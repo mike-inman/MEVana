@@ -1,0 +1,33 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+      {
+        "name": "Run arb-feed (UI)",
+        "type": "lldb",
+        "request": "launch",
+        "cargo": {
+          "args": ["run", "--package", "arb-feed", "--release"]
+        },
+        "args": [],
+        "cwd": "${workspaceFolder}"
+      },
+      {
+        "name": "Run dex-data-parser",
+        "type": "lldb",
+        "request": "launch",
+        "cargo": {
+          "args": ["run", "-p", "dex-data-parser"]
+        },
+        "envFile": "${workspaceFolder}/.env",
+        "cwd": "${workspaceFolder}"
+      }
+    ],
+    "compounds": [
+      {
+        "name": "UI + Parser",
+        "configurations": ["Run arb-feed (UI)", "Run dex-data-parser"],
+        "stopAll": true
+      }
+    ]
+  }
+  

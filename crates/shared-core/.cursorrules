@@ -1,0 +1,16 @@
+# Prefer the workspace layout and shared crates
+- Use crates/shared-redis for Redis key helpers.
+- Use crates/shared-core for symbols, discriminators, and canonical pair logic.
+- Do not duplicate Redis key strings; import from shared-redis.
+
+# Keep binaries separated
+- Geyser subscriber lives in crates/geyser-producer (thin, reliable).
+- Heavy parsing/normalization lives in crates/dex-data-parser (scalable).
+- One-off tools and backfill live in crates/ops-tools/src/bin/*.
+
+# Safety
+- Do not edit idls/* in-place; if changing IDL, mirror into versioned path or use include_str!.
+- No network keys or secrets in code. Use .env and env! only for non-secrets.
+
+# Style
+- Run cargo fmt and cargo clippy –deny warnings.

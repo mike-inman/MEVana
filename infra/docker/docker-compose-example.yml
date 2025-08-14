@@ -1,0 +1,65 @@
+services:
+  redis:
+    image: redis:7
+    ports: ["${REDIS_PORT:-6379}:6379"]
+    command: ["redis-server", "--appendonly", "yes"]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 3s
+      timeout: 2s
+      retries: 20
+    volumes:
+      - ${REDIS_VOL:-redis_data}:/data
+    restart: unless-stopped
+
+  zookeeper:
+    image: bitnami/zookeeper:3.9
+    environment:
+      - ALLOW_ANONYMOUS_LOGIN=yes
+    ports: ["2181:2181"]
+    healthcheck:
+      test: ["CMD", "bash", "-lc", "echo stat | nc -w 2 localhost 2181 | grep -q Mode"]
+      interval: 5s
+      timeout: 3s
+      retries: 30
+    volumes:
+      - ${ZK_VOL:-zk_data}:/bitnami
+    restart: unless-stopped
+
+  kafka:
+    image: bitnami/kafka:3.7
+    depends_on:
+      zookeeper:
+        condition: service_healthy
+    environment:
+      - KAFKA_CFG_ZOOKEEPER_CONNECT=zookeeper:2181
+      - KAFKA_CFG_LISTENERS=PLAINTEXT://:9092
+      - KAFKA_CFG_ADVERTISED_LISTENERS=PLAINTEXT://kafka:9092
+      - ALLOW_PLAINTEXT_LISTENER=yes
+    ports: ["${KAFKA_PORT:-9092}:9092"]
+    healthcheck:
+      test: ["CMD", "bash", "-lc", "kafka-topics.sh --bootstrap-server localhost:9092 --list >/dev/null 2>&1"]
+      interval: 5s
+      timeout: 4s
+      retries: 30
+    volumes:
+      - ${KAFKA_VOL:-kafka_data}:/bitnami
+    restart: unless-stopped
+
+  kafka-init:
+    image: bitnami/kafka:3.7
+    depends_on:
+      kafka:
+        condition: service_healthy
+    entrypoint: ["/bin/bash","/init/create-topics.sh"]
+    volumes:
+      - ../scripts:/init:ro
+    environment:
+      - BOOTSTRAP=kafka:9092
+    profiles: ["init"]  # run only when you need bootstrap
+    restart: "no"
+
+volumes:
+  redis_data:
+  kafka_data:
+  zk_data:

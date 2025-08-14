@@ -1,0 +1,16 @@
+{
+    "rust-analyzer.cargo.watch.enable": true,
+    "rust-analyzer.checkOnSave.command": "clippy",
+    "rust-analyzer.procMacro.attributes.enable": true,
+    "rust-analyzer.showUnlinkedFileNotification": false,
+    "editor.formatOnSave": true,
+    "editor.defaultFormatter": "rust-lang.rust-analyzer",
+    "files.exclude": {
+      "**/target": true
+    },
+    // Keep env files recognized
+    "files.associations": {
+      ".env*": "dotenv"
+    }
+  }
+  
