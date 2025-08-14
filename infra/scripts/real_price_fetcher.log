@@ -1,0 +1,9 @@
+2025-07-27 13:06:57,380 - INFO - 🧪 Starting Real Price Fetcher Demo
+2025-07-27 13:06:57,380 - INFO - 🚀 Fetching comprehensive price data from all sources...
+2025-07-27 13:06:58,153 - INFO - ✅ Raydium: Fetched 0 token prices
+2025-07-27 13:06:58,459 - ERROR - ❌ Error fetching DexScreener prices: '>' not supported between instances of 'str' and 'int'
+2025-07-27 13:06:58,497 - ERROR - ❌ Error fetching Jupiter prices: Cannot connect to host price.jup.ag:443 ssl:default [nodename nor servname provided, or not known]
+2025-07-27 13:06:59,084 - WARNING - ⚠️ Birdeye API returned status 404
+2025-07-27 13:06:59,382 - INFO - ✅ CoinGecko: Fetched 9 token prices
+2025-07-27 13:06:59,382 - INFO - ✅ Comprehensive price fetch complete in 2.00s
+2025-07-27 13:06:59,383 - INFO - 📊 Found 0 arbitrage opportunities

@@ -1,0 +1,33 @@
+2025-07-27 13:06:16,446 - INFO - 🚀 Starting Real-Time Transaction Parser Demo
+2025-07-27 13:06:16,446 - INFO - 🔍 Starting real-time transaction monitoring for 30 seconds...
+2025-07-27 13:06:16,763 - ERROR - Failed to get transaction 26VJgJk4MnmjcSydrzyYXfNHSx41fpR2zDab4sHNvHDk4R9S5Dr6xLGgTaMh2hk9tAb7efQh1Svyr2QXMMv3xwGs: 429
+2025-07-27 13:06:16,903 - ERROR - Failed to get transaction 2pHhy91qKvnVxPiBQPhrPAaNQV1877ikm4NEM2LmDte8XJF9W2rSq6FgTv5AaCiD733ZjigjtdYE7RAp8scoJvPp: 429
+2025-07-27 13:06:17,047 - ERROR - Failed to get transaction 48vzGncbEcKscmdHqcnvHhzagPrvDsUoVsJh686HsuSzq5KiknfNCLrvcLQkmrTGQ9dDoAUZ1kyAwzXoAaHUtX7K: 429
+2025-07-27 13:06:17,182 - ERROR - Failed to get transaction 396JJvXtAtxKynnuK566qPrwB9UgtjJG8PQSPAjAgzQSM5oTCu5wQ3kLgnaLKgtYbZq5L3jqsyS5NroWiuFSxbHq: 429
+2025-07-27 13:06:17,320 - ERROR - Failed to get transaction 2d7p9rM8KV9E3vexopxz2WaeR6zKF9GN3jHEXcqZfswhiBFMsbJC3RL45bzsfSiUjNRCAk7sBJ3R5G5tWqzQP8qh: 429
+2025-07-27 13:06:17,472 - ERROR - Failed to get transaction 57YH4zwLBaHQFZ7Hz8smrf7ce2QsYGMkyZaLzxxiKhXeRMfAQzZEaPQBuUgE8XwViSZxYjGDuxj9DxmWAxoXfiVa: 429
+2025-07-27 13:06:17,617 - ERROR - Failed to get transaction 2dCbniXFjXBnK7RXQgTuYopj2Wqboe5L1Kf9AFMjLs7RaiDDYkWvc3z6TJtkjBskakpYDMHpuh3hjNL6JmbsH7Sa: 429
+2025-07-27 13:06:17,752 - ERROR - Failed to get transaction 3HgGBmhZ3KsVA8gaNxJNtA72oa6LF4grV2tv8R1XjX8HqLxwkLeWBvmE5vDjL8ns8njE7xfcAHKLbDtbHH6sfsX5: 429
+2025-07-27 13:06:17,753 - ERROR - Error parsing Raydium swap: unsupported operand type(s) for -: 'NoneType' and 'NoneType'
+2025-07-27 13:06:19,932 - ERROR - Failed to get transaction 5LjjeEFnusbFoeXwGfVBLJA7LoqLFrQaHc2UdJ4oXqzHGLp34joEXLGXHJKTVtvmiipmoUXn7z8Gqv3zJqyYPA4v: 429
+2025-07-27 13:06:20,078 - ERROR - Failed to get transaction 4BRZ6w9SXxJZiAg7YVUCrcrQuDbK6GjQ6CC1FtSWVuqx2iqmN9Lne2AEbRPcEkMG3jV8VoCeiDXY6sdNu6bTQ6ag: 429
+2025-07-27 13:06:20,219 - ERROR - Failed to get transaction 35rXo2CJ6gY38PoXbSgLPkKrZGFA3J6GYvRYVwT7roWDD9UNeFK5NahqesoBdkoAvLhww4LyGGizw1CKEMUNmmFS: 429
+2025-07-27 13:06:20,366 - ERROR - Failed to get transaction 3oEdWzH6Nkdg8A5w8fz3wMqiwJYrKcymfoFQoQxphNMMD4KKm6UWtMNyANoqUS5DWLsBNdgq5EjXDCZYaCk3GBmD: 429
+2025-07-27 13:06:20,487 - ERROR - Failed to get transaction ikhf9ExxVJ2j16Q7babEt9Kz7tPBwzK4JbYJHqNqQAqZprE26cfDtBYzbTbbrAeZwAyaaWMfpEgWGdMTJeWcj33: 429
+2025-07-27 13:06:20,635 - ERROR - Failed to get transaction 5bYDpP9tYJ6fsmQgJem5UuQF4imfCN179mUHPfDSeJqKExzLPKxP96pavMcGm6DBt4mPwjR5PaeAJ7dpeNEVJ1Hf: 429
+2025-07-27 13:06:20,801 - ERROR - Failed to get transaction 4yokLMXU3yESEbC8Y8qvPyKux6DeuF2m852FVuAmE7XHRUBVWaSq9dJ2bug9VhhZzXTC2fwdq3DxGyEaMrt7p8Yn: 429
+2025-07-27 13:06:20,935 - ERROR - Failed to get transaction 2L3y7tfBbhXVdQmcseMT3aRdn2Swfa9BX9NGjYiVqnupGyfA8owbCy4uSxw2TMsiGxbNdgtAXsmrtD7GiBE1NTgZ: 429
+2025-07-27 13:06:21,067 - ERROR - Failed to get transaction 4FRiqecdkGMNqMGvwUnEryHgHhQ2YKQ56MCLwWC334BQAU75koSmieU6XHvHe3X71G1fUQgUdCSUjYbDmme5dUYz: 429
+2025-07-27 13:06:21,193 - ERROR - Failed to get transaction 99EbJ5aeZsSWMP9WxpeLS491RAtejTsfkq5GfNEWUpbvcppVeSY1yfnVYvGsE8Rk6ik9USPw7gk6gnPEjpCSTVB: 429
+2025-07-27 13:06:23,336 - ERROR - RPC request failed: 429
+2025-07-27 13:06:25,472 - ERROR - RPC request failed: 429
+2025-07-27 13:06:27,618 - ERROR - RPC request failed: 429
+2025-07-27 13:06:29,747 - ERROR - RPC request failed: 429
+2025-07-27 13:06:31,885 - ERROR - RPC request failed: 429
+2025-07-27 13:06:34,026 - ERROR - RPC request failed: 429
+2025-07-27 13:06:36,179 - ERROR - RPC request failed: 429
+2025-07-27 13:06:38,330 - ERROR - RPC request failed: 429
+2025-07-27 13:06:40,475 - ERROR - RPC request failed: 429
+2025-07-27 13:06:42,611 - ERROR - RPC request failed: 429
+2025-07-27 13:06:44,769 - ERROR - RPC request failed: 429
+2025-07-27 13:06:46,773 - INFO - ✅ Real-time monitoring complete. Found 0 swap events

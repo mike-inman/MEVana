@@ -1,0 +1,10 @@
+program_name: whirlpool
+program_id: "whirLbM2vNtMeJ6z18WZb98sPNT1L4GzWk2vuyZgq2U"  # example
+swap_instructions:
+  - name: "swap"
+    kind: "CLMM"
+    pool_account_roles: ["whirlpool", "pool"]           # which account is the pool
+    user_authority_roles: ["authority", "owner"]        # signer/authority field names
+    token_accounts_roles_in:  ["token_owner_account_a", "token_owner_account_b"]
+    token_accounts_roles_out: ["token_owner_account_b", "token_owner_account_a"]
+    clmm_state_account: "whirlpool"                     # optional: has sqrt_price_x64/tick
