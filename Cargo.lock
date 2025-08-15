@@ -1069,6 +1069,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "dev-fixtures"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "chrono",
+ "env_logger",
+ "log",
+ "rdkafka",
+ "serde",
+ "serde_json",
+ "tokio",
+]
+
+[[package]]
 name = "dex-stream-orca"
 version = "0.1.0"
 dependencies = [
@@ -2338,6 +2352,7 @@ dependencies = [
  "dotenv",
  "env_logger",
  "log",
+ "normalizer-service",
  "prost",
  "rdkafka",
  "serde",
@@ -2367,12 +2382,20 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "base64 0.22.1",
+ "bs58",
+ "chrono",
  "clap",
+ "dotenv",
+ "env_logger",
+ "log",
  "normalizer-codegen",
  "normalizer-runtime",
  "once_cell",
+ "rdkafka",
  "serde",
  "serde_json",
+ "tokio",
+ "yellowstone-grpc-proto",
 ]
 
 [[package]]

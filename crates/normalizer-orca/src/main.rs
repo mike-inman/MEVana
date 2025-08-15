@@ -12,16 +12,13 @@ use std::collections::{HashMap, HashSet};
 use std::env;
 use std::time::Duration;
 
-//use prost::Message;
-use yellowstone_grpc_proto::prost::Message as ProstMessage;
-
+// bring prost::Message trait into scope via Yellowstone re-export (for .decode)
+use yellowstone_grpc_proto::prost::Message as _;
 // Yellowstone gRPC (prost-generated types)
 use yellowstone_grpc_proto::prelude as ypp;
 
-// Solana pubkey encoding
-//use bs58;
-
-// modern base64 API
+// Solana pubkey encoding (needed by signer_set_from_info / normalized_from_tx)
+use bs58;
 
 // ---------- Config ----------
 
@@ -92,19 +89,19 @@ fn ui_amount_to_f64(amount_str: &str, decimals: u32) -> Option<f64> {
 
 fn headers_to_map(headers: Option<&BorrowedHeaders>) -> serde_json::Value {
     match headers {
-        None => serde_json::json!([]),
+        None => json!([]),
         Some(hs) => {
             let mut out = Vec::with_capacity(hs.count());
             for i in 0..hs.count() {
                 let h = hs.get(i);
-                out.push(serde_json::json!({
+                out.push(json!({
                     "key": h.key,
                     "value_b64": h.value
                         .map(|b| general_purpose::STANDARD.encode(b))
                         .unwrap_or_default(),
                 }));
             }
-            serde_json::json!(out)
+            json!(out)
         }
     }
 }
@@ -161,7 +158,7 @@ fn infer_swap_from_balances(
     let mut all_mints: HashSet<String> = HashSet::new();
 
     for b in pre {
-        let owner = b.owner.clone(); // String (not Option) in these protos
+        let owner = b.owner.clone(); // String in these protos
         let mint = b.mint.clone();
         all_mints.insert(mint.clone());
         let dec = b

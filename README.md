@@ -1,5 +1,15 @@
 # MEVana
 
+One-liners you might want handy
+View topics:
+kafka-topics --bootstrap-server $KAFKA_BROKER --list
+
+Peek at latest messages:
+kafka-console-consumer --bootstrap-server $KAFKA_BROKER --topic prices.latest --from-beginning --max-messages 5
+
+Stop everything (if you backgrounded it):
+pkill -f "cargo run -p" || true
+
 
 
 # one-time bootstrap
