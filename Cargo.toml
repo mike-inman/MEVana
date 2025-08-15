@@ -1,0 +1,81 @@
+# ./Cargo.toml
+[workspace]
+members = [
+    "crates/normalizer-orca",
+    "crates/price-aggregator",
+    "crates/normalizer-codegen",
+#   "crates/normalizer-generated",
+    "crates/normalizer-runtime",
+    "crates/normalizer-service",
+    "crates/dex-stream-orca",
+#    "crates/geyser-producer",
+#    "crates/dex-data-parser",
+#    "crates/ops-tools",
+#    "crates/shared-core",
+#    "crates/shared-redis",
+#    "crates/stream_and_parse_whirlpool_account_updates",
+#    "crates/dex-data-parser",
+#    "crates/arb-feed",        # the WebSocket + HTML viewer
+#    "crates/arb-executor",    # the colocated executor (later)
+#    "crates/shyft-helpers",   # optional libraries
+#    "crates/shyft-helpers",   # optional libraries
+]
+resolver = "2"
+
+# Optional: share deps & lints across members
+[workspace.dependencies]
+anyhow = "1"
+bs58 = "0.5"
+chrono = "0.4"
+clap = { version = "4.5", features = ["derive", "env"] }
+dotenv = "0.15"
+env_logger = "0.11"
+futures-util = "0.3"
+log = "0.4"
+lru = "0.12"
+redis = { version = "0.32", features = ["tokio-comp"] }
+reqwest = { version = "0.12", features = ["json", "gzip", "brotli", "deflate", "rustls-tls"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+tokio = { version = "1", features = ["full"] }
+
+
+
+[workspace.lints.rust]
+unsafe_code = "forbid"
+
+[profile.release]
+lto = "thin"
+codegen-units = 1
+
+
+
+
+
+
+# ./Cargo.toml  (no [package] here → a “virtual” manifest)
+# [workspace]
+# members = [
+#  "crates/stream_and_parse_whirlpool_account_updates",
+#  "crates/dex-data-parser",
+#  "crates/arb-feed",        # the WebSocket + HTML viewer
+#  "crates/arb-executor",    # the colocated executor (later)
+#  "crates/shyft-helpers",   # optional libraries
+# ]
+
+# Optional: share deps & lints across members
+# [workspace.dependencies]
+# anyhow = "1"
+# tokio = { version = "1", features = ["full"] }
+# redis = { version = "0.32", features = ["tokio-comp"] }
+# serde = { version = "1", features = ["derive"] }
+# serde_json = "1"
+# ... add common deps
+
+# [workspace.lints.rust]
+# unsafe_code = "forbid"
+
+# [profile.release]
+# lto = "thin"
+# codegen-units = 1
+
