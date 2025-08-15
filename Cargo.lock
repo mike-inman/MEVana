@@ -2316,6 +2316,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "normalizer-generated"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "base64 0.21.7",
+ "bs58",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
 name = "normalizer-orca"
 version = "0.1.0"
 dependencies = [
