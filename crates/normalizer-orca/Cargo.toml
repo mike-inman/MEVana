@@ -1,0 +1,31 @@
+[package]
+name = "normalizer-orca"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+anyhow = "1"
+tokio = { version = "1.38", features = ["macros", "rt-multi-thread", "signal"] }
+rdkafka = "0.38"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+log = "0.4"
+env_logger = "0.11"
+dotenv = "0.15"
+base64 = "0.21"
+bs58 = "0.5"
+backoff = { version = "0.4", features = ["tokio"] }
+prost = "0.13"
+chrono = { version = "0.4", features = ["serde"] }
+
+# Yellowstone just for prost types to decode the messages produced by dex-stream-orca
+yellowstone-grpc-proto = "4.2.1"
+
+# Solana stack (types/utilities we may use when interpreting accounts)
+solana-program = "2.1.21"
+solana-sdk = "2.1.21"
+solana-transaction-status = "2.1.21"
+solana-account-decoder = "2.1.21"
+
+# SPL token (only if you want to match token instructions later)
+spl-token = "6.0.0"

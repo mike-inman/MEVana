@@ -1,6 +1,8 @@
 # ./Cargo.toml
 [workspace]
 members = [
+    "crates/normalizer-orca",
+    "crates/price-aggregator",
     "crates/normalizer-codegen",
 #   "crates/normalizer-generated",
     "crates/normalizer-runtime",

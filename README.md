@@ -7,6 +7,47 @@ docker compose -f infra/docker/docker-compose.yml --env-file infra/docker/.env.d
 docker compose -f infra/docker/docker-compose.yml --env-file infra/docker/.env.docker up kafka-init
 
 
+normalizer-orca
+Reads raw geyser txs (orca-swaps) → writes normalized swaps (orca-swaps.parsed) and DLQ.
+
+bash
+Copy
+Edit
+# terminal A
+export KAFKA_BROKER=localhost:29092
+export IN_TOPIC=orca-swaps
+export OUT_TOPIC=orca-swaps.parsed
+export DLQ_TOPIC=dlq
+export GROUP_ID=normalizer-orca
+RUST_LOG=info cargo run -p normalizer-orca
+Expected logs:
+
+csharp
+Copy
+Edit
+normalizer-orca started: in='orca-swaps' out='orca-swaps.parsed'
+... normalized swap -> orca-swaps.parsed key=<txsig>
+price-aggregator
+Reads normalized swaps (orca-swaps.parsed) → emits rolling prices (prices.latest).
+
+bash
+Copy
+Edit
+# terminal B
+export KAFKA_BROKER=localhost:29092
+export IN_TOPIC=orca-swaps.parsed
+export OUT_TOPIC=prices.latest
+export GROUP_ID=price-aggregator
+export EMIT_SECS=5
+RUST_LOG=info cargo run -p price-aggregator
+Expected logs:
+
+csharp
+Copy
+Edit
+price-aggregator started: in='orca-swaps.parsed' out='prices.latest'
+... emitted N price snapshots
+
 
 crates/
   normalizer-runtime/      # traits, helpers, serializers, redis writer
