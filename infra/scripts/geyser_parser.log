@@ -1,0 +1,5 @@
+2025-07-27 13:18:40,129 - INFO - 🚀 Starting Geyser Transaction Parser Demo
+2025-07-27 13:19:43,472 - ERROR - Error parsing Geyser transaction: '<' not supported between instances of 'str' and 'int'
+2025-07-27 13:20:07,218 - ERROR - Error parsing Geyser transaction: '<' not supported between instances of 'str' and 'int'
+2025-07-27 13:21:59,636 - INFO - 💰 RAYDIUM Swap: 492.9952 2qEHjDLD... → 2.2491 SOL (Price: 0.004562)
+2025-07-27 13:22:19,264 - INFO - 💰 RAYDIUM Swap: 492.9952 2qEHjDLD... → 2.2491 SOL (Price: 0.004562)
