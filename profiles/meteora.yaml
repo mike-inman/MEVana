@@ -1,5 +1,5 @@
 program_name: meteora
-program_id: "METoRaX..."  # example
+program_id: "cpamdpZCGKUy5JxQXB4dcpGPiikHawvSWAd6mEn1sGG"  # example
 swap_instructions:
   - name: "swap"
     kind: "CPMM"
