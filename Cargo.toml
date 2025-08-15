@@ -4,7 +4,7 @@ members = [
     "crates/normalizer-orca",
     "crates/price-aggregator",
     "crates/normalizer-codegen",
-#   "crates/normalizer-generated",
+    "crates/normalizer-generated",
     "crates/normalizer-runtime",
     "crates/normalizer-service",
     "crates/dex-stream-orca", 

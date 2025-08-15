@@ -1,0 +1,11 @@
+[package]
+name = "normalizer-generated"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+anyhow = { workspace = true }
+serde = { workspace = true, features = ["derive"] }
+serde_json = { workspace = true }
+bs58 = { workspace = true }
+base64 = "0.21" # or workspace if you added it
