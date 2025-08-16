@@ -125,6 +125,31 @@ services:
           memory: 256M
           cpus: '0.25'
 
+  dex-stream-universal:
+    build:
+      context: ../..
+      dockerfile: crates/dex-stream-universal/Dockerfile
+    image: dex-stream-universal:latest
+    container_name: dex-stream-universal
+    depends_on:
+      kafka:
+        condition: service_healthy
+    environment:
+      - KAFKA_BROKER=kafka:9092
+      - ENDPOINT=${SHYFT_GRPC_ENDPOINT}
+      - X_TOKEN=${SHYFT_GRPC_TOKEN}
+      - PROGRAM_IDS=${PROGRAM_IDS:-whirLbMiicVdio4qvUfM5KAg6Ct8VwpYzGff3uctyCc,5Q544fKrFoe6tsEbD7S8EmxGTJYAKtTVhAW5Q5pge4j1,cpamdpZCGKUy5JxQXB4dcpGPiikHawvSWAd6mEn1sGG}
+      - RUST_LOG=${RUST_LOG:-info}
+    command: ["--topic","geyser.raw"]
+    networks:
+      - mevana-network
+    restart: unless-stopped
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "50m"
+        max-file: "5"
+
   redis:
     image: redis:7-alpine
     container_name: redis
