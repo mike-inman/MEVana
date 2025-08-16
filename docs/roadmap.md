@@ -41,12 +41,14 @@ Status: partial completion
   - `dex-backfill`: Dockerized, continuous updates; IDLs mounted; running
   - `normalizer-extract` (bin `tap_orca_extract`): Dockerized and running; Redis read-through caches; producing `orca-swaps.parsed.v2`
   - `price-aggregator`: Dockerized and running; consuming parsed swaps and emitting `prices.latest`
+  - `depth-builder` first cut: computes p0_ui and heuristic size→price quotes; writes to `dex:pool_depth:{pool}`
+  - `ui-gateway` depth API: `GET /depth/:pool` returns `dex:pool_depth:{pool}` snapshot for UI/arb-test
 
 - Next up:
   - Expand `PROGRAM_IDS` to include Raydium + Meteora; verify extraction paths and add backfills
   - Depth/slippage model:
-    - Maintain per-pool depth snapshots from TickArrays/Positions → Redis `dex:pool_depth:{pool}`
-    - Provide size→expected price function for sizing and slippage checks
+    - Maintain per-pool depth snapshots from TickArrays/Positions → Redis `dex:pool_depth:{pool}` (in progress)
+    - Provide size→expected price function for sizing and slippage checks (first cut done; refine with real TickArray liquidity)
   - Arb test mode:
     - Consume multi-venue prices, simulate bundles, record p50/p99 pipeline latencies
   - Observability & safeguards:

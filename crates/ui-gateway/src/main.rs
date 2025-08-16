@@ -1,13 +1,15 @@
 use anyhow::Result;
 use axum::{
     extract::ws::{Message as WsMessage, WebSocketUpgrade},
-    extract::State,
+    extract::{Path, State},
+    response::IntoResponse,
     routing::get,
-    Router,
+    Json, Router,
 };
 use rdkafka::consumer::{Consumer, StreamConsumer};
 use rdkafka::{ClientConfig, Message as _};
 use std::sync::Arc;
+use serde_json::json;
 use tokio::net::TcpListener;
 use tokio::sync::broadcast;
 use tracing::{info, warn};
@@ -17,6 +19,7 @@ struct AppState {
     prices: broadcast::Sender<String>,
     swaps: broadcast::Sender<String>,
     swaps_v2: broadcast::Sender<String>,
+    redis_client: redis::Client,
 }
 
 #[tokio::main]
@@ -32,10 +35,13 @@ async fn main() -> Result<()> {
     let (prices_tx, _) = broadcast::channel::<String>(2048);
     let (swaps_tx, _) = broadcast::channel::<String>(2048);
     let (swaps_v2_tx, _) = broadcast::channel::<String>(2048);
+    let redis_url = std::env::var("REDIS_URL").unwrap_or_else(|_| "redis://redis:6379/0".into());
+    let redis_client = redis::Client::open(redis_url.clone())?;
     let state = AppState {
         prices: prices_tx.clone(),
         swaps: swaps_tx.clone(),
         swaps_v2: swaps_v2_tx.clone(),
+        redis_client,
     };
 
     // Kafka consumers
@@ -63,6 +69,7 @@ async fn main() -> Result<()> {
         .route("/ws/prices", get(ws_prices))
         .route("/ws/swaps", get(ws_swaps))
         .route("/ws/swaps.v2", get(ws_swaps_v2))
+        .route("/depth/:pool", get(http_depth))
         .route("/ws/ping", get(ws_ping))
         .route("/healthz", get(|| async { "ok" }))
         .with_state(Arc::new(state));
@@ -181,4 +188,42 @@ async fn ws_ping(ws: WebSocketUpgrade) -> axum::response::Response {
         }
         tracing::info!("WS /ping disconnected");
     })
+}
+
+async fn http_depth(
+    Path(pool): Path<String>,
+    State(s): State<Arc<AppState>>,
+) -> impl IntoResponse {
+    let key = format!("dex:pool_depth:{}", pool);
+    let mut map = serde_json::Map::new();
+    match s.redis_client.get_multiplexed_tokio_connection().await {
+        Ok(mut conn) => {
+            let resp: redis::Value = redis::cmd("HGETALL")
+                .arg(&key)
+                .query_async(&mut conn)
+                .await
+                .unwrap_or(redis::Value::Nil);
+            if let redis::Value::Array(kvs) = resp {
+                let mut it = kvs.into_iter();
+                while let (Some(k), Some(v)) = (it.next(), it.next()) {
+                    if let (redis::Value::BulkString(kb), v) = (k, v) {
+                        let name = String::from_utf8_lossy(&kb).to_string();
+                        let val = match v {
+                            redis::Value::BulkString(vb) => json!(String::from_utf8_lossy(&vb).to_string()),
+                            redis::Value::Int(i) => json!(i),
+                            redis::Value::Nil => serde_json::Value::Null,
+                            _ => serde_json::Value::Null,
+                        };
+                        map.insert(name, val);
+                    }
+                }
+            }
+        }
+        Err(_) => {}
+    }
+    Json(json!({
+        "pool": pool,
+        "key": key,
+        "data": map,
+    }))
 }
