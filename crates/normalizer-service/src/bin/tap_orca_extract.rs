@@ -16,12 +16,12 @@ use rdkafka::consumer::{CommitMode, Consumer, StreamConsumer};
 use rdkafka::producer::{FutureProducer, FutureRecord};
 use rdkafka::ClientConfig;
 use rdkafka::Message as _;
+use redis::{aio::MultiplexedConnection, AsyncCommands};
 use serde_json;
 use std::collections::HashMap;
+use std::time::Instant;
 use yellowstone_grpc_proto::prelude as ypp;
 use yellowstone_grpc_proto::prost::Message as _;
-use redis::{aio::MultiplexedConnection, AsyncCommands};
-use std::time::Instant;
 
 #[tokio::main]
 async fn main() -> Result<()> {
@@ -32,28 +32,45 @@ async fn main() -> Result<()> {
     let in_topic = std::env::var("IN_TOPIC").unwrap_or_else(|_| "orca-swaps".into());
     let out_topic = std::env::var("OUT_TOPIC").unwrap_or_else(|_| "orca-swaps.parsed.v2".into());
     let group_id = std::env::var("GROUP_ID").unwrap_or_else(|_| "tap-orca-extract".into());
-    let redis_url = std::env::var("REDIS_URL").unwrap_or_else(|_| "redis://127.0.0.1:6379/0".into());
+    let redis_url =
+        std::env::var("REDIS_URL").unwrap_or_else(|_| "redis://127.0.0.1:6379/0".into());
 
     info!("tap_orca_extract: broker={broker} in={in_topic} out={out_topic} group_id={group_id}");
 
-    let consumer: StreamConsumer = ClientConfig::new()
+    let fast = std::env::var("FAST_MODE").ok().as_deref() == Some("1");
+    let mut cconf = ClientConfig::new();
+    cconf
         .set("bootstrap.servers", &broker)
         .set("group.id", &group_id)
         .set("enable.auto.commit", "false")
-        .set("auto.offset.reset", "latest")
-        .create()
-        .context("create consumer")?;
+        .set("auto.offset.reset", "latest");
+    if fast {
+        cconf
+            .set("fetch.min.bytes", "1")
+            .set("fetch.wait.max.ms", "1")
+            .set("queued.min.messages", "1");
+    }
+    let consumer: StreamConsumer = cconf.create().context("create consumer")?;
 
     consumer.subscribe(&[&in_topic]).context("subscribe")?;
 
     // Producer for v2 output
-    let producer: FutureProducer = ClientConfig::new()
-        .set("bootstrap.servers", &broker)
-        .set("compression.type", "lz4")
-        .set("linger.ms", "5")
-        .set("acks", "all")
-        .create()
-        .context("create producer")?;
+    let mut pconf = ClientConfig::new();
+    pconf.set("bootstrap.servers", &broker);
+    if fast {
+        pconf
+            .set("linger.ms", "0")
+            .set("acks", "1")
+            .set("compression.type", "lz4")
+            .set("enable.idempotence", "false")
+            .set("message.timeout.ms", "100");
+    } else {
+        pconf
+            .set("compression.type", "lz4")
+            .set("linger.ms", "5")
+            .set("acks", "all");
+    }
+    let producer: FutureProducer = pconf.create().context("create producer")?;
 
     // Redis (optional enrich)
     let redis_client = redis::Client::open(redis_url.clone())?;
@@ -161,16 +178,23 @@ async fn handle(
                 let pool_id = ctx
                     .decoded_accounts_by_role
                     .as_ref()
-                    .and_then(|m| ["whirlpool","pool"].iter().find_map(|r| m.get(*r)))
+                    .and_then(|m| ["whirlpool", "pool"].iter().find_map(|r| m.get(*r)))
                     .cloned()
                     .unwrap_or_default();
                 let pool_key = format!("dex:pool:{}", pool_id);
                 let mut tick_hint: Option<i64> = None;
                 let mut sqrt_price_hint: Option<String> = None;
-                if !pool_key.ends_with(':') { // crude check; empty id yields trailing ':'
-                    if let Ok::<std::collections::HashMap<String, String>, _>(snap) = redis.hgetall(&pool_key).await {
-                        if let Some(sp) = snap.get("sqrt_price_x64") { sqrt_price_hint = Some(sp.clone()); }
-                        if let Some(t) = snap.get("tick").and_then(|s| s.parse::<i64>().ok()) { tick_hint = Some(t); }
+                if !pool_key.ends_with(':') {
+                    // crude check; empty id yields trailing ':'
+                    if let Ok::<std::collections::HashMap<String, String>, _>(snap) =
+                        redis.hgetall(&pool_key).await
+                    {
+                        if let Some(sp) = snap.get("sqrt_price_x64") {
+                            sqrt_price_hint = Some(sp.clone());
+                        }
+                        if let Some(t) = snap.get("tick").and_then(|s| s.parse::<i64>().ok()) {
+                            tick_hint = Some(t);
+                        }
                     }
                 }
 
@@ -185,12 +209,25 @@ async fn handle(
                 };
 
                 // Merge into JSON object
-                let mut obj = serde_json::to_value(&n)?.as_object().cloned().unwrap_or_default();
-                if let Some(v) = amount_in_ui { obj.insert("amount_in_ui".into(), serde_json::json!(v)); }
-                if let Some(v) = amount_out_ui { obj.insert("amount_out_ui".into(), serde_json::json!(v)); }
-                if let Some(v) = price_ui { obj.insert("price_ui".into(), serde_json::json!(v)); }
-                if let Some(v) = tick_hint { obj.insert("tick_hint".into(), serde_json::json!(v)); }
-                if let Some(v) = sqrt_price_hint { obj.insert("sqrt_price_x64_hint".into(), serde_json::json!(v)); }
+                let mut obj = serde_json::to_value(&n)?
+                    .as_object()
+                    .cloned()
+                    .unwrap_or_default();
+                if let Some(v) = amount_in_ui {
+                    obj.insert("amount_in_ui".into(), serde_json::json!(v));
+                }
+                if let Some(v) = amount_out_ui {
+                    obj.insert("amount_out_ui".into(), serde_json::json!(v));
+                }
+                if let Some(v) = price_ui {
+                    obj.insert("price_ui".into(), serde_json::json!(v));
+                }
+                if let Some(v) = tick_hint {
+                    obj.insert("tick_hint".into(), serde_json::json!(v));
+                }
+                if let Some(v) = sqrt_price_hint {
+                    obj.insert("sqrt_price_x64_hint".into(), serde_json::json!(v));
+                }
 
                 // Emit to Kafka as JSON with key = signature
                 let key = ctx.signature.clone();
@@ -284,14 +321,21 @@ fn build_keys_and_balance_changes(
 }
 
 fn to_ui(raw: u128, decimals: u8) -> f64 {
-    if decimals == 0 { return raw as f64; }
+    if decimals == 0 {
+        return raw as f64;
+    }
     let scale = 10u128.saturating_pow(decimals as u32);
     (raw as f64) / (scale as f64)
 }
 
 async fn get_mint_decimals(redis: &mut MultiplexedConnection, mint: &str) -> Option<u8> {
     let key = format!("dex:mint:{}", mint);
-    match redis::cmd("HGET").arg(&key).arg("decimals").query_async::<Option<i64>>(redis).await {
+    match redis::cmd("HGET")
+        .arg(&key)
+        .arg("decimals")
+        .query_async::<Option<i64>>(redis)
+        .await
+    {
         Ok(Some(d)) if d >= 0 && d <= 255 => Some(d as u8),
         _ => None,
     }
