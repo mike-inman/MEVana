@@ -1,0 +1,21 @@
+[package]
+name = "dex-stream-universal"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+anyhow = "1"
+dotenv = "0.15"
+env_logger = "0.11"
+log = "0.4"
+clap = { version = "4.5", features = ["derive"] }
+backoff = { version = "0.4", features = ["tokio"] }
+tokio = { version = "1.38", features = ["full"] }
+rdkafka = "0.38"
+yellowstone-grpc-client = "4.2.1"
+yellowstone-grpc-proto = "4.2.1"
+bs58 = "0.5"
+chrono = { version = "0.4", features = ["serde"] }
+tonic = "0.12"
+futures-util = "0.3"
+
