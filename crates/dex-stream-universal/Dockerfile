@@ -1,6 +1,6 @@
 # syntax=docker/dockerfile:1
 
-FROM rust:1.79 as builder
+FROM rust:1.83 as builder
 WORKDIR /app
 # Build only this crate (small context)
 COPY . .

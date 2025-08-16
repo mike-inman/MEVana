@@ -74,8 +74,10 @@
   - feature/ui-v2-toggle-pool: UI v1/v2 toggle, Pool panel scaffold
   - feature/universal-geyser-stream: universal stream (PROGRAM_IDS) + Docker
 - Next:
-  - feature/fast-mode-hotpath: in-proc/binary v2 + Kafka low-latency flags
-  - feature/extractor-local-caches: local mint/pool caches; decimal-aware prices
+  - feature/normalizer-extract-service: run `tap_orca_extract` producing `*.parsed.v2` with FAST_MODE
+  - feature/multi-venue-expansion: add Raydium/Meteora PROGRAM_IDS, verify decoders/extractors
+  - feature/depth-slippage-model: maintain pool depth from TickArrays, expose size→price
+  - feature/arb-test-mode: dry-run net-PnL and “would trade” logging
   - feature/jito-bundle-scaffold: bundle builder, tip model, canary mode
   - feature/metrics-latency-slos: histograms/dashboards/kill-switch
 
@@ -85,6 +87,10 @@
 - amount_in_raw (u128), amount_out_raw (u128), price (f64)
 - tick (opt), sqrt_price_x64 (opt), fee_bps
 - signers[], success
+
+## Services to add
+- normalizer-extract: consumes raw geyser topic; produces `*.parsed.v2` with decimals, optional pool hints
+- arb-test-mode: consumes `*.parsed.v2`, computes net-PnL, logs “would trade”
 
 ## Execution Budget
 - Target p50: 1–5 ms, p99 <= 25 ms
