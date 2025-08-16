@@ -14,6 +14,7 @@ use whirlpool_interface::accounts::{
     Whirlpool, WhirlpoolAccount, WHIRLPOOL_ACCOUNT_DISCM,
     TICK_ARRAY_ACCOUNT_DISCM, POSITION_ACCOUNT_DISCM,
 };
+use whirlpool_interface::accounts::TickArrayAccount;
 use yellowstone_grpc_client::{GeyserGrpcClient, Interceptor};
 use yellowstone_grpc_proto::geyser::{
     subscribe_request_filter_accounts_filter::Filter as AccountsFilterOneOf,
@@ -458,10 +459,30 @@ async fn handle_account_update(
     // Optionally stash TickArrays / Positions
     let now = Utc::now().timestamp();
     if flags.include_tickarrays && disc == TICK_ARRAY_ACCOUNT_DISCM {
+        // Parse and emit a compact summary for depth builder
+        let tick_array = TickArrayAccount::deserialize(data)
+            .map_err(|e| anyhow::anyhow!("TickArrayAccount::deserialize: {e}"))?;
+        let ta = tick_array.0;
+        let pool_pubkey = ta.whirlpool.to_string();
+        let start_tick = ta.start_tick_index as i64;
+        let mut num_initialized: i64 = 0;
+        let mut sum_gross: u128 = 0;
+        for t in ta.ticks.iter() {
+            if t.initialized {
+                num_initialized += 1;
+                sum_gross = sum_gross.saturating_add(t.liquidity_gross);
+            }
+        }
+        let array_pubkey = bs58::encode(&upd.account.as_ref().unwrap().pubkey).into_string();
+
         let _id: String = redis::cmd("XADD")
             .arg("dex:whirlpool:tickarray_updates").arg("*")
             .arg("slot").arg(upd.slot as i64)
-            .arg("len").arg(data.len() as i64)
+            .arg("pool").arg(&pool_pubkey)
+            .arg("array").arg(&array_pubkey)
+            .arg("start").arg(start_tick)
+            .arg("num_init").arg(num_initialized)
+            .arg("sum_gross").arg(sum_gross.to_string())
             .arg("ts").arg(now)
             .query_async(redis).await?;
         return Ok(());
