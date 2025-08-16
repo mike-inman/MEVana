@@ -813,6 +813,21 @@ services:
       - mevana-network
     restart: unless-stopped
 
+  arb-test-mode:
+    build:
+      context: ../../crates/arb-test-mode
+      dockerfile: Dockerfile
+    image: arb-test-mode:latest
+    container_name: arb-test-mode
+    environment:
+      - KAFKA_BROKER=kafka:9092
+      - IN_TOPIC=${ARB_IN_TOPIC:-orca-swaps.parsed.v2}
+      - REDIS_URL=${REDIS_URL:-redis://redis:6379/0}
+      - RUST_LOG=${RUST_LOG:-info}
+    networks:
+      - mevana-network
+    restart: unless-stopped
+
   ui-gateway:
     build:
       context: ../../crates/ui-gateway

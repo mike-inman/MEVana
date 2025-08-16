@@ -464,25 +464,17 @@ async fn handle_account_update(
             .map_err(|e| anyhow::anyhow!("TickArrayAccount::deserialize: {e}"))?;
         let ta = tick_array.0;
         let pool_pubkey = ta.whirlpool.to_string();
-        let start_tick = ta.start_tick_index as i64;
-        let mut num_initialized: i64 = 0;
-        let mut sum_gross: u128 = 0;
-        for t in ta.ticks.iter() {
-            if t.initialized {
-                num_initialized += 1;
-                sum_gross = sum_gross.saturating_add(t.liquidity_gross);
-            }
-        }
-        let array_pubkey = bs58::encode(&upd.account.as_ref().unwrap().pubkey).into_string();
-
+        let start_tick = ta.start_tick_index;
+        let num_initialized = ta.ticks.iter().filter(|t| t.initialized).count() as i64;
+        let sum_gross = ta.ticks.iter().filter_map(|t| if t.initialized { Some(t.liquidity_gross) } else { None }).sum::<u128>();
+        
         let _id: String = redis::cmd("XADD")
             .arg("dex:whirlpool:tickarray_updates").arg("*")
-            .arg("slot").arg(upd.slot as i64)
             .arg("pool").arg(&pool_pubkey)
-            .arg("array").arg(&array_pubkey)
             .arg("start").arg(start_tick)
             .arg("num_init").arg(num_initialized)
             .arg("sum_gross").arg(sum_gross.to_string())
+            .arg("slot").arg(upd.slot as i64)
             .arg("ts").arg(now)
             .query_async(redis).await?;
         return Ok(());
