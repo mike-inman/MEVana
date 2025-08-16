@@ -8,8 +8,8 @@ use axum::{
 };
 use rdkafka::consumer::{Consumer, StreamConsumer};
 use rdkafka::{ClientConfig, Message as _};
-use std::sync::Arc;
 use serde_json::json;
+use std::sync::Arc;
 use tokio::net::TcpListener;
 use tokio::sync::broadcast;
 use tracing::{info, warn};
@@ -69,6 +69,7 @@ async fn main() -> Result<()> {
         .route("/ws/prices", get(ws_prices))
         .route("/ws/swaps", get(ws_swaps))
         .route("/ws/swaps.v2", get(ws_swaps_v2))
+        .route("/pool/:id", get(http_pool))
         .route("/depth/:pool", get(http_depth))
         .route("/ws/ping", get(ws_ping))
         .route("/healthz", get(|| async { "ok" }))
@@ -190,10 +191,7 @@ async fn ws_ping(ws: WebSocketUpgrade) -> axum::response::Response {
     })
 }
 
-async fn http_depth(
-    Path(pool): Path<String>,
-    State(s): State<Arc<AppState>>,
-) -> impl IntoResponse {
+async fn http_depth(Path(pool): Path<String>, State(s): State<Arc<AppState>>) -> impl IntoResponse {
     let key = format!("dex:pool_depth:{}", pool);
     let mut map = serde_json::Map::new();
     match s.redis_client.get_multiplexed_tokio_connection().await {
@@ -209,7 +207,46 @@ async fn http_depth(
                     if let (redis::Value::BulkString(kb), v) = (k, v) {
                         let name = String::from_utf8_lossy(&kb).to_string();
                         let val = match v {
-                            redis::Value::BulkString(vb) => json!(String::from_utf8_lossy(&vb).to_string()),
+                            redis::Value::BulkString(vb) => {
+                                json!(String::from_utf8_lossy(&vb).to_string())
+                            }
+                            redis::Value::Int(i) => json!(i),
+                            redis::Value::Nil => serde_json::Value::Null,
+                            _ => serde_json::Value::Null,
+                        };
+                        map.insert(name, val);
+                    }
+                }
+            }
+        }
+        Err(_) => {}
+    }
+    Json(json!({
+        "pool": pool,
+        "key": key,
+        "data": map,
+    }))
+}
+
+async fn http_pool(Path(pool): Path<String>, State(s): State<Arc<AppState>>) -> impl IntoResponse {
+    let key = format!("dex:pool:{}", pool);
+    let mut map = serde_json::Map::new();
+    match s.redis_client.get_multiplexed_tokio_connection().await {
+        Ok(mut conn) => {
+            let resp: redis::Value = redis::cmd("HGETALL")
+                .arg(&key)
+                .query_async(&mut conn)
+                .await
+                .unwrap_or(redis::Value::Nil);
+            if let redis::Value::Array(kvs) = resp {
+                let mut it = kvs.into_iter();
+                while let (Some(k), Some(v)) = (it.next(), it.next()) {
+                    if let (redis::Value::BulkString(kb), v) = (k, v) {
+                        let name = String::from_utf8_lossy(&kb).to_string();
+                        let val = match v {
+                            redis::Value::BulkString(vb) => {
+                                json!(String::from_utf8_lossy(&vb).to_string())
+                            }
                             redis::Value::Int(i) => json!(i),
                             redis::Value::Nil => serde_json::Value::Null,
                             _ => serde_json::Value::Null,
