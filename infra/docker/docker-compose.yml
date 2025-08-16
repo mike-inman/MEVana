@@ -220,6 +220,7 @@ services:
       - RECONNECT_DELAY=5
       - ENABLE_TIMER=${ENABLE_TIMER:-false}
       - TIMER_DURATION_SECONDS=${TIMER_DURATION_SECONDS:-20}
+      - PROGRAM_IDS=${PROGRAM_IDS:-whirLbMiicVdio4qvUfM5KAg6Ct8VwpYzGff3uctyCc}
     ports:
       - "9094:9090"
     networks:
