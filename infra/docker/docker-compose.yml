@@ -127,8 +127,8 @@ services:
 
   dex-stream-universal:
     build:
-      context: ../..
-      dockerfile: crates/dex-stream-universal/Dockerfile
+      context: ../../crates/dex-stream-universal
+      dockerfile: Dockerfile
     image: dex-stream-universal:latest
     container_name: dex-stream-universal
     depends_on:
@@ -140,7 +140,7 @@ services:
       - X_TOKEN=${SHYFT_GRPC_TOKEN}
       - PROGRAM_IDS=${PROGRAM_IDS:-whirLbMiicVdio4qvUfM5KAg6Ct8VwpYzGff3uctyCc,5Q544fKrFoe6tsEbD7S8EmxGTJYAKtTVhAW5Q5pge4j1,cpamdpZCGKUy5JxQXB4dcpGPiikHawvSWAd6mEn1sGG}
       - RUST_LOG=${RUST_LOG:-info}
-    command: ["--topic","geyser.raw"]
+    command: ["--topic","orca-swaps"]
     networks:
       - mevana-network
     restart: unless-stopped
@@ -149,6 +149,14 @@ services:
       options:
         max-size: "50m"
         max-file: "5"
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+          cpus: '0.25'
+        reservations:
+          memory: 128M
+          cpus: '0.10'
 
   redis:
     image: redis:7-alpine
@@ -622,7 +630,7 @@ services:
     image: adminer
     container_name: adminer
     ports:
-      - "8081:8080"
+      - "8082:8080"
     networks:
       - mevana-network
     restart: unless-stopped
