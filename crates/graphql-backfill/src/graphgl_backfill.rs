@@ -47,6 +47,7 @@
 // HSET dex:mint:{MINT} => decimals, [symbol], [name], updated_at
 
 use anyhow::{bail, Context, Result};
+use log::info;
 use chrono::Utc;
 use clap::{Parser, ArgAction};
 use dotenv::dotenv;

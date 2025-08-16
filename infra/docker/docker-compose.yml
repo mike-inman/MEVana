@@ -52,7 +52,7 @@ services:
       KAFKA_BROKER_ID: 1
       KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
       KAFKA_LISTENERS: PLAINTEXT://0.0.0.0:9092,PLAINTEXT_HOST://0.0.0.0:29092
-      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092,PLAINTEXT_HOST://localhost:29092
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092,PLAINTEXT_HOST://host.docker.internal:29092
       KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
       KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
       KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"
@@ -140,6 +140,7 @@ services:
       - X_TOKEN=${SHYFT_GRPC_TOKEN}
       - PROGRAM_IDS=${PROGRAM_IDS:-whirLbMiicVdio4qvUfM5KAg6Ct8VwpYzGff3uctyCc,5Q544fKrFoe6tsEbD7S8EmxGTJYAKtTVhAW5Q5pge4j1,cpamdpZCGKUy5JxQXB4dcpGPiikHawvSWAd6mEn1sGG}
       - RUST_LOG=${RUST_LOG:-info}
+      - FAST_MODE=${FAST_MODE:-1}
     command: ["--topic","orca-swaps"]
     networks:
       - mevana-network
@@ -221,6 +222,42 @@ services:
         reservations:
           memory: 128M
           cpus: '0.1'
+
+  graphql-backfill:
+    build:
+      context: ../../crates/graphql-backfill
+      dockerfile: Dockerfile
+    image: graphql-backfill:latest
+    container_name: graphql-backfill
+    environment:
+      - SHYFT_API_KEY=${SHYFT_API_KEY}
+      - SHYFT_NETWORK=${SHYFT_NETWORK:-mainnet-beta}
+      - REDIS_URL=${REDIS_URL:-redis://redis:6379/0}
+      - PAGE_SIZE=${PAGE_SIZE:-250}
+      - MAX_PAGES=${MAX_PAGES:-200}
+    networks:
+      - mevana-network
+    restart: "no"
+    command: ["--page-size","250","--max-pages","200"]
+
+  dex-backfill:
+    build:
+      context: ../../crates/dex-backfill
+      dockerfile: Dockerfile
+    image: dex-backfill:latest
+    container_name: dex-backfill
+    environment:
+      - ENDPOINT=${SHYFT_GRPC_ENDPOINT}
+      - X_TOKEN=${SHYFT_GRPC_TOKEN}
+      - REDIS_URL=${REDIS_URL:-redis://redis:6379/0}
+      - INCLUDE_TICKARRAYS=${INCLUDE_TICKARRAYS:-true}
+      - INCLUDE_POSITIONS=${INCLUDE_POSITIONS:-true}
+    networks:
+      - mevana-network
+    restart: unless-stopped
+    command: ["--include-tickarrays","--include-positions"]
+    volumes:
+      - ../../crates/dex-backfill/idls:/app/idls:ro
 
   # =============================================================================
   # STREAMING SERVICES
@@ -727,12 +764,8 @@ services:
 
 networks:
   mevana-network:
-    driver: bridge
+    external: true
     name: mevana-network
-    ipam:
-      config:
-        - subnet: 172.20.0.0/16
-          gateway: 172.20.0.1
 
 volumes:
   postgres_data:

@@ -31,3 +31,20 @@
 ## Next (post-orca parity)
 - Raydium/Meteora profiles, comparator diffs in UI
 - Binary v2 hot stream (prost) + metrics dashboards + CI/CD pipelines
+
+## Immediate Next Items (in progress)
+- Add and run `normalizer-extract` (bin `tap_orca_extract`) as a service:
+  - IN_TOPIC: raw geyser topic from `dex-stream-universal`
+  - OUT_TOPIC: `*.parsed.v2` normalized swaps (JSON initially)
+  - FAST_MODE=1, counters-only logging, latency histograms
+- Expand `PROGRAM_IDS` to include Raydium and Meteora; verify decoders/extractors
+- Depth/slippage model:
+  - Maintain per-pool depth snapshots from TickArrays/Positions → Redis `dex:pool_depth:{pool}`
+  - Provide size→expected price function for sizing and slippage checks
+- Arb test mode service:
+  - Consume `*.parsed.v2`, compute net-PnL (DEX fees + tip=0 canary), log “would trade”, skip non-positive
+- Observability & safety:
+  - Add histograms geyser→extractor and extractor→arb-test; counters for decode/extract success
+  - PnL dashboards and kill-switch for p99 latency and negative rolling net-PnL
+- Binary hot path:
+  - Move normalized v2 to prost for hot path (keep JSON for UI)
