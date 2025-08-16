@@ -61,6 +61,45 @@ impl Cfg {
     }
 }
 
+fn log_idl_recognition(tx: &ypp::SubscribeUpdateTransaction) {
+    // try to decode any Whirlpool instructions using generated IDL decoders
+    let Some(info) = tx.transaction.as_ref() else {
+        return;
+    };
+    let Some(msg) = info.transaction.as_ref().and_then(|v| v.message.as_ref()) else {
+        return;
+    };
+
+    // Collect base58 message keys (for account index resolution)
+    let account_keys: Vec<String> = msg
+        .account_keys
+        .iter()
+        .map(|k| bs58::encode(k).into_string())
+        .collect();
+
+    // Walk compiled instructions
+    for ix in &msg.instructions {
+        // Program id is an index into account_keys
+        let pid_idx = ix.program_id_index as usize;
+        if pid_idx >= account_keys.len() {
+            continue;
+        }
+        let program_id_b58 = &account_keys[pid_idx];
+
+        // If we have a decoder for this program, try it
+        if let Some(dec) = normalizer_service::decoder_for(program_id_b58) {
+            if let Some((name, roles)) = dec(&ix.data, &ix.accounts, &account_keys) {
+                log::info!(
+                    "IDL decode ok: program={} ix={} roles={:?}",
+                    program_id_b58,
+                    name,
+                    roles
+                );
+            }
+        }
+    }
+}
+
 // ---------- Normalized schema ----------
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -365,6 +404,21 @@ async fn handle_msg(cfg: &Cfg, producer: &FutureProducer, m: &BorrowedMessage<'_
                 .map_err(|(e, _)| anyhow::anyhow!(e))?;
             log::error!("decode failed; sent to dlq key={}", key);
         }
+    }
+
+    match decode_transaction(payload) {
+        Ok(tx) => {
+            // NEW: visibility log for IDL decodes
+            log_idl_recognition(&tx);
+
+            // existing logic…
+            if let Some(n) = normalized_from_tx(&tx) {
+                // …
+            } else {
+                // …
+            }
+        }
+        Err(e) => { /* … */ }
     }
 
     Ok(())

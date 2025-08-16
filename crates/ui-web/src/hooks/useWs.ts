@@ -5,7 +5,8 @@ import { startMockFeed } from '../mock/mockFeed'
 export function useWS() {
   const upsertPrice = useStore((s) => s.upsertPrice)
   const pushSwap = useStore((s) => s.pushSwap)
-  const mock = import.meta.env.VITE_MOCK === '1'
+  const useV2 = useStore((s) => s.useV2)
+  const mock = (import.meta.env as any)["VITE_MOCK"] === '1'
 
   useEffect(() => {
     if (mock) {
@@ -24,7 +25,8 @@ export function useWS() {
     }
 
     const priceWS = new WebSocket('ws://localhost:8081/ws/prices')
-    const swapWS = new WebSocket('ws://localhost:8081/ws/swaps')
+    const swapsPath = useV2 ? '/ws/swaps.v2' : '/ws/swaps'
+    const swapWS = new WebSocket('ws://localhost:8081' + swapsPath)
 
     const failTimer = setTimeout(startFallback, 2000)
 
@@ -51,5 +53,5 @@ export function useWS() {
       try { swapWS.close() } catch {}
       if (stopMock) stopMock()
     }
-  }, [upsertPrice, pushSwap, mock])
+  }, [upsertPrice, pushSwap, mock, useV2])
 }

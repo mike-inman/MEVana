@@ -17,7 +17,7 @@ export function startMockFeed(
   upsertPrice: (p: PriceSnapshot) => void,
   pushSwap: (s: NormalizedSwap) => void
 ) {
-  let seed = pairs.map((p) => ({ ...p }))
+  let seed: { dex: string; pair: string; price: number }[] = pairs.map((p) => ({ ...p }))
 
   const priceTimer = setInterval(() => {
     const ts = Math.floor(Date.now() / 1000)
@@ -34,8 +34,8 @@ export function startMockFeed(
       upsertPrice(snap)
     }
     // occasionally emit a swap
-    if (Math.random() < 0.7) {
-      const pick = seed[Math.floor(Math.random() * seed.length)]
+    if (Math.random() < 0.7 && seed.length > 0) {
+      const pick = seed[Math.floor(Math.random() * seed.length)]!
       const amtIn = +(Math.random() * 5 + 0.1).toFixed(4)
       const amtOut = +(amtIn * pick.price).toFixed(4)
       const swap: NormalizedSwap = {
@@ -43,9 +43,9 @@ export function startMockFeed(
         slot: 0,
         sig: 'mock_tx_' + Math.random().toString(36).slice(2, 10),
         dex: pick.dex.toLowerCase(),
-        token_in: pick.pair.split('/')[0],
+        token_in: pick.pair.split('/')[0]!,
         amount_in: amtIn,
-        token_out: pick.pair.split('/')[1],
+        token_out: pick.pair.split('/')[1]!,
         amount_out: amtOut,
       }
       pushSwap(swap)
