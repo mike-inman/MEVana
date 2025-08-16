@@ -130,8 +130,8 @@ pub fn generate(idl_dir: &Path, profiles_dir: &Path, out_dir: &Path) -> Result<(
             continue; // skip instead of error
         };
 
-        // If the IDL lacks an address, fall back to the profile’s program_id
-        let effective_pid = if idl.program_id.is_empty() {
+        // Prefer profile override when provided; else use IDL address
+        let effective_pid = if !profile.program_id.is_empty() {
             &profile.program_id
         } else {
             &idl.program_id
@@ -157,7 +157,6 @@ pub fn generate(idl_dir: &Path, profiles_dir: &Path, out_dir: &Path) -> Result<(
         let mod_name = format!("program_{}", profile.program_name.replace('-', "_"));
         let mod_path = out_dir.join(format!("{mod_name}.rs"));
         fs::write(&mod_path, mod_src)?;
-        // modules.push((mod_name, profile.program_id.clone()));
         modules.push((mod_name, effective_pid.to_string()));
     }
 

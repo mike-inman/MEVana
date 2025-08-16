@@ -16,6 +16,22 @@ pkill -f "cargo run -p" || true
 docker compose -f infra/docker/docker-compose.yml --env-file infra/docker/.env.docker up -d
 docker compose -f infra/docker/docker-compose.yml --env-file infra/docker/.env.docker up kafka-init
 
+in tap_orca_decode
+
+
+
+# adjust the PID to your Whirlpool program id
+KAFKA_BROKER=localhost:29092 \
+IN_TOPIC=orca-swaps \
+FILTER_PID=whirLbM2vNtMeJ6z18WZb98sPNT1L4GzWk2vuyZgq2U \
+MAX=25 \
+cargo run -p normalizer-service --bin tap_orca_decode
+
+
+
+
+
+
 
 normalizer-orca
 Reads raw geyser txs (orca-swaps) → writes normalized swaps (orca-swaps.parsed) and DLQ.

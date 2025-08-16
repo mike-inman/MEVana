@@ -1,4 +1,4 @@
-import { useWS } from '../hooks/useWS'
+import { useWS } from '../hooks/useWs'
 import { useStore } from '../state/useStore'
 import { PriceCard } from './PriceCard'
 

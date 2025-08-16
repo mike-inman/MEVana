@@ -1,6 +1,7 @@
 import { PricesPanel } from './components/PricesPanel'
 import { SwapsPanel } from './components/SwapsPanel'
 import { WsStatus } from './components/WsStatus'
+import { PoolPanel } from './components/PoolPanel'
 
 export default function App() {
   return (
@@ -17,8 +18,9 @@ export default function App() {
         <PricesPanel />
       </section>
 
-      <aside className="col-span-12 lg:col-span-5 card p-3">
-        <SwapsPanel />
+      <aside className="col-span-12 lg:col-span-5 space-y-3">
+        <div className="card p-3"><SwapsPanel /></div>
+        <div className="card p-3"><PoolPanel /></div>
       </aside>
     </div>
   )
