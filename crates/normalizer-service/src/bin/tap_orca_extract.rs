@@ -20,6 +20,8 @@ use serde_json;
 use std::collections::HashMap;
 use yellowstone_grpc_proto::prelude as ypp;
 use yellowstone_grpc_proto::prost::Message as _;
+use redis::{aio::MultiplexedConnection, AsyncCommands};
+use std::time::Instant;
 
 #[tokio::main]
 async fn main() -> Result<()> {
@@ -30,6 +32,7 @@ async fn main() -> Result<()> {
     let in_topic = std::env::var("IN_TOPIC").unwrap_or_else(|_| "orca-swaps".into());
     let out_topic = std::env::var("OUT_TOPIC").unwrap_or_else(|_| "orca-swaps.parsed.v2".into());
     let group_id = std::env::var("GROUP_ID").unwrap_or_else(|_| "tap-orca-extract".into());
+    let redis_url = std::env::var("REDIS_URL").unwrap_or_else(|_| "redis://127.0.0.1:6379/0".into());
 
     info!("tap_orca_extract: broker={broker} in={in_topic} out={out_topic} group_id={group_id}");
 
@@ -52,6 +55,13 @@ async fn main() -> Result<()> {
         .create()
         .context("create producer")?;
 
+    // Redis (optional enrich)
+    let redis_client = redis::Client::open(redis_url.clone())?;
+    let mut redis_conn: MultiplexedConnection = redis_client
+        .get_multiplexed_tokio_connection()
+        .await
+        .context("redis connect")?;
+
     // Verify decoders are registered
     {
         let regs = generated::registry();
@@ -70,8 +80,13 @@ async fn main() -> Result<()> {
             Err(e) => warn!("kafka recv error: {e:?}"),
             Ok(m) => {
                 if let Some(bytes) = m.payload() {
-                    if let Err(e) = handle(bytes, &producer, &out_topic).await {
+                    let t0 = Instant::now();
+                    if let Err(e) = handle(bytes, &producer, &out_topic, &mut redis_conn).await {
                         error!("handle error: {e:#}");
+                    }
+                    let dt_ms = t0.elapsed().as_micros() as f64 / 1000.0;
+                    if dt_ms > 25.0 {
+                        warn!("extract path latency high: {:.2} ms", dt_ms);
                     }
                 } else {
                     warn!("empty payload");
@@ -82,7 +97,12 @@ async fn main() -> Result<()> {
     }
 }
 
-async fn handle(payload: &[u8], producer: &FutureProducer, out_topic: &str) -> Result<()> {
+async fn handle(
+    payload: &[u8],
+    producer: &FutureProducer,
+    out_topic: &str,
+    redis: &mut MultiplexedConnection,
+) -> Result<()> {
     // Decode the Yellowstone SubscribeUpdateTransaction
     let update = ypp::SubscribeUpdateTransaction::decode(payload)
         .context("prost decode SubscribeUpdateTransaction")?;
@@ -136,9 +156,45 @@ async fn handle(payload: &[u8], producer: &FutureProducer, out_topic: &str) -> R
             };
 
             if let Some(n) = extractor.try_extract(&ctx) {
+                // Enrich with pool/mint info from Redis if present
+                // Expect keys: dex:pool:{pool_id}, dex:mint:{mint}
+                let pool_id = ctx
+                    .decoded_accounts_by_role
+                    .as_ref()
+                    .and_then(|m| ["whirlpool","pool"].iter().find_map(|r| m.get(*r)))
+                    .cloned()
+                    .unwrap_or_default();
+                let pool_key = format!("dex:pool:{}", pool_id);
+                let mut tick_hint: Option<i64> = None;
+                let mut sqrt_price_hint: Option<String> = None;
+                if !pool_key.ends_with(':') { // crude check; empty id yields trailing ':'
+                    if let Ok::<std::collections::HashMap<String, String>, _>(snap) = redis.hgetall(&pool_key).await {
+                        if let Some(sp) = snap.get("sqrt_price_x64") { sqrt_price_hint = Some(sp.clone()); }
+                        if let Some(t) = snap.get("tick").and_then(|s| s.parse::<i64>().ok()) { tick_hint = Some(t); }
+                    }
+                }
+
+                // Optional decimals → UI amounts
+                let dec_in = get_mint_decimals(redis, &n.token_in_mint).await;
+                let dec_out = get_mint_decimals(redis, &n.token_out_mint).await;
+                let amount_in_ui = dec_in.map(|d| to_ui(n.amount_in, d));
+                let amount_out_ui = dec_out.map(|d| to_ui(n.amount_out, d));
+                let price_ui = match (amount_in_ui, amount_out_ui) {
+                    (Some(ai), Some(ao)) if ai > 0.0 => Some(ao / ai),
+                    _ => None,
+                };
+
+                // Merge into JSON object
+                let mut obj = serde_json::to_value(&n)?.as_object().cloned().unwrap_or_default();
+                if let Some(v) = amount_in_ui { obj.insert("amount_in_ui".into(), serde_json::json!(v)); }
+                if let Some(v) = amount_out_ui { obj.insert("amount_out_ui".into(), serde_json::json!(v)); }
+                if let Some(v) = price_ui { obj.insert("price_ui".into(), serde_json::json!(v)); }
+                if let Some(v) = tick_hint { obj.insert("tick_hint".into(), serde_json::json!(v)); }
+                if let Some(v) = sqrt_price_hint { obj.insert("sqrt_price_x64_hint".into(), serde_json::json!(v)); }
+
                 // Emit to Kafka as JSON with key = signature
                 let key = ctx.signature.clone();
-                let payload = serde_json::to_vec(&n)?;
+                let payload = serde_json::to_vec(&obj)?;
                 let _ = producer
                     .send(
                         FutureRecord::to(out_topic).key(&key).payload(&payload),
@@ -146,7 +202,7 @@ async fn handle(payload: &[u8], producer: &FutureProducer, out_topic: &str) -> R
                     )
                     .await;
                 // Also echo to stdout for quick inspection
-                println!("{}", serde_json::to_string(&n)?);
+                println!("{}", serde_json::to_string(&obj)?);
             }
         }
     }
@@ -225,4 +281,18 @@ fn build_keys_and_balance_changes(
     }
 
     (keys_b58, out)
+}
+
+fn to_ui(raw: u128, decimals: u8) -> f64 {
+    if decimals == 0 { return raw as f64; }
+    let scale = 10u128.saturating_pow(decimals as u32);
+    (raw as f64) / (scale as f64)
+}
+
+async fn get_mint_decimals(redis: &mut MultiplexedConnection, mint: &str) -> Option<u8> {
+    let key = format!("dex:mint:{}", mint);
+    match redis::cmd("HGET").arg(&key).arg("decimals").query_async::<Option<i64>>(redis).await {
+        Ok(Some(d)) if d >= 0 && d <= 255 => Some(d as u8),
+        _ => None,
+    }
 }

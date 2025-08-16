@@ -2,9 +2,9 @@
 
 FROM rust:1.79 as builder
 WORKDIR /app
-COPY . /app
-# Cache deps by building a dummy
-RUN mkdir -p /app/.cargo && cargo build -p dex-stream-universal --release
+# Build only this crate (small context)
+COPY . .
+RUN cargo build --release
 
 FROM debian:bookworm-slim as runtime
 RUN apt-get update && apt-get install -y ca-certificates && update-ca-certificates && rm -rf /var/lib/apt/lists/*
