@@ -32,19 +32,24 @@
 - Raydium/Meteora profiles, comparator diffs in UI
 - Binary v2 hot stream (prost) + metrics dashboards + CI/CD pipelines
 
-## Immediate Next Items (in progress)
-- Add and run `normalizer-extract` (bin `tap_orca_extract`) as a service:
-  - IN_TOPIC: raw geyser topic from `dex-stream-universal`
-  - OUT_TOPIC: `*.parsed.v2` normalized swaps (JSON initially)
-  - FAST_MODE=1, counters-only logging, latency histograms
-- Expand `PROGRAM_IDS` to include Raydium and Meteora; verify decoders/extractors
-- Depth/slippage model:
-  - Maintain per-pool depth snapshots from TickArrays/Positions → Redis `dex:pool_depth:{pool}`
-  - Provide size→expected price function for sizing and slippage checks
-- Arb test mode service:
-  - Consume `*.parsed.v2`, compute net-PnL (DEX fees + tip=0 canary), log “would trade”, skip non-positive
-- Observability & safety:
-  - Add histograms geyser→extractor and extractor→arb-test; counters for decode/extract success
-  - PnL dashboards and kill-switch for p99 latency and negative rolling net-PnL
-- Binary hot path:
-  - Move normalized v2 to prost for hot path (keep JSON for UI)
+## Immediate Next Items
+Status: partial completion
+
+- Done:
+  - `dex-stream-universal`: FAST_MODE enabled; no Kafka key on hot path; Dockerized and running on `mevana-network` against internal Kafka
+  - `graphql-backfill`: Dockerized service added (one-shot)
+  - `dex-backfill`: Dockerized, continuous updates; IDLs mounted; running
+  - `normalizer-extract` (bin `tap_orca_extract`): Dockerized and running; Redis read-through caches; producing `orca-swaps.parsed.v2`
+  - `price-aggregator`: Dockerized and running; consuming parsed swaps and emitting `prices.latest`
+
+- Next up:
+  - Expand `PROGRAM_IDS` to include Raydium + Meteora; verify extraction paths and add backfills
+  - Depth/slippage model:
+    - Maintain per-pool depth snapshots from TickArrays/Positions → Redis `dex:pool_depth:{pool}`
+    - Provide size→expected price function for sizing and slippage checks
+  - Arb test mode:
+    - Consume multi-venue prices, simulate bundles, record p50/p99 pipeline latencies
+  - Observability & safeguards:
+    - Enable `metrics` profile (Prometheus/Grafana), export histograms, add circuit breaker
+  - Binary hot path:
+    - Move normalized v2 from JSON to prost (retain JSON for UI)
