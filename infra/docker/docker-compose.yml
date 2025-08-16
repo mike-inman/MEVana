@@ -782,6 +782,22 @@ services:
     profiles:
       - cache
 
+  price-aggregator:
+    build:
+      context: ../../crates/price-aggregator
+      dockerfile: Dockerfile
+    image: price-aggregator:latest
+    container_name: price-aggregator
+    environment:
+      - KAFKA_BROKER=kafka:9092
+      - IN_TOPIC=${AGG_IN_TOPIC:-orca-swaps.parsed.v2}
+      - OUT_TOPIC=${AGG_OUT_TOPIC:-prices.latest}
+      - GROUP_ID=${AGG_GROUP_ID:-price-aggregator}
+      - EMIT_SECS=${AGG_EMIT_SECS:-5}
+    networks:
+      - mevana-network
+    restart: unless-stopped
+
 networks:
   mevana-network:
     external: true
