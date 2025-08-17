@@ -7,6 +7,8 @@ use futures_util::{sink::SinkExt, stream::StreamExt, TryFutureExt};
 use log::{error, info, warn};
 use rdkafka::producer::{FutureProducer, FutureRecord};
 use rdkafka::ClientConfig;
+use serde_json::json;
+use std::collections::HashSet;
 use std::time::Duration;
 use tonic::transport::channel::ClientTlsConfig;
 use yellowstone_grpc_client::{GeyserGrpcClient, Interceptor};
@@ -17,8 +19,6 @@ use yellowstone_grpc_proto::{
     },
     prost::Message as _,
 };
-use serde_json::json;
-use std::collections::HashSet;
 
 #[derive(Debug, Clone, Parser)]
 #[command(author, version, about)]
@@ -43,7 +43,7 @@ fn analyze_transaction_for_discovery(
     known_program_ids: &HashSet<String>,
 ) -> Option<Vec<String>> {
     let mut unknown_programs = Vec::new();
-    
+
     // Extract program IDs from transaction instructions
     if let Some(transaction_info) = &update.transaction {
         if let Some(transaction) = &transaction_info.transaction {
@@ -60,7 +60,7 @@ fn analyze_transaction_for_discovery(
             }
         }
     }
-    
+
     // Extract program IDs from account keys
     if let Some(transaction_info) = &update.transaction {
         if let Some(transaction) = &transaction_info.transaction {
@@ -75,7 +75,7 @@ fn analyze_transaction_for_discovery(
             }
         }
     }
-    
+
     if unknown_programs.is_empty() {
         None
     } else {
@@ -171,10 +171,10 @@ async fn main() -> Result<()> {
 
     let fast_mode = std::env::var("FAST_MODE").ok().as_deref() == Some("1");
     let producer = create_producer(&broker, fast_mode)?;
-    
+
     // Create a set of known program IDs for fast lookup
     let known_program_ids: HashSet<String> = program_ids.iter().cloned().collect();
-    
+
     // Discovery mode: emit unknown program IDs for AI analysis
     let discovery_mode = std::env::var("DISCOVERY_MODE").ok().as_deref() == Some("1");
     let discovery_producer = if discovery_mode {
@@ -209,16 +209,16 @@ async fn main() -> Result<()> {
             let (mut subscribe_tx, mut stream) =
                 client.subscribe_with_request(Some(request)).await?;
             info!("stream opened");
-            
+
             let mut unknown_program_count = 0u64;
-            
+
             while let Some(msg) = stream.next().await {
                 match msg {
                     Ok(update_msg) => match update_msg.update_oneof {
                         Some(UpdateOneof::Transaction(update)) => {
                             let mut buf = Vec::new();
                             update.encode(&mut buf)?;
-                            
+
                             // Emit to main topic
                             let _ = producer
                                 .send(
@@ -226,19 +226,25 @@ async fn main() -> Result<()> {
                                     Duration::from_secs(10),
                                 )
                                 .await;
-                            
+
                             // Discovery mode: analyze transaction for unknown program IDs
                             if discovery_mode {
                                 if let Some(discovery_prod) = &discovery_producer {
-                                    if let Some(unknown_programs) = analyze_transaction_for_discovery(&update, &known_program_ids) {
+                                    if let Some(unknown_programs) =
+                                        analyze_transaction_for_discovery(
+                                            &update,
+                                            &known_program_ids,
+                                        )
+                                    {
                                         for program_id in unknown_programs {
                                             unknown_program_count += 1;
-                                            let signature = update.transaction
+                                            let signature = update
+                                                .transaction
                                                 .as_ref()
-                                                .and_then(|t| t.signature.as_ref())
-                                                .map(|s| bs58::encode(s).into_string())
+                                                .and_then(|t| Some(t.signature.clone()))
+                                                .map(|s| bs58::encode(&s).into_string())
                                                 .unwrap_or_else(|| "unknown".to_string());
-                                            
+
                                             let discovery_data = json!({
                                                 "program_id": program_id,
                                                 "timestamp": chrono::Utc::now().timestamp(),
@@ -247,7 +253,7 @@ async fn main() -> Result<()> {
                                                 "encounter_count": unknown_program_count,
                                                 "source": "dex-stream-universal"
                                             });
-                                            
+
                                             let discovery_payload = discovery_data.to_string();
                                             let _ = discovery_prod
                                                 .send(
@@ -257,9 +263,12 @@ async fn main() -> Result<()> {
                                                     Duration::from_secs(5),
                                                 )
                                                 .await;
-                                            
+
                                             if unknown_program_count % 100 == 0 {
-                                                info!("Discovered {} unknown program IDs", unknown_program_count);
+                                                info!(
+                                                    "Discovered {} unknown program IDs",
+                                                    unknown_program_count
+                                                );
                                             }
                                         }
                                     }

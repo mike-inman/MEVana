@@ -1,38 +1,39 @@
+use anyhow::{Context, Result};
+use bs58;
 use chrono::Utc;
-use clap::{Parser, ArgAction};
+use clap::{ArgAction, Parser};
 use dotenv::dotenv;
 use env_logger;
+use futures_util::StreamExt;
 use log::{error, info, warn};
-use redis::{aio::MultiplexedConnection, AsyncCommands, pipe};
+use lru::LruCache;
+use redis::{aio::MultiplexedConnection, pipe, AsyncCommands};
+use serde::{Deserialize, Serialize};
+use std::sync::Arc;
 use std::{collections::HashMap, env, time::Duration};
 use tokio::sync::Mutex;
-use std::sync::Arc;
-use bs58;
-use lru::LruCache;
-
-// Import our TickArray debugger module
-mod tickarray_debugger;
-use tickarray_debugger::{TickArrayDebugger, TickArrayDebugInfo};
-
-use whirlpool_interface::accounts::{
-    Whirlpool, WhirlpoolAccount, WHIRLPOOL_ACCOUNT_DISCM,
-    TICK_ARRAY_ACCOUNT_DISCM, POSITION_ACCOUNT_DISCM,
-};
-use whirlpool_interface::accounts::TickArrayAccount;
 use yellowstone_grpc_client::{GeyserGrpcClient, Interceptor};
 use yellowstone_grpc_proto::geyser::{
     subscribe_request_filter_accounts_filter::Filter as AccountsFilterOneOf,
     subscribe_request_filter_accounts_filter_memcmp::Data as MemcmpData,
-    CommitmentLevel, SubscribeRequest, SubscribeRequestFilterAccounts,
-    SubscribeRequestFilterAccountsFilter, SubscribeRequestFilterAccountsFilterMemcmp,
-    subscribe_update::UpdateOneof, SubscribeUpdateAccount,
+    subscribe_update::UpdateOneof, CommitmentLevel, SubscribeRequest,
+    SubscribeRequestFilterAccounts, SubscribeRequestFilterAccountsFilter,
+    SubscribeRequestFilterAccountsFilterMemcmp, SubscribeUpdateAccount,
 };
-use futures_util::StreamExt;
+
+// Import our TickArray debugger module
+mod tickarray_debugger;
+use tickarray_debugger::TickArrayDebugger;
+
+use whirlpool_interface::accounts::TickArrayAccount;
+use whirlpool_interface::accounts::{
+    Whirlpool, WhirlpoolAccount, POSITION_ACCOUNT_DISCM, TICK_ARRAY_ACCOUNT_DISCM,
+    WHIRLPOOL_ACCOUNT_DISCM,
+};
 
 type AccountFilterMap = HashMap<String, SubscribeRequestFilterAccounts>;
 
 const WHIRLPOOL_PROGRAM_ID: &str = "whirLbMiicVdio4qvUfM5KAg6Ct8VwpYzGff3uctyCc";
-
 
 #[derive(Clone, Debug, Default)]
 struct MintMeta {
@@ -48,7 +49,9 @@ struct MintCache {
 impl MintCache {
     fn new(cap: usize) -> Self {
         use std::num::NonZeroUsize;
-        Self { lru: LruCache::new(NonZeroUsize::new(cap.max(16)).unwrap()) }
+        Self {
+            lru: LruCache::new(NonZeroUsize::new(cap.max(16)).unwrap()),
+        }
     }
 
     /// Pull from in-memory LRU first; if missing, read from Redis: HGET dex:mint:{MINT} decimals/symbol/name
@@ -66,8 +69,12 @@ impl MintCache {
         // (We keep it tolerant; your backfill and streamer will fill these over time.)
         let (dec_opt, sym_opt, name_opt): (Option<i64>, Option<String>, Option<String>) =
             redis::cmd("HMGET")
-                .arg(&key).arg("decimals").arg("symbol").arg("name")
-                .query_async(redis).await
+                .arg(&key)
+                .arg("decimals")
+                .arg("symbol")
+                .arg("name")
+                .query_async(redis)
+                .await
                 .unwrap_or((None, None, None));
 
         let meta = MintMeta {
@@ -81,8 +88,6 @@ impl MintCache {
     }
 }
 
-
-
 #[derive(Debug, Clone)]
 struct ConnArgs {
     endpoint: String,
@@ -94,14 +99,14 @@ struct ConnArgs {
 impl ConnArgs {
     async fn connect(&self) -> anyhow::Result<GeyserGrpcClient<impl Interceptor>> {
         info!("🔒 Building gRPC client for endpoint: {}", self.endpoint);
-        
+
         let builder = GeyserGrpcClient::build_from_shared(self.endpoint.clone())?
             .x_token(Some(self.x_token.clone()))?
             .connect_timeout(Duration::from_secs(20))
             .timeout(Duration::from_secs(20))
             .tls_config(tonic::transport::channel::ClientTlsConfig::new().with_native_roots())?
             .max_decoding_message_size(1024 * 1024 * 1024);
-        
+
         info!("🚀 Attempting connection...");
         builder.connect().await.map_err(Into::into)
     }
@@ -132,16 +137,19 @@ impl AppArgs {
         let endpoint = env::var("ENDPOINT").expect("ENDPOINT not found in .env file");
         let x_token = env::var("X_TOKEN").expect("X_TOKEN not found in .env file");
         let redis_url = env::var("REDIS_URL").expect("REDIS_URL not found in .env file");
-        
+
         // Initialize TickArray debugger if Shyft API key is available
-        let tickarray_debugger = env::var("SHYFT_API_KEY")
-            .ok()
-            .map(|api_key| {
-                let network = env::var("SHYFT_NETWORK").unwrap_or_else(|_| "mainnet-beta".to_string());
-                TickArrayDebugger::new(api_key, network)
-            });
-        
-        ConnArgs { endpoint, x_token, redis_url, tickarray_debugger }
+        let tickarray_debugger = env::var("SHYFT_API_KEY").ok().map(|api_key| {
+            let network = env::var("SHYFT_NETWORK").unwrap_or_else(|_| "mainnet-beta".to_string());
+            TickArrayDebugger::new(api_key, network)
+        });
+
+        ConnArgs {
+            endpoint,
+            x_token,
+            redis_url,
+            tickarray_debugger,
+        }
     }
 
     fn build_subscribe_request(&self) -> SubscribeRequest {
@@ -176,12 +184,24 @@ impl AppArgs {
             push("whirlpool_owner_only", WHIRLPOOL_PROGRAM_ID, None);
         } else {
             // Safe default: only Whirlpool POOL accounts (ok to IDL-parse)
-            push("whirlpool_pools", WHIRLPOOL_PROGRAM_ID, Some(WHIRLPOOL_ACCOUNT_DISCM));
+            push(
+                "whirlpool_pools",
+                WHIRLPOOL_PROGRAM_ID,
+                Some(WHIRLPOOL_ACCOUNT_DISCM),
+            );
             if self.include_tickarrays {
-                push("whirlpool_tickarrays", WHIRLPOOL_PROGRAM_ID, Some(TICK_ARRAY_ACCOUNT_DISCM));
+                push(
+                    "whirlpool_tickarrays",
+                    WHIRLPOOL_PROGRAM_ID,
+                    Some(TICK_ARRAY_ACCOUNT_DISCM),
+                );
             }
             if self.include_positions {
-                push("whirlpool_positions", WHIRLPOOL_PROGRAM_ID, Some(POSITION_ACCOUNT_DISCM));
+                push(
+                    "whirlpool_positions",
+                    WHIRLPOOL_PROGRAM_ID,
+                    Some(POSITION_ACCOUNT_DISCM),
+                );
             }
         }
 
@@ -204,7 +224,7 @@ impl AppArgs {
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
     dotenv().ok();
-    
+
     // Set up logging
     env::set_var(
         env_logger::DEFAULT_FILTER_ENV,
@@ -214,10 +234,13 @@ async fn main() -> anyhow::Result<()> {
 
     // At the start of your main function
     info!("🔍 Loading IDL files...");
-    info!("📁 Current working directory: {:?}", std::env::current_dir()?);
+    info!(
+        "📁 Current working directory: {:?}",
+        std::env::current_dir()?
+    );
 
     // Check if IDL files exist
-            let idl_path = "idls/whirLbMi_idl.json";
+    let idl_path = "idls/whirLbMi_idl.json";
     if std::path::Path::new(idl_path).exists() {
         info!("✅ IDL file found: {}", idl_path);
     } else {
@@ -228,7 +251,7 @@ async fn main() -> anyhow::Result<()> {
     let endpoint = env::var("ENDPOINT").expect("ENDPOINT not found in .env file");
     let x_token = env::var("X_TOKEN").expect("X_TOKEN not found in .env file");
     let redis_url = env::var("REDIS_URL").expect("REDIS_URL not found in .env file");
-    
+
     // Filter flags
     let flags = AppArgs::parse();
 
@@ -238,7 +261,11 @@ async fn main() -> anyhow::Result<()> {
     println!("🚀 Starting Whirlpool Account Updates Streamer");
     println!("================================================");
     println!("📡 Endpoint: {}", endpoint);
-    println!("🔑 X-Token: {}...{}", &x_token[..8], &x_token[x_token.len()-4..]);
+    println!(
+        "🔑 X-Token: {}...{}",
+        &x_token[..8],
+        &x_token[x_token.len() - 4..]
+    );
     println!("🗄️  Redis URL: {}", redis_url);
     println!("⚙️  Configuration:");
     println!("   Owner only mode: {}", flags.owner_only);
@@ -258,21 +285,24 @@ async fn main() -> anyhow::Result<()> {
     info!("Configuration flags: {:?}", flags);
 
     // Network creds (this one is not used, but keeping for reference)
-    let _conn_args = ConnArgs { 
-        endpoint, 
-        x_token, 
-        redis_url, 
-        tickarray_debugger: None 
+    let _conn_args = ConnArgs {
+        endpoint,
+        x_token,
+        redis_url,
+        tickarray_debugger: None,
     };
 
     // Simple retry loop for connection
     let mut attempts = 0;
     let max_attempts = 5;
-    
+
     loop {
         attempts += 1;
-        info!("🔄 Attempt {} of {}: Attempting to connect to geyser...", attempts, max_attempts);
-        
+        info!(
+            "🔄 Attempt {} of {}: Attempting to connect to geyser...",
+            attempts, max_attempts
+        );
+
         match try_connect(&flags).await {
             Ok(_) => {
                 info!("✅ Connection and processing completed successfully");
@@ -281,10 +311,13 @@ async fn main() -> anyhow::Result<()> {
             Err(e) => {
                 error!("❌ Attempt {} failed: {}", attempts, e);
                 if attempts >= max_attempts {
-                    error!("❌ Failed to establish connection after {} attempts", max_attempts);
+                    error!(
+                        "❌ Failed to establish connection after {} attempts",
+                        max_attempts
+                    );
                     return Err(e);
                 }
-                
+
                 // Exponential backoff: wait longer between attempts
                 let delay = std::cmp::min(1000 * (2_u64.pow(attempts as u32)), 30000);
                 info!("⏳ Waiting {}ms before retry...", delay);
@@ -299,20 +332,21 @@ async fn main() -> anyhow::Result<()> {
 async fn try_connect(flags: &AppArgs) -> anyhow::Result<()> {
     info!("🔌 Building connection arguments...");
     let conn_args = flags.build_connection_args();
-    
+
     info!("📡 Connection details:");
     info!("   Endpoint: {}", conn_args.endpoint);
-    info!("   X-Token: {}...{}", 
-        &conn_args.x_token[..8], 
-        &conn_args.x_token[conn_args.x_token.len()-4..]
+    info!(
+        "   X-Token: {}...{}",
+        &conn_args.x_token[..8],
+        &conn_args.x_token[conn_args.x_token.len() - 4..]
     );
     info!("   Redis URL: {}", conn_args.redis_url);
-    
+
     info!("🔄 Attempting to connect to geyser...");
     info!("   Setting connection timeout: 20s");
     info!("   Setting request timeout: 20s");
     info!("   Max message size: 1GB");
-    
+
     let client = match conn_args.connect().await {
         Ok(client) => {
             info!("✅ Successfully connected to geyser!");
@@ -322,46 +356,57 @@ async fn try_connect(flags: &AppArgs) -> anyhow::Result<()> {
             error!("❌ Failed to connect to geyser");
             error!("🔍 Connection error details: {:#?}", e);
             error!("📡 Endpoint: {}", conn_args.endpoint);
-            error!("🔑 X-Token: {}...{}", 
-                &conn_args.x_token[..8], 
-                &conn_args.x_token[conn_args.x_token.len()-4..]
+            error!(
+                "🔑 X-Token: {}...{}",
+                &conn_args.x_token[..8],
+                &conn_args.x_token[conn_args.x_token.len() - 4..]
             );
-            
+
             // Check if it's a TLS/certificate issue
             if e.to_string().contains("certificate") || e.to_string().contains("UnknownIssuer") {
                 error!("🔒 TLS Certificate Issue Detected");
                 error!("💡 This might be a certificate validation problem with the endpoint");
                 error!("💡 Try checking if the endpoint URL is correct or if there are certificate issues");
             }
-            
+
             // Check if it's a network issue
             if e.to_string().contains("transport") {
                 error!("🌐 Network/Transport Issue Detected");
                 error!("💡 Check your internet connection and firewall settings");
             }
-            
+
             // Check if it's an authentication issue
             if e.to_string().contains("Unauthenticated") || e.to_string().contains("Invalid") {
                 error!("🔐 Authentication Issue Detected");
                 error!("💡 Check if your X-Token is valid and not expired");
                 error!("💡 Verify your Shyft account status and API limits");
             }
-            
+
             return Err(e);
         }
     };
-    
+
     info!("📋 Building subscribe request...");
     let request = flags.build_subscribe_request();
-    info!("   Account filters: {:?}", request.accounts.keys().collect::<Vec<_>>());
+    info!(
+        "   Account filters: {:?}",
+        request.accounts.keys().collect::<Vec<_>>()
+    );
     info!("   Commitment level: {:?}", request.commitment);
     if let Some(from_slot) = request.from_slot {
         info!("   Starting from slot: {}", from_slot);
     }
-    
+
     info!("🚀 Starting geyser subscription...");
-    geyser_subscribe(client, request, &conn_args.redis_url, flags).await?;
-    
+    geyser_subscribe(
+        client,
+        request,
+        &conn_args.redis_url,
+        flags,
+        conn_args.tickarray_debugger.as_ref(),
+    )
+    .await?;
+
     info!("✅ Geyser subscription completed successfully");
     Ok(())
 }
@@ -371,16 +416,19 @@ async fn geyser_subscribe(
     request: SubscribeRequest,
     redis_url: &str,
     flags: &AppArgs,
+    debugger: Option<&TickArrayDebugger>,
 ) -> anyhow::Result<()> {
     let (mut _tx, mut stream) = client.subscribe_with_request(Some(request)).await?;
     info!("stream opened");
 
     let redis_client = redis::Client::open(redis_url)?;
-    let mut redis_conn: MultiplexedConnection = redis_client
-        .get_multiplexed_tokio_connection()
-        .await?;
+    let mut redis_conn: MultiplexedConnection =
+        redis_client.get_multiplexed_tokio_connection().await?;
 
-    let pong: String = redis::cmd("PING").query_async(&mut redis_conn).await.unwrap_or_else(|_| "PONG".to_string());
+    let pong: String = redis::cmd("PING")
+        .query_async(&mut redis_conn)
+        .await
+        .unwrap_or_else(|_| "PONG".to_string());
     info!("Redis ping: {}", pong);
 
     // // Test Redis connection with a simple command
@@ -392,21 +440,24 @@ async fn geyser_subscribe(
 
     // Redis client
     let redis_client = redis::Client::open(redis_url)?;
-    let mut redis_conn: MultiplexedConnection = redis_client
-        .get_multiplexed_tokio_connection()
-        .await?;
-
+    let mut redis_conn: MultiplexedConnection =
+        redis_client.get_multiplexed_tokio_connection().await?;
 
     while let Some(message) = stream.next().await {
         match message {
             Ok(msg) => match msg.update_oneof {
                 Some(UpdateOneof::Account(account)) => {
-                    if let Err(e) = handle_account_update(&mut redis_conn, flags, &mut mint_cache, &account ).await {
+                    if let Err(e) = handle_account_update(
+                        &mut redis_conn,
+                        flags,
+                        &mut mint_cache,
+                        &account,
+                        debugger,
+                    )
+                    .await
+                    {
                         error!("handle_account_update error: {e:?}");
                     }
-                }
-                Some(UpdateOneof::Ping(_)) => {
-                    // no-op; some servers send ping/pong automatically
                 }
                 _ => {}
             },
@@ -425,11 +476,16 @@ async fn handle_account_update(
     redis: &mut MultiplexedConnection,
     flags: &AppArgs,
     mint_cache: &mut MintCache,
-    upd: &SubscribeUpdateAccount
+    upd: &SubscribeUpdateAccount,
+    debugger: Option<&TickArrayDebugger>,
 ) -> anyhow::Result<()> {
-    let Some(acct) = &upd.account else { return Ok(()); };
+    let Some(acct) = &upd.account else {
+        return Ok(());
+    };
     let data: &[u8] = &acct.data;
-    if data.len() < 8 { return Ok(()); }
+    if data.len() < 8 {
+        return Ok(());
+    }
 
     let disc = &data[..8];
 
@@ -438,20 +494,22 @@ async fn handle_account_update(
         let whirlpool_acc = WhirlpoolAccount::deserialize(data)
             .map_err(|e| anyhow::anyhow!("WhirlpoolAccount::deserialize: {e}"))?;
         let whirlpool: Whirlpool = whirlpool_acc.0;
-    
+
         let pool_pubkey = bs58::encode(&acct.pubkey).into_string();
         let mint_a = whirlpool.token_mint_a.to_string();
         let mint_b = whirlpool.token_mint_b.to_string();
-    
+
         // Pull decimals/symbols from Redis (w/ in-process LRU)
         let meta_a = mint_cache.get_from_redis(redis, &mint_a).await?;
         let meta_b = mint_cache.get_from_redis(redis, &mint_b).await?;
-    
+
         let pair_symbol = match (&meta_a.symbol, &meta_b.symbol) {
-            (Some(sa), Some(sb)) if !sa.is_empty() && !sb.is_empty() => Some(format!("{}/{}", sa, sb)),
+            (Some(sa), Some(sb)) if !sa.is_empty() && !sb.is_empty() => {
+                Some(format!("{}/{}", sa, sb))
+            }
             _ => None,
         };
-    
+
         // Write full snapshot including decimals (+ optional pair_symbol)
         cache_whirlpool_snapshot(
             redis,
@@ -461,8 +519,9 @@ async fn handle_account_update(
             meta_b.decimals,
             pair_symbol.as_deref(),
             upd.slot,
-        ).await?;
-    
+        )
+        .await?;
+
         // Optional verification
         let pool_key = format!("dex:pool:{pool_pubkey}");
         let snap: HashMap<String, String> = redis.hgetall(&pool_key).await?;
@@ -472,13 +531,12 @@ async fn handle_account_update(
         }
         return Ok(());
     }
-    
 
     // Optionally stash TickArrays / Positions
     let now = Utc::now().timestamp();
     if flags.include_tickarrays && disc == TICK_ARRAY_ACCOUNT_DISCM.as_slice() {
         // Try to parse TickArray, but handle deserialization errors gracefully
-        match TickArrayAccount::deserialize(data) {
+        match TickArrayAccount::deserialize(&mut &upd.account.as_ref().unwrap().data[..]) {
             Ok(tick_array) => {
                 let ta = tick_array.0;
                 let pool_pubkey = ta.whirlpool.to_string();
@@ -487,15 +545,24 @@ async fn handle_account_update(
                 let sum_gross_liquidity: u128 = ta.ticks.iter().map(|t| t.liquidity_gross).sum();
 
                 let _id: String = redis::cmd("XADD")
-                    .arg("dex:whirlpool:tickarray_updates").arg("*")
-                    .arg("pool").arg(&pool_pubkey)
-                    .arg("array").arg(bs58::encode(&upd.account.as_ref().unwrap().pubkey).into_string())
-                    .arg("start").arg(start_tick)
-                    .arg("num_init").arg(num_initialized_ticks)
-                    .arg("sum_gross").arg(sum_gross_liquidity.to_string())
-                    .arg("slot").arg(upd.slot as i64)
-                    .arg("ts").arg(now)
-                    .query_async(redis).await?;
+                    .arg("dex:whirlpool:tickarray_updates")
+                    .arg("*")
+                    .arg("pool")
+                    .arg(&pool_pubkey)
+                    .arg("array")
+                    .arg(bs58::encode(&upd.account.as_ref().unwrap().pubkey).into_string())
+                    .arg("start")
+                    .arg(start_tick)
+                    .arg("num_init")
+                    .arg(num_initialized_ticks)
+                    .arg("sum_gross")
+                    .arg(sum_gross_liquidity.to_string())
+                    .arg("slot")
+                    .arg(upd.slot as i64)
+                    .arg("ts")
+                    .arg(now)
+                    .query_async(redis)
+                    .await?;
             }
             Err(e) => {
                 // Extract pool ID from account data if possible (first 32 bytes)
@@ -504,39 +571,61 @@ async fn handle_account_update(
                 } else {
                     "unknown".to_string()
                 };
-                
+
                 // Use debugger to understand why parsing failed (non-blocking)
-                if let Some(debugger) = &self.tickarray_debugger {
+                if let Some(debugger) = debugger {
                     let error_msg = e.to_string();
                     let data_clone = data.to_vec();
-                    
+                    let pool_pubkey_clone = pool_pubkey.clone();
+                    let debugger_clone = debugger.clone();
+
                     // Spawn debugger in background to avoid blocking the main stream
                     tokio::spawn(async move {
-                        match debugger.debug_parsing_failure(&pool_pubkey, &data_clone, &error_msg).await {
+                        match debugger_clone
+                            .debug_parsing_failure(&pool_pubkey_clone, &data_clone, &error_msg)
+                            .await
+                        {
                             Ok(debug_info) => {
-                                debugger.log_debug_info(&debug_info);
+                                debugger_clone.log_debug_info(&debug_info);
                             }
                             Err(debug_e) => {
-                                warn!("Debugger failed for pool {}: {}", pool_pubkey, debug_e);
+                                warn!(
+                                    "Debugger failed for pool {}: {}",
+                                    pool_pubkey_clone, debug_e
+                                );
                             }
                         }
                     });
                 }
-                
+
                 // Still emit basic metadata for depth builder (maintains existing behavior)
-                warn!("TickArray deserialization failed for {}: {}, emitting basic metadata", bs58::encode(&upd.account.as_ref().unwrap().pubkey).into_string(), e);
-                
+                warn!(
+                    "TickArray deserialization failed for {}: {}, emitting basic metadata",
+                    bs58::encode(&upd.account.as_ref().unwrap().pubkey).into_string(),
+                    e
+                );
+
                 let _id: String = redis::cmd("XADD")
-                    .arg("dex:whirlpool:tickarray_updates").arg("*")
-                    .arg("pool").arg(&pool_pubkey)
-                    .arg("array").arg(bs58::encode(&upd.account.as_ref().unwrap().pubkey).into_string())
-                    .arg("start").arg(0) // Unknown start tick
-                    .arg("num_init").arg(0) // Unknown initialized count
-                    .arg("sum_gross").arg("0") // Unknown liquidity
-                    .arg("slot").arg(upd.slot as i64)
-                    .arg("ts").arg(now)
-                    .arg("error").arg("deserialization_failed")
-                    .query_async(redis).await?;
+                    .arg("dex:whirlpool:tickarray_updates")
+                    .arg("*")
+                    .arg("pool")
+                    .arg(&pool_pubkey)
+                    .arg("array")
+                    .arg(bs58::encode(&upd.account.as_ref().unwrap().pubkey).into_string())
+                    .arg("start")
+                    .arg(0) // Unknown start tick
+                    .arg("num_init")
+                    .arg(0) // Unknown initialized count
+                    .arg("sum_gross")
+                    .arg("0") // Unknown liquidity
+                    .arg("slot")
+                    .arg(upd.slot as i64)
+                    .arg("ts")
+                    .arg(now)
+                    .arg("error")
+                    .arg("deserialization_failed")
+                    .query_async(redis)
+                    .await?;
             }
         }
         return Ok(());
@@ -544,11 +633,16 @@ async fn handle_account_update(
 
     if flags.include_positions && disc == POSITION_ACCOUNT_DISCM.as_slice() {
         let _id: String = redis::cmd("XADD")
-            .arg("dex:whirlpool:position_updates").arg("*")
-            .arg("slot").arg(upd.slot as i64)
-            .arg("len").arg(data.len() as i64)
-            .arg("ts").arg(now)
-            .query_async(redis).await?;
+            .arg("dex:whirlpool:position_updates")
+            .arg("*")
+            .arg("slot")
+            .arg(upd.slot as i64)
+            .arg("len")
+            .arg(data.len() as i64)
+            .arg("ts")
+            .arg(now)
+            .query_async(redis)
+            .await?;
         return Ok(());
     }
 
@@ -579,28 +673,44 @@ pub async fn cache_whirlpool_snapshot(
     let now = Utc::now().timestamp();
 
     let mut p = pipe();
-    p.cmd("HSET").arg(&pool_key)
-        .arg("mint_a").arg(&mint_a)
-        .arg("mint_b").arg(&mint_b)
-        .arg("decimals_a").arg(decimals_a as i64)
-        .arg("decimals_b").arg(decimals_b as i64)
-        .arg("fee_bps").arg(fee_bps)
-        .arg("sqrt_price_x64").arg(sqrt_price_x64)
-        .arg("tick").arg(tick)
-        .arg("updated_slot").arg(slot as i64)
-        .arg("updated_at").arg(now)
-        .arg("pair").arg(&pair);
+    p.cmd("HSET")
+        .arg(&pool_key)
+        .arg("mint_a")
+        .arg(&mint_a)
+        .arg("mint_b")
+        .arg(&mint_b)
+        .arg("decimals_a")
+        .arg(decimals_a as i64)
+        .arg("decimals_b")
+        .arg(decimals_b as i64)
+        .arg("fee_bps")
+        .arg(fee_bps)
+        .arg("sqrt_price_x64")
+        .arg(sqrt_price_x64)
+        .arg("tick")
+        .arg(tick)
+        .arg("updated_slot")
+        .arg(slot as i64)
+        .arg("updated_at")
+        .arg(now)
+        .arg("pair")
+        .arg(&pair);
 
     if let Some(ps) = pair_symbol {
         p.arg("pair_symbol").arg(ps);
         // symbol-based mapping too (if both symbols known)
-        p.cmd("SET").arg(format!("dex:pair_symbol:latest_pool:{ps}")).arg(pool_pubkey).ignore();
+        p.cmd("SET")
+            .arg(format!("dex:pair_symbol:latest_pool:{ps}"))
+            .arg(pool_pubkey)
+            .ignore();
     }
 
     // address-based pair mapping
-    p.cmd("SET").arg(format!("dex:pair:latest_pool:{pair}")).arg(pool_pubkey).ignore();
+    p.cmd("SET")
+        .arg(format!("dex:pair:latest_pool:{pair}"))
+        .arg(pool_pubkey)
+        .ignore();
 
     // Use explicit generic for older redis versions; both are fine:
     p.query_async::<()>(&mut *redis_conn).await
 }
-
