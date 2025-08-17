@@ -1,4 +1,7 @@
 # MEVana Development Roadmap
+**Last Updated**: 2024-08-17 15:30 CDT  
+**Strategic Revision**: Updated to reflect hybrid geyser + Shyft API approach  
+**Critical Success Factor**: Sub-10ms latency from signal to trade execution
 
 ## 🎯 **Phase 1: Core Infrastructure (COMPLETED)**
 - ✅ **Docker Orchestration**: All services consolidated in `infra/docker/docker-compose.yml`
@@ -44,6 +47,28 @@
 - 🔄 **Real-time Monitoring**: Live trading status, P&L, risk metrics
 - 🔄 **Configuration Management**: Easy parameter tuning and strategy adjustment
 
+## 🔄 **Hybrid Geyser + Shyft API Strategy (IMPLEMENTING)**
+
+### **Strategic Approach**
+- **Primary Data Source**: Geyser streams for live trading (speed requirement)
+- **Validation Layer**: Shyft APIs for cross-reference and fallback (reliability)
+- **Performance Target**: Sub-10ms latency maintained while improving reliability
+- **TickArray Solution**: Use Shyft `get_liquidity_details_of_a_pool` for validation
+
+### **Implementation Status**
+- ✅ **Shyft API Integration**: Basic API client and endpoints configured
+- ✅ **GraphQL Backfill**: Pool metadata seeding service ready
+- ✅ **Dex Backfill**: Continuous data maintenance service ready
+- 🔄 **TickArray Validation**: Implementing cross-reference layer
+- 🔄 **Fallback Logic**: Adding Shyft data fallback when geyser fails
+- 🔄 **Performance Testing**: Ensuring validation doesn't impact speed
+
+### **Next Steps (This Week)**
+1. **Complete TickArray Validation**: Implement Shyft API cross-reference
+2. **Add Fallback Logic**: Switch to Shyft data when geyser parsing fails
+3. **Performance Testing**: Measure validation impact on latency
+4. **Cache Optimization**: Use Shyft data to improve cache hit rates
+
 ## 🧠 **AI Foundation Architecture (IMPLEMENTED)**
 
 ### **Core AI Components**
@@ -76,12 +101,13 @@
 ## 🎯 **Target: Live Trading Ready by Thursday August 21st**
 
 ### **Critical Path Items**
-- [ ] **TickArray Stream Fix**: Resolve Redis stream data population issue
+- [ ] **TickArray Hybrid Solution**: Implement Shyft API validation + geyser fallback
 - [ ] **Discovery Mode Testing**: Verify unknown program ID detection
 - [ ] **Wallet Infrastructure**: Implement secure wallet management
 - [ ] **Trade Execution**: Basic Jito integration and preflight validation
 - [ ] **Risk Management**: Circuit breakers and position limits
 - [ ] **Performance Testing**: Validate sub-10ms latency targets
+- [ ] **Hybrid Validation**: Ensure Shyft API validation doesn't impact speed
 
 ### **Success Metrics**
 - **Latency**: <10ms from signal to execution
