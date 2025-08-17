@@ -24,14 +24,17 @@ type State = {
   prices: Record<string, PriceSnapshot>
   priceHistory: Record<string, number[]>
   swaps: NormalizedSwap[]
+  useV2: boolean
   upsertPrice: (p: PriceSnapshot) => void
   pushSwap: (s: NormalizedSwap) => void
+  setUseV2: (v: boolean) => void
 }
 
 export const useStore = create<State>((set, get) => ({
   prices: {},
   priceHistory: {},
   swaps: [],
+  useV2: true,
   upsertPrice: (p) =>
     set((st) => {
       const key = `${p.dex}:${p.pair}`
@@ -43,4 +46,5 @@ export const useStore = create<State>((set, get) => ({
       }
     }),
   pushSwap: (s) => set((st) => ({ swaps: [s, ...st.swaps].slice(0, 500) })),
+  setUseV2: (v) => set(() => ({ useV2: v })),
 }))

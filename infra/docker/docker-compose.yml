@@ -125,6 +125,39 @@ services:
           memory: 256M
           cpus: '0.25'
 
+  dex-stream-universal:
+    build:
+      context: ../../crates/dex-stream-universal
+      dockerfile: Dockerfile
+    image: dex-stream-universal:latest
+    container_name: dex-stream-universal
+    depends_on:
+      kafka:
+        condition: service_healthy
+    environment:
+      - KAFKA_BROKER=kafka:9092
+      - ENDPOINT=${SHYFT_GRPC_ENDPOINT}
+      - X_TOKEN=${SHYFT_GRPC_TOKEN}
+      - PROGRAM_IDS=${PROGRAM_IDS:-whirLbMiicVdio4qvUfM5KAg6Ct8VwpYzGff3uctyCc,5Q544fKrFoe6tsEbD7S8EmxGTJYAKtTVhAW5Q5pge4j1,cpamdpZCGKUy5JxQXB4dcpGPiikHawvSWAd6mEn1sGG}
+      - RUST_LOG=${RUST_LOG:-info}
+    command: ["--topic","orca-swaps"]
+    networks:
+      - mevana-network
+    restart: unless-stopped
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "50m"
+        max-file: "5"
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+          cpus: '0.25'
+        reservations:
+          memory: 128M
+          cpus: '0.10'
+
   redis:
     image: redis:7-alpine
     container_name: redis
@@ -220,6 +253,7 @@ services:
       - RECONNECT_DELAY=5
       - ENABLE_TIMER=${ENABLE_TIMER:-false}
       - TIMER_DURATION_SECONDS=${TIMER_DURATION_SECONDS:-20}
+      - PROGRAM_IDS=${PROGRAM_IDS:-whirLbMiicVdio4qvUfM5KAg6Ct8VwpYzGff3uctyCc}
     ports:
       - "9094:9090"
     networks:
@@ -596,7 +630,7 @@ services:
     image: adminer
     container_name: adminer
     ports:
-      - "8081:8080"
+      - "8082:8080"
     networks:
       - mevana-network
     restart: unless-stopped

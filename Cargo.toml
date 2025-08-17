@@ -8,6 +8,7 @@ members = [
     "crates/normalizer-runtime",
     "crates/normalizer-service",
     "crates/dex-stream-orca", 
+    "crates/dex-stream-universal",
     "crates/ui-gateway",
     "crates/dev-fixtures",
 #    "crates/geyser-producer",

@@ -5,7 +5,9 @@ import { startMockFeed } from '../mock/mockFeed'
 export function useWS() {
   const upsertPrice = useStore((s) => s.upsertPrice)
   const pushSwap = useStore((s) => s.pushSwap)
-  const mock = import.meta.env.VITE_MOCK === '1'
+  const useV2 = useStore((s) => s.useV2)
+  const mock = (import.meta.env as any)["VITE_MOCK"] === '1'
+  const allowFallback = (import.meta.env as any)["VITE_ALLOW_FALLBACK"] === '1'
 
   useEffect(() => {
     if (mock) {
@@ -17,19 +19,22 @@ export function useWS() {
     let usingMock = false
     let stopMock: (() => void) | null = null
     const startFallback = () => {
+      if (!allowFallback) { console.warn('[WS] fallback disabled'); return }
       if (!usingMock) {
         usingMock = true
         stopMock = startMockFeed(upsertPrice, pushSwap)
       }
     }
 
-    const priceWS = new WebSocket('ws://localhost:8081/ws/prices')
-    const swapWS = new WebSocket('ws://localhost:8081/ws/swaps')
+    const base = 'ws://127.0.0.1:8081'
+    const priceWS = new WebSocket(base + '/ws/prices')
+    const swapsPath = useV2 ? '/ws/swaps.v2' : '/ws/swaps'
+    const swapWS = new WebSocket(base + swapsPath)
 
-    const failTimer = setTimeout(startFallback, 2000)
+    const failTimer = setTimeout(startFallback, 5000)
 
-    priceWS.onopen = () => clearTimeout(failTimer)
-    swapWS.onopen = () => clearTimeout(failTimer)
+    priceWS.onopen = () => { console.log('[WS] prices open'); clearTimeout(failTimer) }
+    swapWS.onopen = () => { console.log('[WS] swaps open'); clearTimeout(failTimer) }
 
     priceWS.onmessage = (e) => {
       try {
@@ -42,8 +47,8 @@ export function useWS() {
       } catch {}
     }
 
-    priceWS.onerror = startFallback
-    swapWS.onerror = startFallback
+    priceWS.onerror = () => { console.warn('[WS] prices error'); startFallback() }
+    swapWS.onerror = () => { console.warn('[WS] swaps error'); startFallback() }
 
     return () => {
       clearTimeout(failTimer)
@@ -51,5 +56,5 @@ export function useWS() {
       try { swapWS.close() } catch {}
       if (stopMock) stopMock()
     }
-  }, [upsertPrice, pushSwap, mock])
+  }, [upsertPrice, pushSwap, mock, useV2])
 }
