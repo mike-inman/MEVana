@@ -15,3 +15,12 @@ serde_json = "1"
 clap = { version = "4.5", features = ["derive"] }
 base64 = "0.22"
 
+# NEW (needed for Capture + decode + logging)
+rdkafka = { version = "0.38", features=["cmake-build"] }
+yellowstone-grpc-proto = "4.2.1"
+chrono = { version = "0.4", features = ["serde"] }
+dotenv = "0.15"
+env_logger = "0.11"
+bs58 = "0.5"
+log="0.4"
+tokio={version = "1",features=["full"]}

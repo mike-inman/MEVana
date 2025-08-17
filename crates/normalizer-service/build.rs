@@ -20,11 +20,27 @@ fn main() {
     println!("cargo:rerun-if-changed={}", idl_dir.display());
     println!("cargo:rerun-if-changed={}", profiles_dir.display());
 
-    match normalizer_codegen::generate(&idl_dir, &profiles_dir, &out_dir) {
-        Ok(()) => {}
-        Err(e) => {
-            eprintln!("codegen failed, falling back to empty registry: {e}");
-            write_empty_registry(&out_dir);
+    // 1) Generate into OUT_DIR (used by the build)
+    let gen = normalizer_codegen::generate(&idl_dir, &profiles_dir, &out_dir);
+
+    // 2) Optionally mirror generated sources to a human-visible folder
+    //    Enable with: NORMALIZER_WRITE_GENERATED=1
+    if std::env::var("NORMALIZER_WRITE_GENERATED").ok().as_deref() == Some("1") {
+        let mirror_dir = manifest_dir.join("../normalizer-generated/src");
+        let _ = fs::create_dir_all(&mirror_dir);
+        // re-run codegen directly to the mirror dir
+        if let Err(e) = normalizer_codegen::generate(&idl_dir, &profiles_dir, &mirror_dir) {
+            eprintln!("mirror codegen failed: {e}");
+        } else {
+            println!(
+                "cargo:warning=generated sources mirrored to {}",
+                mirror_dir.display()
+            );
         }
+    }
+
+    if let Err(e) = gen {
+        eprintln!("codegen failed, falling back to empty registry: {e}");
+        write_empty_registry(&out_dir);
     }
 }

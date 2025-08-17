@@ -18,6 +18,8 @@ backoff = { version = "0.4", features = ["tokio"] }
 prost = "0.13"
 chrono = { version = "0.4", features = ["serde"] }
 
+normalizer-service = { path = "../normalizer-service" } 
+
 # Yellowstone just for prost types to decode the messages produced by dex-stream-orca
 yellowstone-grpc-proto = "4.2.1"
 
