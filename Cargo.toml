@@ -11,6 +11,7 @@ members = [
     "crates/dex-stream-universal",
     "crates/ui-gateway",
     "crates/dev-fixtures",
+    "crates/dex-backfill",
 #    "crates/geyser-producer",
 #    "crates/dex-data-parser",
 #    "crates/ops-tools",
