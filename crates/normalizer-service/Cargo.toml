@@ -25,3 +25,4 @@ bs58 = "0.5"
 log="0.4"
 tokio={version = "1",features=["full"]}
 redis = { version = "0.32", features = ["tokio-comp"] }
+lru = "0.12"

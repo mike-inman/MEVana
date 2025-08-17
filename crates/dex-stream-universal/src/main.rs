@@ -63,14 +63,24 @@ fn build_request(program_ids: Vec<String>) -> SubscribeRequest {
     }
 }
 
-fn create_producer(broker: &str) -> Result<FutureProducer> {
-    let p: FutureProducer = ClientConfig::new()
-        .set("bootstrap.servers", broker)
-        .set("enable.idempotence", "true")
-        .set("compression.type", "lz4")
-        .set("acks", "all")
-        .set("linger.ms", "5")
-        .create()?;
+fn create_producer(broker: &str, fast_mode: bool) -> Result<FutureProducer> {
+    let mut config = ClientConfig::new();
+    config.set("bootstrap.servers", broker);
+    if fast_mode {
+        config
+            .set("linger.ms", "0")
+            .set("acks", "1")
+            .set("compression.type", "lz4")
+            .set("enable.idempotence", "false")
+            .set("message.timeout.ms", "100");
+    } else {
+        config
+            .set("enable.idempotence", "true")
+            .set("compression.type", "lz4")
+            .set("acks", "all")
+            .set("linger.ms", "5");
+    }
+    let p: FutureProducer = config.create()?;
     Ok(p)
 }
 
@@ -108,7 +118,8 @@ async fn main() -> Result<()> {
         program_ids
     );
 
-    let producer = create_producer(&broker)?;
+    let fast_mode = std::env::var("FAST_MODE").ok().as_deref() == Some("1");
+    let producer = create_producer(&broker, fast_mode)?;
 
     retry(ExponentialBackoff::default(), move || {
         let producer = producer.clone();
@@ -138,16 +149,11 @@ async fn main() -> Result<()> {
                 match msg {
                     Ok(update_msg) => match update_msg.update_oneof {
                         Some(UpdateOneof::Transaction(update)) => {
-                            let key = update
-                                .transaction
-                                .as_ref()
-                                .map(|t| bs58::encode(&t.signature).into_string())
-                                .unwrap_or_else(|| format!("slot:{}", update.slot));
                             let mut buf = Vec::new();
                             update.encode(&mut buf)?;
                             let _ = producer
                                 .send(
-                                    FutureRecord::to(&topic).key(&key).payload(&buf),
+                                    FutureRecord::<(), _>::to(&topic).payload(&buf),
                                     Duration::from_secs(10),
                                 )
                                 .await;

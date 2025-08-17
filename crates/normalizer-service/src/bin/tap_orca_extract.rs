@@ -72,7 +72,7 @@ async fn main() -> Result<()> {
     }
     let producer: FutureProducer = pconf.create().context("create producer")?;
 
-    // Redis (optional enrich)
+    // Redis (optional enrich) with local read-through caches
     let redis_client = redis::Client::open(redis_url.clone())?;
     let mut redis_conn: MultiplexedConnection = redis_client
         .get_multiplexed_tokio_connection()
@@ -185,10 +185,7 @@ async fn handle(
                 let mut tick_hint: Option<i64> = None;
                 let mut sqrt_price_hint: Option<String> = None;
                 if !pool_key.ends_with(':') {
-                    // crude check; empty id yields trailing ':'
-                    if let Ok::<std::collections::HashMap<String, String>, _>(snap) =
-                        redis.hgetall(&pool_key).await
-                    {
+                    if let Some(snap) = get_pool_snapshot_cached(redis, &pool_key).await {
                         if let Some(sp) = snap.get("sqrt_price_x64") {
                             sqrt_price_hint = Some(sp.clone());
                         }
@@ -198,9 +195,9 @@ async fn handle(
                     }
                 }
 
-                // Optional decimals → UI amounts
-                let dec_in = get_mint_decimals(redis, &n.token_in_mint).await;
-                let dec_out = get_mint_decimals(redis, &n.token_out_mint).await;
+                // Optional decimals → UI amounts (with local LRU + TTL read-through)
+                let dec_in = get_mint_decimals_cached(redis, &n.token_in_mint).await;
+                let dec_out = get_mint_decimals_cached(redis, &n.token_out_mint).await;
                 let amount_in_ui = dec_in.map(|d| to_ui(n.amount_in, d));
                 let amount_out_ui = dec_out.map(|d| to_ui(n.amount_out, d));
                 let price_ui = match (amount_in_ui, amount_out_ui) {
@@ -328,15 +325,88 @@ fn to_ui(raw: u128, decimals: u8) -> f64 {
     (raw as f64) / (scale as f64)
 }
 
-async fn get_mint_decimals(redis: &mut MultiplexedConnection, mint: &str) -> Option<u8> {
+use once_cell::sync::Lazy;
+use std::num::NonZeroUsize;
+use std::sync::Mutex as StdMutex;
+
+struct TtlEntry<T> {
+    value: T,
+    expires_at_unix_ms: i64,
+}
+
+static MINT_DECIMALS_CACHE: Lazy<StdMutex<lru::LruCache<String, TtlEntry<u8>>>> =
+    Lazy::new(|| StdMutex::new(lru::LruCache::new(NonZeroUsize::new(1024).unwrap())));
+
+static POOL_SNAPSHOT_CACHE: Lazy<
+    StdMutex<lru::LruCache<String, TtlEntry<HashMap<String, String>>>>,
+> = Lazy::new(|| StdMutex::new(lru::LruCache::new(NonZeroUsize::new(1024).unwrap())));
+
+fn now_unix_ms() -> i64 {
+    (std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_millis() as i64)
+}
+
+async fn get_mint_decimals_cached(redis: &mut MultiplexedConnection, mint: &str) -> Option<u8> {
+    let ttl_ms: i64 = std::env::var("MINT_DECIMALS_TTL_MS")
+        .ok()
+        .and_then(|s| s.parse().ok())
+        .unwrap_or(60_000);
+    {
+        let mut guard = MINT_DECIMALS_CACHE.lock().unwrap();
+        if let Some(entry) = guard.get(mint) {
+            if entry.expires_at_unix_ms > now_unix_ms() {
+                return Some(entry.value);
+            }
+        }
+    }
     let key = format!("dex:mint:{}", mint);
-    match redis::cmd("HGET")
+    if let Ok(Some(d)) = redis::cmd("HGET")
         .arg(&key)
         .arg("decimals")
         .query_async::<Option<i64>>(redis)
         .await
     {
-        Ok(Some(d)) if d >= 0 && d <= 255 => Some(d as u8),
+        if d >= 0 && d <= 255 {
+            let entry = TtlEntry {
+                value: d as u8,
+                expires_at_unix_ms: now_unix_ms() + ttl_ms,
+            };
+            let mut guard = MINT_DECIMALS_CACHE.lock().unwrap();
+            guard.put(mint.to_string(), entry);
+            return Some(d as u8);
+        }
+    }
+    None
+}
+
+async fn get_pool_snapshot_cached(
+    redis: &mut MultiplexedConnection,
+    pool_key: &str,
+) -> Option<HashMap<String, String>> {
+    let ttl_ms: i64 = std::env::var("POOL_SNAPSHOT_TTL_MS")
+        .ok()
+        .and_then(|s| s.parse().ok())
+        .unwrap_or(60_000);
+    {
+        let mut guard = POOL_SNAPSHOT_CACHE.lock().unwrap();
+        if let Some(entry) = guard.get(pool_key) {
+            if entry.expires_at_unix_ms > now_unix_ms() {
+                return Some(entry.value.clone());
+            }
+        }
+    }
+    match redis.hgetall::<_, HashMap<String, String>>(pool_key).await {
+        Ok(map) if !map.is_empty() => {
+            let entry = TtlEntry {
+                value: map.clone(),
+                expires_at_unix_ms: now_unix_ms() + ttl_ms,
+            };
+            let mut guard = POOL_SNAPSHOT_CACHE.lock().unwrap();
+            guard.put(pool_key.to_string(), entry);
+            Some(map)
+        }
         _ => None,
     }
 }

@@ -52,7 +52,7 @@ services:
       KAFKA_BROKER_ID: 1
       KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
       KAFKA_LISTENERS: PLAINTEXT://0.0.0.0:9092,PLAINTEXT_HOST://0.0.0.0:29092
-      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092,PLAINTEXT_HOST://localhost:29092
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092,PLAINTEXT_HOST://host.docker.internal:29092
       KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
       KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
       KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"
@@ -138,8 +138,9 @@ services:
       - KAFKA_BROKER=kafka:9092
       - ENDPOINT=${SHYFT_GRPC_ENDPOINT}
       - X_TOKEN=${SHYFT_GRPC_TOKEN}
-      - PROGRAM_IDS=${PROGRAM_IDS:-whirLbMiicVdio4qvUfM5KAg6Ct8VwpYzGff3uctyCc,5Q544fKrFoe6tsEbD7S8EmxGTJYAKtTVhAW5Q5pge4j1,cpamdpZCGKUy5JxQXB4dcpGPiikHawvSWAd6mEn1sGG}
+      - PROGRAM_IDS=${PROGRAM_IDS:-whirLbMiicVdio4qvUfM5KAg6Ct8VwpYzGff3uctyCc,675kPX9MHTjS2zt1qfr1NYHuzeLXfQM9H24wFSUt1Mp8,cpamdpZCGKUy5JxQXB4dcpGPiikHawvSWAd6mEn1sGG}
       - RUST_LOG=${RUST_LOG:-info}
+      - FAST_MODE=${FAST_MODE:-1}
     command: ["--topic","orca-swaps"]
     networks:
       - mevana-network
@@ -221,6 +222,77 @@ services:
         reservations:
           memory: 128M
           cpus: '0.1'
+
+  graphql-backfill:
+    build:
+      context: ../../crates/graphql-backfill
+      dockerfile: Dockerfile
+    image: graphql-backfill:latest
+    container_name: graphql-backfill
+    environment:
+      - SHYFT_API_KEY=${SHYFT_API_KEY}
+      - SHYFT_NETWORK=${SHYFT_NETWORK:-mainnet-beta}
+      - REDIS_URL=${REDIS_URL:-redis://redis:6379/0}
+      - PAGE_SIZE=${PAGE_SIZE:-250}
+      - MAX_PAGES=${MAX_PAGES:-200}
+    networks:
+      - mevana-network
+    restart: "no"
+    command: ["--page-size","250","--max-pages","200"]
+
+  dex-backfill:
+    build:
+      context: ../../crates/dex-backfill
+      dockerfile: Dockerfile
+    image: dex-backfill:latest
+    container_name: dex-backfill
+    environment:
+      - ENDPOINT=${SHYFT_GRPC_ENDPOINT}
+      - X_TOKEN=${SHYFT_GRPC_TOKEN}
+      - REDIS_URL=${REDIS_URL:-redis://redis:6379/0}
+      - INCLUDE_TICKARRAYS=${INCLUDE_TICKARRAYS:-true}
+      - INCLUDE_POSITIONS=${INCLUDE_POSITIONS:-true}
+    networks:
+      - mevana-network
+    restart: unless-stopped
+    command: ["--include-tickarrays","--include-positions"]
+    volumes:
+      - ../../crates/dex-backfill/idls:/app/idls:ro
+
+  normalizer-extract:
+    build:
+      context: ../..
+      dockerfile: crates/normalizer-service/Dockerfile
+    image: normalizer-extract:latest
+    container_name: normalizer-extract
+    environment:
+      - KAFKA_BROKER=kafka:9092
+      - IN_TOPIC=${IN_TOPIC:-orca-swaps}
+      - OUT_TOPIC=${OUT_TOPIC:-orca-swaps.parsed.v2}
+      - GROUP_ID=${GROUP_ID:-tap-orca-extract}
+      - REDIS_URL=${REDIS_URL:-redis://redis:6379/0}
+      - FAST_MODE=${FAST_MODE:-1}
+      - RUST_LOG=${RUST_LOG:-info}
+      - MINT_DECIMALS_TTL_MS=${MINT_DECIMALS_TTL_MS:-60000}
+      - POOL_SNAPSHOT_TTL_MS=${POOL_SNAPSHOT_TTL_MS:-60000}
+    networks:
+      - mevana-network
+    restart: unless-stopped
+
+  depth-builder:
+    build:
+      context: ../..
+      dockerfile: crates/normalizer-service/Dockerfile
+    image: depth-builder:latest
+    container_name: depth-builder
+    environment:
+      - REDIS_URL=${REDIS_URL:-redis://redis:6379/0}
+      - RUST_LOG=${RUST_LOG:-info}
+      - START_ID=${DEPTH_START_ID:-0}
+    entrypoint: ["/usr/local/bin/depth-builder"]
+    networks:
+      - mevana-network
+    restart: unless-stopped
 
   # =============================================================================
   # STREAMING SERVICES
@@ -725,14 +797,58 @@ services:
     profiles:
       - cache
 
+  price-aggregator:
+    build:
+      context: ../../crates/price-aggregator
+      dockerfile: Dockerfile
+    image: price-aggregator:latest
+    container_name: price-aggregator
+    environment:
+      - KAFKA_BROKER=kafka:9092
+      - IN_TOPIC=${AGG_IN_TOPIC:-orca-swaps.parsed.v2}
+      - OUT_TOPIC=${AGG_OUT_TOPIC:-prices.latest}
+      - GROUP_ID=${AGG_GROUP_ID:-price-aggregator}
+      - EMIT_SECS=${AGG_EMIT_SECS:-5}
+    networks:
+      - mevana-network
+    restart: unless-stopped
+
+  arb-test-mode:
+    build:
+      context: ../../crates/arb-test-mode
+      dockerfile: Dockerfile
+    image: arb-test-mode:latest
+    container_name: arb-test-mode
+    environment:
+      - KAFKA_BROKER=kafka:9092
+      - IN_TOPIC=${ARB_IN_TOPIC:-orca-swaps.parsed.v2}
+      - REDIS_URL=${REDIS_URL:-redis://redis:6379/0}
+      - RUST_LOG=${RUST_LOG:-info}
+    networks:
+      - mevana-network
+    restart: unless-stopped
+
+  ui-gateway:
+    build:
+      context: ../../crates/ui-gateway
+      dockerfile: Dockerfile
+    image: ui-gateway:latest
+    container_name: ui-gateway
+    environment:
+      - KAFKA_BROKER=kafka:9092
+      - PRICES_TOPIC=${PRICES_TOPIC:-prices.latest}
+      - SWAPS_TOPIC=${SWAPS_TOPIC:-orca-swaps.parsed}
+      - SWAPS_V2_TOPIC=${SWAPS_V2_TOPIC:-orca-swaps.parsed.v2}
+      - REDIS_URL=${REDIS_URL:-redis://redis:6379/0}
+      - RUST_LOG=${RUST_LOG:-info}
+    networks:
+      - mevana-network
+    restart: unless-stopped
+
 networks:
   mevana-network:
-    driver: bridge
+    external: true
     name: mevana-network
-    ipam:
-      config:
-        - subnet: 172.20.0.0/16
-          gateway: 172.20.0.1
 
 volumes:
   postgres_data:
