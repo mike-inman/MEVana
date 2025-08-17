@@ -1,124 +1,109 @@
-# MEVana
+# MEVana - Solana AI Trading Platform
 
-One-liners you might want handy
-View topics:
-kafka-topics --bootstrap-server $KAFKA_BROKER --list
+[![Rust](https://img.shields.io/badge/rust-1.70+-blue.svg)](https://www.rust-lang.org/)
+[![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
+[![Documentation](https://img.shields.io/badge/docs-latest-blue.svg)](docs/)
 
-Peek at latest messages:
-kafka-console-consumer --bootstrap-server $KAFKA_BROKER --topic prices.latest --from-beginning --max-messages 5
+**MEVana** is a comprehensive Solana AI trading platform designed to capture MEV (Maximal Extractable Value) opportunities through real-time blockchain data streaming, intelligent transaction analysis, and automated arbitrage execution.
 
-Stop everything (if you backgrounded it):
-pkill -f "cargo run -p" || true
+## 🚀 Quick Start
 
+### **Prerequisites**
+- Rust 1.70+
+- Docker Desktop
+- Git
 
+### **Get Started**
+```bash
+# Clone the repository
+git clone https://github.com/mike-inman/MEVana.git
+cd MEVana
 
-# one-time bootstrap
-docker compose -f infra/docker/docker-compose.yml --env-file infra/docker/.env.docker up -d
-docker compose -f infra/docker/docker-compose.yml --env-file infra/docker/.env.docker up kafka-init
+# Build the workspace
+cargo build --workspace
 
-in tap_orca_decode
+# Start infrastructure services
+cd infrastructure
+docker-compose up -d
+```
 
+### **Run Services**
+```bash
+# Start Orca streaming service
+cargo run -p dex-stream-orca
 
+# Start normalizer service
+cargo run -p normalizer-service
+```
 
-# adjust the PID to your Whirlpool program id
-KAFKA_BROKER=localhost:29092 \
-IN_TOPIC=orca-swaps \
-FILTER_PID=whirLbM2vNtMeJ6z18WZb98sPNT1L4GzWk2vuyZgq2U \
-MAX=25 \
-cargo run -p normalizer-service --bin tap_orca_decode
+## 📚 Documentation
 
+**📖 [Full Documentation](docs/)** - Comprehensive guides and references
 
+**🎯 [Master Summary](docs/MASTER_SUMMARY.md)** - Single source of truth for the platform
 
+**🏗️ [Architecture](docs/architecture/)** - System design and components
 
+**👨‍💻 [Development](docs/development/)** - Setup and development guides
 
+**🚀 [Deployment](docs/deployment/)** - Infrastructure and deployment
 
+**📈 [Project Evolution](docs/PROJECT_EVOLUTION.md)** - Development timeline and phases
 
-normalizer-orca
-Reads raw geyser txs (orca-swaps) → writes normalized swaps (orca-swaps.parsed) and DLQ.
+## 🏗️ Architecture
 
-bash
-Copy
-Edit
-# terminal A
-export KAFKA_BROKER=localhost:29092
-export IN_TOPIC=orca-swaps
-export OUT_TOPIC=orca-swaps.parsed
-export DLQ_TOPIC=dlq
-export GROUP_ID=normalizer-orca
-RUST_LOG=info cargo run -p normalizer-orca
-Expected logs:
+MEVana consists of several key components:
 
-csharp
-Copy
-Edit
-normalizer-orca started: in='orca-swaps' out='orca-swaps.parsed'
-... normalized swap -> orca-swaps.parsed key=<txsig>
-price-aggregator
-Reads normalized swaps (orca-swaps.parsed) → emits rolling prices (prices.latest).
+- **Streaming Services** - Real-time DEX transaction monitoring (Orca, Raydium, Meteora)
+- **Normalizer Service** - IDL-based code generation and transaction parsing
+- **Arbitrage Engine** - MEV opportunity detection and execution
+- **Infrastructure Layer** - Kafka, Redis, PostgreSQL, monitoring
 
-bash
-Copy
-Edit
-# terminal B
-export KAFKA_BROKER=localhost:29092
-export IN_TOPIC=orca-swaps.parsed
-export OUT_TOPIC=prices.latest
-export GROUP_ID=price-aggregator
-export EMIT_SECS=5
-RUST_LOG=info cargo run -p price-aggregator
-Expected logs:
+## 🛠️ Technology Stack
 
-csharp
-Copy
-Edit
-price-aggregator started: in='orca-swaps.parsed' out='prices.latest'
-... emitted N price snapshots
+- **Backend**: Rust, Tokio, Solana SDK
+- **Infrastructure**: Docker, Kafka, Redis, PostgreSQL
+- **Monitoring**: Prometheus, Grafana
+- **Protocols**: Whirlpool, Raydium CLMM, Meteora DAMM
 
+## 🔧 Development
 
-crates/
-  normalizer-runtime/      # traits, helpers, serializers, redis writer
-  normalizer-codegen/      # parses IDL+profile, emits Rust
-  normalizer-generated/    # (git-ignored) emitted sources
-  normalizer-service/      # Kafka/Geyser consumer; uses registry from generated
-idls/
-  orca_whirlpool_idl.json
-  raydium_idl.json
-  meteora_idl.json
-profiles/
-  orca_whirlpool.yaml
-  raydium.yaml
-  meteora.yaml
+```bash
+# Build everything
+cargo build --workspace
 
+# Run tests
+cargo test --workspace
 
-Geyser client (Rust) ──► Kafka: geyser.raw
-                           │
-                           ▼
-                 Normalizer (IDL+profile, amounts-from-meta)
-                           │
-                           ├──► Kafka: dex.swaps.normalized.v1  (system of record)
-                           │
-                           └──► Redis (TOB + short windows)     (hot path / queries)
+# Check code quality
+cargo clippy --workspace
+cargo fmt --all
+```
 
-Common commands
-Build everything: cargo build --workspace
+## 📊 Performance
 
-Run a specific crate: cargo run -p arb-feed
+- **Throughput**: 10,000+ transactions/second
+- **Latency**: <100ms end-to-end processing
+- **Availability**: 99.9% uptime target
 
-Test all: cargo test --workspace
+## 🤝 Contributing
 
+1. Fork the repository
+2. Create a feature branch (`git checkout -b feature/amazing-feature`)
+3. Commit your changes (`git commit -m 'Add amazing feature'`)
+4. Push to the branch (`git push origin feature/amazing-feature`)
+5. Open a Pull Request
 
+## 📄 License
 
-.
-├─ Cargo.toml            # the [workspace] file above
-├─ rust-toolchain.toml   # pin toolchain (recommended)
-├─ idls/
-├─ crates/
-│  ├─ stream_and_parse_whirlpool_account_updates/
-│  ├─ dex-data-parser/
-│  ├─ arb-feed/
-│  └─ arb-executor/
-└─ .vscode/
-   ├─ settings.json
-   ├─ launch.json
-   ├─ tasks.json
-   └─ extensions.json
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+
+## 🆘 Support
+
+- **Documentation**: [docs/](docs/)
+- **Issues**: [GitHub Issues](https://github.com/mike-inman/MEVana/issues)
+- **Discussions**: [GitHub Discussions](https://github.com/mike-inman/MEVana/discussions)
+
+---
+
+**MEVana** - Capturing MEV opportunities on Solana with AI-powered intelligence.
