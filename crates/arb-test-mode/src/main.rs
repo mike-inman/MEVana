@@ -8,6 +8,59 @@ use redis::AsyncCommands;
 use serde::{Deserialize, Serialize};
 use tokio::time::Instant;
 
+// Simple metrics collection
+#[derive(Default)]
+struct Metrics {
+    total_swaps: u64,
+    opportunities_found: u64,
+    parse_errors: u64,
+    redis_errors: u64,
+    kafka_errors: u64,
+    latency_samples: Vec<f64>,
+}
+
+impl Metrics {
+    fn record_latency(&mut self, latency_ms: f64) {
+        self.latency_samples.push(latency_ms);
+        // Keep only last 1000 samples for memory efficiency
+        if self.latency_samples.len() > 1000 {
+            self.latency_samples.remove(0);
+        }
+    }
+    
+    fn get_p50_latency(&self) -> Option<f64> {
+        if self.latency_samples.is_empty() {
+            return None;
+        }
+        let mut sorted = self.latency_samples.clone();
+        sorted.sort_by(|a, b| a.partial_cmp(b).unwrap());
+        let mid = sorted.len() / 2;
+        Some(sorted[mid])
+    }
+    
+    fn get_p99_latency(&self) -> Option<f64> {
+        if self.latency_samples.is_empty() {
+            return None;
+        }
+        let mut sorted = self.latency_samples.clone();
+        sorted.sort_by(|a, b| a.partial_cmp(b).unwrap());
+        let idx = (sorted.len() as f64 * 0.99) as usize;
+        Some(sorted[idx.min(sorted.len() - 1)])
+    }
+    
+    fn log_summary(&self) {
+        info!("ARB METRICS: swaps={} opportunities={} parse_errors={} redis_errors={} kafka_errors={} p50={:.2}ms p99={:.2}ms", 
+            self.total_swaps,
+            self.opportunities_found,
+            self.parse_errors,
+            self.redis_errors,
+            self.kafka_errors,
+            self.get_p50_latency().unwrap_or(0.0),
+            self.get_p99_latency().unwrap_or(0.0)
+        );
+    }
+}
+
 #[derive(Debug, Deserialize, Serialize)]
 struct NormalizedSwap {
     slot: u64,
@@ -84,16 +137,40 @@ impl ArbTestMode {
     async fn run(&mut self) -> Result<()> {
         info!("arb-test-mode: starting arbitrage opportunity detection");
         
+        let mut metrics = Metrics::default();
+        
         loop {
-            let msg = self.kafka_consumer.recv().await?;
-            if let Some(payload) = msg.payload_view::<str>().and_then(|r| r.ok()) {
-                let payload = payload.to_string(); // Clone the payload to avoid borrow issues
-                self.process_swap(&payload).await?;
+            let start = Instant::now();
+            match self.kafka_consumer.recv().await {
+                Ok(msg) => {
+                    if let Some(payload) = msg.payload_view::<str>().and_then(|r| r.ok()) {
+                        let payload = payload.to_string(); // Clone the payload to avoid borrow issues
+                        match self.process_swap(&payload, &mut metrics).await {
+                            Ok(_) => {
+                                metrics.total_swaps += 1;
+                                let latency = start.elapsed();
+                                metrics.record_latency(latency.as_micros() as f64 / 1000.0);
+                            }
+                            Err(e) => {
+                                metrics.parse_errors += 1;
+                                warn!("failed to process swap: {}", e);
+                            }
+                        }
+                    }
+                }
+                Err(e) => {
+                    metrics.kafka_errors += 1;
+                    warn!("kafka recv error: {}", e);
+                }
+            }
+            
+            if metrics.total_swaps % 1000 == 0 {
+                metrics.log_summary();
             }
         }
     }
     
-    async fn process_swap(&mut self, payload: &str) -> Result<()> {
+    async fn process_swap(&mut self, payload: &str, metrics: &mut Metrics) -> Result<()> {
         let start = Instant::now();
         
         match serde_json::from_str::<NormalizedSwap>(payload) {
@@ -126,6 +203,7 @@ impl ArbTestMode {
                             
                             self.opportunities.push(opportunity);
                             self.total_opportunities += 1;
+                            metrics.opportunities_found += 1;
                             
                             info!("WOULD TRADE: pool={} size=${:.2} impact={:.3}% pnl=${:.2}", 
                                 swap.pool_id, trade_size_usd, price_impact * 100.0, net_pnl);

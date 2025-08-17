@@ -2,7 +2,7 @@ use chrono::Utc;
 use clap::{Parser, ArgAction};
 use dotenv::dotenv;
 use env_logger;
-use log::{error, info};
+use log::{error, info, warn};
 use redis::{aio::MultiplexedConnection, AsyncCommands, pipe};
 use std::{collections::HashMap, env, time::Duration};
 use tokio::sync::Mutex;
@@ -416,7 +416,7 @@ async fn handle_account_update(
     let disc = &data[..8];
 
     // Only IDL-parse Whirlpool pools
-    if disc == WHIRLPOOL_ACCOUNT_DISCM {
+    if disc == WHIRLPOOL_ACCOUNT_DISCM.as_slice() {
         let whirlpool_acc = WhirlpoolAccount::deserialize(data)
             .map_err(|e| anyhow::anyhow!("WhirlpoolAccount::deserialize: {e}"))?;
         let whirlpool: Whirlpool = whirlpool_acc.0;
@@ -458,29 +458,55 @@ async fn handle_account_update(
 
     // Optionally stash TickArrays / Positions
     let now = Utc::now().timestamp();
-    if flags.include_tickarrays && disc == TICK_ARRAY_ACCOUNT_DISCM {
-        // Parse and emit a compact summary for depth builder
-        let tick_array = TickArrayAccount::deserialize(data)
-            .map_err(|e| anyhow::anyhow!("TickArrayAccount::deserialize: {e}"))?;
-        let ta = tick_array.0;
-        let pool_pubkey = ta.whirlpool.to_string();
-        let start_tick = ta.start_tick_index;
-        let num_initialized = ta.ticks.iter().filter(|t| t.initialized).count() as i64;
-        let sum_gross = ta.ticks.iter().filter_map(|t| if t.initialized { Some(t.liquidity_gross) } else { None }).sum::<u128>();
-        
-        let _id: String = redis::cmd("XADD")
-            .arg("dex:whirlpool:tickarray_updates").arg("*")
-            .arg("pool").arg(&pool_pubkey)
-            .arg("start").arg(start_tick)
-            .arg("num_init").arg(num_initialized)
-            .arg("sum_gross").arg(sum_gross.to_string())
-            .arg("slot").arg(upd.slot as i64)
-            .arg("ts").arg(now)
-            .query_async(redis).await?;
+    if flags.include_tickarrays && disc == TICK_ARRAY_ACCOUNT_DISCM.as_slice() {
+        // Try to parse TickArray, but handle deserialization errors gracefully
+        match TickArrayAccount::deserialize(data) {
+            Ok(tick_array) => {
+                let ta = tick_array.0;
+                let pool_pubkey = ta.whirlpool.to_string();
+                let start_tick = ta.start_tick_index;
+                let num_initialized_ticks = ta.ticks.iter().filter(|t| t.initialized).count();
+                let sum_gross_liquidity: u128 = ta.ticks.iter().map(|t| t.liquidity_gross).sum();
+
+                let _id: String = redis::cmd("XADD")
+                    .arg("dex:whirlpool:tickarray_updates").arg("*")
+                    .arg("pool").arg(&pool_pubkey)
+                    .arg("array").arg(bs58::encode(&upd.account.as_ref().unwrap().pubkey).into_string())
+                    .arg("start").arg(start_tick)
+                    .arg("num_init").arg(num_initialized_ticks)
+                    .arg("sum_gross").arg(sum_gross_liquidity.to_string())
+                    .arg("slot").arg(upd.slot as i64)
+                    .arg("ts").arg(now)
+                    .query_async(redis).await?;
+            }
+            Err(e) => {
+                // Log the error but still emit basic metadata for depth builder
+                warn!("TickArray deserialization failed for {}: {}, emitting basic metadata", bs58::encode(&upd.account.as_ref().unwrap().pubkey).into_string(), e);
+                
+                // Extract pool ID from account data if possible (first 32 bytes)
+                let pool_pubkey = if data.len() >= 32 {
+                    bs58::encode(&data[..32]).into_string()
+                } else {
+                    "unknown".to_string()
+                };
+                
+                let _id: String = redis::cmd("XADD")
+                    .arg("dex:whirlpool:tickarray_updates").arg("*")
+                    .arg("pool").arg(&pool_pubkey)
+                    .arg("array").arg(bs58::encode(&upd.account.as_ref().unwrap().pubkey).into_string())
+                    .arg("start").arg(0) // Unknown start tick
+                    .arg("num_init").arg(0) // Unknown initialized count
+                    .arg("sum_gross").arg("0") // Unknown liquidity
+                    .arg("slot").arg(upd.slot as i64)
+                    .arg("ts").arg(now)
+                    .arg("error").arg("deserialization_failed")
+                    .query_async(redis).await?;
+            }
+        }
         return Ok(());
     }
 
-    if flags.include_positions && disc == POSITION_ACCOUNT_DISCM {
+    if flags.include_positions && disc == POSITION_ACCOUNT_DISCM.as_slice() {
         let _id: String = redis::cmd("XADD")
             .arg("dex:whirlpool:position_updates").arg("*")
             .arg("slot").arg(upd.slot as i64)

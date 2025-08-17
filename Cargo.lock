@@ -1149,6 +1149,8 @@ dependencies = [
  "futures-util",
  "log",
  "rdkafka",
+ "serde",
+ "serde_json",
  "tokio",
  "tonic",
  "yellowstone-grpc-client",
