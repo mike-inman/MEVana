@@ -1,0 +1,26 @@
+# VCS
+.git
+
+# Rust build artifacts
+**/target/**
+**/*.rs.bk
+
+# Node/JS
+**/node_modules/**
+ui-web/node_modules/**
+
+# Logs & temp
+**/*.log
+infra/logs/**
+infrastructure/logs/**
+infra/**/logs/**
+
+# Large media (not needed for service builds)
+**/*.png
+**/*.jpg
+**/*.jpeg
+**/*.svg
+**/*.pdf
+
+# OS files
+.DS_Store
