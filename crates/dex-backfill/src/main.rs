@@ -10,6 +10,10 @@ use std::sync::Arc;
 use bs58;
 use lru::LruCache;
 
+// Import our TickArray debugger module
+mod tickarray_debugger;
+use tickarray_debugger::{TickArrayDebugger, TickArrayDebugInfo};
+
 use whirlpool_interface::accounts::{
     Whirlpool, WhirlpoolAccount, WHIRLPOOL_ACCOUNT_DISCM,
     TICK_ARRAY_ACCOUNT_DISCM, POSITION_ACCOUNT_DISCM,
@@ -84,6 +88,7 @@ struct ConnArgs {
     endpoint: String,
     x_token: String,
     redis_url: String,
+    tickarray_debugger: Option<TickArrayDebugger>,
 }
 
 impl ConnArgs {
@@ -128,7 +133,15 @@ impl AppArgs {
         let x_token = env::var("X_TOKEN").expect("X_TOKEN not found in .env file");
         let redis_url = env::var("REDIS_URL").expect("REDIS_URL not found in .env file");
         
-        ConnArgs { endpoint, x_token, redis_url }
+        // Initialize TickArray debugger if Shyft API key is available
+        let tickarray_debugger = env::var("SHYFT_API_KEY")
+            .ok()
+            .map(|api_key| {
+                let network = env::var("SHYFT_NETWORK").unwrap_or_else(|_| "mainnet-beta".to_string());
+                TickArrayDebugger::new(api_key, network)
+            });
+        
+        ConnArgs { endpoint, x_token, redis_url, tickarray_debugger }
     }
 
     fn build_subscribe_request(&self) -> SubscribeRequest {
@@ -244,8 +257,13 @@ async fn main() -> anyhow::Result<()> {
     info!("X-Token: {}", x_token);
     info!("Configuration flags: {:?}", flags);
 
-    // Network creds
-    let _conn_args = ConnArgs { endpoint, x_token, redis_url };
+    // Network creds (this one is not used, but keeping for reference)
+    let _conn_args = ConnArgs { 
+        endpoint, 
+        x_token, 
+        redis_url, 
+        tickarray_debugger: None 
+    };
 
     // Simple retry loop for connection
     let mut attempts = 0;
@@ -480,15 +498,33 @@ async fn handle_account_update(
                     .query_async(redis).await?;
             }
             Err(e) => {
-                // Log the error but still emit basic metadata for depth builder
-                warn!("TickArray deserialization failed for {}: {}, emitting basic metadata", bs58::encode(&upd.account.as_ref().unwrap().pubkey).into_string(), e);
-                
                 // Extract pool ID from account data if possible (first 32 bytes)
                 let pool_pubkey = if data.len() >= 32 {
                     bs58::encode(&data[..32]).into_string()
                 } else {
                     "unknown".to_string()
                 };
+                
+                // Use debugger to understand why parsing failed (non-blocking)
+                if let Some(debugger) = &self.tickarray_debugger {
+                    let error_msg = e.to_string();
+                    let data_clone = data.to_vec();
+                    
+                    // Spawn debugger in background to avoid blocking the main stream
+                    tokio::spawn(async move {
+                        match debugger.debug_parsing_failure(&pool_pubkey, &data_clone, &error_msg).await {
+                            Ok(debug_info) => {
+                                debugger.log_debug_info(&debug_info);
+                            }
+                            Err(debug_e) => {
+                                warn!("Debugger failed for pool {}: {}", pool_pubkey, debug_e);
+                            }
+                        }
+                    });
+                }
+                
+                // Still emit basic metadata for depth builder (maintains existing behavior)
+                warn!("TickArray deserialization failed for {}: {}, emitting basic metadata", bs58::encode(&upd.account.as_ref().unwrap().pubkey).into_string(), e);
                 
                 let _id: String = redis::cmd("XADD")
                     .arg("dex:whirlpool:tickarray_updates").arg("*")
