@@ -5,6 +5,7 @@ use serde::{Deserialize, Serialize};
 use std::time::Duration;
 
 /// TickArray debugger using Shyft APIs to understand parsing failures
+#[derive(Debug, Clone)]
 pub struct TickArrayDebugger {
     client: Client,
     api_key: String,
@@ -112,22 +113,19 @@ impl TickArrayDebugger {
 
     /// Get pool tick data from Shyft API for comparison
     async fn get_pool_tick_data(&self, pool_address: &str) -> Result<Option<ShyftTickData>> {
-        let query = format!(
-            r#"
-            query GetPoolTickData($address: String!) {{
+        let query = r#"
+            query GetPoolTickData($address: String!) {
                 ORCA_WHIRLPOOLS_whirlpool(
-                    where: {{ pubkey: {{ _eq: $address }} }}
+                    where: { pubkey: { _eq: $address } }
                     limit: 1
-                ) {{
+                ) {
                     tickCurrentIndex
                     sqrtPrice
                     liquidity
                     feeRate
-                }}
-            }}
-            "#,
-            address = pool_address
-        );
+                }
+            }
+        "#;
 
         let response: GraphQLResponse<WhirlpoolRows> = self
             .client

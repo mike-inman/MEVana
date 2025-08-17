@@ -245,8 +245,8 @@ services:
 
   dex-backfill:
     build:
-      context: ../../crates/dex-backfill
-      dockerfile: Dockerfile
+      context: ../..
+      dockerfile: crates/dex-backfill/Dockerfile
     image: dex-backfill:latest
     container_name: dex-backfill
     environment:
