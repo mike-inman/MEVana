@@ -298,6 +298,24 @@ services:
       - mevana-network
     restart: unless-stopped
 
+  shyft-pool-depth:
+    build:
+      context: ../..
+      dockerfile: crates/shyft-pool-depth/Dockerfile
+    image: shyft-pool-depth:latest
+    container_name: shyft-pool-depth
+    environment:
+      - REDIS_URL=${REDIS_URL:-redis://redis:6379/0}
+      - SHYFT_API_KEY=${SHYFT_API_KEY}
+      - RUST_LOG=${RUST_LOG:-info}
+      - UPDATE_INTERVAL=${SHYFT_UPDATE_INTERVAL:-30}
+    networks:
+      - mevana-network
+    restart: unless-stopped
+    depends_on:
+      redis:
+        condition: service_healthy
+
   # =============================================================================
   # STREAMING SERVICES
   # =============================================================================
