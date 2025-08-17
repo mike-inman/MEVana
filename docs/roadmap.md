@@ -1,62 +1,91 @@
-# MEVana Roadmap (compressed to ~24h)
+# MEVana Development Roadmap
 
-## Now → 2h: Orca v2 enrichment
-- Local caches (mint decimals, pool snapshots) with Redis read-through
-- Emit amount_in_ui, amount_out_ui, price_ui, pool_id, tick_index, sqrt_price_x64
-- Latency timing (warn if >25ms)
+## 🎯 **Phase 1: Core Infrastructure (COMPLETED)**
+- ✅ **Docker Orchestration**: All services consolidated in `infra/docker/docker-compose.yml`
+- ✅ **Core Services**: `dex-stream-universal`, `graphql-backfill`, `dex-backfill`, `normalizer-extract`, `price-aggregator`, `depth-builder`, `ui-gateway`, `arb-test-mode`
+- ✅ **Data Pipeline**: Geyser → Kafka → Normalizer → Price Aggregator → Arbitrage Detection
+- ✅ **Basic Metrics**: Latency tracking and error counters implemented
+- ✅ **Depth Model**: First-cut size→price function and Redis-based depth storage
 
-## 2h → 3h: Fast mode (low-latency)
-- FAST_MODE=1 toggles Kafka producer/consumer low-latency flags
-- Disable hot-path logging; counters only
+## 🚀 **Phase 2: Advanced Arbitrage Infrastructure (IN PROGRESS)**
 
-## 3h → 5h: Pool endpoint & UI
-- ui-gateway GET /pool/:id → Redis `dex:pool:{id}` (+mint meta)
-- UI `PoolPanel` loads selected pool from `SwapsPanel`
+### **Phase 2.1: Multi-Venue Discovery & AI Foundation (COMPLETED)**
+- ✅ **Discovery Service**: AI-ready service for unknown program ID analysis
+- ✅ **Program ID Discovery**: Modified `dex-stream-universal` to emit unknown program IDs
+- ✅ **AI Data Pipeline**: Structured data collection for AI analysis and learning
+- ✅ **Plugin Architecture Foundation**: Extensible parser architecture for AI-driven extensions
+- ✅ **Quality Metrics**: Comprehensive data quality scoring for AI learning
+- ✅ **Feedback Loops**: Systems designed for learning from execution results
 
-## 5h → 7h: Backfills warmup
-- Run graphql-backfill (seed pools+mints)
-- Optional dex-backfill (accounts) to keep snapshots current
+### **Phase 2.2: Wallet Management & Security (PLANNED)**
+- 🔄 **Dynamic Wallet Creation**: Bot wallet rotation to avoid tracking
+- 🔄 **Wallet Security**: Secure key management and rotation strategies
+- 🔄 **Multi-wallet Support**: Risk distribution across multiple trading wallets
 
-## 7h → 9h: Arb test mode
-- Arb stub consumes v2, logs “would trade” with size/net PnL (no Jito)
-- Guard: skip non-positive net after fees/tips
+### **Phase 2.3: Trade Execution Engine (PLANNED)**
+- 🔄 **Jito Integration**: MEV bundles and tip management
+- 🔄 **Atomic Bundled Trades**: Flash loan integration for complex strategies
+- 🔄 **Preflight Validation**: Transaction simulation and validation
+- 🔄 **Execution Monitoring**: Real-time tracking and failure handling
 
-## 9h → 12h: Jito scaffold (canary)
-- Bundle builder stub + tip-policy interface; canary mode logs only
+### **Phase 2.4: Advanced Data & Analytics (PLANNED)**
+- 🔄 **Order Book History**: Comprehensive data for AI learning
+- 🔄 **Slippage Modeling**: AI-driven optimization
+- 🔄 **Cross-venue Validation**: Sanity checks against other DEXs
+- 🔄 **Price Validation**: Multi-source cross-validation
 
-## 12h → 18h: End-to-end test
-- Universal stream (Orca, Raydium, Meteora) + extractor (fast) + UI + arb-test
-- Record latency histograms + sample “would trade” set
+### **Phase 2.5: Testing & Validation (PLANNED)**
+- 🔄 **TestNet/DevNet Testing**: Framework for trade execution testing
+- 🔄 **Performance Metrics**: Trades per minute, success rate analysis
+- 🔄 **Risk Management**: Circuit breakers, kill-switches, position limits
 
-## Next (post-orca parity)
-- Raydium/Meteora profiles, comparator diffs in UI
-- Binary v2 hot stream (prost) + metrics dashboards + CI/CD pipelines
+### **Phase 2.6: UI & Management (PLANNED)**
+- 🔄 **High-quality UI**: Comprehensive system management dashboard
+- 🔄 **Real-time Monitoring**: Live trading status, P&L, risk metrics
+- 🔄 **Configuration Management**: Easy parameter tuning and strategy adjustment
 
-## Immediate Next Items (in progress)
-- Add and run `normalizer-extract` (bin `tap_orca_extract`) as a service:
-  - IN_TOPIC: raw geyser topic from `dex-stream-universal`
-  - OUT_TOPIC: `*.parsed.v2` normalized swaps (JSON initially)
-  - FAST_MODE=1, counters-only logging, latency histograms
-- Add and run `price-aggregator` as a service:
-  - IN_TOPIC: `*.parsed.v2` normalized swaps
-  - OUT_TOPIC: `prices.latest` (rolling price per pair/venue)
-- Expand `PROGRAM_IDS` to include Raydium and Meteora; verify decoders/extractors
-- Depth/slippage model:
-  - Maintain per-pool depth snapshots from TickArrays/Positions → Redis `dex:pool_depth:{pool}`
-  - Provide size→expected price function for sizing and slippage checks
-- Arb test mode service:
-  - Consume `*.parsed.v2`, compute net-PnL (DEX fees + tip=0 canary), log "would trade", skip non-positive
-- Observability & safety:
-  - Add histograms geyser→extractor and extractor→arb-test; counters for decodes/errors
-  - Circuit breaker / kill-switch for arb engine
-- Binary hot path: move from JSON to prost-encoded v2 structs end-to-end
+## 🧠 **AI Foundation Architecture (IMPLEMENTED)**
 
-## Completed Today
-- `dex-stream-universal`: FAST_MODE enabled; no Kafka key on hot path; Dockerized and running on `mevana-network` against internal Kafka
-- `graphql-backfill`: Dockerized service added (one-shot)
-- `dex-backfill`: Dockerized, continuous updates; IDLs mounted; running
-- `normalizer-extract` (bin `tap_orca_extract`): Dockerized and running; Redis read-through caches; producing `orca-swaps.parsed.v2`
-- `price-aggregator`: Dockerized and running; consuming parsed swaps and emitting `prices.latest`
-- `depth-builder` first cut: computes p0_ui and heuristic size→price quotes; writes to `dex:pool_depth:{pool}`
-- `ui-gateway` depth API: `GET /depth/:pool` returns `dex:pool_depth:{pool}` snapshot for UI/arb-test
-- `arb-test-mode`: Dockerized and running; consuming `orca-swaps.parsed.v2`, computing net-PnL, logging "WOULD TRADE" opportunities
+### **Core AI Components**
+- **Structured Data Pipeline**: All data flows designed to be AI-consumable
+- **Plugin Interface**: Extensible parser architecture that AI can extend
+- **Quality Metrics**: Comprehensive data quality scoring for AI learning
+- **Feedback Loops**: Systems that can learn from execution results
+
+### **Discovery & Learning**
+- **Unknown Program Detection**: Automatic identification of new DEXs and protocols
+- **Pattern Recognition**: Byte pattern analysis for AI learning
+- **AI Analysis Queue**: Structured data preparation for AI agents
+- **Metrics Collection**: Performance tracking for AI-driven optimization
+
+## 📊 **Current Status: Phase 2.1 Complete**
+
+### **What's Working**
+- ✅ Multi-venue data ingestion (Orca, Raydium, Meteora)
+- ✅ AI-ready discovery pipeline for unknown program IDs
+- ✅ Structured data collection for AI analysis
+- ✅ Plugin architecture foundation
+- ✅ Quality metrics and feedback loops
+
+### **Next Steps**
+1. **Enable Discovery Mode**: Set `DISCOVERY_MODE=1` in dex-stream-universal
+2. **Test Discovery Service**: Verify unknown program ID detection and emission
+3. **AI Analysis Integration**: Connect discovery service to AI analysis pipeline
+4. **Move to Phase 2.2**: Implement wallet management and security
+
+## 🎯 **Target: Live Trading Ready by Thursday August 21st**
+
+### **Critical Path Items**
+- [ ] **TickArray Stream Fix**: Resolve Redis stream data population issue
+- [ ] **Discovery Mode Testing**: Verify unknown program ID detection
+- [ ] **Wallet Infrastructure**: Implement secure wallet management
+- [ ] **Trade Execution**: Basic Jito integration and preflight validation
+- [ ] **Risk Management**: Circuit breakers and position limits
+- [ ] **Performance Testing**: Validate sub-10ms latency targets
+
+### **Success Metrics**
+- **Latency**: <10ms from signal to execution
+- **Discovery**: >90% unknown program ID detection rate
+- **Reliability**: >99.9% uptime for critical services
+- **Security**: Zero wallet compromise incidents
+- **Profitability**: Positive P&L in test environment

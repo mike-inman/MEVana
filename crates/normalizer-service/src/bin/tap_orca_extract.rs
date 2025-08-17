@@ -23,6 +23,59 @@ use std::time::Instant;
 use yellowstone_grpc_proto::prelude as ypp;
 use yellowstone_grpc_proto::prost::Message as _;
 
+// Simple metrics collection
+#[derive(Default)]
+struct Metrics {
+    total_messages: u64,
+    successful_decodes: u64,
+    decode_errors: u64,
+    redis_errors: u64,
+    kafka_errors: u64,
+    latency_samples: Vec<f64>,
+}
+
+impl Metrics {
+    fn record_latency(&mut self, latency_ms: f64) {
+        self.latency_samples.push(latency_ms);
+        // Keep only last 1000 samples for memory efficiency
+        if self.latency_samples.len() > 1000 {
+            self.latency_samples.remove(0);
+        }
+    }
+
+    fn get_p50_latency(&self) -> Option<f64> {
+        if self.latency_samples.is_empty() {
+            return None;
+        }
+        let mut sorted = self.latency_samples.clone();
+        sorted.sort_by(|a, b| a.partial_cmp(b).unwrap());
+        let mid = sorted.len() / 2;
+        Some(sorted[mid])
+    }
+
+    fn get_p99_latency(&self) -> Option<f64> {
+        if self.latency_samples.is_empty() {
+            return None;
+        }
+        let mut sorted = self.latency_samples.clone();
+        sorted.sort_by(|a, b| a.partial_cmp(b).unwrap());
+        let idx = (sorted.len() as f64 * 0.99) as usize;
+        Some(sorted[idx.min(sorted.len() - 1)])
+    }
+
+    fn log_summary(&self) {
+        info!("METRICS: total={} decodes={} errors={} redis_errors={} kafka_errors={} p50={:.2}ms p99={:.2}ms", 
+            self.total_messages,
+            self.successful_decodes,
+            self.decode_errors,
+            self.redis_errors,
+            self.kafka_errors,
+            self.get_p50_latency().unwrap_or(0.0),
+            self.get_p99_latency().unwrap_or(0.0)
+        );
+    }
+}
+
 #[tokio::main]
 async fn main() -> Result<()> {
     dotenv().ok();
@@ -92,24 +145,38 @@ async fn main() -> Result<()> {
         }
     }
 
+    let mut metrics = Metrics::default();
+
     loop {
         match consumer.recv().await {
-            Err(e) => warn!("kafka recv error: {e:?}"),
+            Err(e) => {
+                metrics.kafka_errors += 1;
+                warn!("kafka recv error: {e:?}");
+            }
             Ok(m) => {
                 if let Some(bytes) = m.payload() {
                     let t0 = Instant::now();
                     if let Err(e) = handle(bytes, &producer, &out_topic, &mut redis_conn).await {
+                        metrics.decode_errors += 1;
                         error!("handle error: {e:#}");
+                    } else {
+                        metrics.successful_decodes += 1;
                     }
                     let dt_ms = t0.elapsed().as_micros() as f64 / 1000.0;
+                    metrics.record_latency(dt_ms);
                     if dt_ms > 25.0 {
                         warn!("extract path latency high: {:.2} ms", dt_ms);
                     }
                 } else {
+                    metrics.kafka_errors += 1;
                     warn!("empty payload");
                 }
                 let _ = consumer.commit_message(&m, CommitMode::Async);
             }
+        }
+        metrics.total_messages += 1;
+        if metrics.total_messages % 1000 == 0 {
+            metrics.log_summary();
         }
     }
 }
