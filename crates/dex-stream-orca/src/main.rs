@@ -85,6 +85,7 @@ fn mask_token(t: &str) -> String {
 
 type TxnFilterMap = HashMap<String, SubscribeRequestFilterTransactions>;
 
+// Deprecated constant: use PROGRAM_IDS env for universal filtering
 const WHIRLPOOL_PROGRAM_ID: &str = "whirLbMiicVdio4qvUfM5KAg6Ct8VwpYzGff3uctyCc";
 const TOKEN_PROGRAM_ID: &str = "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA";
 
@@ -133,12 +134,22 @@ impl Args {
     pub fn get_txn_updates(&self) -> anyhow::Result<SubscribeRequest> {
         let mut transactions: TxnFilterMap = HashMap::new();
 
+        // PROGRAM_IDS env: comma-separated list of program ids
+        let pids_env = std::env::var("PROGRAM_IDS").ok();
+        let pids: Vec<String> = pids_env
+            .as_deref()
+            .unwrap_or(WHIRLPOOL_PROGRAM_ID)
+            .split(',')
+            .map(|s| s.trim().to_string())
+            .filter(|s| !s.is_empty())
+            .collect();
+
         transactions.insert(
             "client".to_owned(),
             SubscribeRequestFilterTransactions {
                 vote: Some(false),
                 failed: Some(false),
-                account_include: vec![WHIRLPOOL_PROGRAM_ID.to_string()],
+                account_include: pids,
                 account_exclude: vec![],
                 account_required: vec![],
                 signature: None,
