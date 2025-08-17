@@ -131,6 +131,8 @@ services:
       dockerfile: Dockerfile
     image: dex-stream-universal:latest
     container_name: dex-stream-universal
+    env_file:
+      - ../../crates/dex-stream-universal/.env
     depends_on:
       kafka:
         condition: service_healthy
@@ -138,9 +140,10 @@ services:
       - KAFKA_BROKER=kafka:9092
       - ENDPOINT=${SHYFT_GRPC_ENDPOINT}
       - X_TOKEN=${SHYFT_GRPC_TOKEN}
-      - PROGRAM_IDS=${PROGRAM_IDS:-whirLbMiicVdio4qvUfM5KAg6Ct8VwpYzGff3uctyCc,675kPX9MHTjS2zt1qfr1NYHuzeLXfQM9H24wFSUt1Mp8,cpamdpZCGKUy5JxQXB4dcpGPiikHawvSWAd6mEn1sGG}
+      - PROGRAM_IDS=whirLbMiicVdio4qvUfM5KAg6Ct8VwpYzGff3uctyCc
       - RUST_LOG=${RUST_LOG:-info}
       - FAST_MODE=${FAST_MODE:-1}
+      - DISCOVERY_MODE=${DISCOVERY_MODE:-1}
     command: ["--topic","orca-swaps"]
     networks:
       - mevana-network
@@ -257,7 +260,8 @@ services:
     restart: unless-stopped
     command: ["--include-tickarrays","--include-positions"]
     volumes:
-      - ../../crates/dex-backfill/idls:/app/idls:ro
+      - ../../crates/dex-backfill/idls:/app/idls
+      - ../../crates/dex-backfill/scripts:/app/scripts:ro
 
   normalizer-extract:
     build:
@@ -844,6 +848,25 @@ services:
     networks:
       - mevana-network
     restart: unless-stopped
+
+  # Discovery service for AI-driven program ID discovery
+  discovery-service:
+    build:
+      context: ../../crates/discovery-service
+      dockerfile: Dockerfile
+    image: discovery-service:latest
+    container_name: discovery-service
+    environment:
+      - KAFKA_BROKER=kafka:9092
+      - REDIS_URL=${REDIS_URL:-redis://redis:6379/0}
+      - UNKNOWN_PROGRAMS_TOPIC=${UNKNOWN_PROGRAMS_TOPIC:-unknown-programs}
+      - RUST_LOG=${RUST_LOG:-info}
+    networks:
+      - mevana-network
+    restart: unless-stopped
+    depends_on:
+      - kafka
+      - redis
 
 networks:
   mevana-network:
