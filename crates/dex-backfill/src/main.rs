@@ -204,7 +204,7 @@ async fn main() -> anyhow::Result<()> {
     info!("📁 Current working directory: {:?}", std::env::current_dir()?);
 
     // Check if IDL files exist
-    let idl_path = "idls/whirlpool_idl.json";
+            let idl_path = "idls/whirLbMi_idl.json";
     if std::path::Path::new(idl_path).exists() {
         info!("✅ IDL file found: {}", idl_path);
     } else {

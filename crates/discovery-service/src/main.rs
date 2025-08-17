@@ -1,7 +1,7 @@
 use anyhow::Result;
 use dotenv::dotenv;
 use env_logger;
-use log::{info, warn, error};
+use log::{info, error};
 use rdkafka::consumer::{Consumer, StreamConsumer};
 use rdkafka::producer::{FutureProducer, FutureRecord};
 use rdkafka::{ClientConfig, Message as _};
@@ -82,8 +82,8 @@ impl DiscoveryService {
         let redis_client = redis::Client::open(redis_url)?;
 
         Ok(Self {
-            kafka_consumer,
-            kafka_producer,
+            kafka_consumer: consumer,
+            kafka_producer: producer,
             redis_client,
             unknown_programs: HashMap::new(),
             metrics: DiscoveryMetrics::default(),
@@ -100,6 +100,7 @@ impl DiscoveryService {
             match self.kafka_consumer.recv().await {
                 Ok(msg) => {
                     if let Some(payload) = msg.payload_view::<str>().and_then(|r| r.ok()) {
+                        let payload = payload.to_string();
                         match self.process_unknown_program(&payload).await {
                             Ok(_) => {
                                 self.metrics.total_unknown_programs += 1;
@@ -131,31 +132,49 @@ impl DiscoveryService {
         
         // Extract program ID and analyze patterns
         if let Some(program_id) = program_data.get("program_id").and_then(|v| v.as_str()) {
-            let entry = self.unknown_programs.entry(program_id.to_string()).or_insert_with(|| UnknownProgram {
-                program_id: program_id.to_string(),
-                first_seen: Utc::now(),
-                last_seen: Utc::now(),
-                encounter_count: 0,
-                account_types: Vec::new(),
-                data_patterns: Vec::new(),
-                potential_dex: false,
-                confidence_score: 0.0,
-                ai_analysis_status: AIAnalysisStatus::Pending,
-            });
+            let program_id = program_id.to_string();
+            
+            // Step 1: Get or create the program entry and update basic fields
+            {
+                let entry = self.unknown_programs.entry(program_id.clone()).or_insert_with(|| UnknownProgram {
+                    program_id: program_id.clone(),
+                    first_seen: Utc::now(),
+                    last_seen: Utc::now(),
+                    encounter_count: 0,
+                    account_types: Vec::new(),
+                    data_patterns: Vec::new(),
+                    potential_dex: false,
+                    confidence_score: 0.0,
+                    ai_analysis_status: AIAnalysisStatus::Pending,
+                });
 
-            entry.last_seen = Utc::now();
-            entry.encounter_count += 1;
-
-            // Analyze data patterns for AI learning
-            self.analyze_data_patterns(entry, &program_data).await?;
-
-            // Queue for AI analysis if meets criteria
-            if self.should_queue_for_ai_analysis(entry) {
-                self.queue_for_ai_analysis(entry).await?;
+                entry.last_seen = Utc::now();
+                entry.encounter_count += 1;
             }
 
-            // Cache in Redis for persistence
-            self.cache_program_data(entry).await?;
+            // Step 2: Analyze data patterns for AI learning
+            if let Some(entry) = self.unknown_programs.get_mut(&program_id) {
+                self.analyze_data_patterns(entry, &program_data).await?;
+            }
+
+            // Step 3: Check if should queue for AI analysis
+            let should_queue = if let Some(entry) = self.unknown_programs.get(&program_id) {
+                self.should_queue_for_ai_analysis(entry)
+            } else {
+                false
+            };
+
+            // Step 4: Queue for AI analysis if meets criteria
+            if should_queue {
+                if let Some(entry) = self.unknown_programs.get_mut(&program_id) {
+                    self.queue_for_ai_analysis(entry).await?;
+                }
+            }
+
+            // Step 5: Cache in Redis for persistence
+            if let Some(entry) = self.unknown_programs.get(&program_id) {
+                self.cache_program_data(entry).await?;
+            }
         }
 
         let analysis_time = start.elapsed();
@@ -203,7 +222,7 @@ impl DiscoveryService {
         program.data_patterns.iter().any(|p| p.data_length > 100) // Substantial data
     }
 
-    async fn queue_for_ai_analysis(&mut self, program: &UnknownProgram) -> Result<()> {
+    async fn queue_for_ai_analysis(&mut self, program: &mut UnknownProgram) -> Result<()> {
         program.ai_analysis_status = AIAnalysisStatus::InProgress;
         
         // Send to AI analysis queue
