@@ -26,3 +26,8 @@ log="0.4"
 tokio={version = "1",features=["full"]}
 redis = { version = "0.32", features = ["tokio-comp"] }
 lru = "0.12"
+
+# NEW: HTTP server for health endpoints
+axum = "0.7"
+tower = "0.4"
+tower-http = { version = "0.5", features = ["cors"] }

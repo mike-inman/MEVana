@@ -1,0 +1,41 @@
+# Master Network Configuration for Normalizer Service
+# NO HARDCODED NETWORK ADDRESSES - All configurable via environment variables
+# Date: 2025-08-18
+
+networks:
+  mevana_net:
+    external: true
+    name: mevana-network
+
+services:
+  # Normalizer Service
+  normalizer-service:
+    health_port: 8085
+    bind_address: 0.0.0.0
+    kafka_broker: kafka:9092
+    in_topic: dex-transactions
+    out_topic: orca-swaps.parsed.v2
+    redis_url: redis://redis:6379/0
+    
+  # Dependencies
+  kafka:
+    port: 9092
+    bind_address: 0.0.0.0
+    
+  redis:
+    port: 6379
+    bind_address: 0.0.0.0
+
+# Port Allocation Summary:
+# 8080: Kafka-UI
+# 8081: Adminer (configured but not running)
+# 8083: Redis-UI (external)
+# 8084: dex-stream-universal-v2 ✅
+# 8085: normalizer-service ✅ (NEW)
+# 9090: Prometheus ✅
+# 3000: Grafana ✅
+# 5432: PostgreSQL ✅
+# 9092: Kafka
+# 29092: Kafka (external)
+# 2181: Zookeeper
+# 6379: Redis

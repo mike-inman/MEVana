@@ -50,7 +50,7 @@ fi
 echo -e "\n${BLUE}[TEST 2] Prometheus Targets Check${NC}"
 echo "  Checking if our test metrics server is being scraped..."
 
-TARGET_STATUS=$(curl -s "$PROMETHEUS_URL/api/v1/targets" | grep -o '"health":"[^"]*"' | grep "host.docker.internal:9091" | head -1)
+TARGET_STATUS=$(curl -s "$PROMETHEUS_URL/api/v1/targets" | grep -o '"health":"[^"]*"' | grep "localhost:9091" | head -1)
 
 if [[ $TARGET_STATUS == *"up"* ]]; then
     echo -e "  ✅ Test metrics server target is UP"

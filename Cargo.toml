@@ -9,6 +9,7 @@ members = [
     "crates/normalizer-service",
     "crates/dex-stream-orca", 
     "crates/dex-stream-universal",
+    "crates/dex-stream-universal-v2",
     "crates/ui-gateway",
     "crates/dev-fixtures",
     "crates/dex-backfill",
