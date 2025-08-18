@@ -10,6 +10,80 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::time::Duration;
 
+// NEW: Configuration structure with validation
+#[derive(Debug, Clone)]
+struct ServiceConfig {
+    api_key: String,
+    network: String,
+    redis_url: String,
+    update_interval: u64,
+    max_pools: usize,
+    dry_run: bool,
+    health_port: u16,
+    bind_address: String,
+}
+
+impl ServiceConfig {
+    fn from_env() -> Result<Self> {
+        // Load environment variables with validation
+        let api_key = std::env::var("SHYFT_API_KEY")
+            .map_err(|_| anyhow::anyhow!("SHYFT_API_KEY environment variable is required"))?;
+        
+        let network = std::env::var("SHYFT_NETWORK")
+            .unwrap_or_else(|_| "mainnet-beta".to_string());
+        
+        let redis_url = std::env::var("REDIS_URL")
+            .map_err(|_| anyhow::anyhow!("REDIS_URL environment variable is required"))?;
+        
+        let health_port = std::env::var("HEALTH_PORT")
+            .unwrap_or_else(|_| "8087".to_string())
+            .parse::<u16>()
+            .map_err(|_| anyhow::anyhow!("HEALTH_PORT must be a valid port number"))?;
+        
+        let bind_address = std::env::var("BIND_ADDRESS")
+            .unwrap_or_else(|_| "0.0.0.0".to_string());
+        
+        let update_interval = std::env::var("UPDATE_INTERVAL")
+            .unwrap_or_else(|_| "30".to_string())
+            .parse::<u64>()
+            .unwrap_or(30);
+        
+        let max_pools = std::env::var("MAX_POOLS")
+            .unwrap_or_else(|_| "100".to_string())
+            .parse::<usize>()
+            .unwrap_or(100);
+        
+        let dry_run = std::env::var("DRY_RUN")
+            .unwrap_or_else(|_| "false".to_string())
+            .parse::<bool>()
+            .unwrap_or(false);
+
+        Ok(Self {
+            api_key,
+            network,
+            redis_url,
+            update_interval,
+            max_pools,
+            dry_run,
+            health_port,
+            bind_address,
+        })
+    }
+
+    fn log_config(&self) {
+        info!("=== SHYFT POOL DEPTH SERVICE CONFIGURATION ===");
+        info!("Shyft Network: {}", self.network);
+        info!("Redis URL: {}", self.redis_url);
+        info!("Update Interval: {} seconds", self.update_interval);
+        info!("Max Pools: {}", self.max_pools);
+        info!("Dry Run: {}", self.dry_run);
+        info!("Health Port: {}", self.health_port);
+        info!("Bind Address: {}", self.bind_address);
+        info!("API Key: {}...", &self.api_key[..8.min(self.api_key.len())]);
+        info!("=============================================");
+    }
+}
+
 #[derive(Debug, Parser)]
 #[command(author, version, about = "Shyft Pool Depth Service - Get pool depth data directly from Shyft APIs")]
 struct Args {
@@ -22,7 +96,7 @@ struct Args {
     network: String,
 
     /// Redis URL
-    #[arg(long, env = "REDIS_URL", default_value = "redis://127.0.0.1:6379/0")]
+    #[arg(long, env = "REDIS_URL", default_value = "redis://redis:6379/0")]
     redis_url: String,
 
     /// Update interval in seconds
@@ -294,46 +368,89 @@ async fn write_pool_depth_to_redis(
     Ok(())
 }
 
-// ---------- Main Service Loop ----------
-async fn run_service(args: Args) -> Result<()> {
-    let shyft_client = ShyftClient::new(args.shyft_api_key, args.network);
-    
-    let redis_client = redis::Client::open(args.redis_url)?;
-    let mut redis_conn = redis_client.get_multiplexed_async_connection().await?;
+// NEW: Health check endpoint
+async fn start_health_server(config: &ServiceConfig) -> Result<()> {
+    use axum::{
+        routing::get,
+        Router,
+        http::StatusCode,
+        response::Json,
+    };
+    use serde_json::json;
+    use tokio::net::TcpListener;
 
-    info!("Starting Shyft Pool Depth Service");
-    info!("Update interval: {} seconds", args.update_interval);
-    info!("Max pools per update: {}", args.max_pools);
+    let app = Router::new()
+        .route("/health", get(|| async { 
+            (StatusCode::OK, Json(json!({ "status": "healthy", "service": "shyft-pool-depth" })))
+        }))
+        .route("/metrics", get(|| async { 
+            (StatusCode::OK, Json(json!({ "status": "metrics endpoint ready" })))
+        }));
+
+    let listener = match TcpListener::bind((config.bind_address.as_str(), config.health_port)).await {
+        Ok(listener) => listener,
+        Err(e) => {
+            error!("❌ Failed to bind health server to {}:{} - {}", config.bind_address, config.health_port, e);
+            error!("💡 Check if the bind address is valid and the port is available");
+            return Err(anyhow::anyhow!("Health server binding failed: {}", e));
+        }
+    };
+
+    info!("🚀 Health server started on {}:{}", config.bind_address, config.health_port);
+    
+    // Spawn the health server in a separate task
+    tokio::spawn(async move {
+        if let Err(e) = axum::serve(listener, app).await {
+            error!("Health server error: {}", e);
+        }
+    });
+
+    Ok(())
+}
+
+// ---------- Main Service Loop ----------
+async fn run_service(config: &ServiceConfig) -> Result<()> {
+    let shyft_client = ShyftClient::new(config.api_key.clone(), config.network.clone());
+    
+    let redis_client = redis::Client::open(&config.redis_url)
+        .context("Failed to create Redis client")?;
+    let mut redis_conn = redis_client.get_multiplexed_async_connection().await
+        .context("Failed to connect to Redis")?;
+
+    info!("🚀 Starting Shyft Pool Depth Service");
+    info!("📊 Update interval: {} seconds", config.update_interval);
+    info!("🎯 Max pools per update: {}", config.max_pools);
+    info!("🧪 Dry run mode: {}", config.dry_run);
 
     let mut offset = 0;
     
     loop {
-        info!("Fetching pools (offset: {})", offset);
+        info!("📡 Fetching pools (offset: {})", offset);
         
-        match shyft_client.get_pools(args.max_pools, offset).await {
+        match shyft_client.get_pools(config.max_pools, offset).await {
             Ok(pools) => {
                 if pools.is_empty() {
-                    info!("No more pools, resetting offset");
+                    info!("🔄 No more pools, resetting offset");
                     offset = 0;
                     continue;
                 }
 
                 let pools_count = pools.len();
-                info!("Processing {} pools", pools_count);
+                info!("⚙️  Processing {} pools", pools_count);
                 
                 for pool in &pools {
                     match shyft_client.calculate_pool_depth(pool).await {
                         Ok(depth) => {
-                            if !args.dry_run {
+                            if !config.dry_run {
                                 if let Err(e) = write_pool_depth_to_redis(&mut redis_conn, &depth).await {
-                                    error!("Failed to write pool depth to Redis: {}", e);
+                                    error!("❌ Failed to write pool depth to Redis: {}", e);
                                 }
                             } else {
-                                info!("[DRY RUN] Would write pool depth for {}", pool.pubkey);
+                                info!("🧪 [DRY RUN] Would write pool depth for {}", pool.pubkey);
                             }
                         }
                         Err(e) => {
-                            error!("Failed to calculate depth for pool {}: {}", pool.pubkey, e);
+                            error!("❌ Failed to calculate depth for pool {}: {}", pool.pubkey, e);
                         }
                     }
                 }
@@ -341,11 +458,11 @@ async fn run_service(args: Args) -> Result<()> {
                 offset += pools_count;
             }
             Err(e) => {
-                error!("Failed to fetch pools: {}", e);
+                error!("❌ Failed to fetch pools: {}", e);
             }
         }
 
-        tokio::time::sleep(Duration::from_secs(args.update_interval)).await;
+        tokio::time::sleep(Duration::from_secs(config.update_interval)).await;
     }
 }
 
@@ -354,11 +471,34 @@ async fn main() -> Result<()> {
     dotenv().ok();
     env_logger::init_from_env(Env::default().default_filter_or("info"));
 
+    info!("🚀 Starting Shyft Pool Depth Service...");
+
+    // Load and validate configuration
+    let config = match ServiceConfig::from_env() {
+        Ok(config) => {
+            config.log_config();
+            config
+        },
+        Err(e) => {
+            error!("❌ Configuration error: {}", e);
+            error!("💡 Please check all required environment variables are set");
+            std::process::exit(1);
+        }
+    };
+
+    // Start health server
+    if let Err(e) = start_health_server(&config).await {
+        error!("❌ Failed to start health server: {}", e);
+        std::process::exit(1);
+    }
+
+    // Parse CLI arguments for backward compatibility
     let args = Args::parse();
     
     if args.shyft_api_key.is_empty() {
         bail!("SHYFT_API_KEY is required");
     }
 
-    run_service(args).await
+    // Run the main service
+    run_service(&config).await
 }

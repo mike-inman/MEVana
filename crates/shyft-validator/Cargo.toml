@@ -13,3 +13,8 @@ log = "0.4"
 env_logger = "0.10"
 dotenv = "0.15"
 chrono = { version = "0.4", features = ["serde"] }
+
+# NEW: HTTP server for health endpoints
+axum = "0.7"
+tower = "0.4"
+tower-http = { version = "0.5", features = ["cors"] }
