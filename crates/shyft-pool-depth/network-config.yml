@@ -1,0 +1,40 @@
+# Master Network Configuration for Shyft Pool Depth Service
+# NO HARDCODED NETWORK ADDRESSES - All configurable via environment variables
+# Date: 2025-08-18
+
+networks:
+  mevana_net:
+    external: true
+    name: mevana-network
+
+services:
+  # Shyft Pool Depth Service
+  shyft-pool-depth:
+    health_port: 8087
+    bind_address: 0.0.0.0
+    redis_url: redis://redis:6379/0
+    
+  # Dependencies
+  kafka:
+    port: 9092
+    bind_address: 0.0.0.0
+    
+  redis:
+    port: 6379
+    bind_address: 0.0.0.0
+
+# Port Allocation Summary:
+# 8080: Kafka-UI
+# 8081: Adminer (configured but not running)
+# 8083: Redis-UI (external)
+# 8084: dex-stream-universal-v2 ✅
+# 8085: normalizer-service ✅
+# 8086: shyft-validator ✅
+# 8087: shyft-pool-depth ✅ (NEW)
+# 9090: Prometheus ✅
+# 3000: Grafana ✅
+# 5432: PostgreSQL ✅
+# 9092: Kafka
+# 29092: Kafka (external)
+# 2181: Zookeeper
+# 6379: Redis

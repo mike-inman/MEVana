@@ -4410,6 +4410,7 @@ name = "shyft-pool-depth"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "axum",
  "chrono",
  "clap",
  "dotenv",
@@ -4421,6 +4422,8 @@ dependencies = [
  "serde",
  "serde_json",
  "tokio",
+ "tower 0.4.13",
+ "tower-http 0.5.2",
 ]
 
 [[package]]
@@ -4428,6 +4431,7 @@ name = "shyft-validator"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "axum",
  "chrono",
  "dotenv",
  "env_logger 0.10.2",
@@ -4436,6 +4440,8 @@ dependencies = [
  "serde",
  "serde_json",
  "tokio",
+ "tower 0.4.13",
+ "tower-http 0.5.2",
 ]
 
 [[package]]

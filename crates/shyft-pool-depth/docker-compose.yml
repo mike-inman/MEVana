@@ -1,0 +1,95 @@
+# Docker Compose for Shyft Pool Depth Service
+# NO HARDCODED NETWORK ADDRESSES - All configurable via environment variables
+# Date: 2025-08-18
+
+services:
+  # Development environment (default)
+  shyft_pool_depth_dev:
+    build:
+      context: ../..
+      dockerfile: crates/shyft-pool-depth/Dockerfile
+    profiles: ["dev"]
+    container_name: shyft_pool_depth_dev
+    environment:
+      - RUST_LOG=${RUST_LOG:-info}
+      - HEALTH_PORT=${HEALTH_PORT:-8087}
+      - BIND_ADDRESS=${BIND_ADDRESS:-0.0.0.0}
+      - SHYFT_API_KEY=${SHYFT_API_KEY}
+      - SHYFT_NETWORK=${SHYFT_NETWORK:-mainnet-beta}
+      - REDIS_URL=${REDIS_URL:-redis://redis:6379/0}
+      - UPDATE_INTERVAL=${UPDATE_INTERVAL:-30}
+      - MAX_POOLS=${MAX_POOLS:-100}
+      - DRY_RUN=${DRY_RUN:-false}
+    ports:
+      - "${HEALTH_PORT:-8087}:8087"
+    networks:
+      - mevana-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://:8087/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    restart: unless-stopped
+
+  # Test environment
+  shyft_pool_depth_test:
+    build:
+      context: ../..
+      dockerfile: crates/shyft-pool-depth/Dockerfile
+    profiles: ["test"]
+    container_name: shyft_pool_depth_test
+    environment:
+      - RUST_LOG=${RUST_LOG:-info}
+      - HEALTH_PORT=${HEALTH_PORT:-8087}
+      - BIND_ADDRESS=${BIND_ADDRESS:-0.0.0.0}
+      - SHYFT_API_KEY=${SHYFT_API_KEY}
+      - SHYFT_NETWORK=${SHYFT_NETWORK:-mainnet-beta}
+      - REDIS_URL=${REDIS_URL:-redis://redis:6379/0}
+      - UPDATE_INTERVAL=${UPDATE_INTERVAL:-30}
+      - MAX_POOLS=${MAX_POOLS:-100}
+      - DRY_RUN=${DRY_RUN:-true}
+    ports:
+      - "${HEALTH_PORT:-8087}:8087"
+    networks:
+      - mevana-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://:8087/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    restart: unless-stopped
+
+  # Production environment
+  shyft_pool_depth_prod:
+    build:
+      context: ../..
+      dockerfile: crates/shyft-pool-depth/Dockerfile
+    profiles: ["prod"]
+    container_name: shyft_pool_depth_prod
+    environment:
+      - RUST_LOG=${RUST_LOG:-warn}
+      - HEALTH_PORT=${HEALTH_PORT:-8087}
+      - BIND_ADDRESS=${BIND_ADDRESS:-0.0.0.0}
+      - SHYFT_API_KEY=${SHYFT_API_KEY}
+      - SHYFT_NETWORK=${SHYFT_NETWORK:-mainnet-beta}
+      - REDIS_URL=${REDIS_URL:-redis://redis:6379/0}
+      - UPDATE_INTERVAL=${UPDATE_INTERVAL:-30}
+      - MAX_POOLS=${MAX_POOLS:-100}
+      - DRY_RUN=${DRY_RUN:-false}
+    ports:
+      - "${HEALTH_PORT:-8087}:8087"
+    networks:
+      - mevana-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://:8087/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    restart: unless-stopped
+
+networks:
+  mevana-network:
+    external: true
