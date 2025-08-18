@@ -272,7 +272,7 @@ async fn write_pool_depth_to_redis(
     
     // Write pool depth data
     let depth_json = serde_json::to_string(depth)?;
-    redis.set_ex(&pool_key, depth_json, 300).await?; // 5 minute TTL
+    redis.set_ex::<_, _, ()>(&pool_key, depth_json, 300).await?; // 5 minute TTL
 
     // Write summary data for quick access
     let summary_key = format!("dex:pool_summary:{}", depth.pool);
@@ -288,7 +288,7 @@ async fn write_pool_depth_to_redis(
         "updated_at": depth.updated_at,
     });
     
-    redis.set_ex(&summary_key, summary.to_string(), 300).await?;
+    redis.set_ex::<_, _, ()>(&summary_key, summary.to_string(), 300).await?;
 
     info!("Updated pool depth for {} with {} depth levels", depth.pool, depth.depth_levels.len());
     Ok(())
@@ -318,10 +318,11 @@ async fn run_service(args: Args) -> Result<()> {
                     continue;
                 }
 
-                info!("Processing {} pools", pools.len());
+                let pools_count = pools.len();
+                info!("Processing {} pools", pools_count);
                 
-                for pool in pools {
-                    match shyft_client.calculate_pool_depth(&pool).await {
+                for pool in &pools {
+                    match shyft_client.calculate_pool_depth(pool).await {
                         Ok(depth) => {
                             if !args.dry_run {
                                 if let Err(e) = write_pool_depth_to_redis(&mut redis_conn, &depth).await {
@@ -337,7 +338,7 @@ async fn run_service(args: Args) -> Result<()> {
                     }
                 }
 
-                offset += pools.len();
+                offset += pools_count;
             }
             Err(e) => {
                 error!("Failed to fetch pools: {}", e);

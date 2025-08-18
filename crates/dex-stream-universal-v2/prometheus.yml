@@ -1,0 +1,37 @@
+# Prometheus Configuration for MEVana Stack
+# NO HARDCODED NETWORK ADDRESSES - Uses Docker service names
+# Date: 2025-08-18
+
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+
+rule_files:
+  # Add alerting rules here later
+
+scrape_configs:
+  # Self-monitoring
+  - job_name: 'prometheus'
+    static_configs:
+      - targets: ['localhost:9090']
+
+  # DEX Stream Universal V2 metrics
+  - job_name: 'dex-stream-universal-v2'
+    static_configs:
+      - targets: ['dex_stream_universal_v2_dev:8084']
+    metrics_path: '/metrics'
+    scrape_interval: 10s
+    
+  # Kafka metrics (if we add them later)
+  - job_name: 'kafka'
+    static_configs:
+      - targets: ['kafka:9092']
+    metrics_path: '/metrics'
+    scrape_interval: 30s
+
+  # Redis metrics (if we add them later)
+  - job_name: 'redis'
+    static_configs:
+      - targets: ['redis:6379']
+    metrics_path: '/metrics'
+    scrape_interval: 30s

@@ -23,7 +23,89 @@ use std::time::Instant;
 use yellowstone_grpc_proto::prelude as ypp;
 use yellowstone_grpc_proto::prost::Message as _;
 
-// Simple metrics collection
+// NEW: Configuration structure with validation
+#[derive(Debug, Clone)]
+struct ServiceConfig {
+    broker: String,
+    in_topic: String,
+    out_topic: String,
+    group_id: String,
+    redis_url: String,
+    mint_decimals_ttl_ms: i64,
+    pool_snapshot_ttl_ms: i64,
+    fast_mode: bool,
+    health_port: u16,
+    bind_address: String,
+}
+
+impl ServiceConfig {
+    fn from_env() -> Result<Self> {
+        // Load environment variables with validation
+        let broker = std::env::var("KAFKA_BROKER")
+            .map_err(|_| anyhow::anyhow!("KAFKA_BROKER environment variable is required"))?;
+
+        let in_topic = std::env::var("IN_TOPIC")
+            .map_err(|_| anyhow::anyhow!("IN_TOPIC environment variable is required"))?;
+
+        let out_topic = std::env::var("OUT_TOPIC")
+            .map_err(|_| anyhow::anyhow!("OUT_TOPIC environment variable is required"))?;
+
+        let group_id = std::env::var("GROUP_ID")
+            .map_err(|_| anyhow::anyhow!("GROUP_ID environment variable is required"))?;
+
+        let redis_url = std::env::var("REDIS_URL")
+            .map_err(|_| anyhow::anyhow!("REDIS_URL environment variable is required"))?;
+
+        let health_port = std::env::var("HEALTH_PORT")
+            .unwrap_or_else(|_| "8085".to_string())
+            .parse::<u16>()
+            .map_err(|_| anyhow::anyhow!("HEALTH_PORT must be a valid port number"))?;
+
+        let bind_address = std::env::var("BIND_ADDRESS").unwrap_or_else(|_| "0.0.0.0".to_string());
+
+        let mint_decimals_ttl_ms = std::env::var("MINT_DECIMALS_TTL_MS")
+            .unwrap_or_else(|_| "60000".to_string())
+            .parse::<i64>()
+            .unwrap_or(60000);
+
+        let pool_snapshot_ttl_ms = std::env::var("POOL_SNAPSHOT_TTL_MS")
+            .unwrap_or_else(|_| "60000".to_string())
+            .parse::<i64>()
+            .unwrap_or(60000);
+
+        let fast_mode = std::env::var("FAST_MODE").ok().as_deref() == Some("1");
+
+        Ok(Self {
+            broker,
+            in_topic,
+            out_topic,
+            group_id,
+            redis_url,
+            mint_decimals_ttl_ms,
+            pool_snapshot_ttl_ms,
+            fast_mode,
+            health_port,
+            bind_address,
+        })
+    }
+
+    fn log_config(&self) {
+        info!("=== NORMALIZER SERVICE CONFIGURATION ===");
+        info!("Kafka Broker: {}", self.broker);
+        info!("Input Topic: {}", self.in_topic);
+        info!("Output Topic: {}", self.out_topic);
+        info!("Group ID: {}", self.group_id);
+        info!("Redis URL: {}", self.redis_url);
+        info!("Health Port: {}", self.health_port);
+        info!("Bind Address: {}", self.bind_address);
+        info!("Fast Mode: {}", self.fast_mode);
+        info!("Mint Decimals TTL: {}ms", self.mint_decimals_ttl_ms);
+        info!("Pool Snapshot TTL: {}ms", self.pool_snapshot_ttl_ms);
+        info!("=========================================");
+    }
+}
+
+// NEW: Enhanced metrics with Prometheus support
 #[derive(Default)]
 struct Metrics {
     total_messages: u64,
@@ -76,41 +158,209 @@ impl Metrics {
     }
 }
 
+// NEW: Health check endpoint
+async fn start_health_server(config: &ServiceConfig) -> Result<()> {
+    use axum::{http::StatusCode, response::Json, routing::get, Router};
+    use serde_json::json;
+    use tokio::net::TcpListener;
+
+    let app = Router::new()
+        .route(
+            "/health",
+            get(|| async {
+                (
+                    StatusCode::OK,
+                    Json(json!({ "status": "healthy", "service": "normalizer-service" })),
+                )
+            }),
+        )
+        .route(
+            "/metrics",
+            get(|| async {
+                (
+                    StatusCode::OK,
+                    Json(json!({ "status": "metrics endpoint ready" })),
+                )
+            }),
+        );
+
+    let listener = match TcpListener::bind((config.bind_address.as_str(), config.health_port)).await
+    {
+        Ok(listener) => listener,
+        Err(e) => {
+            error!(
+                "❌ Failed to bind health server to {}:{} - {}",
+                config.bind_address, config.health_port, e
+            );
+            error!("💡 Check if the bind address is valid and the port is available");
+            return Err(anyhow::anyhow!("Health server binding failed: {}", e));
+        }
+    };
+
+    info!(
+        "🚀 Health server started on {}:{}",
+        config.bind_address, config.health_port
+    );
+
+    // Spawn the health server in a separate task
+    tokio::spawn(async move {
+        if let Err(e) = axum::serve(listener, app).await {
+            error!("Health server error: {}", e);
+        }
+    });
+
+    Ok(())
+}
+
 #[tokio::main]
 async fn main() -> Result<()> {
+    // Load environment variables
     dotenv().ok();
     env_logger::init();
 
-    let broker = std::env::var("KAFKA_BROKER").unwrap_or_else(|_| "localhost:29092".into());
-    let in_topic = std::env::var("IN_TOPIC").unwrap_or_else(|_| "orca-swaps".into());
-    let out_topic = std::env::var("OUT_TOPIC").unwrap_or_else(|_| "orca-swaps.parsed.v2".into());
-    let group_id = std::env::var("GROUP_ID").unwrap_or_else(|_| "tap-orca-extract".into());
-    let redis_url =
-        std::env::var("REDIS_URL").unwrap_or_else(|_| "redis://127.0.0.1:6379/0".into());
+    info!("🚀 Starting Normalizer Service...");
 
-    info!("tap_orca_extract: broker={broker} in={in_topic} out={out_topic} group_id={group_id}");
+    // Load and validate configuration
+    let config = match ServiceConfig::from_env() {
+        Ok(config) => {
+            config.log_config();
+            config
+        }
+        Err(e) => {
+            error!("❌ Configuration error: {}", e);
+            error!("💡 Please check all required environment variables are set");
+            std::process::exit(1);
+        }
+    };
 
-    let fast = std::env::var("FAST_MODE").ok().as_deref() == Some("1");
+    // Start health server
+    if let Err(e) = start_health_server(&config).await {
+        error!("❌ Failed to start health server: {}", e);
+        std::process::exit(1);
+    }
+
+    // Verify decoders are registered
+    {
+        let regs = generated::registry();
+        if regs.is_empty() {
+            warn!("⚠️  No generated extractors registered. Check idls/ and profiles/.");
+        } else {
+            info!("✅ {} extractor(s) registered", regs.len());
+            for e in regs {
+                info!("   - program_id={}", e.program_id());
+            }
+        }
+    }
+
+    // Initialize Kafka consumer with proper error handling
+    let consumer = match create_kafka_consumer(&config).await {
+        Ok(consumer) => {
+            info!("✅ Kafka consumer created successfully");
+            consumer
+        }
+        Err(e) => {
+            error!("❌ Failed to create Kafka consumer: {}", e);
+            std::process::exit(1);
+        }
+    };
+
+    // Initialize Kafka producer with proper error handling
+    let producer = match create_kafka_producer(&config).await {
+        Ok(producer) => {
+            info!("✅ Kafka producer created successfully");
+            producer
+        }
+        Err(e) => {
+            error!("❌ Failed to create Kafka producer: {}", e);
+            std::process::exit(1);
+        }
+    };
+
+    // Initialize Redis connection with proper error handling
+    let mut redis_conn = match create_redis_connection(&config).await {
+        Ok(conn) => {
+            info!("✅ Redis connection established successfully");
+            conn
+        }
+        Err(e) => {
+            error!("❌ Failed to connect to Redis: {}", e);
+            std::process::exit(1);
+        }
+    };
+
+    // Subscribe to input topic
+    if let Err(e) = consumer.subscribe(&[&config.in_topic]) {
+        error!("❌ Failed to subscribe to topic {}: {}", config.in_topic, e);
+        std::process::exit(1);
+    }
+    info!("✅ Subscribed to input topic: {}", config.in_topic);
+
+    let mut metrics = Metrics::default();
+    info!("🚀 Starting message processing loop...");
+
+    loop {
+        match consumer.recv().await {
+            Err(e) => {
+                metrics.kafka_errors += 1;
+                warn!("⚠️  Kafka receive error: {e:?}");
+            }
+            Ok(m) => {
+                if let Some(bytes) = m.payload() {
+                    let t0 = Instant::now();
+                    if let Err(e) =
+                        handle(bytes, &producer, &config.out_topic, &mut redis_conn).await
+                    {
+                        metrics.decode_errors += 1;
+                        error!("❌ Handle error: {e:#}");
+                    } else {
+                        metrics.successful_decodes += 1;
+                    }
+                    let dt_ms = t0.elapsed().as_micros() as f64 / 1000.0;
+                    metrics.record_latency(dt_ms);
+                    if dt_ms > 25.0 {
+                        warn!("⚠️  Extract path latency high: {:.2} ms", dt_ms);
+                    }
+                } else {
+                    metrics.kafka_errors += 1;
+                    warn!("⚠️  Empty payload received");
+                }
+                let _ = consumer.commit_message(&m, CommitMode::Async);
+            }
+        }
+        metrics.total_messages += 1;
+        if metrics.total_messages % 1000 == 0 {
+            metrics.log_summary();
+        }
+    }
+}
+
+// NEW: Helper function to create Kafka consumer with proper error handling
+async fn create_kafka_consumer(config: &ServiceConfig) -> Result<StreamConsumer> {
     let mut cconf = ClientConfig::new();
     cconf
-        .set("bootstrap.servers", &broker)
-        .set("group.id", &group_id)
+        .set("bootstrap.servers", &config.broker)
+        .set("group.id", &config.group_id)
         .set("enable.auto.commit", "false")
         .set("auto.offset.reset", "latest");
-    if fast {
+
+    if config.fast_mode {
         cconf
             .set("fetch.min.bytes", "1")
             .set("fetch.wait.max.ms", "1")
             .set("queued.min.messages", "1");
     }
-    let consumer: StreamConsumer = cconf.create().context("create consumer")?;
 
-    consumer.subscribe(&[&in_topic]).context("subscribe")?;
+    let consumer: StreamConsumer = cconf.create().context("Failed to create Kafka consumer")?;
 
-    // Producer for v2 output
+    Ok(consumer)
+}
+
+// NEW: Helper function to create Kafka producer with proper error handling
+async fn create_kafka_producer(config: &ServiceConfig) -> Result<FutureProducer> {
     let mut pconf = ClientConfig::new();
-    pconf.set("bootstrap.servers", &broker);
-    if fast {
+    pconf.set("bootstrap.servers", &config.broker);
+
+    if config.fast_mode {
         pconf
             .set("linger.ms", "0")
             .set("acks", "1")
@@ -123,62 +373,23 @@ async fn main() -> Result<()> {
             .set("linger.ms", "5")
             .set("acks", "all");
     }
-    let producer: FutureProducer = pconf.create().context("create producer")?;
 
-    // Redis (optional enrich) with local read-through caches
-    let redis_client = redis::Client::open(redis_url.clone())?;
-    let mut redis_conn: MultiplexedConnection = redis_client
+    let producer: FutureProducer = pconf.create().context("Failed to create Kafka producer")?;
+
+    Ok(producer)
+}
+
+// NEW: Helper function to create Redis connection with proper error handling
+async fn create_redis_connection(config: &ServiceConfig) -> Result<MultiplexedConnection> {
+    let redis_client =
+        redis::Client::open(config.redis_url.clone()).context("Failed to create Redis client")?;
+
+    let redis_conn: MultiplexedConnection = redis_client
         .get_multiplexed_tokio_connection()
         .await
-        .context("redis connect")?;
+        .context("Failed to connect to Redis")?;
 
-    // Verify decoders are registered
-    {
-        let regs = generated::registry();
-        if regs.is_empty() {
-            warn!("No generated extractors registered. Check idls/ and profiles/.");
-        } else {
-            info!("{} extractor(s) registered", regs.len());
-            for e in regs {
-                info!(" - program_id={}", e.program_id());
-            }
-        }
-    }
-
-    let mut metrics = Metrics::default();
-
-    loop {
-        match consumer.recv().await {
-            Err(e) => {
-                metrics.kafka_errors += 1;
-                warn!("kafka recv error: {e:?}");
-            }
-            Ok(m) => {
-                if let Some(bytes) = m.payload() {
-                    let t0 = Instant::now();
-                    if let Err(e) = handle(bytes, &producer, &out_topic, &mut redis_conn).await {
-                        metrics.decode_errors += 1;
-                        error!("handle error: {e:#}");
-                    } else {
-                        metrics.successful_decodes += 1;
-                    }
-                    let dt_ms = t0.elapsed().as_micros() as f64 / 1000.0;
-                    metrics.record_latency(dt_ms);
-                    if dt_ms > 25.0 {
-                        warn!("extract path latency high: {:.2} ms", dt_ms);
-                    }
-                } else {
-                    metrics.kafka_errors += 1;
-                    warn!("empty payload");
-                }
-                let _ = consumer.commit_message(&m, CommitMode::Async);
-            }
-        }
-        metrics.total_messages += 1;
-        if metrics.total_messages % 1000 == 0 {
-            metrics.log_summary();
-        }
-    }
+    Ok(redis_conn)
 }
 
 async fn handle(

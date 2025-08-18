@@ -51,7 +51,7 @@ Our MEVana platform now has a **complete observability pipeline** with Prometheu
 ```yaml
 # Key monitoring targets
 - job_name: 'mevana-testing'
-  targets: ['host.docker.internal:9091']
+  targets: ['localhost:9091']
   scrape_interval: 10s
 
 - job_name: 'mevana-services'
