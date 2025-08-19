@@ -1,32 +1,30 @@
-# syntax=docker/dockerfile:1
-# NO HARDCODED NETWORK ADDRESSES - All configurable via environment variables
-# Date: 2025-08-18
+# Multi-stage build for enhanced shyft-validator
+FROM docker.io/library/rust:1.83 as builder
 
-FROM rust:1.83 as builder
+# Install build dependencies
 RUN apt-get update && apt-get install -y cmake build-essential pkg-config && rm -rf /var/lib/apt/lists/*
+
 WORKDIR /app
 
-# Build from workspace root with .dockerignore trimming the context
+# Copy the entire workspace
 COPY . .
+
+# Build the enhanced shyft-validator binary
 RUN cargo build --release -p shyft-validator
 
-FROM debian:bookworm-slim as runtime
+# Runtime stage
+FROM docker.io/library/debian:bookworm-slim
+
+# Install runtime dependencies
 RUN apt-get update && apt-get install -y ca-certificates curl && update-ca-certificates && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
+
+# Copy the binary from builder stage
 COPY --from=builder /app/target/release/shyft-validator /usr/local/bin/shyft-validator
 
-# Set default environment variables
-ENV RUST_LOG=info
-ENV HEALTH_PORT=8086
-ENV BIND_ADDRESS=0.0.0.0
-ENV SHYFT_NETWORK=mainnet-beta
-
-# Expose health check port
-EXPOSE 8086
-
-# Health check
-HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
-  CMD curl -f http://:8086/health || exit 1
-
+# Set the entrypoint
 ENTRYPOINT ["/usr/local/bin/shyft-validator"]
+
+# Default command (can be overridden)
+CMD ["--help"]
