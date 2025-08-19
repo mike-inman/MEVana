@@ -39,6 +39,9 @@ Date: 2025-08-19
 - RPC (JSON-RPC): `getTransaction` via `POST https://rpc.shyft.to?api_key=...`
   - Docs: `https://docs.shyft.to/solana/rpc-calls/http/gettransaction`
 
+### Full Catalog (AI‑friendly)
+- See `docs/SHYFT_API_CATALOG.md` for a curated list of available methods and conventions.
+
 ### Sliding Window Readiness
 - Starts at 2s initial delay (configurable), auto-adjusts based on success/failure counts
 - Adapts to Geyser > Shyft readiness gap to reduce empty/missing responses
