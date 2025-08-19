@@ -8,13 +8,13 @@
 
 ## 🎯 **Overview**
 
-The **Normalizer Service** is a critical component in the MEVana data pipeline that processes raw Solana transaction data from the DEX Stream Service and normalizes it into structured, business-ready formats. This service implements the same professional standards established for `dex-stream-universal-v2`.
+The **Normalizer Service** is a critical component in the MEVana data pipeline that processes raw Solana transaction data from the DEX Stream Service and normalizes it into structured, business-ready formats. This service implements the same professional standards established for `dex-stream-universal`.
 
 ### **Key Features**
 - ✅ **Zero hardcoded network addresses** - All configurable via environment variables
 - ✅ **Professional error handling** - Try-catch blocks with graceful failures
 - ✅ **Health monitoring** - `/health` and `/metrics` endpoints
-- ✅ **Docker-native deployment** - Integrated with `mevana-network`
+- ✅ **Docker-native deployment** - Integrated with `mevana_net`
 - ✅ **Configuration validation** - Startup validation of all required settings
 - ✅ **Comprehensive logging** - Professional logging with emojis and clear messages
 
@@ -44,7 +44,7 @@ The **Normalizer Service** is a critical component in the MEVana data pipeline t
 
 ### **Prerequisites**
 - Docker and Docker Compose
-- `mevana-network` Docker network
+- `mevana_net` Docker network
 - Kafka and Redis services running
 
 ### **1. Deploy to Docker**
@@ -117,7 +117,7 @@ docker compose --profile prod up -d
 ### **Container Details**
 - **Image**: Built from source with multi-stage Dockerfile
 - **Port**: 8085 (configurable via `HEALTH_PORT`)
-- **Network**: `mevana-network` (external)
+- **Network**: `mevana_net` (external)
 - **Health Check**: HTTP endpoint `/health`
 - **Restart Policy**: `unless-stopped`
 
@@ -218,7 +218,7 @@ src/
 
 ### **Network Security**
 - **No hardcoded addresses**: All network settings configurable
-- **Docker network isolation**: Services isolated in `mevana-network`
+- **Docker network isolation**: Services isolated in `mevana_net`
 - **Port binding control**: Configurable bind addresses
 
 ### **Data Security**

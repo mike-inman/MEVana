@@ -83,4 +83,4 @@ volumes:
 networks:
   mevana_net:
     external: true
-    name: mevana-network
+    name: mevana_net

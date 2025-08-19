@@ -25,7 +25,7 @@ services:
     ports:
       - "${HEALTH_PORT:-8085}:8085"
     networks:
-      - mevana-network
+      - mevana_net
     healthcheck:
       test: ["CMD", "curl", "-f", "http://:8085/health"]
       interval: 30s
@@ -57,7 +57,7 @@ services:
     ports:
       - "${HEALTH_PORT:-8085}:8085"
     networks:
-      - mevana-network
+      - mevana_net
     healthcheck:
       test: ["CMD", "curl", "-f", "http://:8085/health"]
       interval: 30s
@@ -88,7 +88,7 @@ services:
     ports:
       - "${HEALTH_PORT:-8085}:8085"
     networks:
-      - mevana-network
+      - mevana_net
     healthcheck:
       test: ["CMD", "curl", "-f", "http://:8085/health"]
       interval: 30s
@@ -98,5 +98,5 @@ services:
     restart: unless-stopped
 
 networks:
-  mevana-network:
+  mevana_net:
     external: true

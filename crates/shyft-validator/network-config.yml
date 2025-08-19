@@ -5,7 +5,7 @@
 networks:
   mevana_net:
     external: true
-    name: mevana-network
+    name: mevana_net
 
 services:
   # Shyft Validator Service
@@ -26,7 +26,7 @@ services:
 # 8080: Kafka-UI
 # 8081: Adminer (configured but not running)
 # 8083: Redis-UI (external)
-# 8084: dex-stream-universal-v2 ✅
+# 8084: dex-stream-universal ✅
 # 8085: normalizer-service ✅
 # 8086: shyft-validator ✅ (NEW)
 # 9090: Prometheus ✅

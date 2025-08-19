@@ -1,27 +1,69 @@
-use anyhow::Result;
+use anyhow::{Context, Result};
 use dotenv::dotenv;
 use env_logger;
 use log::{info, warn};
-use redis::{from_redis_value, AsyncCommands, Value};
+use redis::{AsyncCommands, Value};
 use serde_json::json;
 use std::collections::HashMap;
+
+// NEW: Configuration structure with validation
+#[derive(Debug, Clone)]
+struct ServiceConfig {
+    redis_url: String,
+    start_id: String,
+}
+
+impl ServiceConfig {
+    fn from_env() -> Result<Self> {
+        // Load environment variables with validation
+        let redis_url = std::env::var("REDIS_URL")
+            .map_err(|_| anyhow::anyhow!("REDIS_URL environment variable is required"))?;
+
+        let start_id = std::env::var("START_ID").unwrap_or_else(|_| "$".to_string());
+
+        Ok(Self {
+            redis_url,
+            start_id,
+        })
+    }
+
+    fn log_config(&self) {
+        info!("=== DEPTH BUILDER SERVICE CONFIGURATION ===");
+        info!("Redis URL: {}", self.redis_url);
+        info!("Start ID: {}", self.start_id);
+        info!("==========================================");
+    }
+}
 
 #[tokio::main]
 async fn main() -> Result<()> {
     dotenv().ok();
     env_logger::init();
 
-    let redis_url =
-        std::env::var("REDIS_URL").unwrap_or_else(|_| "redis://127.0.0.1:6379/0".into());
-    let client = redis::Client::open(redis_url.clone())?;
-    let mut conn = client.get_multiplexed_tokio_connection().await?;
-    info!("depth-builder: redis={}", redis_url);
+    // Load and validate configuration
+    let config = ServiceConfig::from_env().context("Failed to load service configuration")?;
+
+    config.log_config();
+
+    // Validate Redis connection
+    let client =
+        redis::Client::open(config.redis_url.clone()).context("Failed to create Redis client")?;
+
+    let mut conn = client
+        .get_multiplexed_tokio_connection()
+        .await
+        .context("Failed to connect to Redis")?;
+
+    info!("depth-builder: Connected to Redis successfully");
 
     // Simple loop: read from XREAD on tickarray stream; compute/update per-pool summaries
     // Stream: dex:whirlpool:tickarray_updates
-    let mut last_id = std::env::var("START_ID").unwrap_or_else(|_| "$".into());
+    let mut last_id = config.start_id.clone();
+
+    info!("Starting depth builder loop with start_id: {}", last_id);
+
     loop {
-        let resp: Value = redis::cmd("XREAD")
+        let resp: Value = match redis::cmd("XREAD")
             .arg("BLOCK")
             .arg(5000)
             .arg("STREAMS")
@@ -29,7 +71,13 @@ async fn main() -> Result<()> {
             .arg(&last_id)
             .query_async(&mut conn)
             .await
-            .unwrap_or(Value::Nil);
+        {
+            Ok(value) => value,
+            Err(e) => {
+                warn!("Redis XREAD error: {}", e);
+                Value::Nil
+            }
+        };
         // Expect structure: [[stream_key, [[id, [field, value, ...]], ...]]]
         if let Value::Array(streams) = resp {
             if let Some(Value::Array(mut top)) = streams.into_iter().next() {
@@ -115,7 +163,9 @@ async fn main() -> Result<()> {
                                 if let Value::Array(kvs) = snap_val.clone() {
                                     let mut it = kvs.into_iter();
                                     while let (Some(k), Some(v)) = (it.next(), it.next()) {
-                                        if let (Value::BulkString(kb), Value::BulkString(vb)) = (k, v) {
+                                        if let (Value::BulkString(kb), Value::BulkString(vb)) =
+                                            (k, v)
+                                        {
                                             meta.insert(
                                                 String::from_utf8_lossy(&kb).to_string(),
                                                 String::from_utf8_lossy(&vb).to_string(),
@@ -127,19 +177,22 @@ async fn main() -> Result<()> {
                                 let sqrt_price_x64_opt = meta
                                     .get("sqrt_price_x64")
                                     .and_then(|s| s.parse::<u128>().ok());
-                                let dec_a_opt = meta.get("decimals_a").and_then(|s| s.parse::<i32>().ok());
-                                let dec_b_opt = meta.get("decimals_b").and_then(|s| s.parse::<i32>().ok());
+                                let dec_a_opt =
+                                    meta.get("decimals_a").and_then(|s| s.parse::<i32>().ok());
+                                let dec_b_opt =
+                                    meta.get("decimals_b").and_then(|s| s.parse::<i32>().ok());
 
                                 // First-cut mid price in UI units for Whirlpool
-                                let p0_ui: Option<f64> = match (sqrt_price_x64_opt, dec_a_opt, dec_b_opt) {
-                                    (Some(sp), Some(da), Some(db)) => {
-                                        const Q64: f64 = 18446744073709551616.0; // 2^64
-                                        let sqrt = (sp as f64) / Q64;
-                                        let price = (sqrt * sqrt) * 10f64.powi(db - da);
-                                        Some(price)
-                                    }
-                                    _ => None,
-                                };
+                                let p0_ui: Option<f64> =
+                                    match (sqrt_price_x64_opt, dec_a_opt, dec_b_opt) {
+                                        (Some(sp), Some(da), Some(db)) => {
+                                            const Q64: f64 = 18446744073709551616.0; // 2^64
+                                            let sqrt = (sp as f64) / Q64;
+                                            let price = (sqrt * sqrt) * 10f64.powi(db - da);
+                                            Some(price)
+                                        }
+                                        _ => None,
+                                    };
 
                                 let sum_gross_f: f64 = sum_gross.parse::<f64>().unwrap_or(0.0);
                                 // Heuristic impact coefficient (smaller when liquidity larger)
@@ -165,9 +218,13 @@ async fn main() -> Result<()> {
                                 let now_ts = chrono::Utc::now().timestamp();
                                 let mut hset = redis::cmd("HSET");
                                 hset.arg(&key).arg("updated_at").arg(now_ts);
-                                if let Some(p0) = p0_ui { hset.arg("p0_ui").arg(p0); }
+                                if let Some(p0) = p0_ui {
+                                    hset.arg("p0_ui").arg(p0);
+                                }
                                 hset.arg("k_coeff").arg(k_coeff);
-                                if let Some(q) = quotes { hset.arg("sample_quotes").arg(q); }
+                                if let Some(q) = quotes {
+                                    hset.arg("sample_quotes").arg(q);
+                                }
                                 let _: () = hset.query_async(&mut conn).await.unwrap_or(());
 
                                 info!(

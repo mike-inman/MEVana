@@ -9,12 +9,14 @@ WORKDIR /app
 # Build from workspace root with .dockerignore trimming the context
 COPY . .
 RUN cargo build --release -p normalizer-service --bin tap_orca_extract
+RUN cargo build --release -p normalizer-service --bin tap_orca_debug
 
 FROM debian:bookworm-slim as runtime
 RUN apt-get update && apt-get install -y ca-certificates curl && update-ca-certificates && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
 COPY --from=builder /app/target/release/tap_orca_extract /usr/local/bin/normalizer-service
+COPY --from=builder /app/target/release/tap_orca_debug /usr/local/bin/tap_orca_debug
 
 # Set default environment variables
 ENV RUST_LOG=info

@@ -56,7 +56,7 @@
                        └─────────────────┘
 ```
 
-**All services using `mevana-network` with zero hardcoded addresses**
+**All services using `mevana_net` with zero hardcoded addresses**
 
 ---
 

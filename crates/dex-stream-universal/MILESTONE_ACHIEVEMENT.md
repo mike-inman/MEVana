@@ -22,7 +22,7 @@
 
 ### **3. Professional Infrastructure Standards**
 - ✅ **Zero hardcoded network addresses**: All configurable via environment variables
-- ✅ **Docker-native networking**: Using `mevana-network`
+- ✅ **Docker-native networking**: Using `mevana_net`
 - ✅ **Health checks**: Proper service monitoring
 - ✅ **Error handling**: Graceful failures with meaningful messages
 - ✅ **Configuration-driven**: No source code changes for network settings
@@ -53,8 +53,8 @@
 - **Result**: Consistent deployment commands
 
 ### **Challenge 5: Prometheus Service Discovery**
-- **Problem**: Prometheus couldn't resolve `dex_stream_universal_v2` hostname
-- **Root Cause**: Container name mismatch (`dex_stream_universal_v2` vs `dex_stream_universal_v2_dev`)
+- **Problem**: Prometheus couldn't resolve `dex_stream_universal` hostname
+- **Root Cause**: Container name mismatch (`dex_stream_universal` vs `dex_stream_universal_dev`)
 - **Solution**: Updated Prometheus config to use correct container name
 - **Result**: Metrics flowing successfully
 
@@ -63,6 +63,20 @@
 - **Root Cause**: Invalid JSON structure with nested `dashboard` object
 - **Solution**: Fixed JSON structure to match Grafana's expected format
 - **Result**: Beautiful auto-provisioned dashboard
+
+### **Challenge 7: Kafka-UI Configuration Missing**
+- **Problem**: Kafka-UI started successfully but showed no topics or data
+- **Root Cause**: Missing environment variables for Kafka cluster connection
+- **Critical Missing Config**:
+  ```yaml
+  environment:
+    - KAFKA_CLUSTERS_0_NAME=local
+    - KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS=kafka:9092
+    - KAFKA_CLUSTERS_0_READONLY=false
+  ```
+- **Solution**: Added required environment variables to docker-compose.yml
+- **Result**: Kafka-UI now properly displays topics and data flow
+- **Lesson Learned**: Kafka-UI requires explicit cluster configuration to connect to Kafka
 
 ---
 
@@ -86,7 +100,7 @@
 ### **Configuration Management**
 - **Environment files**: `.env.dev`, `.env.test`, `.env.prod`, `.env.monitoring`
 - **Docker Compose**: Separate files for service and monitoring
-- **Network isolation**: `mevana-network` for internal communication
+- **Network isolation**: `mevana_net` for internal communication
 - **Port management**: Centralized in `network-config.yml`
 
 ### **Monitoring Pipeline**
@@ -122,7 +136,7 @@
 ## 🚀 **Next Phase: Data Flow Analysis & Standardization**
 
 ### **Target**: Next service in the data pipeline
-### **Approach**: Apply same rigorous standards we used for `dex-stream-universal-v2`
+### **Approach**: Apply same rigorous standards we used for `dex-stream-universal`
 
 ### **Standards to Apply**
 1. **Zero hardcoded network addresses**
@@ -201,7 +215,7 @@ Apply the same rigorous standards to the next component in the data flow pipelin
 5. **Document progress** and update roadmap
 
 ### **Success Criteria**
-- [ ] Next service follows same standards as `dex-stream-universal-v2`
+- [ ] Next service follows same standards as `dex-stream-universal`
 - [ ] Zero hardcoded network addresses
 - [ ] Proper error handling and monitoring
 - [ ] Docker deployment working
@@ -235,6 +249,32 @@ Apply the same rigorous standards to the next component in the data flow pipelin
 - **Externalize networks** for flexibility
 - **Health check all services** for reliability
 - **Automate deployment** with scripts and documentation
+
+---
+
+## 🚨 **Critical Troubleshooting Guide**
+
+### **Kafka-UI Shows No Topics**
+**Symptoms**: Kafka-UI starts successfully but displays no topics or data
+**Root Cause**: Missing environment variables for Kafka cluster connection
+**Required Fix**:
+```yaml
+environment:
+  - KAFKA_CLUSTERS_0_NAME=local
+  - KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS=kafka:9092
+  - KAFKA_CLUSTERS_0_READONLY=false
+```
+**Verification**: Check logs for "Kafka version: X.X.X" and "Metrics updated for cluster: local"
+
+### **Service Not Sending Messages to Kafka**
+**Symptoms**: Service logs show "Program IDs Count: 0" and "Mode: FILTERED"
+**Root Cause**: Missing `PROGRAM_IDS` environment variable or incorrect `DEX_FILTERING` setting
+**Required Fix**: Ensure `PROGRAM_IDS` is set and `DEX_FILTERING=OFF` for wide-open mode
+
+### **Port Conflicts During Deployment**
+**Symptoms**: "Address already in use" errors
+**Root Cause**: Port conflicts with existing services
+**Required Fix**: Check `network-config.yml` for available ports and update service configurations
 
 ---
 

@@ -16,15 +16,15 @@ else
     echo "⚠️  No env.dev file found, using system defaults"
 fi
 
-# Check if mevana-network exists
+# Check if mevana_net exists
 echo "🔍 Checking Docker network..."
-if ! docker network ls | grep -q "mevana-network"; then
-    echo "❌ mevana-network not found. Please create it first:"
-    echo "   docker network create mevana-network"
+if ! docker network ls | grep -q "mevana_net"; then
+    echo "❌ mevana_net not found. Please create it first:"
+    echo "   docker network create mevana_net"
     exit 1
 fi
 
-echo "✅ mevana-network found"
+echo "✅ mevana_net found"
 
 # Check if SHYFT_API_KEY is set
 if [ -z "$SHYFT_API_KEY" ]; then
@@ -64,7 +64,7 @@ echo "🎉 Shyft Pool Depth Service deployed successfully!"
 echo "📍 Health endpoint: http://localhost:${HEALTH_PORT:-8087}/health"
 echo "📊 Metrics endpoint: http://localhost:${HEALTH_PORT:-8087}/metrics"
 echo "🐳 Container: shyft_pool_depth_dev"
-echo "🌐 Network: mevana-network"
+echo "🌐 Network: mevana_net"
 
 # Show running containers
 echo ""

@@ -58,7 +58,7 @@
 
 ### **Recommended Target**: `normalizer-service`
 **Why this service?**
-- **Critical path**: Processes raw data from `dex-stream-universal-v2`
+- **Critical path**: Processes raw data from `dex-stream-universal`
 - **Data transformation**: Converts raw transactions to structured format
 - **Downstream dependency**: Other services depend on its output
 - **Complexity level**: Moderate - good next step after basic service
@@ -106,7 +106,7 @@
 - [ ] **Configuration**: Create environment files and Docker configs
 
 ### **Phase 3: Integration**
-- [ ] **Docker deployment**: Containerize and deploy to `mevana-network`
+- [ ] **Docker deployment**: Containerize and deploy to `mevana_net`
 - [ ] **Monitoring integration**: Add to Prometheus targets
 - [ ] **Dashboard panels**: Create Grafana panels for new metrics
 - [ ] **Health checks**: Verify service reliability

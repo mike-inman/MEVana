@@ -16,10 +16,10 @@ else
     echo "⚠️  No env.monitoring file found, using defaults"
 fi
 
-# Check if mevana-network exists
-if ! docker network ls | grep -q "mevana-network"; then
-    echo "❌ mevana-network not found. Please create it first:"
-    echo "   docker network create mevana-network"
+# Check if mevana_net exists
+if ! docker network ls | grep -q "mevana_net"; then
+    echo "❌ mevana_net not found. Please create it first:"
+    echo "   docker network create mevana_net"
     exit 1
 fi
 
@@ -64,7 +64,7 @@ echo "   Username: ${GRAFANA_ADMIN_USER:-admin}"
 echo "   Password: ${GRAFANA_ADMIN_PASSWORD:-admin}"
 echo ""
 echo "📋 Next Steps:"
-echo "   1. Deploy dex-stream-universal-v2 to Docker"
+    echo "   1. Deploy dex-stream-universal to Docker"
 echo "   2. Verify metrics are flowing in Prometheus"
 echo "   3. Check dashboard in Grafana"
 echo ""
