@@ -1,7 +1,7 @@
 # =============================================================================
-# SOLANA AI TRADING PLATFORM - INFRASTRUCTURE ONLY
+# SOLANA AI TRADING PLATFORM - ENHANCED DOCKER COMPOSE
 # =============================================================================
-# Simplified version with only core infrastructure services
+# Enhanced version with improved connectivity, monitoring, and resource management
 
 services:
   # =============================================================================
@@ -190,8 +190,289 @@ services:
           cpus: '0.1'
 
   # =============================================================================
+  # STREAMING SERVICES
+  # =============================================================================
+
+  stream-orca:
+    build:
+      context: ..
+      dockerfile: stream-orca/Dockerfile
+      target: runtime
+      args:
+        BUILDKIT_INLINE_CACHE: 1
+    image: arbitrage-stream-orca:latest
+    container_name: stream-orca
+    env_file:
+      - .env
+    depends_on:
+      redis:
+        condition: service_healthy
+    environment:
+      - REDIS_URL=redis://redis:6379
+      - SHYFT_GRPC_ENDPOINT=${SHYFT_GRPC_ENDPOINT}
+      - SHYFT_GRPC_TOKEN=${SHYFT_GRPC_TOKEN}
+      - LOG_LEVEL=${LOG_LEVEL:-info}
+      - METRICS_PORT=9090
+      - IDL_PATH=/app
+      - RUST_LOG=${RUST_LOG:-info}
+      - HEARTBEAT_INTERVAL=30
+      - CONNECTION_TIMEOUT=30
+      - RECONNECT_DELAY=5
+      - ENABLE_TIMER=${ENABLE_TIMER:-false}
+      - TIMER_DURATION_SECONDS=${TIMER_DURATION_SECONDS:-20}
+    ports:
+      - "9094:9090"
+    networks:
+      - mevana-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "pgrep", "-f", "stream-orca"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 15s
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "50m"
+        max-file: "5"
+    deploy:
+      resources:
+        limits:
+          memory: 1G
+          cpus: '1.0'
+        reservations:
+          memory: 512M
+          cpus: '0.5'
+
+  stream-raydium:
+    build:
+      context: ../stream-raydium
+      dockerfile: Dockerfile
+      target: runtime
+      args:
+        BUILDKIT_INLINE_CACHE: 1
+    image: arbitrage-stream-raydium:latest
+    container_name: stream-raydium
+    depends_on:
+      redis:
+        condition: service_healthy
+    environment:
+      - REDIS_URL=redis://redis:6379
+      - SHYFT_GRPC_ENDPOINT=${SHYFT_GRPC_ENDPOINT}
+      - SHYFT_GRPC_TOKEN=${SHYFT_GRPC_TOKEN}
+      - LOG_LEVEL=${LOG_LEVEL:-info}
+      - METRICS_PORT=9090
+      - IDL_PATH=/app
+      - RUST_LOG=${RUST_LOG:-info}
+      - HEARTBEAT_INTERVAL=30
+      - CONNECTION_TIMEOUT=30
+      - RECONNECT_DELAY=5
+    ports:
+      - "9093:9090"
+    networks:
+      - mevana-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "pgrep", "-f", "stream-raydium"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 15s
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "50m"
+        max-file: "5"
+    deploy:
+      resources:
+        limits:
+          memory: 1G
+          cpus: '1.0'
+        reservations:
+          memory: 512M
+          cpus: '0.5'
+
+  # =============================================================================
+  # PROCESSING SERVICES
+  # =============================================================================
+
+  swap-ingest:
+    build:
+      context: ../Arbitrage/solana-arbitrage/swap-ingest
+      dockerfile: Dockerfile
+      target: runtime
+      args:
+        BUILDKIT_INLINE_CACHE: 1
+    image: arbitrage-swap-ingest:latest
+    container_name: swap-ingest
+    depends_on:
+      redis:
+        condition: service_healthy
+      stream-orca:
+        condition: service_healthy
+    environment:
+      - REDIS_URL=redis://redis:6379
+      - LOG_LEVEL=${LOG_LEVEL:-info}
+      - MIN_PROFIT_THRESHOLD=${MIN_PROFIT_THRESHOLD:-1.001}
+      - METRICS_PORT=9090
+      - RUST_LOG=${RUST_LOG:-info}
+      - HEARTBEAT_INTERVAL=30
+      - BATCH_SIZE=50
+      - PROCESSING_TIMEOUT=30
+    ports:
+      - "9094:9090"
+    networks:
+      - mevana-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "pgrep", "-f", "swap-ingest"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 15s
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "50m"
+        max-file: "5"
+    deploy:
+      resources:
+        limits:
+          memory: 1G
+          cpus: '1.0'
+        reservations:
+          memory: 512M
+          cpus: '0.5'
+
+  data-stream-processor:
+    build:
+      context: ../data-stream-processor
+      dockerfile: Dockerfile
+      args:
+        BUILDKIT_INLINE_CACHE: 1
+    image: data-stream-processor:latest
+    container_name: data-stream-processor
+    depends_on:
+      redis:
+        condition: service_healthy
+    environment:
+      - REDIS_URL=redis://redis:6379
+      - PROCESSING_INTERVAL=5
+      - RUST_LOG=${RUST_LOG:-info}
+    networks:
+      - mevana-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "ps aux | grep data-stream-processor | grep -v grep || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 15s
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "50m"
+        max-file: "5"
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+          cpus: '0.5'
+        reservations:
+          memory: 128M
+          cpus: '0.1'
+
+  pathfinder:
+    build:
+      context: ../Arbitrage/solana-arbitrage/pathfinder
+      dockerfile: Dockerfile
+      target: runtime
+      args:
+        BUILDKIT_INLINE_CACHE: 1
+    image: arbitrage-pathfinder:latest
+    container_name: pathfinder
+    depends_on:
+      swap-ingest:
+        condition: service_healthy
+    environment:
+      - LOG_LEVEL=${LOG_LEVEL:-info}
+      - MIN_PROFIT_THRESHOLD=${MIN_PROFIT_THRESHOLD:-1.001}
+      - MAX_PATH_LENGTH=${MAX_PATH_LENGTH:-5}
+      - SCAN_INTERVAL_SECONDS=${SCAN_INTERVAL_SECONDS:-1}
+      - METRICS_PORT=9090
+      - RUST_LOG=${RUST_LOG:-info}
+      - HEARTBEAT_INTERVAL=30
+      - MAX_CONCURRENT_PATHS=100
+      - PATH_CACHE_TTL=300
+    ports:
+      - "9095:9090"
+    networks:
+      - mevana-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "pgrep", "-f", "pathfinder"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 15s
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "50m"
+        max-file: "5"
+    deploy:
+      resources:
+        limits:
+          memory: 1G
+          cpus: '1.0'
+        reservations:
+          memory: 512M
+          cpus: '0.5'
+
+  # =============================================================================
   # MONITORING & DEBUGGING
   # =============================================================================
+
+  redis-viewer:
+    build:
+      context: ../Arbitrage/solana-arbitrage/redis-viewer
+      dockerfile: Dockerfile
+      args:
+        BUILDKIT_INLINE_CACHE: 1
+    image: arbitrage-redis-viewer:latest
+    container_name: redis-viewer
+    depends_on:
+      redis:
+        condition: service_healthy
+    environment:
+      - REDIS_URL=redis://redis:6379
+      - PORT=5001
+      - REFRESH_INTERVAL=5
+    ports:
+      - "5001:5001"
+    networks:
+      - mevana-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:5001/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+          cpus: '0.25'
+        reservations:
+          memory: 128M
+          cpus: '0.1'
 
   # Prometheus for metrics collection
   prometheus:
@@ -342,6 +623,74 @@ services:
           memory: 128M
           cpus: '0.1'
 
+  # =============================================================================
+  # DEVELOPMENT SERVICES (Optional)
+  # =============================================================================
+
+  # Development service with hot reloading
+  stream-orca-dev:
+    build:
+      context: ..
+      dockerfile: stream-orca/Dockerfile.dev
+    environment:
+      - SHYFT_GRPC_ENDPOINT=${SHYFT_GRPC_ENDPOINT}
+      - SHYFT_GRPC_TOKEN=${SHYFT_GRPC_TOKEN}
+      - REDIS_URL=redis://redis:6379
+      - RUST_LOG=${RUST_LOG:-debug}
+      - HEARTBEAT_INTERVAL=30
+    volumes:
+      - ../stream-orca:/app
+      - cargo_cache:/usr/local/cargo/registry
+      - target_cache:/app/target
+    networks:
+      - mevana-network
+    depends_on:
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "pgrep", "-f", "cargo-watch"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 20s
+    profiles:
+      - dev
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "50m"
+        max-file: "5"
+    deploy:
+      resources:
+        limits:
+          memory: 1G
+          cpus: '1.0'
+        reservations:
+          memory: 512M
+          cpus: '0.5'
+
+  # =============================================================================
+  # CACHE LAYERS (for faster rebuilds)
+  # =============================================================================
+
+  stream-orca-cache:
+    build:
+      context: ..
+      dockerfile: stream-orca/Dockerfile
+      target: builder
+    image: arbitrage-stream-orca:cache
+    profiles:
+      - cache
+
+  stream-raydium-cache:
+    build:
+      context: ../stream-raydium
+      dockerfile: Dockerfile
+      target: builder
+    image: arbitrage-stream-raydium:cache
+    profiles:
+      - cache
+
 networks:
   mevana-network:
     driver: bridge
@@ -357,4 +706,8 @@ volumes:
   prometheus_data:
     driver: local
   grafana_data:
+    driver: local
+  cargo_cache:
+    driver: local
+  target_cache:
     driver: local
