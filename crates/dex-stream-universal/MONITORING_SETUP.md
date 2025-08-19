@@ -20,7 +20,7 @@ Complete monitoring solution for the MEVana DEX Stream Universal V2 service usin
 
 ## Prerequisites
 - Docker and Docker Compose installed
-- `mevana-network` Docker network exists
+- `mevana_net` Docker network exists
 - Ports 8084, 9090, 3000, 5432 available
 
 ## Quick Start
@@ -55,7 +55,7 @@ HEALTH_PORT=8084
 ```
 
 ### Network Configuration
-- **External Network**: `mevana-network`
+- **External Network**: `mevana_net`
 - **Service Discovery**: Uses Docker service names
 - **No Hardcoded IPs**: All configurable
 
@@ -90,7 +90,7 @@ docker-compose ps
 docker-compose -f docker-compose.monitoring.yml logs -f
 
 # DEX Stream service
-docker-compose logs -f dex_stream_universal_v2_dev
+docker-compose logs -f dex_stream_universal_dev
 ```
 
 ### Verify Metrics Flow

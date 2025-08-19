@@ -1,7 +1,7 @@
-use anyhow::Result;
+use anyhow::{Context, Result};
 use dotenv::dotenv;
 use env_logger;
-use log::{info, warn};
+use log::{error, info, warn};
 use rdkafka::consumer::{Consumer, StreamConsumer};
 use rdkafka::{ClientConfig, Message as _};
 use serde::Deserialize;
@@ -36,33 +36,83 @@ struct State {
     v2_by_sig: HashMap<String, V2Swap>,
 }
 
+// NEW: Configuration structure with validation
+#[derive(Debug, Clone)]
+struct ServiceConfig {
+    broker: String,
+    topic_v1: String,
+    topic_v2: String,
+}
+
+impl ServiceConfig {
+    fn from_env() -> Result<Self> {
+        // Load environment variables with validation
+        let broker = std::env::var("KAFKA_BROKER")
+            .map_err(|_| anyhow::anyhow!("KAFKA_BROKER environment variable is required"))?;
+
+        let topic_v1 =
+            std::env::var("TOPIC_V1").unwrap_or_else(|_| "orca-swaps.parsed".to_string());
+
+        let topic_v2 =
+            std::env::var("TOPIC_V2").unwrap_or_else(|_| "orca-swaps.parsed.v2".to_string());
+
+        Ok(Self {
+            broker,
+            topic_v1,
+            topic_v2,
+        })
+    }
+
+    fn log_config(&self) {
+        info!("=== COMPARE SWAPS SERVICE CONFIGURATION ===");
+        info!("Kafka Broker: {}", self.broker);
+        info!("Topic V1: {}", self.topic_v1);
+        info!("Topic V2: {}", self.topic_v2);
+        info!("==========================================");
+    }
+}
+
 #[tokio::main]
 async fn main() -> Result<()> {
     dotenv().ok();
     env_logger::init();
 
-    let broker = std::env::var("KAFKA_BROKER").unwrap_or_else(|_| "localhost:29092".into());
-    let topic_v1 = std::env::var("TOPIC_V1").unwrap_or_else(|_| "orca-swaps.parsed".into());
-    let topic_v2 = std::env::var("TOPIC_V2").unwrap_or_else(|_| "orca-swaps.parsed.v2".into());
+    // Load and validate configuration
+    let config = ServiceConfig::from_env().context("Failed to load service configuration")?;
 
-    info!("compare-swaps: broker={broker} v1={topic_v1} v2={topic_v2}");
+    config.log_config();
+
+    info!("compare-swaps: Starting comparison service");
 
     let state = Arc::new(Mutex::new(State::default()));
 
     // V1 consumer
     {
-        let broker = broker.clone();
-        let topic = topic_v1.clone();
+        let broker = config.broker.clone();
+        let topic = config.topic_v1.clone();
         let state = Arc::clone(&state);
         tokio::spawn(async move {
-            let c: StreamConsumer = ClientConfig::new()
+            let c: StreamConsumer = match ClientConfig::new()
                 .set("bootstrap.servers", &broker)
                 .set("group.id", "compare-swaps-v1")
                 .set("enable.auto.commit", "true")
                 .set("auto.offset.reset", "latest")
                 .create()
-                .expect("consumer v1");
-            c.subscribe(&[&topic]).expect("subscribe v1");
+            {
+                Ok(consumer) => consumer,
+                Err(e) => {
+                    error!("Failed to create V1 consumer: {}", e);
+                    return;
+                }
+            };
+
+            if let Err(e) = c.subscribe(&[&topic]) {
+                error!("Failed to subscribe to V1 topic: {}", e);
+                return;
+            }
+
+            info!("V1 consumer started for topic: {}", topic);
+
             loop {
                 match c.recv().await {
                     Ok(m) => {
@@ -81,18 +131,31 @@ async fn main() -> Result<()> {
 
     // V2 consumer
     {
-        let broker = broker.clone();
-        let topic = topic_v2.clone();
+        let broker = config.broker.clone();
+        let topic = config.topic_v2.clone();
         let state = Arc::clone(&state);
         tokio::spawn(async move {
-            let c: StreamConsumer = ClientConfig::new()
+            let c: StreamConsumer = match ClientConfig::new()
                 .set("bootstrap.servers", &broker)
                 .set("group.id", "compare-swaps-v2")
                 .set("enable.auto.commit", "true")
                 .set("auto.offset.reset", "latest")
                 .create()
-                .expect("consumer v2");
-            c.subscribe(&[&topic]).expect("subscribe v2");
+            {
+                Ok(consumer) => consumer,
+                Err(e) => {
+                    error!("Failed to create V2 consumer: {}", e);
+                    return;
+                }
+            };
+
+            if let Err(e) = c.subscribe(&[&topic]) {
+                error!("Failed to subscribe to V2 topic: {}", e);
+                return;
+            }
+
+            info!("V2 consumer started for topic: {}", topic);
+
             loop {
                 match c.recv().await {
                     Ok(m) => {
@@ -108,6 +171,8 @@ async fn main() -> Result<()> {
             }
         });
     }
+
+    info!("Both consumers started, beginning comparison loop");
 
     // Periodically compare overlaps
     let mut tick = tokio::time::interval(std::time::Duration::from_secs(5));

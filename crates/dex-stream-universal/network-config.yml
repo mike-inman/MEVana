@@ -5,11 +5,11 @@
 networks:
   mevana_net:
     external: true
-    name: mevana-network
+    name: mevana_net
 
 services:
   # Core DEX Stream Service
-  dex-stream-universal-v2:
+  dex-stream-universal:
     health_port: 8084
     bind_address: 0.0.0.0
     kafka_broker: kafka:9092
@@ -38,7 +38,7 @@ services:
 # 8080: Kafka-UI
 # 8081: Adminer (configured but not running)
 # 8083: Redis-UI (external)
-# 8084: dex-stream-universal-v2 ✅
+# 8084: dex-stream-universal ✅
 # 9090: Prometheus ✅
 # 3000: Grafana ✅
 # 5432: PostgreSQL ✅

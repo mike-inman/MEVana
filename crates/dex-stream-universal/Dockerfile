@@ -1,15 +1,54 @@
-# syntax=docker/dockerfile:1
+# Build stage
+FROM rust:1.88-slim as builder
 
-FROM rust:1.83 as builder
-WORKDIR /app
-# Build only this crate (small context)
+# Install build dependencies
+RUN apt-get update && apt-get install -y \
+    pkg-config \
+    libssl-dev \
+    build-essential \
+    cmake \
+    && rm -rf /var/lib/apt/lists/*
+
+# Set working directory
+WORKDIR /usr/src/app
+
+# Copy the entire workspace
 COPY . .
-RUN cargo build --release
 
-FROM debian:bookworm-slim as runtime
-RUN apt-get update && apt-get install -y ca-certificates && update-ca-certificates && rm -rf /var/lib/apt/lists/*
+# Build the application
+RUN cargo build --release --bin dex-stream-universal
+
+# Production stage
+FROM debian:bookworm-slim
+
+# Install runtime dependencies
+RUN apt-get update && apt-get install -y \
+    ca-certificates \
+    libssl3 \
+    curl \
+    && rm -rf /var/lib/apt/lists/*
+
+# Create non-root user
+RUN useradd -r -s /bin/false app
+
+# Set working directory
 WORKDIR /app
-COPY --from=builder /app/target/release/dex-stream-universal /usr/local/bin/dex-stream-universal
-ENV RUST_LOG=info
-ENTRYPOINT ["/usr/local/bin/dex-stream-universal"]
 
+# Copy binary from builder stage
+COPY --from=builder /usr/src/app/target/release/dex-stream-universal /app/
+
+# Create necessary directories
+RUN mkdir -p /app/config && chown -R app:app /app
+
+# Switch to non-root user
+USER app
+
+# Expose health check port
+EXPOSE 8080
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
+    CMD curl -f http://:8080/health || exit 1
+
+# Default command
+CMD ["./dex-stream-universal"]

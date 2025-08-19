@@ -171,7 +171,7 @@ services:
     ports:
       - "2181:2181"
     networks:
-      - mevana-network
+      - mevana_net
     restart: unless-stopped
     logging:
       driver: "json-file"
@@ -213,7 +213,7 @@ services:
       - "9092:9092"
       - "29092:29092"
     networks:
-      - mevana-network
+      - mevana_net
     restart: unless-stopped
     healthcheck:
       test: ["CMD-SHELL", "kafka-topics --bootstrap-server localhost:9092 --list"]
@@ -248,7 +248,7 @@ services:
       KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS: kafka:9092
       KAFKA_CLUSTERS_0_READONLY: false
     networks:
-      - mevana-network
+      - mevana_net
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8080/health"]
@@ -284,7 +284,7 @@ services:
       - RUST_LOG=${RUST_LOG:-info}
     command: ["--topic","orca-swaps"]
     networks:
-      - mevana-network
+      - mevana_net
     restart: unless-stopped
     logging:
       driver: "json-file"
@@ -306,7 +306,7 @@ services:
     ports:
       - "6379:6379"
     networks:
-      - mevana-network
+      - mevana_net
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "redis-cli", "--raw", "incr", "ping"]
@@ -342,7 +342,7 @@ services:
     ports:
       - "8083:8081"
     networks:
-      - mevana-network
+      - mevana_net
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8081/health"]
@@ -399,7 +399,7 @@ services:
     ports:
       - "9094:9090"
     networks:
-      - mevana-network
+      - mevana_net
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "pgrep", "-f", "stream-orca"]
@@ -447,7 +447,7 @@ services:
     ports:
       - "9093:9090"
     networks:
-      - mevana-network
+      - mevana_net
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "pgrep", "-f", "stream-raydium"]
@@ -499,7 +499,7 @@ services:
     ports:
       - "9094:9090"
     networks:
-      - mevana-network
+      - mevana_net
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "pgrep", "-f", "swap-ingest"]
@@ -537,7 +537,7 @@ services:
       - PROCESSING_INTERVAL=5
       - RUST_LOG=${RUST_LOG:-info}
     networks:
-      - mevana-network
+      - mevana_net
     restart: unless-stopped
     healthcheck:
       test: ["CMD-SHELL", "ps aux | grep data-stream-processor | grep -v grep || exit 1"]
@@ -584,7 +584,7 @@ services:
     ports:
       - "9095:9090"
     networks:
-      - mevana-network
+      - mevana_net
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "pgrep", "-f", "pathfinder"]
@@ -628,7 +628,7 @@ services:
     ports:
       - "5001:5001"
     networks:
-      - mevana-network
+      - mevana_net
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:5001/health"]
@@ -667,7 +667,7 @@ services:
       - '--storage.tsdb.retention.time=200h'
       - '--web.enable-lifecycle'
     networks:
-      - mevana-network
+      - mevana_net
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:9090/-/healthy"]
@@ -703,7 +703,7 @@ services:
       - ./grafana/dashboards:/etc/grafana/provisioning/dashboards
       - ./grafana/datasources:/etc/grafana/provisioning/datasources
     networks:
-      - mevana-network
+      - mevana_net
     restart: unless-stopped
     depends_on:
       prometheus:
@@ -743,7 +743,7 @@ services:
     ports:
       - "5432:5432"
     networks:
-      - mevana-network
+      - mevana_net
     volumes:
       - postgres_data:/var/lib/postgresql/data
       - ./migrations:/docker-entrypoint-initdb.d
@@ -774,7 +774,7 @@ services:
     ports:
       - "8082:8080"
     networks:
-      - mevana-network
+      - mevana_net
     restart: unless-stopped
     depends_on:
       postgres:
@@ -819,7 +819,7 @@ services:
       - cargo_cache:/usr/local/cargo/registry
       - target_cache:/app/target
     networks:
-      - mevana-network
+      - mevana_net
     depends_on:
       redis:
         condition: service_healthy
@@ -868,9 +868,9 @@ services:
       - cache
 
 networks:
-  mevana-network:
+  mevana_net:
     driver: bridge
-    name: mevana-network
+    name: mevana_net
     ipam:
       config:
         - subnet: 172.20.0.0/16
@@ -970,7 +970,7 @@ services:
     ports:
       - "2181:2181"
     networks:
-      - mevana-network
+      - mevana_net
     restart: unless-stopped
     logging:
       driver: "json-file"
@@ -1012,7 +1012,7 @@ services:
       - "9092:9092"
       - "29092:29092"
     networks:
-      - mevana-network
+      - mevana_net
     restart: unless-stopped
     healthcheck:
       test: ["CMD-SHELL", "kafka-topics --bootstrap-server localhost:9092 --list"]
@@ -1047,7 +1047,7 @@ services:
       KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS: kafka:9092
       KAFKA_CLUSTERS_0_READONLY: false
     networks:
-      - mevana-network
+      - mevana_net
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8080/health"]
@@ -1086,7 +1086,7 @@ services:
       - RUST_LOG=${RUST_LOG:-info}
     command: ["--topic","orca-swaps"]
     networks:
-      - mevana-network
+      - mevana_net
     restart: unless-stopped
     logging:
       driver: "json-file"
@@ -1108,7 +1108,7 @@ services:
     ports:
       - "6379:6379"
     networks:
-      - mevana-network
+      - mevana_net
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "redis-cli", "--raw", "incr", "ping"]
@@ -1144,7 +1144,7 @@ services:
     ports:
       - "8083:8081"
     networks:
-      - mevana-network
+      - mevana_net
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8081/health"]
@@ -1201,7 +1201,7 @@ services:
     ports:
       - "9094:9090"
     networks:
-      - mevana-network
+      - mevana_net
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "pgrep", "-f", "stream-orca"]
@@ -1249,7 +1249,7 @@ services:
     ports:
       - "9093:9090"
     networks:
-      - mevana-network
+      - mevana_net
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "pgrep", "-f", "stream-raydium"]
@@ -1301,7 +1301,7 @@ services:
     ports:
       - "9094:9090"
     networks:
-      - mevana-network
+      - mevana_net
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "pgrep", "-f", "swap-ingest"]
@@ -1339,7 +1339,7 @@ services:
       - PROCESSING_INTERVAL=5
       - RUST_LOG=${RUST_LOG:-info}
     networks:
-      - mevana-network
+      - mevana_net
     restart: unless-stopped
     healthcheck:
       test: ["CMD-SHELL", "ps aux | grep data-stream-processor | grep -v grep || exit 1"]
@@ -1386,7 +1386,7 @@ services:
     ports:
       - "9095:9090"
     networks:
-      - mevana-network
+      - mevana_net
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "pgrep", "-f", "pathfinder"]
@@ -1430,7 +1430,7 @@ services:
     ports:
       - "5001:5001"
     networks:
-      - mevana-network
+      - mevana_net
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:5001/health"]
@@ -1469,7 +1469,7 @@ services:
       - '--storage.tsdb.retention.time=200h'
       - '--web.enable-lifecycle'
     networks:
-      - mevana-network
+      - mevana_net
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:9090/-/healthy"]
@@ -1505,7 +1505,7 @@ services:
       - ./grafana/dashboards:/etc/grafana/provisioning/dashboards
       - ./grafana/datasources:/etc/grafana/provisioning/datasources
     networks:
-      - mevana-network
+      - mevana_net
     restart: unless-stopped
     depends_on:
       prometheus:
@@ -1545,7 +1545,7 @@ services:
     ports:
       - "5432:5432"
     networks:
-      - mevana-network
+      - mevana_net
     volumes:
       - postgres_data:/var/lib/postgresql/data
       - ./migrations:/docker-entrypoint-initdb.d
@@ -1576,7 +1576,7 @@ services:
     ports:
       - "8082:8080"
     networks:
-      - mevana-network
+      - mevana_net
     restart: unless-stopped
     depends_on:
       postgres:
@@ -1621,7 +1621,7 @@ services:
       - cargo_cache:/usr/local/cargo/registry
       - target_cache:/app/target
     networks:
-      - mevana-network
+      - mevana_net
     depends_on:
       redis:
         condition: service_healthy
@@ -1670,9 +1670,9 @@ services:
       - cache
 
 networks:
-  mevana-network:
+  mevana_net:
     driver: bridge
-    name: mevana-network
+    name: mevana_net
     ipam:
       config:
         - subnet: 172.20.0.0/16
@@ -1743,7 +1743,7 @@ thos services are already running inside docker. You need to determin the name o
 
 I'll inspect running containers to find the Kafka container's network and name, then update the compose service to attach to that network and remove depends_on to avoid conflicts.
 
-I'll update the compose network to use the existing external network `mevana-network`, then validate the compose file.
+I'll update the compose network to use the existing external network `mevana_net`, then validate the compose file.
 
 ```dockercompose
 # =============================================================================
@@ -1774,7 +1774,7 @@ services:
     ports:
       - "2181:2181"
     networks:
-      - mevana-network
+      - mevana_net
     restart: unless-stopped
     logging:
       driver: "json-file"
@@ -1816,7 +1816,7 @@ services:
       - "9092:9092"
       - "29092:29092"
     networks:
-      - mevana-network
+      - mevana_net
     restart: unless-stopped
     healthcheck:
       test: ["CMD-SHELL", "kafka-topics --bootstrap-server localhost:9092 --list"]
@@ -1851,7 +1851,7 @@ services:
       KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS: kafka:9092
       KAFKA_CLUSTERS_0_READONLY: false
     networks:
-      - mevana-network
+      - mevana_net
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8080/health"]
@@ -1890,7 +1890,7 @@ services:
       - RUST_LOG=${RUST_LOG:-info}
     command: ["--topic","orca-swaps"]
     networks:
-      - mevana-network
+      - mevana_net
     restart: unless-stopped
     logging:
       driver: "json-file"
@@ -1912,7 +1912,7 @@ services:
     ports:
       - "6379:6379"
     networks:
-      - mevana-network
+      - mevana_net
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "redis-cli", "--raw", "incr", "ping"]
@@ -1948,7 +1948,7 @@ services:
     ports:
       - "8083:8081"
     networks:
-      - mevana-network
+      - mevana_net
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8081/health"]
@@ -2005,7 +2005,7 @@ services:
     ports:
       - "9094:9090"
     networks:
-      - mevana-network
+      - mevana_net
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "pgrep", "-f", "stream-orca"]
@@ -2053,7 +2053,7 @@ services:
     ports:
       - "9093:9090"
     networks:
-      - mevana-network
+      - mevana_net
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "pgrep", "-f", "stream-raydium"]
@@ -2105,7 +2105,7 @@ services:
     ports:
       - "9094:9090"
     networks:
-      - mevana-network
+      - mevana_net
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "pgrep", "-f", "swap-ingest"]
@@ -2143,7 +2143,7 @@ services:
       - PROCESSING_INTERVAL=5
       - RUST_LOG=${RUST_LOG:-info}
     networks:
-      - mevana-network
+      - mevana_net
     restart: unless-stopped
     healthcheck:
       test: ["CMD-SHELL", "ps aux | grep data-stream-processor | grep -v grep || exit 1"]
@@ -2190,7 +2190,7 @@ services:
     ports:
       - "9095:9090"
     networks:
-      - mevana-network
+      - mevana_net
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "pgrep", "-f", "pathfinder"]
@@ -2234,7 +2234,7 @@ services:
     ports:
       - "5001:5001"
     networks:
-      - mevana-network
+      - mevana_net
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:5001/health"]
@@ -2273,7 +2273,7 @@ services:
       - '--storage.tsdb.retention.time=200h'
       - '--web.enable-lifecycle'
     networks:
-      - mevana-network
+      - mevana_net
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:9090/-/healthy"]
@@ -2309,7 +2309,7 @@ services:
       - ./grafana/dashboards:/etc/grafana/provisioning/dashboards
       - ./grafana/datasources:/etc/grafana/provisioning/datasources
     networks:
-      - mevana-network
+      - mevana_net
     restart: unless-stopped
     depends_on:
       prometheus:
@@ -2349,7 +2349,7 @@ services:
     ports:
       - "5432:5432"
     networks:
-      - mevana-network
+      - mevana_net
     volumes:
       - postgres_data:/var/lib/postgresql/data
       - ./migrations:/docker-entrypoint-initdb.d
@@ -2380,7 +2380,7 @@ services:
     ports:
       - "8082:8080"
     networks:
-      - mevana-network
+      - mevana_net
     restart: unless-stopped
     depends_on:
       postgres:
@@ -2425,7 +2425,7 @@ services:
       - cargo_cache:/usr/local/cargo/registry
       - target_cache:/app/target
     networks:
-      - mevana-network
+      - mevana_net
     depends_on:
       redis:
         condition: service_healthy
@@ -2474,9 +2474,9 @@ services:
       - cache
 
 networks:
-  mevana-network:
+  mevana_net:
     external: true
-    name: mevana-network
+    name: mevana_net
 
 volumes:
   postgres_data:
@@ -2504,14 +2504,14 @@ volumes:
   nslookup kafka
 ```
 
-Status: Found your running containers on the `mevana-network` and updated Compose to attach `dex-stream-universal` to that same external network. It also defaults to `KAFKA_BROKER=kafka:9092` so it talks to the Kafka inside Docker.
+Status: Found your running containers on the `mevana_net` and updated Compose to attach `dex-stream-universal` to that same external network. It also defaults to `KAFKA_BROKER=kafka:9092` so it talks to the Kafka inside Docker.
 
 What I changed
-- Set `dex-stream-universal` broker to `kafka:9092` and kept it on `mevana-network`.
-- Marked the `mevana-network` as external so we join the existing network instead of creating a new one.
+- Set `dex-stream-universal` broker to `kafka:9092` and kept it on `mevana_net`.
+- Marked the `mevana_net` as external so we join the existing network instead of creating a new one.
 
 How to run only dex-stream-universal (without touching other services)
-- Ensure your Kafka/Zookeeper containers are already running on `mevana-network`.
+- Ensure your Kafka/Zookeeper containers are already running on `mevana_net`.
 - Export your creds and bring up just this service:
 
 ```bash
@@ -2523,11 +2523,11 @@ docker compose -f infra/docker/docker-compose.yml up -d --no-deps --build dex-st
 ```
 
 Notes
-- Service will resolve Kafka at `kafka:9092` over `mevana-network`.
+- Service will resolve Kafka at `kafka:9092` over `mevana_net`.
 - No ports are exposed by `dex-stream-universal`, so no port conflicts.
 
 Task completed.
-- Attached to external `mevana-network` and pointed to internal Kafka.
+- Attached to external `mevana_net` and pointed to internal Kafka.
 - Provided a safe command to start only `dex-stream-universal` using the existing network.
 
 ```shellscript
@@ -2550,7 +2550,7 @@ have you deployed to Docker yet?
 
 **Cursor**
 
-Deploying `dex-stream-universal` now using the existing `.env` and joining the `mevana-network`. Then I’ll verify container status and recent logs.
+Deploying `dex-stream-universal` now using the existing `.env` and joining the `mevana_net`. Then I’ll verify container status and recent logs.
 
 ---
 
@@ -2597,11 +2597,11 @@ ENTRYPOINT ["/usr/local/bin/dex-stream-universal"]
 
 ```
 
-Deploying the container now using the existing env file and external `mevana-network`, then I’ll verify it’s running and check recent logs.
+Deploying the container now using the existing env file and external `mevana_net`, then I’ll verify it’s running and check recent logs.
 
 Building worked with upgraded Rust; the container started but it's connecting to localhost:29092. I'll inspect `infra/docker/.env` to confirm KAFKA_BROKER, then restart the service overriding it to `kafka:9092` and verify logs.
 
-Fixing the broker target: the container used localhost due to .env. I’ll set `KAFKA_BROKER=kafka:9092` directly in the service environment so it always reaches the internal Kafka on `mevana-network`, validate compose, restart only `dex-stream-universal`, and confirm logs show successful broker connection.
+Fixing the broker target: the container used localhost due to .env. I’ll set `KAFKA_BROKER=kafka:9092` directly in the service environment so it always reaches the internal Kafka on `mevana_net`, validate compose, restart only `dex-stream-universal`, and confirm logs show successful broker connection.
 
 ```dockercompose
 # =============================================================================
@@ -2632,7 +2632,7 @@ services:
     ports:
       - "2181:2181"
     networks:
-      - mevana-network
+      - mevana_net
     restart: unless-stopped
     logging:
       driver: "json-file"
@@ -2674,7 +2674,7 @@ services:
       - "9092:9092"
       - "29092:29092"
     networks:
-      - mevana-network
+      - mevana_net
     restart: unless-stopped
     healthcheck:
       test: ["CMD-SHELL", "kafka-topics --bootstrap-server localhost:9092 --list"]
@@ -2709,7 +2709,7 @@ services:
       KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS: kafka:9092
       KAFKA_CLUSTERS_0_READONLY: false
     networks:
-      - mevana-network
+      - mevana_net
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8080/health"]
@@ -2748,7 +2748,7 @@ services:
       - RUST_LOG=${RUST_LOG:-info}
     command: ["--topic","orca-swaps"]
     networks:
-      - mevana-network
+      - mevana_net
     restart: unless-stopped
     logging:
       driver: "json-file"
@@ -2770,7 +2770,7 @@ services:
     ports:
       - "6379:6379"
     networks:
-      - mevana-network
+      - mevana_net
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "redis-cli", "--raw", "incr", "ping"]
@@ -2806,7 +2806,7 @@ services:
     ports:
       - "8083:8081"
     networks:
-      - mevana-network
+      - mevana_net
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8081/health"]
@@ -2863,7 +2863,7 @@ services:
     ports:
       - "9094:9090"
     networks:
-      - mevana-network
+      - mevana_net
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "pgrep", "-f", "stream-orca"]
@@ -2911,7 +2911,7 @@ services:
     ports:
       - "9093:9090"
     networks:
-      - mevana-network
+      - mevana_net
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "pgrep", "-f", "stream-raydium"]
@@ -2963,7 +2963,7 @@ services:
     ports:
       - "9094:9090"
     networks:
-      - mevana-network
+      - mevana_net
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "pgrep", "-f", "swap-ingest"]
@@ -3001,7 +3001,7 @@ services:
       - PROCESSING_INTERVAL=5
       - RUST_LOG=${RUST_LOG:-info}
     networks:
-      - mevana-network
+      - mevana_net
     restart: unless-stopped
     healthcheck:
       test: ["CMD-SHELL", "ps aux | grep data-stream-processor | grep -v grep || exit 1"]
@@ -3048,7 +3048,7 @@ services:
     ports:
       - "9095:9090"
     networks:
-      - mevana-network
+      - mevana_net
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "pgrep", "-f", "pathfinder"]
@@ -3092,7 +3092,7 @@ services:
     ports:
       - "5001:5001"
     networks:
-      - mevana-network
+      - mevana_net
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:5001/health"]
@@ -3131,7 +3131,7 @@ services:
       - '--storage.tsdb.retention.time=200h'
       - '--web.enable-lifecycle'
     networks:
-      - mevana-network
+      - mevana_net
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:9090/-/healthy"]
@@ -3167,7 +3167,7 @@ services:
       - ./grafana/dashboards:/etc/grafana/provisioning/dashboards
       - ./grafana/datasources:/etc/grafana/provisioning/datasources
     networks:
-      - mevana-network
+      - mevana_net
     restart: unless-stopped
     depends_on:
       prometheus:
@@ -3207,7 +3207,7 @@ services:
     ports:
       - "5432:5432"
     networks:
-      - mevana-network
+      - mevana_net
     volumes:
       - postgres_data:/var/lib/postgresql/data
       - ./migrations:/docker-entrypoint-initdb.d
@@ -3238,7 +3238,7 @@ services:
     ports:
       - "8082:8080"
     networks:
-      - mevana-network
+      - mevana_net
     restart: unless-stopped
     depends_on:
       postgres:
@@ -3283,7 +3283,7 @@ services:
       - cargo_cache:/usr/local/cargo/registry
       - target_cache:/app/target
     networks:
-      - mevana-network
+      - mevana_net
     depends_on:
       redis:
         condition: service_healthy
@@ -3332,9 +3332,9 @@ services:
       - cache
 
 networks:
-  mevana-network:
+  mevana_net:
     external: true
-    name: mevana-network
+    name: mevana_net
 
 volumes:
   postgres_data:
@@ -3359,7 +3359,7 @@ volumes:
   docker compose -f infra/docker/docker-compose.yml stop dex-stream-universal  
 ```
 
-Status: Deployed. I upgraded the builder toolchain to Rust 1.83, attached `dex-stream-universal` to your existing `mevana-network`, forced it to use the internal Kafka at `kafka:9092`, built, and started only that service using your `.env`. Logs show it’s up and the stream is open.
+Status: Deployed. I upgraded the builder toolchain to Rust 1.83, attached `dex-stream-universal` to your existing `mevana_net`, forced it to use the internal Kafka at `kafka:9092`, built, and started only that service using your `.env`. Logs show it’s up and the stream is open.
 
 Quick checks:
 - Container status:
@@ -3375,7 +3375,7 @@ You should see:
 - stream opened
 
 Notes:
-- Files changed: `crates/dex-stream-universal/Dockerfile` (Rust 1.83), `infra/docker/docker-compose.yml` (attach to external `mevana-network`, pin `KAFKA_BROKER=kafka:9092` for in-Docker DNS).
+- Files changed: `crates/dex-stream-universal/Dockerfile` (Rust 1.83), `infra/docker/docker-compose.yml` (attach to external `mevana_net`, pin `KAFKA_BROKER=kafka:9092` for in-Docker DNS).
 - Run command used:
 ```bash
 docker compose --env-file infra/docker/.env -f infra/docker/docker-compose.yml up -d --no-deps dex-stream-universal
@@ -3383,7 +3383,7 @@ docker compose --env-file infra/docker/.env -f infra/docker/docker-compose.yml u
 
 Task completed [[memory:6364943]].
 - Upgraded Rust toolchain to 1.83 in `crates/dex-stream-universal/Dockerfile`.
-- Ensured `dex-stream-universal` joins `mevana-network` and targets `kafka:9092`.
+- Ensured `dex-stream-universal` joins `mevana_net` and targets `kafka:9092`.
 - Built and started only `dex-stream-universal`; logs show the stream opened successfully.
 
 ```shellscript
@@ -3472,7 +3472,7 @@ Scanning the backfill crates to extract required environment variables and runti
   - If network dominates, plan co-location near validator/Jito relay and bypass Kafka for hot path.
 
 If you’d like, I can:
-- Add minimal compose services for `graphql-backfill` (one-shot) and `dex-backfill` (continuous), using your existing `.env` and `mevana-network`, without exposing ports.
+- Add minimal compose services for `graphql-backfill` (one-shot) and `dex-backfill` (continuous), using your existing `.env` and `mevana_net`, without exposing ports.
 - Add FAST_MODE toggles to `dex-stream-universal` producer and remove base58 key on hot path.
 - Implement extractor local caches in `normalizer-service` with Redis read-through and TTLs.
 
@@ -3484,7 +3484,7 @@ I’ve held off on edits until you say go [[memory:6354331]]. When you pick the 
 
 do this next and let me know when its completed.
 
-"Add minimal compose services for graphql-backfill (one-shot) and dex-backfill (continuous), using your existing .env and mevana-network, without exposing ports.
+"Add minimal compose services for graphql-backfill (one-shot) and dex-backfill (continuous), using your existing .env and mevana_net, without exposing ports.
 Add FAST_MODE toggles to dex-stream-universal producer and remove base58 key on hot path.
 Implement extractor local caches in normalizer-service with Redis read-through and TTLs."
 
@@ -3493,14 +3493,14 @@ Implement extractor local caches in normalizer-service with Redis read-through a
 **Cursor**
 
 Planning edits and validations:
-- Update docker-compose to add `graphql-backfill` (one-shot) and `dex-backfill` (continuous), no ports, join `mevana-network`, reuse .env.
+- Update docker-compose to add `graphql-backfill` (one-shot) and `dex-backfill` (continuous), no ports, join `mevana_net`, reuse .env.
 - Verify backfill entrypoints exist: check `crates/dex-backfill/src/bin/shyft_graphql_backfill.rs` and confirm `graphql-backfill` crate binary.
 - Add FAST_MODE toggles in `dex-stream-universal/src/main.rs` (kafka producer configs) and remove base58 key usage.
 - Implement local caches with Redis read-through in `normalizer-service` (identify file and add LRU with TTL).
 Proceeding to read the relevant files in parallel.
 
 Making the requested changes:
-- Add compose services for graphql-backfill (one-shot) and dex-backfill (continuous), no ports, on mevana-network.
+- Add compose services for graphql-backfill (one-shot) and dex-backfill (continuous), no ports, on mevana_net.
 - Add FAST_MODE toggles and remove key encoding in dex-stream-universal.
 - Implement Redis read-through LRU caches with TTL in normalizer-service extract path.
 Now applying edits and then validating/building.
@@ -3806,7 +3806,7 @@ services:
     ports:
       - "2181:2181"
     networks:
-      - mevana-network
+      - mevana_net
     restart: unless-stopped
     logging:
       driver: "json-file"
@@ -3848,7 +3848,7 @@ services:
       - "9092:9092"
       - "29092:29092"
     networks:
-      - mevana-network
+      - mevana_net
     restart: unless-stopped
     healthcheck:
       test: ["CMD-SHELL", "kafka-topics --bootstrap-server localhost:9092 --list"]
@@ -3883,7 +3883,7 @@ services:
       KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS: kafka:9092
       KAFKA_CLUSTERS_0_READONLY: false
     networks:
-      - mevana-network
+      - mevana_net
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8080/health"]
@@ -3923,7 +3923,7 @@ services:
       - FAST_MODE=${FAST_MODE:-1}
     command: ["--topic","orca-swaps"]
     networks:
-      - mevana-network
+      - mevana_net
     restart: unless-stopped
     logging:
       driver: "json-file"
@@ -3945,7 +3945,7 @@ services:
     ports:
       - "6379:6379"
     networks:
-      - mevana-network
+      - mevana_net
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "redis-cli", "--raw", "incr", "ping"]
@@ -3981,7 +3981,7 @@ services:
     ports:
       - "8083:8081"
     networks:
-      - mevana-network
+      - mevana_net
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8081/health"]
@@ -4016,7 +4016,7 @@ services:
       - PAGE_SIZE=${PAGE_SIZE:-250}
       - MAX_PAGES=${MAX_PAGES:-200}
     networks:
-      - mevana-network
+      - mevana_net
     restart: "no"
     command: ["--page-size","250","--max-pages","200"]
 
@@ -4034,7 +4034,7 @@ services:
       - INCLUDE_TICKARRAYS=${INCLUDE_TICKARRAYS:-1}
       - INCLUDE_POSITIONS=${INCLUDE_POSITIONS:-1}
     networks:
-      - mevana-network
+      - mevana_net
     restart: unless-stopped
     command: ["--include-tickarrays","--include-positions"]
 
@@ -4073,7 +4073,7 @@ services:
     ports:
       - "9094:9090"
     networks:
-      - mevana-network
+      - mevana_net
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "pgrep", "-f", "stream-orca"]
@@ -4121,7 +4121,7 @@ services:
     ports:
       - "9093:9090"
     networks:
-      - mevana-network
+      - mevana_net
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "pgrep", "-f", "stream-raydium"]
@@ -4173,7 +4173,7 @@ services:
     ports:
       - "9094:9090"
     networks:
-      - mevana-network
+      - mevana_net
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "pgrep", "-f", "swap-ingest"]
@@ -4211,7 +4211,7 @@ services:
       - PROCESSING_INTERVAL=5
       - RUST_LOG=${RUST_LOG:-info}
     networks:
-      - mevana-network
+      - mevana_net
     restart: unless-stopped
     healthcheck:
       test: ["CMD-SHELL", "ps aux | grep data-stream-processor | grep -v grep || exit 1"]
@@ -4258,7 +4258,7 @@ services:
     ports:
       - "9095:9090"
     networks:
-      - mevana-network
+      - mevana_net
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "pgrep", "-f", "pathfinder"]
@@ -4302,7 +4302,7 @@ services:
     ports:
       - "5001:5001"
     networks:
-      - mevana-network
+      - mevana_net
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:5001/health"]
@@ -4341,7 +4341,7 @@ services:
       - '--storage.tsdb.retention.time=200h'
       - '--web.enable-lifecycle'
     networks:
-      - mevana-network
+      - mevana_net
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:9090/-/healthy"]
@@ -4377,7 +4377,7 @@ services:
       - ./grafana/dashboards:/etc/grafana/provisioning/dashboards
       - ./grafana/datasources:/etc/grafana/provisioning/datasources
     networks:
-      - mevana-network
+      - mevana_net
     restart: unless-stopped
     depends_on:
       prometheus:
@@ -4417,7 +4417,7 @@ services:
     ports:
       - "5432:5432"
     networks:
-      - mevana-network
+      - mevana_net
     volumes:
       - postgres_data:/var/lib/postgresql/data
       - ./migrations:/docker-entrypoint-initdb.d
@@ -4448,7 +4448,7 @@ services:
     ports:
       - "8082:8080"
     networks:
-      - mevana-network
+      - mevana_net
     restart: unless-stopped
     depends_on:
       postgres:
@@ -4493,7 +4493,7 @@ services:
       - cargo_cache:/usr/local/cargo/registry
       - target_cache:/app/target
     networks:
-      - mevana-network
+      - mevana_net
     depends_on:
       redis:
         condition: service_healthy
@@ -4542,9 +4542,9 @@ services:
       - cache
 
 networks:
-  mevana-network:
+  mevana_net:
     external: true
-    name: mevana-network
+    name: mevana_net
 
 volumes:
   postgres_data:
@@ -5966,7 +5966,7 @@ services:
     ports:
       - "2181:2181"
     networks:
-      - mevana-network
+      - mevana_net
     restart: unless-stopped
     logging:
       driver: "json-file"
@@ -6008,7 +6008,7 @@ services:
       - "9092:9092"
       - "29092:29092"
     networks:
-      - mevana-network
+      - mevana_net
     restart: unless-stopped
     healthcheck:
       test: ["CMD-SHELL", "kafka-topics --bootstrap-server localhost:9092 --list"]
@@ -6043,7 +6043,7 @@ services:
       KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS: kafka:9092
       KAFKA_CLUSTERS_0_READONLY: false
     networks:
-      - mevana-network
+      - mevana_net
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8080/health"]
@@ -6083,7 +6083,7 @@ services:
       - FAST_MODE=${FAST_MODE:-1}
     command: ["--topic","orca-swaps"]
     networks:
-      - mevana-network
+      - mevana_net
     restart: unless-stopped
     logging:
       driver: "json-file"
@@ -6105,7 +6105,7 @@ services:
     ports:
       - "6379:6379"
     networks:
-      - mevana-network
+      - mevana_net
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "redis-cli", "--raw", "incr", "ping"]
@@ -6141,7 +6141,7 @@ services:
     ports:
       - "8083:8081"
     networks:
-      - mevana-network
+      - mevana_net
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8081/health"]
@@ -6176,7 +6176,7 @@ services:
       - PAGE_SIZE=${PAGE_SIZE:-250}
       - MAX_PAGES=${MAX_PAGES:-200}
     networks:
-      - mevana-network
+      - mevana_net
     restart: "no"
     command: ["--page-size","250","--max-pages","200"]
 
@@ -6193,7 +6193,7 @@ services:
       - INCLUDE_TICKARRAYS=${INCLUDE_TICKARRAYS:-true}
       - INCLUDE_POSITIONS=${INCLUDE_POSITIONS:-true}
     networks:
-      - mevana-network
+      - mevana_net
     restart: unless-stopped
     command: ["--include-tickarrays","--include-positions"]
     volumes:
@@ -6234,7 +6234,7 @@ services:
     ports:
       - "9094:9090"
     networks:
-      - mevana-network
+      - mevana_net
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "pgrep", "-f", "stream-orca"]
@@ -6282,7 +6282,7 @@ services:
     ports:
       - "9093:9090"
     networks:
-      - mevana-network
+      - mevana_net
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "pgrep", "-f", "stream-raydium"]
@@ -6334,7 +6334,7 @@ services:
     ports:
       - "9094:9090"
     networks:
-      - mevana-network
+      - mevana_net
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "pgrep", "-f", "swap-ingest"]
@@ -6372,7 +6372,7 @@ services:
       - PROCESSING_INTERVAL=5
       - RUST_LOG=${RUST_LOG:-info}
     networks:
-      - mevana-network
+      - mevana_net
     restart: unless-stopped
     healthcheck:
       test: ["CMD-SHELL", "ps aux | grep data-stream-processor | grep -v grep || exit 1"]
@@ -6419,7 +6419,7 @@ services:
     ports:
       - "9095:9090"
     networks:
-      - mevana-network
+      - mevana_net
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "pgrep", "-f", "pathfinder"]
@@ -6463,7 +6463,7 @@ services:
     ports:
       - "5001:5001"
     networks:
-      - mevana-network
+      - mevana_net
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:5001/health"]
@@ -6502,7 +6502,7 @@ services:
       - '--storage.tsdb.retention.time=200h'
       - '--web.enable-lifecycle'
     networks:
-      - mevana-network
+      - mevana_net
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:9090/-/healthy"]
@@ -6538,7 +6538,7 @@ services:
       - ./grafana/dashboards:/etc/grafana/provisioning/dashboards
       - ./grafana/datasources:/etc/grafana/provisioning/datasources
     networks:
-      - mevana-network
+      - mevana_net
     restart: unless-stopped
     depends_on:
       prometheus:
@@ -6578,7 +6578,7 @@ services:
     ports:
       - "5432:5432"
     networks:
-      - mevana-network
+      - mevana_net
     volumes:
       - postgres_data:/var/lib/postgresql/data
       - ./migrations:/docker-entrypoint-initdb.d
@@ -6609,7 +6609,7 @@ services:
     ports:
       - "8082:8080"
     networks:
-      - mevana-network
+      - mevana_net
     restart: unless-stopped
     depends_on:
       postgres:
@@ -6654,7 +6654,7 @@ services:
       - cargo_cache:/usr/local/cargo/registry
       - target_cache:/app/target
     networks:
-      - mevana-network
+      - mevana_net
     depends_on:
       redis:
         condition: service_healthy
@@ -6703,9 +6703,9 @@ services:
       - cache
 
 networks:
-  mevana-network:
+  mevana_net:
     external: true
-    name: mevana-network
+    name: mevana_net
 
 volumes:
   postgres_data:
@@ -6722,8 +6722,8 @@ volumes:
 ```
 
 - Added compose services
-  - `graphql-backfill` (one-shot): no ports, joins `mevana-network`, uses `.env` for `SHYFT_API_KEY`, `SHYFT_NETWORK`, `REDIS_URL`. Built and ready.
-  - `dex-backfill` (continuous): no ports, joins `mevana-network`, uses `.env` for `ENDPOINT`, `X_TOKEN`, `REDIS_URL`. Mounted `crates/dex-backfill/idls` into the container to satisfy IDL. Running and streaming.
+  - `graphql-backfill` (one-shot): no ports, joins `mevana_net`, uses `.env` for `SHYFT_API_KEY`, `SHYFT_NETWORK`, `REDIS_URL`. Built and ready.
+  - `dex-backfill` (continuous): no ports, joins `mevana_net`, uses `.env` for `ENDPOINT`, `X_TOKEN`, `REDIS_URL`. Mounted `crates/dex-backfill/idls` into the container to satisfy IDL. Running and streaming.
 
 - Fast-mode + hot-path lean-ups
   - `dex-stream-universal`:
@@ -6744,7 +6744,7 @@ volumes:
 
 - Built and started
   - Built: `dex-stream-universal`, `graphql-backfill`, `dex-backfill` images.
-  - Started services with `.env` and `mevana-network`:
+  - Started services with `.env` and `mevana_net`:
     - `dex-stream-universal`: running, connected to `kafka:9092`.
     - `graphql-backfill`: runs to completion on demand.
     - `dex-backfill`: fixed crash-loop by mounting IDL and using proper boolean flags; running and streaming, updating `dex:pool:*`.
@@ -7099,7 +7099,7 @@ services:
     ports:
       - "2181:2181"
     networks:
-      - mevana-network
+      - mevana_net
     restart: unless-stopped
     logging:
       driver: "json-file"
@@ -7141,7 +7141,7 @@ services:
       - "9092:9092"
       - "29092:29092"
     networks:
-      - mevana-network
+      - mevana_net
     restart: unless-stopped
     healthcheck:
       test: ["CMD-SHELL", "kafka-topics --bootstrap-server localhost:9092 --list"]
@@ -7176,7 +7176,7 @@ services:
       KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS: kafka:9092
       KAFKA_CLUSTERS_0_READONLY: false
     networks:
-      - mevana-network
+      - mevana_net
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8080/health"]
@@ -7216,7 +7216,7 @@ services:
       - FAST_MODE=${FAST_MODE:-1}
     command: ["--topic","orca-swaps"]
     networks:
-      - mevana-network
+      - mevana_net
     restart: unless-stopped
     logging:
       driver: "json-file"
@@ -7238,7 +7238,7 @@ services:
     ports:
       - "6379:6379"
     networks:
-      - mevana-network
+      - mevana_net
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "redis-cli", "--raw", "incr", "ping"]
@@ -7274,7 +7274,7 @@ services:
     ports:
       - "8083:8081"
     networks:
-      - mevana-network
+      - mevana_net
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8081/health"]
@@ -7309,7 +7309,7 @@ services:
       - PAGE_SIZE=${PAGE_SIZE:-250}
       - MAX_PAGES=${MAX_PAGES:-200}
     networks:
-      - mevana-network
+      - mevana_net
     restart: "no"
     command: ["--page-size","250","--max-pages","200"]
 
@@ -7326,7 +7326,7 @@ services:
       - INCLUDE_TICKARRAYS=${INCLUDE_TICKARRAYS:-true}
       - INCLUDE_POSITIONS=${INCLUDE_POSITIONS:-true}
     networks:
-      - mevana-network
+      - mevana_net
     restart: unless-stopped
     command: ["--include-tickarrays","--include-positions"]
     volumes:
@@ -7349,7 +7349,7 @@ services:
       - MINT_DECIMALS_TTL_MS=${MINT_DECIMALS_TTL_MS:-60000}
       - POOL_SNAPSHOT_TTL_MS=${POOL_SNAPSHOT_TTL_MS:-60000}
     networks:
-      - mevana-network
+      - mevana_net
     restart: unless-stopped
 
   # =============================================================================
@@ -7387,7 +7387,7 @@ services:
     ports:
       - "9094:9090"
     networks:
-      - mevana-network
+      - mevana_net
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "pgrep", "-f", "stream-orca"]
@@ -7435,7 +7435,7 @@ services:
     ports:
       - "9093:9090"
     networks:
-      - mevana-network
+      - mevana_net
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "pgrep", "-f", "stream-raydium"]
@@ -7487,7 +7487,7 @@ services:
     ports:
       - "9094:9090"
     networks:
-      - mevana-network
+      - mevana_net
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "pgrep", "-f", "swap-ingest"]
@@ -7525,7 +7525,7 @@ services:
       - PROCESSING_INTERVAL=5
       - RUST_LOG=${RUST_LOG:-info}
     networks:
-      - mevana-network
+      - mevana_net
     restart: unless-stopped
     healthcheck:
       test: ["CMD-SHELL", "ps aux | grep data-stream-processor | grep -v grep || exit 1"]
@@ -7572,7 +7572,7 @@ services:
     ports:
       - "9095:9090"
     networks:
-      - mevana-network
+      - mevana_net
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "pgrep", "-f", "pathfinder"]
@@ -7616,7 +7616,7 @@ services:
     ports:
       - "5001:5001"
     networks:
-      - mevana-network
+      - mevana_net
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:5001/health"]
@@ -7655,7 +7655,7 @@ services:
       - '--storage.tsdb.retention.time=200h'
       - '--web.enable-lifecycle'
     networks:
-      - mevana-network
+      - mevana_net
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:9090/-/healthy"]
@@ -7691,7 +7691,7 @@ services:
       - ./grafana/dashboards:/etc/grafana/provisioning/dashboards
       - ./grafana/datasources:/etc/grafana/provisioning/datasources
     networks:
-      - mevana-network
+      - mevana_net
     restart: unless-stopped
     depends_on:
       prometheus:
@@ -7731,7 +7731,7 @@ services:
     ports:
       - "5432:5432"
     networks:
-      - mevana-network
+      - mevana_net
     volumes:
       - postgres_data:/var/lib/postgresql/data
       - ./migrations:/docker-entrypoint-initdb.d
@@ -7762,7 +7762,7 @@ services:
     ports:
       - "8082:8080"
     networks:
-      - mevana-network
+      - mevana_net
     restart: unless-stopped
     depends_on:
       postgres:
@@ -7807,7 +7807,7 @@ services:
       - cargo_cache:/usr/local/cargo/registry
       - target_cache:/app/target
     networks:
-      - mevana-network
+      - mevana_net
     depends_on:
       redis:
         condition: service_healthy
@@ -7856,9 +7856,9 @@ services:
       - cache
 
 networks:
-  mevana-network:
+  mevana_net:
     external: true
-    name: mevana-network
+    name: mevana_net
 
 volumes:
   postgres_data:
@@ -7925,7 +7925,7 @@ services:
     ports:
       - "2181:2181"
     networks:
-      - mevana-network
+      - mevana_net
     restart: unless-stopped
     logging:
       driver: "json-file"
@@ -7967,7 +7967,7 @@ services:
       - "9092:9092"
       - "29092:29092"
     networks:
-      - mevana-network
+      - mevana_net
     restart: unless-stopped
     healthcheck:
       test: ["CMD-SHELL", "kafka-topics --bootstrap-server localhost:9092 --list"]
@@ -8002,7 +8002,7 @@ services:
       KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS: kafka:9092
       KAFKA_CLUSTERS_0_READONLY: false
     networks:
-      - mevana-network
+      - mevana_net
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8080/health"]
@@ -8042,7 +8042,7 @@ services:
       - FAST_MODE=${FAST_MODE:-1}
     command: ["--topic","orca-swaps"]
     networks:
-      - mevana-network
+      - mevana_net
     restart: unless-stopped
     logging:
       driver: "json-file"
@@ -8064,7 +8064,7 @@ services:
     ports:
       - "6379:6379"
     networks:
-      - mevana-network
+      - mevana_net
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "redis-cli", "--raw", "incr", "ping"]
@@ -8100,7 +8100,7 @@ services:
     ports:
       - "8083:8081"
     networks:
-      - mevana-network
+      - mevana_net
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8081/health"]
@@ -8135,7 +8135,7 @@ services:
       - PAGE_SIZE=${PAGE_SIZE:-250}
       - MAX_PAGES=${MAX_PAGES:-200}
     networks:
-      - mevana-network
+      - mevana_net
     restart: "no"
     command: ["--page-size","250","--max-pages","200"]
 
@@ -8152,7 +8152,7 @@ services:
       - INCLUDE_TICKARRAYS=${INCLUDE_TICKARRAYS:-true}
       - INCLUDE_POSITIONS=${INCLUDE_POSITIONS:-true}
     networks:
-      - mevana-network
+      - mevana_net
     restart: unless-stopped
     command: ["--include-tickarrays","--include-positions"]
     volumes:
@@ -8175,7 +8175,7 @@ services:
       - MINT_DECIMALS_TTL_MS=${MINT_DECIMALS_TTL_MS:-60000}
       - POOL_SNAPSHOT_TTL_MS=${POOL_SNAPSHOT_TTL_MS:-60000}
     networks:
-      - mevana-network
+      - mevana_net
     restart: unless-stopped
 
   # =============================================================================
@@ -8213,7 +8213,7 @@ services:
     ports:
       - "9094:9090"
     networks:
-      - mevana-network
+      - mevana_net
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "pgrep", "-f", "stream-orca"]
@@ -8261,7 +8261,7 @@ services:
     ports:
       - "9093:9090"
     networks:
-      - mevana-network
+      - mevana_net
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "pgrep", "-f", "stream-raydium"]
@@ -8313,7 +8313,7 @@ services:
     ports:
       - "9094:9090"
     networks:
-      - mevana-network
+      - mevana_net
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "pgrep", "-f", "swap-ingest"]
@@ -8351,7 +8351,7 @@ services:
       - PROCESSING_INTERVAL=5
       - RUST_LOG=${RUST_LOG:-info}
     networks:
-      - mevana-network
+      - mevana_net
     restart: unless-stopped
     healthcheck:
       test: ["CMD-SHELL", "ps aux | grep data-stream-processor | grep -v grep || exit 1"]
@@ -8398,7 +8398,7 @@ services:
     ports:
       - "9095:9090"
     networks:
-      - mevana-network
+      - mevana_net
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "pgrep", "-f", "pathfinder"]
@@ -8442,7 +8442,7 @@ services:
     ports:
       - "5001:5001"
     networks:
-      - mevana-network
+      - mevana_net
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:5001/health"]
@@ -8481,7 +8481,7 @@ services:
       - '--storage.tsdb.retention.time=200h'
       - '--web.enable-lifecycle'
     networks:
-      - mevana-network
+      - mevana_net
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:9090/-/healthy"]
@@ -8517,7 +8517,7 @@ services:
       - ./grafana/dashboards:/etc/grafana/provisioning/dashboards
       - ./grafana/datasources:/etc/grafana/provisioning/datasources
     networks:
-      - mevana-network
+      - mevana_net
     restart: unless-stopped
     depends_on:
       prometheus:
@@ -8557,7 +8557,7 @@ services:
     ports:
       - "5432:5432"
     networks:
-      - mevana-network
+      - mevana_net
     volumes:
       - postgres_data:/var/lib/postgresql/data
       - ./migrations:/docker-entrypoint-initdb.d
@@ -8588,7 +8588,7 @@ services:
     ports:
       - "8082:8080"
     networks:
-      - mevana-network
+      - mevana_net
     restart: unless-stopped
     depends_on:
       postgres:
@@ -8633,7 +8633,7 @@ services:
       - cargo_cache:/usr/local/cargo/registry
       - target_cache:/app/target
     networks:
-      - mevana-network
+      - mevana_net
     depends_on:
       redis:
         condition: service_healthy
@@ -8682,9 +8682,9 @@ services:
       - cache
 
 networks:
-  mevana-network:
+  mevana_net:
     external: true
-    name: mevana-network
+    name: mevana_net
 
 volumes:
   postgres_data:
@@ -8909,7 +8909,7 @@ services:
     ports:
       - "2181:2181"
     networks:
-      - mevana-network
+      - mevana_net
     restart: unless-stopped
     logging:
       driver: "json-file"
@@ -8951,7 +8951,7 @@ services:
       - "9092:9092"
       - "29092:29092"
     networks:
-      - mevana-network
+      - mevana_net
     restart: unless-stopped
     healthcheck:
       test: ["CMD-SHELL", "kafka-topics --bootstrap-server localhost:9092 --list"]
@@ -8986,7 +8986,7 @@ services:
       KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS: kafka:9092
       KAFKA_CLUSTERS_0_READONLY: false
     networks:
-      - mevana-network
+      - mevana_net
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8080/health"]
@@ -9026,7 +9026,7 @@ services:
       - FAST_MODE=${FAST_MODE:-1}
     command: ["--topic","orca-swaps"]
     networks:
-      - mevana-network
+      - mevana_net
     restart: unless-stopped
     logging:
       driver: "json-file"
@@ -9048,7 +9048,7 @@ services:
     ports:
       - "6379:6379"
     networks:
-      - mevana-network
+      - mevana_net
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "redis-cli", "--raw", "incr", "ping"]
@@ -9084,7 +9084,7 @@ services:
     ports:
       - "8083:8081"
     networks:
-      - mevana-network
+      - mevana_net
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8081/health"]
@@ -9119,7 +9119,7 @@ services:
       - PAGE_SIZE=${PAGE_SIZE:-250}
       - MAX_PAGES=${MAX_PAGES:-200}
     networks:
-      - mevana-network
+      - mevana_net
     restart: "no"
     command: ["--page-size","250","--max-pages","200"]
 
@@ -9136,7 +9136,7 @@ services:
       - INCLUDE_TICKARRAYS=${INCLUDE_TICKARRAYS:-true}
       - INCLUDE_POSITIONS=${INCLUDE_POSITIONS:-true}
     networks:
-      - mevana-network
+      - mevana_net
     restart: unless-stopped
     command: ["--include-tickarrays","--include-positions"]
     volumes:
@@ -9159,7 +9159,7 @@ services:
       - MINT_DECIMALS_TTL_MS=${MINT_DECIMALS_TTL_MS:-60000}
       - POOL_SNAPSHOT_TTL_MS=${POOL_SNAPSHOT_TTL_MS:-60000}
     networks:
-      - mevana-network
+      - mevana_net
     restart: unless-stopped
 
   # =============================================================================
@@ -9197,7 +9197,7 @@ services:
     ports:
       - "9094:9090"
     networks:
-      - mevana-network
+      - mevana_net
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "pgrep", "-f", "stream-orca"]
@@ -9245,7 +9245,7 @@ services:
     ports:
       - "9093:9090"
     networks:
-      - mevana-network
+      - mevana_net
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "pgrep", "-f", "stream-raydium"]
@@ -9297,7 +9297,7 @@ services:
     ports:
       - "9094:9090"
     networks:
-      - mevana-network
+      - mevana_net
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "pgrep", "-f", "swap-ingest"]
@@ -9335,7 +9335,7 @@ services:
       - PROCESSING_INTERVAL=5
       - RUST_LOG=${RUST_LOG:-info}
     networks:
-      - mevana-network
+      - mevana_net
     restart: unless-stopped
     healthcheck:
       test: ["CMD-SHELL", "ps aux | grep data-stream-processor | grep -v grep || exit 1"]
@@ -9382,7 +9382,7 @@ services:
     ports:
       - "9095:9090"
     networks:
-      - mevana-network
+      - mevana_net
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "pgrep", "-f", "pathfinder"]
@@ -9426,7 +9426,7 @@ services:
     ports:
       - "5001:5001"
     networks:
-      - mevana-network
+      - mevana_net
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:5001/health"]
@@ -9465,7 +9465,7 @@ services:
       - '--storage.tsdb.retention.time=200h'
       - '--web.enable-lifecycle'
     networks:
-      - mevana-network
+      - mevana_net
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:9090/-/healthy"]
@@ -9501,7 +9501,7 @@ services:
       - ./grafana/dashboards:/etc/grafana/provisioning/dashboards
       - ./grafana/datasources:/etc/grafana/provisioning/datasources
     networks:
-      - mevana-network
+      - mevana_net
     restart: unless-stopped
     depends_on:
       prometheus:
@@ -9541,7 +9541,7 @@ services:
     ports:
       - "5432:5432"
     networks:
-      - mevana-network
+      - mevana_net
     volumes:
       - postgres_data:/var/lib/postgresql/data
       - ./migrations:/docker-entrypoint-initdb.d
@@ -9572,7 +9572,7 @@ services:
     ports:
       - "8082:8080"
     networks:
-      - mevana-network
+      - mevana_net
     restart: unless-stopped
     depends_on:
       postgres:
@@ -9617,7 +9617,7 @@ services:
       - cargo_cache:/usr/local/cargo/registry
       - target_cache:/app/target
     networks:
-      - mevana-network
+      - mevana_net
     depends_on:
       redis:
         condition: service_healthy
@@ -9678,13 +9678,13 @@ services:
       - GROUP_ID=${AGG_GROUP_ID:-price-aggregator}
       - EMIT_SECS=${AGG_EMIT_SECS:-5}
     networks:
-      - mevana-network
+      - mevana_net
     restart: unless-stopped
 
 networks:
-  mevana-network:
+  mevana_net:
     external: true
-    name: mevana-network
+    name: mevana_net
 
 volumes:
   postgres_data:
@@ -9723,7 +9723,7 @@ ENTRYPOINT ["/usr/local/bin/price-aggregator"]
   - Put optional stacks (Grafana, Prometheus, Postgres, UIs) behind profiles (e.g., `metrics`, `ui`).
   - Keep host ports only where needed; leave most services internal-only.
   - Standardize env/topic names and unique consumer `GROUP_ID`s.
-  - Continue using the shared `mevana-network`.
+  - Continue using the shared `mevana_net`.
 
 Note: I only see `docker-compose.yml` (not `.yaml`). We’ll use `docker-compose.yml`.
 
@@ -9847,7 +9847,7 @@ ENTRYPOINT ["/usr/local/bin/normalizer-extract"]
 +Status: partial completion
 +
 +- Done:
-+  - `dex-stream-universal`: FAST_MODE enabled; no Kafka key on hot path; Dockerized and running on `mevana-network` against internal Kafka
++  - `dex-stream-universal`: FAST_MODE enabled; no Kafka key on hot path; Dockerized and running on `mevana_net` against internal Kafka
 +  - `graphql-backfill`: Dockerized service added (one-shot)
 +  - `dex-backfill`: Dockerized, continuous updates; IDLs mounted; running
 +  - `normalizer-extract` (bin `tap_orca_extract`): Dockerized and running; Redis read-through caches; producing `orca-swaps.parsed.v2`
@@ -9904,7 +9904,7 @@ PATCH
 Status: partial completion
 
 - Done:
-  - `dex-stream-universal`: FAST_MODE enabled; no Kafka key on hot path; Dockerized and running on `mevana-network` against internal Kafka
+  - `dex-stream-universal`: FAST_MODE enabled; no Kafka key on hot path; Dockerized and running on `mevana_net` against internal Kafka
   - `graphql-backfill`: Dockerized service added (one-shot)
   - `dex-backfill`: Dockerized, continuous updates; IDLs mounted; running
   - `normalizer-extract` (bin `tap_orca_extract`): Dockerized and running; Redis read-through caches; producing `orca-swaps.parsed.v2`
@@ -9924,7 +9924,7 @@ Status: partial completion
 
 ```
 
-Status: Built normalizer-extract with cmake/build-essential, started normalizer-extract and price-aggregator on mevana-network, verified logs. Updated the roadmap to mark what’s done and what’s next, then committed on feature/arb-pipeline-next-steps.
+Status: Built normalizer-extract with cmake/build-essential, started normalizer-extract and price-aggregator on mevana_net, verified logs. Updated the roadmap to mark what’s done and what’s next, then committed on feature/arb-pipeline-next-steps.
 
 Key points:
 - normalizer-extract: consuming `orca-swaps`, producing `orca-swaps.parsed.v2`; Redis read-through caches active; latency warnings visible (next to tune).
@@ -9988,7 +9988,7 @@ services:
     ports:
       - "2181:2181"
     networks:
-      - mevana-network
+      - mevana_net
     restart: unless-stopped
     logging:
       driver: "json-file"
@@ -10030,7 +10030,7 @@ services:
       - "9092:9092"
       - "29092:29092"
     networks:
-      - mevana-network
+      - mevana_net
     restart: unless-stopped
     healthcheck:
       test: ["CMD-SHELL", "kafka-topics --bootstrap-server localhost:9092 --list"]
@@ -10065,7 +10065,7 @@ services:
       KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS: kafka:9092
       KAFKA_CLUSTERS_0_READONLY: false
     networks:
-      - mevana-network
+      - mevana_net
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8080/health"]
@@ -10105,7 +10105,7 @@ services:
       - FAST_MODE=${FAST_MODE:-1}
     command: ["--topic","orca-swaps"]
     networks:
-      - mevana-network
+      - mevana_net
     restart: unless-stopped
     logging:
       driver: "json-file"
@@ -10127,7 +10127,7 @@ services:
     ports:
       - "6379:6379"
     networks:
-      - mevana-network
+      - mevana_net
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "redis-cli", "--raw", "incr", "ping"]
@@ -10163,7 +10163,7 @@ services:
     ports:
       - "8083:8081"
     networks:
-      - mevana-network
+      - mevana_net
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8081/health"]
@@ -10198,7 +10198,7 @@ services:
       - PAGE_SIZE=${PAGE_SIZE:-250}
       - MAX_PAGES=${MAX_PAGES:-200}
     networks:
-      - mevana-network
+      - mevana_net
     restart: "no"
     command: ["--page-size","250","--max-pages","200"]
 
@@ -10215,7 +10215,7 @@ services:
       - INCLUDE_TICKARRAYS=${INCLUDE_TICKARRAYS:-true}
       - INCLUDE_POSITIONS=${INCLUDE_POSITIONS:-true}
     networks:
-      - mevana-network
+      - mevana_net
     restart: unless-stopped
     command: ["--include-tickarrays","--include-positions"]
     volumes:
@@ -10238,7 +10238,7 @@ services:
       - MINT_DECIMALS_TTL_MS=${MINT_DECIMALS_TTL_MS:-60000}
       - POOL_SNAPSHOT_TTL_MS=${POOL_SNAPSHOT_TTL_MS:-60000}
     networks:
-      - mevana-network
+      - mevana_net
     restart: unless-stopped
 
   # =============================================================================
@@ -10276,7 +10276,7 @@ services:
     ports:
       - "9094:9090"
     networks:
-      - mevana-network
+      - mevana_net
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "pgrep", "-f", "stream-orca"]
@@ -10324,7 +10324,7 @@ services:
     ports:
       - "9093:9090"
     networks:
-      - mevana-network
+      - mevana_net
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "pgrep", "-f", "stream-raydium"]
@@ -10376,7 +10376,7 @@ services:
     ports:
       - "9094:9090"
     networks:
-      - mevana-network
+      - mevana_net
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "pgrep", "-f", "swap-ingest"]
@@ -10414,7 +10414,7 @@ services:
       - PROCESSING_INTERVAL=5
       - RUST_LOG=${RUST_LOG:-info}
     networks:
-      - mevana-network
+      - mevana_net
     restart: unless-stopped
     healthcheck:
       test: ["CMD-SHELL", "ps aux | grep data-stream-processor | grep -v grep || exit 1"]
@@ -10461,7 +10461,7 @@ services:
     ports:
       - "9095:9090"
     networks:
-      - mevana-network
+      - mevana_net
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "pgrep", "-f", "pathfinder"]
@@ -10505,7 +10505,7 @@ services:
     ports:
       - "5001:5001"
     networks:
-      - mevana-network
+      - mevana_net
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:5001/health"]
@@ -10544,7 +10544,7 @@ services:
       - '--storage.tsdb.retention.time=200h'
       - '--web.enable-lifecycle'
     networks:
-      - mevana-network
+      - mevana_net
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:9090/-/healthy"]
@@ -10580,7 +10580,7 @@ services:
       - ./grafana/dashboards:/etc/grafana/provisioning/dashboards
       - ./grafana/datasources:/etc/grafana/provisioning/datasources
     networks:
-      - mevana-network
+      - mevana_net
     restart: unless-stopped
     depends_on:
       prometheus:
@@ -10620,7 +10620,7 @@ services:
     ports:
       - "5432:5432"
     networks:
-      - mevana-network
+      - mevana_net
     volumes:
       - postgres_data:/var/lib/postgresql/data
       - ./migrations:/docker-entrypoint-initdb.d
@@ -10651,7 +10651,7 @@ services:
     ports:
       - "8082:8080"
     networks:
-      - mevana-network
+      - mevana_net
     restart: unless-stopped
     depends_on:
       postgres:
@@ -10696,7 +10696,7 @@ services:
       - cargo_cache:/usr/local/cargo/registry
       - target_cache:/app/target
     networks:
-      - mevana-network
+      - mevana_net
     depends_on:
       redis:
         condition: service_healthy
@@ -10757,13 +10757,13 @@ services:
       - GROUP_ID=${AGG_GROUP_ID:-price-aggregator}
       - EMIT_SECS=${AGG_EMIT_SECS:-5}
     networks:
-      - mevana-network
+      - mevana_net
     restart: unless-stopped
 
 networks:
-  mevana-network:
+  mevana_net:
     external: true
-    name: mevana-network
+    name: mevana_net
 
 volumes:
   postgres_data:
@@ -11493,7 +11493,7 @@ services:
     ports:
       - "2181:2181"
     networks:
-      - mevana-network
+      - mevana_net
     restart: unless-stopped
     logging:
       driver: "json-file"
@@ -11535,7 +11535,7 @@ services:
       - "9092:9092"
       - "29092:29092"
     networks:
-      - mevana-network
+      - mevana_net
     restart: unless-stopped
     healthcheck:
       test: ["CMD-SHELL", "kafka-topics --bootstrap-server localhost:9092 --list"]
@@ -11570,7 +11570,7 @@ services:
       KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS: kafka:9092
       KAFKA_CLUSTERS_0_READONLY: false
     networks:
-      - mevana-network
+      - mevana_net
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8080/health"]
@@ -11610,7 +11610,7 @@ services:
       - FAST_MODE=${FAST_MODE:-1}
     command: ["--topic","orca-swaps"]
     networks:
-      - mevana-network
+      - mevana_net
     restart: unless-stopped
     logging:
       driver: "json-file"
@@ -11632,7 +11632,7 @@ services:
     ports:
       - "6379:6379"
     networks:
-      - mevana-network
+      - mevana_net
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "redis-cli", "--raw", "incr", "ping"]
@@ -11668,7 +11668,7 @@ services:
     ports:
       - "8083:8081"
     networks:
-      - mevana-network
+      - mevana_net
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8081/health"]
@@ -11703,7 +11703,7 @@ services:
       - PAGE_SIZE=${PAGE_SIZE:-250}
       - MAX_PAGES=${MAX_PAGES:-200}
     networks:
-      - mevana-network
+      - mevana_net
     restart: "no"
     command: ["--page-size","250","--max-pages","200"]
 
@@ -11720,7 +11720,7 @@ services:
       - INCLUDE_TICKARRAYS=${INCLUDE_TICKARRAYS:-true}
       - INCLUDE_POSITIONS=${INCLUDE_POSITIONS:-true}
     networks:
-      - mevana-network
+      - mevana_net
     restart: unless-stopped
     command: ["--include-tickarrays","--include-positions"]
     volumes:
@@ -11743,7 +11743,7 @@ services:
       - MINT_DECIMALS_TTL_MS=${MINT_DECIMALS_TTL_MS:-60000}
       - POOL_SNAPSHOT_TTL_MS=${POOL_SNAPSHOT_TTL_MS:-60000}
     networks:
-      - mevana-network
+      - mevana_net
     restart: unless-stopped
 
   depth-builder:
@@ -11757,7 +11757,7 @@ services:
       - RUST_LOG=${RUST_LOG:-info}
     command: ["/usr/local/bin/normalizer-extract"]
     networks:
-      - mevana-network
+      - mevana_net
     restart: unless-stopped
 
   # =============================================================================
@@ -11795,7 +11795,7 @@ services:
     ports:
       - "9094:9090"
     networks:
-      - mevana-network
+      - mevana_net
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "pgrep", "-f", "stream-orca"]
@@ -11843,7 +11843,7 @@ services:
     ports:
       - "9093:9090"
     networks:
-      - mevana-network
+      - mevana_net
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "pgrep", "-f", "stream-raydium"]
@@ -11895,7 +11895,7 @@ services:
     ports:
       - "9094:9090"
     networks:
-      - mevana-network
+      - mevana_net
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "pgrep", "-f", "swap-ingest"]
@@ -11933,7 +11933,7 @@ services:
       - PROCESSING_INTERVAL=5
       - RUST_LOG=${RUST_LOG:-info}
     networks:
-      - mevana-network
+      - mevana_net
     restart: unless-stopped
     healthcheck:
       test: ["CMD-SHELL", "ps aux | grep data-stream-processor | grep -v grep || exit 1"]
@@ -11980,7 +11980,7 @@ services:
     ports:
       - "9095:9090"
     networks:
-      - mevana-network
+      - mevana_net
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "pgrep", "-f", "pathfinder"]
@@ -12024,7 +12024,7 @@ services:
     ports:
       - "5001:5001"
     networks:
-      - mevana-network
+      - mevana_net
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:5001/health"]
@@ -12063,7 +12063,7 @@ services:
       - '--storage.tsdb.retention.time=200h'
       - '--web.enable-lifecycle'
     networks:
-      - mevana-network
+      - mevana_net
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:9090/-/healthy"]
@@ -12099,7 +12099,7 @@ services:
       - ./grafana/dashboards:/etc/grafana/provisioning/dashboards
       - ./grafana/datasources:/etc/grafana/provisioning/datasources
     networks:
-      - mevana-network
+      - mevana_net
     restart: unless-stopped
     depends_on:
       prometheus:
@@ -12139,7 +12139,7 @@ services:
     ports:
       - "5432:5432"
     networks:
-      - mevana-network
+      - mevana_net
     volumes:
       - postgres_data:/var/lib/postgresql/data
       - ./migrations:/docker-entrypoint-initdb.d
@@ -12170,7 +12170,7 @@ services:
     ports:
       - "8082:8080"
     networks:
-      - mevana-network
+      - mevana_net
     restart: unless-stopped
     depends_on:
       postgres:
@@ -12215,7 +12215,7 @@ services:
       - cargo_cache:/usr/local/cargo/registry
       - target_cache:/app/target
     networks:
-      - mevana-network
+      - mevana_net
     depends_on:
       redis:
         condition: service_healthy
@@ -12276,13 +12276,13 @@ services:
       - GROUP_ID=${AGG_GROUP_ID:-price-aggregator}
       - EMIT_SECS=${AGG_EMIT_SECS:-5}
     networks:
-      - mevana-network
+      - mevana_net
     restart: unless-stopped
 
 networks:
-  mevana-network:
+  mevana_net:
     external: true
-    name: mevana-network
+    name: mevana_net
 
 volumes:
   postgres_data:
@@ -12349,7 +12349,7 @@ services:
     ports:
       - "2181:2181"
     networks:
-      - mevana-network
+      - mevana_net
     restart: unless-stopped
     logging:
       driver: "json-file"
@@ -12391,7 +12391,7 @@ services:
       - "9092:9092"
       - "29092:29092"
     networks:
-      - mevana-network
+      - mevana_net
     restart: unless-stopped
     healthcheck:
       test: ["CMD-SHELL", "kafka-topics --bootstrap-server localhost:9092 --list"]
@@ -12426,7 +12426,7 @@ services:
       KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS: kafka:9092
       KAFKA_CLUSTERS_0_READONLY: false
     networks:
-      - mevana-network
+      - mevana_net
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8080/health"]
@@ -12466,7 +12466,7 @@ services:
       - FAST_MODE=${FAST_MODE:-1}
     command: ["--topic","orca-swaps"]
     networks:
-      - mevana-network
+      - mevana_net
     restart: unless-stopped
     logging:
       driver: "json-file"
@@ -12488,7 +12488,7 @@ services:
     ports:
       - "6379:6379"
     networks:
-      - mevana-network
+      - mevana_net
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "redis-cli", "--raw", "incr", "ping"]
@@ -12524,7 +12524,7 @@ services:
     ports:
       - "8083:8081"
     networks:
-      - mevana-network
+      - mevana_net
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8081/health"]
@@ -12559,7 +12559,7 @@ services:
       - PAGE_SIZE=${PAGE_SIZE:-250}
       - MAX_PAGES=${MAX_PAGES:-200}
     networks:
-      - mevana-network
+      - mevana_net
     restart: "no"
     command: ["--page-size","250","--max-pages","200"]
 
@@ -12576,7 +12576,7 @@ services:
       - INCLUDE_TICKARRAYS=${INCLUDE_TICKARRAYS:-true}
       - INCLUDE_POSITIONS=${INCLUDE_POSITIONS:-true}
     networks:
-      - mevana-network
+      - mevana_net
     restart: unless-stopped
     command: ["--include-tickarrays","--include-positions"]
     volumes:
@@ -12599,7 +12599,7 @@ services:
       - MINT_DECIMALS_TTL_MS=${MINT_DECIMALS_TTL_MS:-60000}
       - POOL_SNAPSHOT_TTL_MS=${POOL_SNAPSHOT_TTL_MS:-60000}
     networks:
-      - mevana-network
+      - mevana_net
     restart: unless-stopped
 
   depth-builder:
@@ -12613,7 +12613,7 @@ services:
       - RUST_LOG=${RUST_LOG:-info}
     command: ["/usr/local/bin/depth-builder"]
     networks:
-      - mevana-network
+      - mevana_net
     restart: unless-stopped
 
   # =============================================================================
@@ -12651,7 +12651,7 @@ services:
     ports:
       - "9094:9090"
     networks:
-      - mevana-network
+      - mevana_net
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "pgrep", "-f", "stream-orca"]
@@ -12699,7 +12699,7 @@ services:
     ports:
       - "9093:9090"
     networks:
-      - mevana-network
+      - mevana_net
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "pgrep", "-f", "stream-raydium"]
@@ -12751,7 +12751,7 @@ services:
     ports:
       - "9094:9090"
     networks:
-      - mevana-network
+      - mevana_net
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "pgrep", "-f", "swap-ingest"]
@@ -12789,7 +12789,7 @@ services:
       - PROCESSING_INTERVAL=5
       - RUST_LOG=${RUST_LOG:-info}
     networks:
-      - mevana-network
+      - mevana_net
     restart: unless-stopped
     healthcheck:
       test: ["CMD-SHELL", "ps aux | grep data-stream-processor | grep -v grep || exit 1"]
@@ -12836,7 +12836,7 @@ services:
     ports:
       - "9095:9090"
     networks:
-      - mevana-network
+      - mevana_net
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "pgrep", "-f", "pathfinder"]
@@ -12880,7 +12880,7 @@ services:
     ports:
       - "5001:5001"
     networks:
-      - mevana-network
+      - mevana_net
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:5001/health"]
@@ -12919,7 +12919,7 @@ services:
       - '--storage.tsdb.retention.time=200h'
       - '--web.enable-lifecycle'
     networks:
-      - mevana-network
+      - mevana_net
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:9090/-/healthy"]
@@ -12955,7 +12955,7 @@ services:
       - ./grafana/dashboards:/etc/grafana/provisioning/dashboards
       - ./grafana/datasources:/etc/grafana/provisioning/datasources
     networks:
-      - mevana-network
+      - mevana_net
     restart: unless-stopped
     depends_on:
       prometheus:
@@ -12995,7 +12995,7 @@ services:
     ports:
       - "5432:5432"
     networks:
-      - mevana-network
+      - mevana_net
     volumes:
       - postgres_data:/var/lib/postgresql/data
       - ./migrations:/docker-entrypoint-initdb.d
@@ -13026,7 +13026,7 @@ services:
     ports:
       - "8082:8080"
     networks:
-      - mevana-network
+      - mevana_net
     restart: unless-stopped
     depends_on:
       postgres:
@@ -13071,7 +13071,7 @@ services:
       - cargo_cache:/usr/local/cargo/registry
       - target_cache:/app/target
     networks:
-      - mevana-network
+      - mevana_net
     depends_on:
       redis:
         condition: service_healthy
@@ -13132,13 +13132,13 @@ services:
       - GROUP_ID=${AGG_GROUP_ID:-price-aggregator}
       - EMIT_SECS=${AGG_EMIT_SECS:-5}
     networks:
-      - mevana-network
+      - mevana_net
     restart: unless-stopped
 
 networks:
-  mevana-network:
+  mevana_net:
     external: true
-    name: mevana-network
+    name: mevana_net
 
 volumes:
   postgres_data:
@@ -13257,7 +13257,7 @@ services:
     ports:
       - "2181:2181"
     networks:
-      - mevana-network
+      - mevana_net
     restart: unless-stopped
     logging:
       driver: "json-file"
@@ -13299,7 +13299,7 @@ services:
       - "9092:9092"
       - "29092:29092"
     networks:
-      - mevana-network
+      - mevana_net
     restart: unless-stopped
     healthcheck:
       test: ["CMD-SHELL", "kafka-topics --bootstrap-server localhost:9092 --list"]
@@ -13334,7 +13334,7 @@ services:
       KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS: kafka:9092
       KAFKA_CLUSTERS_0_READONLY: false
     networks:
-      - mevana-network
+      - mevana_net
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8080/health"]
@@ -13374,7 +13374,7 @@ services:
       - FAST_MODE=${FAST_MODE:-1}
     command: ["--topic","orca-swaps"]
     networks:
-      - mevana-network
+      - mevana_net
     restart: unless-stopped
     logging:
       driver: "json-file"
@@ -13396,7 +13396,7 @@ services:
     ports:
       - "6379:6379"
     networks:
-      - mevana-network
+      - mevana_net
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "redis-cli", "--raw", "incr", "ping"]
@@ -13432,7 +13432,7 @@ services:
     ports:
       - "8083:8081"
     networks:
-      - mevana-network
+      - mevana_net
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8081/health"]
@@ -13467,7 +13467,7 @@ services:
       - PAGE_SIZE=${PAGE_SIZE:-250}
       - MAX_PAGES=${MAX_PAGES:-200}
     networks:
-      - mevana-network
+      - mevana_net
     restart: "no"
     command: ["--page-size","250","--max-pages","200"]
 
@@ -13484,7 +13484,7 @@ services:
       - INCLUDE_TICKARRAYS=${INCLUDE_TICKARRAYS:-true}
       - INCLUDE_POSITIONS=${INCLUDE_POSITIONS:-true}
     networks:
-      - mevana-network
+      - mevana_net
     restart: unless-stopped
     command: ["--include-tickarrays","--include-positions"]
     volumes:
@@ -13507,7 +13507,7 @@ services:
       - MINT_DECIMALS_TTL_MS=${MINT_DECIMALS_TTL_MS:-60000}
       - POOL_SNAPSHOT_TTL_MS=${POOL_SNAPSHOT_TTL_MS:-60000}
     networks:
-      - mevana-network
+      - mevana_net
     restart: unless-stopped
 
   depth-builder:
@@ -13521,7 +13521,7 @@ services:
       - RUST_LOG=${RUST_LOG:-info}
     entrypoint: ["/usr/local/bin/depth-builder"]
     networks:
-      - mevana-network
+      - mevana_net
     restart: unless-stopped
 
   # =============================================================================
@@ -13559,7 +13559,7 @@ services:
     ports:
       - "9094:9090"
     networks:
-      - mevana-network
+      - mevana_net
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "pgrep", "-f", "stream-orca"]
@@ -13607,7 +13607,7 @@ services:
     ports:
       - "9093:9090"
     networks:
-      - mevana-network
+      - mevana_net
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "pgrep", "-f", "stream-raydium"]
@@ -13659,7 +13659,7 @@ services:
     ports:
       - "9094:9090"
     networks:
-      - mevana-network
+      - mevana_net
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "pgrep", "-f", "swap-ingest"]
@@ -13697,7 +13697,7 @@ services:
       - PROCESSING_INTERVAL=5
       - RUST_LOG=${RUST_LOG:-info}
     networks:
-      - mevana-network
+      - mevana_net
     restart: unless-stopped
     healthcheck:
       test: ["CMD-SHELL", "ps aux | grep data-stream-processor | grep -v grep || exit 1"]
@@ -13744,7 +13744,7 @@ services:
     ports:
       - "9095:9090"
     networks:
-      - mevana-network
+      - mevana_net
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "pgrep", "-f", "pathfinder"]
@@ -13788,7 +13788,7 @@ services:
     ports:
       - "5001:5001"
     networks:
-      - mevana-network
+      - mevana_net
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:5001/health"]
@@ -13827,7 +13827,7 @@ services:
       - '--storage.tsdb.retention.time=200h'
       - '--web.enable-lifecycle'
     networks:
-      - mevana-network
+      - mevana_net
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:9090/-/healthy"]
@@ -13863,7 +13863,7 @@ services:
       - ./grafana/dashboards:/etc/grafana/provisioning/dashboards
       - ./grafana/datasources:/etc/grafana/provisioning/datasources
     networks:
-      - mevana-network
+      - mevana_net
     restart: unless-stopped
     depends_on:
       prometheus:
@@ -13903,7 +13903,7 @@ services:
     ports:
       - "5432:5432"
     networks:
-      - mevana-network
+      - mevana_net
     volumes:
       - postgres_data:/var/lib/postgresql/data
       - ./migrations:/docker-entrypoint-initdb.d
@@ -13934,7 +13934,7 @@ services:
     ports:
       - "8082:8080"
     networks:
-      - mevana-network
+      - mevana_net
     restart: unless-stopped
     depends_on:
       postgres:
@@ -13979,7 +13979,7 @@ services:
       - cargo_cache:/usr/local/cargo/registry
       - target_cache:/app/target
     networks:
-      - mevana-network
+      - mevana_net
     depends_on:
       redis:
         condition: service_healthy
@@ -14040,13 +14040,13 @@ services:
       - GROUP_ID=${AGG_GROUP_ID:-price-aggregator}
       - EMIT_SECS=${AGG_EMIT_SECS:-5}
     networks:
-      - mevana-network
+      - mevana_net
     restart: unless-stopped
 
 networks:
-  mevana-network:
+  mevana_net:
     external: true
-    name: mevana-network
+    name: mevana_net
 
 volumes:
   postgres_data:
@@ -14166,7 +14166,7 @@ services:
     ports:
       - "2181:2181"
     networks:
-      - mevana-network
+      - mevana_net
     restart: unless-stopped
     logging:
       driver: "json-file"
@@ -14208,7 +14208,7 @@ services:
       - "9092:9092"
       - "29092:29092"
     networks:
-      - mevana-network
+      - mevana_net
     restart: unless-stopped
     healthcheck:
       test: ["CMD-SHELL", "kafka-topics --bootstrap-server localhost:9092 --list"]
@@ -14243,7 +14243,7 @@ services:
       KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS: kafka:9092
       KAFKA_CLUSTERS_0_READONLY: false
     networks:
-      - mevana-network
+      - mevana_net
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8080/health"]
@@ -14283,7 +14283,7 @@ services:
       - FAST_MODE=${FAST_MODE:-1}
     command: ["--topic","orca-swaps"]
     networks:
-      - mevana-network
+      - mevana_net
     restart: unless-stopped
     logging:
       driver: "json-file"
@@ -14305,7 +14305,7 @@ services:
     ports:
       - "6379:6379"
     networks:
-      - mevana-network
+      - mevana_net
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "redis-cli", "--raw", "incr", "ping"]
@@ -14341,7 +14341,7 @@ services:
     ports:
       - "8083:8081"
     networks:
-      - mevana-network
+      - mevana_net
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8081/health"]
@@ -14376,7 +14376,7 @@ services:
       - PAGE_SIZE=${PAGE_SIZE:-250}
       - MAX_PAGES=${MAX_PAGES:-200}
     networks:
-      - mevana-network
+      - mevana_net
     restart: "no"
     command: ["--page-size","250","--max-pages","200"]
 
@@ -14393,7 +14393,7 @@ services:
       - INCLUDE_TICKARRAYS=${INCLUDE_TICKARRAYS:-true}
       - INCLUDE_POSITIONS=${INCLUDE_POSITIONS:-true}
     networks:
-      - mevana-network
+      - mevana_net
     restart: unless-stopped
     command: ["--include-tickarrays","--include-positions"]
     volumes:
@@ -14416,7 +14416,7 @@ services:
       - MINT_DECIMALS_TTL_MS=${MINT_DECIMALS_TTL_MS:-60000}
       - POOL_SNAPSHOT_TTL_MS=${POOL_SNAPSHOT_TTL_MS:-60000}
     networks:
-      - mevana-network
+      - mevana_net
     restart: unless-stopped
 
   depth-builder:
@@ -14431,7 +14431,7 @@ services:
       - START_ID=${DEPTH_START_ID:-0}
     entrypoint: ["/usr/local/bin/depth-builder"]
     networks:
-      - mevana-network
+      - mevana_net
     restart: unless-stopped
 
   # =============================================================================
@@ -14469,7 +14469,7 @@ services:
     ports:
       - "9094:9090"
     networks:
-      - mevana-network
+      - mevana_net
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "pgrep", "-f", "stream-orca"]
@@ -14517,7 +14517,7 @@ services:
     ports:
       - "9093:9090"
     networks:
-      - mevana-network
+      - mevana_net
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "pgrep", "-f", "stream-raydium"]
@@ -14569,7 +14569,7 @@ services:
     ports:
       - "9094:9090"
     networks:
-      - mevana-network
+      - mevana_net
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "pgrep", "-f", "swap-ingest"]
@@ -14607,7 +14607,7 @@ services:
       - PROCESSING_INTERVAL=5
       - RUST_LOG=${RUST_LOG:-info}
     networks:
-      - mevana-network
+      - mevana_net
     restart: unless-stopped
     healthcheck:
       test: ["CMD-SHELL", "ps aux | grep data-stream-processor | grep -v grep || exit 1"]
@@ -14654,7 +14654,7 @@ services:
     ports:
       - "9095:9090"
     networks:
-      - mevana-network
+      - mevana_net
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "pgrep", "-f", "pathfinder"]
@@ -14698,7 +14698,7 @@ services:
     ports:
       - "5001:5001"
     networks:
-      - mevana-network
+      - mevana_net
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:5001/health"]
@@ -14737,7 +14737,7 @@ services:
       - '--storage.tsdb.retention.time=200h'
       - '--web.enable-lifecycle'
     networks:
-      - mevana-network
+      - mevana_net
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:9090/-/healthy"]
@@ -14773,7 +14773,7 @@ services:
       - ./grafana/dashboards:/etc/grafana/provisioning/dashboards
       - ./grafana/datasources:/etc/grafana/provisioning/datasources
     networks:
-      - mevana-network
+      - mevana_net
     restart: unless-stopped
     depends_on:
       prometheus:
@@ -14813,7 +14813,7 @@ services:
     ports:
       - "5432:5432"
     networks:
-      - mevana-network
+      - mevana_net
     volumes:
       - postgres_data:/var/lib/postgresql/data
       - ./migrations:/docker-entrypoint-initdb.d
@@ -14844,7 +14844,7 @@ services:
     ports:
       - "8082:8080"
     networks:
-      - mevana-network
+      - mevana_net
     restart: unless-stopped
     depends_on:
       postgres:
@@ -14889,7 +14889,7 @@ services:
       - cargo_cache:/usr/local/cargo/registry
       - target_cache:/app/target
     networks:
-      - mevana-network
+      - mevana_net
     depends_on:
       redis:
         condition: service_healthy
@@ -14950,13 +14950,13 @@ services:
       - GROUP_ID=${AGG_GROUP_ID:-price-aggregator}
       - EMIT_SECS=${AGG_EMIT_SECS:-5}
     networks:
-      - mevana-network
+      - mevana_net
     restart: unless-stopped
 
 networks:
-  mevana-network:
+  mevana_net:
     external: true
-    name: mevana-network
+    name: mevana_net
 
 volumes:
   postgres_data:
@@ -16738,7 +16738,7 @@ services:
     ports:
       - "2181:2181"
     networks:
-      - mevana-network
+      - mevana_net
     restart: unless-stopped
     logging:
       driver: "json-file"
@@ -16780,7 +16780,7 @@ services:
       - "9092:9092"
       - "29092:29092"
     networks:
-      - mevana-network
+      - mevana_net
     restart: unless-stopped
     healthcheck:
       test: ["CMD-SHELL", "kafka-topics --bootstrap-server localhost:9092 --list"]
@@ -16815,7 +16815,7 @@ services:
       KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS: kafka:9092
       KAFKA_CLUSTERS_0_READONLY: false
     networks:
-      - mevana-network
+      - mevana_net
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8080/health"]
@@ -16855,7 +16855,7 @@ services:
       - FAST_MODE=${FAST_MODE:-1}
     command: ["--topic","orca-swaps"]
     networks:
-      - mevana-network
+      - mevana_net
     restart: unless-stopped
     logging:
       driver: "json-file"
@@ -16877,7 +16877,7 @@ services:
     ports:
       - "6379:6379"
     networks:
-      - mevana-network
+      - mevana_net
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "redis-cli", "--raw", "incr", "ping"]
@@ -16913,7 +16913,7 @@ services:
     ports:
       - "8083:8081"
     networks:
-      - mevana-network
+      - mevana_net
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8081/health"]
@@ -16948,7 +16948,7 @@ services:
       - PAGE_SIZE=${PAGE_SIZE:-250}
       - MAX_PAGES=${MAX_PAGES:-200}
     networks:
-      - mevana-network
+      - mevana_net
     restart: "no"
     command: ["--page-size","250","--max-pages","200"]
 
@@ -16965,7 +16965,7 @@ services:
       - INCLUDE_TICKARRAYS=${INCLUDE_TICKARRAYS:-true}
       - INCLUDE_POSITIONS=${INCLUDE_POSITIONS:-true}
     networks:
-      - mevana-network
+      - mevana_net
     restart: unless-stopped
     command: ["--include-tickarrays","--include-positions"]
     volumes:
@@ -16988,7 +16988,7 @@ services:
       - MINT_DECIMALS_TTL_MS=${MINT_DECIMALS_TTL_MS:-60000}
       - POOL_SNAPSHOT_TTL_MS=${POOL_SNAPSHOT_TTL_MS:-60000}
     networks:
-      - mevana-network
+      - mevana_net
     restart: unless-stopped
 
   depth-builder:
@@ -17003,7 +17003,7 @@ services:
       - START_ID=${DEPTH_START_ID:-0}
     entrypoint: ["/usr/local/bin/depth-builder"]
     networks:
-      - mevana-network
+      - mevana_net
     restart: unless-stopped
 
   # =============================================================================
@@ -17041,7 +17041,7 @@ services:
     ports:
       - "9094:9090"
     networks:
-      - mevana-network
+      - mevana_net
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "pgrep", "-f", "stream-orca"]
@@ -17089,7 +17089,7 @@ services:
     ports:
       - "9093:9090"
     networks:
-      - mevana-network
+      - mevana_net
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "pgrep", "-f", "stream-raydium"]
@@ -17141,7 +17141,7 @@ services:
     ports:
       - "9094:9090"
     networks:
-      - mevana-network
+      - mevana_net
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "pgrep", "-f", "swap-ingest"]
@@ -17179,7 +17179,7 @@ services:
       - PROCESSING_INTERVAL=5
       - RUST_LOG=${RUST_LOG:-info}
     networks:
-      - mevana-network
+      - mevana_net
     restart: unless-stopped
     healthcheck:
       test: ["CMD-SHELL", "ps aux | grep data-stream-processor | grep -v grep || exit 1"]
@@ -17226,7 +17226,7 @@ services:
     ports:
       - "9095:9090"
     networks:
-      - mevana-network
+      - mevana_net
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "pgrep", "-f", "pathfinder"]
@@ -17270,7 +17270,7 @@ services:
     ports:
       - "5001:5001"
     networks:
-      - mevana-network
+      - mevana_net
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:5001/health"]
@@ -17309,7 +17309,7 @@ services:
       - '--storage.tsdb.retention.time=200h'
       - '--web.enable-lifecycle'
     networks:
-      - mevana-network
+      - mevana_net
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:9090/-/healthy"]
@@ -17345,7 +17345,7 @@ services:
       - ./grafana/dashboards:/etc/grafana/provisioning/dashboards
       - ./grafana/datasources:/etc/grafana/provisioning/datasources
     networks:
-      - mevana-network
+      - mevana_net
     restart: unless-stopped
     depends_on:
       prometheus:
@@ -17385,7 +17385,7 @@ services:
     ports:
       - "5432:5432"
     networks:
-      - mevana-network
+      - mevana_net
     volumes:
       - postgres_data:/var/lib/postgresql/data
       - ./migrations:/docker-entrypoint-initdb.d
@@ -17416,7 +17416,7 @@ services:
     ports:
       - "8082:8080"
     networks:
-      - mevana-network
+      - mevana_net
     restart: unless-stopped
     depends_on:
       postgres:
@@ -17461,7 +17461,7 @@ services:
       - cargo_cache:/usr/local/cargo/registry
       - target_cache:/app/target
     networks:
-      - mevana-network
+      - mevana_net
     depends_on:
       redis:
         condition: service_healthy
@@ -17522,7 +17522,7 @@ services:
       - GROUP_ID=${AGG_GROUP_ID:-price-aggregator}
       - EMIT_SECS=${AGG_EMIT_SECS:-5}
     networks:
-      - mevana-network
+      - mevana_net
     restart: unless-stopped
 
   ui-gateway:
@@ -17539,13 +17539,13 @@ services:
       - REDIS_URL=${REDIS_URL:-redis://redis:6379/0}
       - RUST_LOG=${RUST_LOG:-info}
     networks:
-      - mevana-network
+      - mevana_net
     restart: unless-stopped
 
 networks:
-  mevana-network:
+  mevana_net:
     external: true
-    name: mevana-network
+    name: mevana_net
 
 volumes:
   postgres_data:
@@ -17835,7 +17835,7 @@ async fn http_depth(
 Status: partial completion
 
 - Done:
-  - `dex-stream-universal`: FAST_MODE enabled; no Kafka key on hot path; Dockerized and running on `mevana-network` against internal Kafka
+  - `dex-stream-universal`: FAST_MODE enabled; no Kafka key on hot path; Dockerized and running on `mevana_net` against internal Kafka
   - `graphql-backfill`: Dockerized service added (one-shot)
   - `dex-backfill`: Dockerized, continuous updates; IDLs mounted; running
   - `normalizer-extract` (bin `tap_orca_extract`): Dockerized and running; Redis read-through caches; producing `orca-swaps.parsed.v2`
@@ -18295,7 +18295,7 @@ Now let me add arb-test-mode to the docker-compose.yml.
       - GROUP_ID=${AGG_GROUP_ID:-price-aggregator}
       - EMIT_SECS=${AGG_EMIT_SECS:-5}
     networks:
-      - mevana-network
+      - mevana_net
     restart: unless-stopped
 
   arb-test-mode:
@@ -18310,7 +18310,7 @@ Now let me add arb-test-mode to the docker-compose.yml.
       - REDIS_URL=${REDIS_URL:-redis://redis:6379/0}
       - RUST_LOG=${RUST_LOG:-info}
     networks:
-      - mevana-network
+      - mevana_net
     restart: unless-stopped
 ```
 
@@ -18683,7 +18683,7 @@ Now let me update the roadmap to reflect what we've accomplished and commit the 
 - Binary hot path: move from JSON to prost-encoded v2 structs end-to-end
 
 ## Completed Today
-- `dex-stream-universal`: FAST_MODE enabled; no Kafka key on hot path; Dockerized and running on `mevana-network` against internal Kafka
+- `dex-stream-universal`: FAST_MODE enabled; no Kafka key on hot path; Dockerized and running on `mevana_net` against internal Kafka
 - `graphql-backfill`: Dockerized service added (one-shot)
 - `dex-backfill`: Dockerized, continuous updates; IDLs mounted; running
 - `normalizer-extract` (bin `tap_orca_extract`): Dockerized and running; Redis read-through caches; producing `orca-swaps.parsed.v2`
@@ -21915,7 +21915,7 @@ I've hit the limit of 3 attempts to fix linter errors. Let me move forward with 
       - UNKNOWN_PROGRAMS_TOPIC=${UNKNOWN_PROGRAMS_TOPIC:-unknown-programs}
       - RUST_LOG=${RUST_LOG:-info}
     networks:
-      - mevana-network
+      - mevana_net
     restart: unless-stopped
     depends_on:
       - kafka
@@ -23127,7 +23127,7 @@ I can see the issue. The `restart` and `command` lines are misaligned. Let me fi
 
 ```dockercompose
     networks:
-      - mevana-network
+      - mevana_net
           restart: unless-stopped
       command: ["--include-tickarrays","--include-positions"]
       volumes:
@@ -23137,7 +23137,7 @@ I can see the issue. The `restart` and `command` lines are misaligned. Let me fi
 ->
 
     networks:
-      - mevana-network
+      - mevana_net
     restart: unless-stopped
     command: ["--include-tickarrays","--include-positions"]
     volumes:

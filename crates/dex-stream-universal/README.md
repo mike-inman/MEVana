@@ -189,10 +189,10 @@ curl http://:<health-port>/metrics
 ### **Log Analysis**
 ```bash
 # Monitor transaction processing
-tail -f logs/dex-stream-universal-v2.log | grep "HEARTBEAT"
+tail -f logs/dex-stream-universal.log | grep "HEARTBEAT"
 
 # Check health status
-tail -f logs/dex-stream-universal-v2.log | grep "Health check"
+tail -f logs/dex-stream-universal.log | grep "Health check"
 ```
 
 ## 🚨 **Troubleshooting**

@@ -15,10 +15,24 @@ scrape_configs:
     static_configs:
       - targets: ['localhost:9090']
 
-  # DEX Stream Universal V2 metrics
-  - job_name: 'dex-stream-universal-v2'
+  # DEX Stream Universal metrics
+  - job_name: 'dex-stream-universal'
     static_configs:
-      - targets: ['dex_stream_universal_v2_dev:8084']
+      - targets: ['dex-stream-universal:8084']
+    metrics_path: '/metrics'
+    scrape_interval: 10s
+    
+  # Normalizer Service metrics - Parsing accuracy & performance
+  - job_name: 'normalizer-service-extractor'
+    static_configs:
+      - targets: ['normalizer-service-extractor:8085']
+    metrics_path: '/metrics'
+    scrape_interval: 10s
+    
+  # Normalizer Debug Service metrics - Full transaction data
+  - job_name: 'normalizer-service-debug'
+    static_configs:
+      - targets: ['normalizer-service-extractor:8085']
     metrics_path: '/metrics'
     scrape_interval: 10s
     

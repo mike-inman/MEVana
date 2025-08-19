@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # Development Environment Deployment Script
-# This script deploys the dex-stream-universal-v2 service in development mode
+# This script deploys the dex-stream-universal service in development mode
 
 set -e
 
@@ -35,7 +35,7 @@ if curl -f http://:8080/health > /dev/null 2>&1; then
     echo "✅ Service is healthy!"
 else
     echo "❌ Service health check failed!"
-    docker compose --profile dev logs dex_stream_universal_v2_dev
+    docker compose --profile dev logs dex_stream_universal_dev
     exit 1
 fi
 
@@ -58,5 +58,5 @@ echo "   Grafana: http://:3000 (admin/admin)"
 echo "   Kafka: [configured via environment]"
 echo "   Redis: [configured via environment]"
 echo ""
-echo "🔍 To view logs: docker compose --profile dev logs -f dex_stream_universal_v2_dev"
+echo "🔍 To view logs: docker compose --profile dev logs -f dex_stream_universal_dev"
 echo "🛑 To stop: docker compose --profile dev down"

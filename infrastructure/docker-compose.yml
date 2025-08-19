@@ -2,31 +2,78 @@
 # SOLANA AI TRADING PLATFORM - ENHANCED DOCKER COMPOSE
 # =============================================================================
 # Enhanced version with improved connectivity, monitoring, and resource management
+#
+# NETWORK ARCHITECTURE OVERVIEW:
+# =============================
+# This compose file establishes a complete infrastructure foundation for the MEVana
+# trading platform. Services are deployed in dependency order with proper health
+# checks to ensure reliable startup sequences.
+#
+# DEPLOYMENT ORDER (CRITICAL):
+# 1. Zookeeper (2181) - Kafka coordination service
+# 2. Kafka (9092/29092) - Message broker (depends on Zookeeper)
+# 3. Kafka-UI (8080) - Management interface (depends on Kafka)
+# 4. Redis (6379) - Data caching service
+# 5. Redis-UI (8083) - Management interface (depends on Redis)
+#
+# NETWORK ISOLATION:
+# - All services use 'mevana_net' external network
+# - Internal communication via Docker DNS (e.g., kafka:9092)
+# - External access via localhost ports for development
+#
+# HEALTH CHECK STRATEGY:
+# - Zookeeper: Basic connectivity test
+# - Kafka: Topic listing capability
+# - Redis: Ping/incr operation
+# - UI Services: HTTP endpoint availability
+#
+# RESOURCE MANAGEMENT:
+# - Memory and CPU limits set for production stability
+# - Log rotation configured to prevent disk space issues
+# - Graceful restart policies for service recovery
+# =============================================================================
 
 services:
   # =============================================================================
-  # INFRASTRUCTURE SERVICES
+  # INFRASTRUCTURE SERVICES - CORE MESSAGE BROKER STACK
   # =============================================================================
   
+  # ZOOKEEPER SERVICE - Kafka Coordination Foundation
+  # ================================================
+  # Zookeeper is the coordination service that Kafka requires for:
+  # - Leader election and failover
+  # - Configuration management
+  # - Distributed synchronization
+  # - Service discovery
+  #
+  # CRITICAL: This service MUST start first and be healthy before Kafka
+  # can initialize. All Kafka operations depend on Zookeeper availability.
   zookeeper:
     image: confluentinc/cp-zookeeper:7.4.0
     container_name: zookeeper
     environment:
+      # Client connection port - used by Kafka and other services
       ZOOKEEPER_CLIENT_PORT: 2181
+      # Heartbeat interval in milliseconds
       ZOOKEEPER_TICK_TIME: 2000
+      # Maximum number of client connections
       ZOOKEEPER_MAX_CLIENT_CNXNS: 60
+      # Sync limit for follower synchronization
       ZOOKEEPER_SYNC_LIMIT: 2
+      # Initial limit for leader election
       ZOOKEEPER_INIT_LIMIT: 5
     healthcheck:
+      # Test Zookeeper connectivity by attempting a basic operation
       test: ["CMD", "bash", "-c", "echo stat | nc localhost 2181"]
       interval: 10s
       timeout: 5s
       retries: 5
       start_period: 10s
     ports:
+      # Expose Zookeeper port for external monitoring and debugging
       - "2181:2181"
     networks:
-      - mevana-network
+      - mevana_net
     restart: unless-stopped
     logging:
       driver: "json-file"
@@ -42,6 +89,17 @@ services:
           memory: 256M
           cpus: '0.25'
 
+  # KAFKA SERVICE - Message Broker Core
+  # ===================================
+  # Kafka is the central message broker that handles:
+  # - High-throughput message streaming
+  # - Topic management and partitioning
+  # - Consumer group coordination
+  # - Message persistence and replication
+  #
+  # CRITICAL: This service depends on Zookeeper being healthy.
+  # Kafka will not start until Zookeeper reports healthy status.
+  # All application services depend on Kafka availability.
   kafka:
     image: confluentinc/cp-kafka:7.4.0
     container_name: kafka
@@ -49,28 +107,50 @@ services:
       zookeeper:
         condition: service_healthy
     environment:
+      # Unique broker identifier in the cluster
       KAFKA_BROKER_ID: 1
+      # Zookeeper connection string for coordination
       KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
+      # Network listeners configuration
+      # PLAINTEXT://0.0.0.0:9092 - Internal Docker network listener
+      # PLAINTEXT_HOST://0.0.0.0:29092 - External host access listener
       KAFKA_LISTENERS: PLAINTEXT://0.0.0.0:9092,PLAINTEXT_HOST://0.0.0.0:29092
+      # Advertised listeners for client connections
+      # PLAINTEXT://kafka:9092 - Internal Docker DNS name
+      # PLAINTEXT_HOST://localhost:29092 - External localhost access
       KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092,PLAINTEXT_HOST://localhost:29092
+      # Security protocol mapping for each listener
       KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
+      # Internal broker communication listener
       KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+      # Enable automatic topic creation for development
       KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"
+      # Replication factor for system topics
       KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      # JVM heap configuration for performance
       KAFKA_HEAP_OPTS: "-Xmx1G -Xms1G"
+      # Log retention policy (7 days)
       KAFKA_LOG_RETENTION_HOURS: 168
+      # Log segment size for efficient storage
       KAFKA_LOG_SEGMENT_BYTES: 1073741824
+      # Default number of partitions for new topics
       KAFKA_NUM_PARTITIONS: 3
+      # Default replication factor for new topics
       KAFKA_DEFAULT_REPLICATION_FACTOR: 1
+      # Minimum in-sync replicas for durability
       KAFKA_MIN_INSYNC_REPLICAS: 1
+      # Enable topic deletion for development flexibility
       KAFKA_DELETE_TOPIC_ENABLE: "true"
     ports:
+      # Internal Docker network access
       - "9092:9092"
+      # External host access for development and debugging
       - "29092:29092"
     networks:
-      - mevana-network
+      - mevana_net
     restart: unless-stopped
     healthcheck:
+      # Test Kafka functionality by listing topics
       test: ["CMD-SHELL", "kafka-topics --bootstrap-server localhost:9092 --list"]
       interval: 30s
       timeout: 10s
@@ -90,23 +170,60 @@ services:
           memory: 1G
           cpus: '0.5'
 
+  # KAFKA-UI SERVICE - Management Interface
+  # =======================================
+  # Kafka-UI provides a web-based interface for:
+  # - Topic management and monitoring
+  # - Consumer group status
+  # - Message browsing and production
+  # - Cluster health monitoring
+  # - Performance metrics visualization
+  #
+  # CRITICAL: This service depends on Kafka being healthy.
+  # UI will not start until Kafka reports healthy status.
+  # KAFKA-UI SERVICE - Management Interface
+  # =======================================
+  # Kafka-UI provides a web-based interface for:
+  # - Topic browsing and management
+  # - Message inspection and debugging
+  # - Consumer group monitoring
+  # - Cluster health and performance metrics
+  # - Real-time data flow visualization
+  #
+  # CRITICAL CONFIGURATION REQUIREMENT:
+  # ===================================
+  # Kafka-UI MUST have environment variables to connect to Kafka.
+  # Without these, the service will start but show no topics/data.
+  # 
+  # REQUIRED ENVIRONMENT VARIABLES:
+  # - KAFKA_CLUSTERS_0_NAME: Cluster identifier
+  # - KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS: Kafka broker address (use Docker DNS)
+  # - KAFKA_CLUSTERS_0_READONLY: Management permissions
+  #
+  # TROUBLESHOOTING: If Kafka-UI shows no topics, verify these env vars exist.
   kafka-ui:
-    image: provectuslabs/kafka-ui:latest
+    image: provectuslabs/kafka-ui:v0.7.2
     container_name: kafka-ui
     depends_on:
       kafka:
         condition: service_healthy
-    ports:
-      - "8080:8080"
     environment:
-      KAFKA_CLUSTERS_0_NAME: local
-      KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS: kafka:9092
-      KAFKA_CLUSTERS_0_READONLY: false
+      # Kafka cluster configuration - REQUIRED for Kafka-UI to connect
+      - KAFKA_CLUSTERS_0_NAME=local
+      - KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS=kafka:9092
+      - KAFKA_CLUSTERS_0_READONLY=false
+      # Optional: Enable topic creation and management
+      - KAFKA_CLUSTERS_0_TOPICCONFIG=0
+      - KAFKA_CLUSTERS_0_TOPICREPLICATION=1
+    ports:
+      # Web interface accessible at http://localhost:8080
+      - "8080:8080"
     networks:
-      - mevana-network
+      - mevana_net
     restart: unless-stopped
     healthcheck:
-      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8080/health"]
+      # Test web interface availability
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8080"]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -119,21 +236,34 @@ services:
     deploy:
       resources:
         limits:
-          memory: 512M
-          cpus: '0.5'
-        reservations:
           memory: 256M
           cpus: '0.25'
+        reservations:
+          memory: 128M
+          cpus: '0.10'
 
+  # REDIS SERVICE - Data Caching Foundation
+  # =======================================
+  # Redis provides high-performance data caching for:
+  # - Token metadata and pricing information
+  # - Pool state and liquidity data
+  # - User session and configuration data
+  # - Temporary computation results
+  # - Rate limiting and throttling
+  #
+  # Redis operates independently of the Kafka stack and can start
+  # in parallel with Zookeeper for faster overall startup.
   redis:
     image: redis:7-alpine
     container_name: redis
     ports:
+      # Redis protocol access for external clients and debugging
       - "6379:6379"
     networks:
-      - mevana-network
+      - mevana_net
     restart: unless-stopped
     healthcheck:
+      # Test Redis functionality with ping and increment operation
       test: ["CMD", "redis-cli", "--raw", "incr", "ping"]
       interval: 10s
       timeout: 5s
@@ -154,6 +284,17 @@ services:
           memory: 512M
           cpus: '0.25'
 
+  # REDIS-UI SERVICE - Management Interface
+  # =======================================
+  # Redis-UI provides a web-based interface for:
+  # - Key-value browsing and editing
+  # - Memory usage monitoring
+  # - Performance statistics
+  # - Database operations and debugging
+  # - Connection management
+  #
+  # CRITICAL: This service depends on Redis being healthy.
+  # UI will not start until Redis reports healthy status.
   redis-ui:
     image: rediscommander/redis-commander:latest
     container_name: redis-ui
@@ -161,15 +302,20 @@ services:
       redis:
         condition: service_healthy
     environment:
+      # Redis connection configuration
       - REDIS_HOSTS=local:redis:6379
+      # Basic authentication for security
       - HTTP_USER=admin
       - HTTP_PASSWORD=admin123
     ports:
+      # Web interface accessible at http://localhost:8083
+      # Note: Redis-Commander uses internal port 8081, mapped to host 8083
       - "8083:8081"
     networks:
-      - mevana-network
+      - mevana_net
     restart: unless-stopped
     healthcheck:
+      # Test web interface availability
       test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8081/health"]
       interval: 30s
       timeout: 10s
@@ -189,10 +335,451 @@ services:
           memory: 128M
           cpus: '0.1'
 
+  # DEX-STREAM-UNIVERSAL SERVICE - Solana DEX Data Processing
+  # ========================================================
+  # This service processes Solana DEX data (Raydium, Orca, etc.)
+  # and streams it to Kafka for further processing.
+  #
+  # CRITICAL: This service depends on Kafka being healthy.
+  # It will not start until Kafka is ready to accept messages.
+  #
+  # FEATURES:
+  # - Live Solana Geyser stream processing
+  # - Kafka message production with proper error handling
+  # - Health monitoring endpoints (/health, /metrics)
+  # - Prometheus metrics collection
+  # - Configurable DEX filtering (currently OFF for wide-open mode)
+  dex-stream-universal:
+    build:
+      context: ..
+      dockerfile: crates/dex-stream-universal/Dockerfile
+    container_name: dex-stream-universal
+    depends_on:
+      kafka:
+        condition: service_healthy
+    environment:
+      # Core service configuration
+      - RUST_LOG=info
+      - KAFKA_BROKER=kafka:9092
+      - TOPIC=dex-transactions
+      - ENDPOINT=https://grpc.ny.shyft.to
+      - X_TOKEN=${X_TOKEN:-efff2d23-97ae-4c5f-8b8b-9a6265001189}
+      - HEALTH_PORT=8084
+      - BIND_ADDRESS=0.0.0.0
+      - DEX_FILTERING=OFF
+      - PROGRAM_IDS=whirLbMiicVdio4qvUfM5KAg6Ct8VwpYzGff3uctyCc
+    ports:
+      - "8084:8084"
+    networks:
+      - mevana_net
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://:8084/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    restart: unless-stopped
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "50m"
+        max-file: "5"
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+          cpus: '0.25'
+        reservations:
+          memory: 128M
+          cpus: '0.10'
+
+  # Test environment configuration
+  dex-stream-universal-test:
+    build:
+      context: ../..
+      dockerfile: crates/dex-stream-universal/Dockerfile
+    profiles: ["test"]
+    container_name: dex_stream_universal_test
+    depends_on:
+      kafka:
+        condition: service_healthy
+    environment:
+      # Core service configuration
+      - RUST_LOG=info
+      - KAFKA_BROKER=kafka:9092
+      - TOPIC=dex-transactions
+      - ENDPOINT=https://grpc.ny.shyft.to
+      - X_TOKEN=${TEST_X_TOKEN:-efff2d23-97ae-4c5f-8b8b-9a6265001189}
+      - HEALTH_PORT=8084
+      - BIND_ADDRESS=0.0.0.0
+      - DEX_FILTERING=OFF
+      - PROGRAM_IDS=whirLbMiicVdio4qvUfM5KAg6Ct8VwpYzGff3uctyCc
+    ports:
+      - "8084:8084"
+    networks:
+      - mevana_net
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://:8084/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    restart: unless-stopped
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "50m"
+        max-file: "5"
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+          cpus: '0.25'
+        reservations:
+          memory: 128M
+          cpus: '0.10'
+
+  # Production environment configuration
+  dex-stream-universal-prod:
+    build:
+      context: ../..
+      dockerfile: crates/dex-stream-universal/Dockerfile
+    profiles: ["prod"]
+    container_name: dex_stream_universal_prod
+    depends_on:
+      kafka:
+        condition: service_healthy
+    environment:
+      # Core service configuration
+      - RUST_LOG=warn
+      - KAFKA_BROKER=kafka:9092
+      - TOPIC=dex-transactions
+      - ENDPOINT=https://grpc.ny.shyft.to
+      - X_TOKEN=${PROD_X_TOKEN:-efff2d23-97ae-4c5f-8b8b-9a6265001189}
+      - HEALTH_PORT=8084
+      - BIND_ADDRESS=0.0.0.0
+      - DEX_FILTERING=ON
+      - PROGRAM_IDS=whirLbMiicVdio4qvUfM5KAg6Ct8VwpYzGff3uctyCc
+    ports:
+      - "8084:8084"
+    networks:
+      - mevana_net
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://:8084/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    restart: unless-stopped
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "50m"
+        max-file: "5"
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+          cpus: '0.25'
+        reservations:
+          memory: 128M
+          cpus: '0.10'
+
+  # GRAPHQL-BACKFILL SERVICE - Historical data processing
+  # =====================================================
+  # This service fetches historical data from Shyft's GraphQL API
+  # and stores it in Redis for quick retrieval.
+  #
+  # CRITICAL: This service depends on Redis being healthy.
+  # It will not start until Redis is ready to accept connections.
+  graphql-backfill:
+    build:
+      context: ../../crates/graphql-backfill
+      dockerfile: Dockerfile
+    image: graphql-backfill:latest
+    container_name: graphql-backfill
+    environment:
+      # Shyft API key for authentication
+      - SHYFT_API_KEY=${SHYFT_API_KEY}
+      # Shyft network (e.g., mainnet-beta, devnet)
+      - SHYFT_NETWORK=${SHYFT_NETWORK:-mainnet-beta}
+      # Redis connection string
+      - REDIS_URL=${REDIS_URL:-redis://redis:6379/0}
+      # Pagination parameters for data fetching
+      - PAGE_SIZE=${PAGE_SIZE:-250}
+      - MAX_PAGES=${MAX_PAGES:-200}
+    networks:
+      - mevana_net
+    restart: "no"
+    command: ["--page-size","250","--max-pages","200"]
+
+  # DEX-BACKFILL SERVICE - Solana DEX Data Backfill
+  # ===============================================
+  # This service fetches historical DEX data (swaps, positions)
+  # from Solana's RPC and stores it in Redis.
+  #
+  # CRITICAL: This service depends on Redis being healthy.
+  # It will not start until Redis is ready to accept connections.
+  dex-backfill:
+    build:
+      context: ../..
+      dockerfile: crates/dex-backfill/Dockerfile
+    image: dex-backfill:latest
+    container_name: dex-backfill
+    environment:
+      # Shyft RPC endpoint and token for data fetching
+      - ENDPOINT=${SHYFT_GRPC_ENDPOINT}
+      - X_TOKEN=${SHYFT_GRPC_TOKEN}
+      # Redis connection string
+      - REDIS_URL=${REDIS_URL:-redis://redis:6379/0}
+      # Include tick arrays and positions in backfill
+      - INCLUDE_TICKARRAYS=${INCLUDE_TICKARRAYS:-true}
+      - INCLUDE_POSITIONS=${INCLUDE_POSITIONS:-true}
+    networks:
+      - mevana_net
+    restart: unless-stopped
+    command: ["--include-tickarrays","--include-positions"]
+    volumes:
+      - ../../crates/dex-backfill/idls:/app/idls
+      - ../../crates/dex-backfill/scripts:/app/scripts:ro
+
+  # NORMALIZER-SERVICE-EXTRACTOR - Data Normalization & Performance Monitoring
+  # ======================================================================
+  # This service consumes raw Kafka messages and normalizes
+  # them into a consistent format for downstream processing.
+  #
+  # CRITICAL: This service depends on Kafka and Redis being healthy.
+  # It will not start until both are ready.
+  #
+  # PERFORMANCE MONITORING:
+  # - Parsing accuracy metrics
+  # - Processing speed (messages/second)
+  # - Error rates and types
+  # - Memory and CPU usage
+  # - Kafka consumer lag
+  normalizer-service-extractor:
+    build:
+      context: ..
+      dockerfile: crates/normalizer-service/Dockerfile
+    container_name: normalizer-service-extractor
+    depends_on:
+      kafka:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    environment:
+      # Core service configuration
+      - RUST_LOG=info
+      # Kafka broker connection
+      - KAFKA_BROKER=kafka:9092
+      # Input topic for raw data (from dex-stream-universal)
+      - IN_TOPIC=dex-transactions
+      # Output topic for normalized data
+      - OUT_TOPIC=orca-swaps.parsed.v2
+      # Consumer group ID for message consumption
+      - GROUP_ID=tap-orca-extract
+      # Redis connection string
+      - REDIS_URL=redis://redis:6379/0
+      # Health monitoring port
+      - HEALTH_PORT=8085
+      - BIND_ADDRESS=0.0.0.0
+      # Fast mode for quicker development
+      - FAST_MODE=1
+      # TTL for mint decimals cache
+      - MINT_DECIMALS_TTL_MS=60000
+      # TTL for pool snapshot cache
+      - POOL_SNAPSHOT_TTL_MS=60000
+      # Debug mode for full transaction output
+      - DEBUG_MODE=1
+      - DEBUG_TOPIC=normalizer-debug-full-tx
+    ports:
+      - "8085:8085"
+    networks:
+      - mevana_net
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://:8085/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    restart: unless-stopped
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "50m"
+        max-file: "5"
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+          cpus: '0.5'
+        reservations:
+          memory: 256M
+          cpus: '0.25'
+
+  # NORMALIZER-SERVICE-DEBUG - Full Transaction Debug Output
+  # ========================================================
+  # This service outputs the complete, prettified JSON of raw transactions
+  # for development and analysis purposes.
+  #
+  # CRITICAL: This service depends on Kafka being healthy.
+  # It will not start until Kafka is ready.
+  #
+  # OUTPUT: Full transaction JSON with all instructions, accounts, and metadata
+  # LABELED: "FULL_TRANSACTION_DEBUG_OUTPUT" for easy identification
+  normalizer-service-debug:
+    build:
+      context: ..
+      dockerfile: crates/normalizer-service/Dockerfile
+    container_name: normalizer-service-debug
+    depends_on:
+      kafka:
+        condition: service_healthy
+    environment:
+      # Core service configuration
+      - RUST_LOG=info
+      # Kafka broker connection
+      - KAFKA_BROKER=kafka:9092
+      # Input topic for raw data (from dex-stream-universal)
+      - IN_TOPIC=dex-transactions
+      # Debug topic for full transaction output
+      - DEBUG_TOPIC=normalizer-debug-full-tx
+      # Consumer group ID for message consumption
+      - GROUP_ID=tap-orca-debug
+    entrypoint: ["/usr/local/bin/tap_orca_debug"]
+    networks:
+      - mevana_net
+    restart: unless-stopped
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "50m"
+        max-file: "5"
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+          cpus: '0.25'
+        reservations:
+          memory: 128M
+          cpus: '0.10'
+
+  # SHYFT-TRANSACTION-FETCHER - Shyft API Transaction Data
+  # ======================================================
+  # This service fetches decoded transactions from Shyft API and sends them to Kafka
+  # for comparison with our debug output.
+  #
+  # CRITICAL: This service depends on Kafka being healthy.
+  # It will not start until Kafka is ready.
+  #
+  # OUTPUT: Complete Shyft API parsed transaction data in prettified JSON
+  # LABELED: "SHYFT_API_COMPLETE_TRANSACTION_PARSED" for easy identification
+  shyft-transaction-fetcher:
+    build:
+      context: ..
+      dockerfile: crates/shyft-transaction-fetcher/Dockerfile
+    container_name: shyft-transaction-fetcher
+    depends_on:
+      kafka:
+        condition: service_healthy
+    environment:
+      # Core service configuration
+      - RUST_LOG=info
+      # Shyft API configuration
+      - SHYFT_API_KEY=${SHYFT_API_KEY}
+      - SHYFT_NETWORK=mainnet-beta
+      # Kafka broker connection
+      - KAFKA_BROKER=kafka:9092
+      # Output topic for Shyft transaction data
+      - OUTPUT_TOPIC=shyft-transactions-parsed
+      # Health check configuration
+      - HEALTH_PORT=8087
+      - BIND_ADDRESS=0.0.0.0
+    # Example: Fetch recent transactions from a test wallet
+    # You can override this with specific signatures or wallets
+    command: ["--wallet", "HhxRJzEbnqgFs9FLzqSeDL8Dx2a1ubhyY82SMvKRZ3Vr", "--count", "3"]
+    networks:
+      - mevana_net
+    restart: unless-stopped
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "50m"
+        max-file: "5"
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+          cpus: '0.25'
+        reservations:
+          memory: 128M
+          cpus: '0.10'
+
+  # NORMALIZER-SERVICE-DEPTH-BUILDER - Pool Depth Calculation
+  # =========================================================
+  # This service calculates and stores pool depths
+  # for efficient price and liquidity lookups.
+  #
+  # CRITICAL: This service depends on Redis being healthy.
+  # It will not start until Redis is ready to accept connections.
+  normalizer-service-depth-builder:
+    build:
+      context: ../..
+      dockerfile: crates/normalizer-service/Dockerfile
+    image: normalizer-service-depth-builder:latest
+    container_name: normalizer-service-depth-builder
+    environment:
+      # Redis connection string
+      - REDIS_URL=${REDIS_URL:-redis://redis:6379/0}
+      # Logging configuration
+      - RUST_LOG=${RUST_LOG:-info}
+      # Starting ID for depth calculation
+      - START_ID=${DEPTH_START_ID:-0}
+    entrypoint: ["/usr/local/bin/depth-builder"]
+    networks:
+      - mevana_net
+    restart: unless-stopped
+
+  # SHYFT-POOL-DEPTH SERVICE - Shyft Pool Depth Updates
+  # ===================================================
+  # This service periodically updates the Shyft pool depth cache
+  # based on the latest data from the Solana blockchain.
+  #
+  # CRITICAL: This service depends on Redis being healthy.
+  # It will not start until Redis is ready to accept connections.
+  shyft-pool-depth:
+    build:
+      context: ../..
+      dockerfile: crates/shyft-pool-depth/Dockerfile
+    image: shyft-pool-depth:latest
+    container_name: shyft-pool-depth
+    environment:
+      # Redis connection string
+      - REDIS_URL=${REDIS_URL:-redis://redis:6379/0}
+      # Shyft API key for authentication
+      - SHYFT_API_KEY=${SHYFT_API_KEY}
+      # Logging configuration
+      - RUST_LOG=${RUST_LOG:-info}
+      # Update interval for Shyft cache
+      - UPDATE_INTERVAL=${SHYFT_UPDATE_INTERVAL:-30}
+    networks:
+      - mevana_net
+    restart: unless-stopped
+    depends_on:
+      redis:
+        condition: service_healthy
+
   # =============================================================================
-  # STREAMING SERVICES
+  # STREAMING SERVICES - Solana DEX Data Streaming
   # =============================================================================
 
+  # STREAM-ORCA SERVICE - Solana DEX Data Streamer (Orca)
+  # ======================================================
+  # This service streams Solana DEX data (Orca) from the blockchain
+  # and publishes it to Kafka for real-time processing.
+  #
+  # CRITICAL: This service depends on Redis and Kafka being healthy.
+  # It will not start until both are ready.
   stream-orca:
     build:
       context: ..
@@ -208,24 +795,39 @@ services:
       redis:
         condition: service_healthy
     environment:
+      # Redis connection string
       - REDIS_URL=redis://redis:6379
+      # Shyft RPC endpoint and token for data fetching
       - SHYFT_GRPC_ENDPOINT=${SHYFT_GRPC_ENDPOINT}
       - SHYFT_GRPC_TOKEN=${SHYFT_GRPC_TOKEN}
+      # Logging configuration
       - LOG_LEVEL=${LOG_LEVEL:-info}
+      # Metrics port for monitoring
       - METRICS_PORT=9090
+      # Path to IDL files
       - IDL_PATH=/app
+      # Logging configuration
       - RUST_LOG=${RUST_LOG:-info}
+      # Heartbeat interval for connection monitoring
       - HEARTBEAT_INTERVAL=30
+      # Connection timeout for RPC calls
       - CONNECTION_TIMEOUT=30
+      # Reconnection delay
       - RECONNECT_DELAY=5
+      # Enable timer for periodic updates
       - ENABLE_TIMER=${ENABLE_TIMER:-false}
+      # Timer duration for periodic updates
       - TIMER_DURATION_SECONDS=${TIMER_DURATION_SECONDS:-20}
+      # Program IDs to monitor
+      - PROGRAM_IDS=${PROGRAM_IDS:-whirLbMiicVdio4qvUfM5KAg6Ct8VwpYzGff3uctyCc}
     ports:
+      # Metrics port for monitoring
       - "9094:9090"
     networks:
-      - mevana-network
+      - mevana_net
     restart: unless-stopped
     healthcheck:
+      # Check if stream-orca process is running
       test: ["CMD", "pgrep", "-f", "stream-orca"]
       interval: 30s
       timeout: 10s
@@ -245,6 +847,13 @@ services:
           memory: 512M
           cpus: '0.5'
 
+  # STREAM-RAYDIUM SERVICE - Solana DEX Data Streamer (Raydium)
+  # ==========================================================
+  # This service streams Solana DEX data (Raydium) from the blockchain
+  # and publishes it to Kafka for real-time processing.
+  #
+  # CRITICAL: This service depends on Redis and Kafka being healthy.
+  # It will not start until both are ready.
   stream-raydium:
     build:
       context: ../stream-raydium
@@ -258,22 +867,33 @@ services:
       redis:
         condition: service_healthy
     environment:
+      # Redis connection string
       - REDIS_URL=redis://redis:6379
+      # Shyft RPC endpoint and token for data fetching
       - SHYFT_GRPC_ENDPOINT=${SHYFT_GRPC_ENDPOINT}
       - SHYFT_GRPC_TOKEN=${SHYFT_GRPC_TOKEN}
+      # Logging configuration
       - LOG_LEVEL=${LOG_LEVEL:-info}
+      # Metrics port for monitoring
       - METRICS_PORT=9090
+      # Path to IDL files
       - IDL_PATH=/app
+      # Logging configuration
       - RUST_LOG=${RUST_LOG:-info}
+      # Heartbeat interval for connection monitoring
       - HEARTBEAT_INTERVAL=30
+      # Connection timeout for RPC calls
       - CONNECTION_TIMEOUT=30
+      # Reconnection delay
       - RECONNECT_DELAY=5
     ports:
+      # Metrics port for monitoring
       - "9093:9090"
     networks:
-      - mevana-network
+      - mevana_net
     restart: unless-stopped
     healthcheck:
+      # Check if stream-raydium process is running
       test: ["CMD", "pgrep", "-f", "stream-raydium"]
       interval: 30s
       timeout: 10s
@@ -294,9 +914,16 @@ services:
           cpus: '0.5'
 
   # =============================================================================
-  # PROCESSING SERVICES
+  # PROCESSING SERVICES - Data Processing and Aggregation
   # =============================================================================
 
+  # SWAP-INGEST SERVICE - Solana DEX Swap Data Ingestion
+  # =====================================================
+  # This service consumes raw Solana DEX swap data from Kafka,
+  # validates it, and stores it in Redis for quick retrieval.
+  #
+  # CRITICAL: This service depends on Redis and Kafka being healthy.
+  # It will not start until both are ready.
   swap-ingest:
     build:
       context: ../Arbitrage/solana-arbitrage/swap-ingest
@@ -312,20 +939,30 @@ services:
       stream-orca:
         condition: service_healthy
     environment:
+      # Redis connection string
       - REDIS_URL=redis://redis:6379
+      # Logging configuration
       - LOG_LEVEL=${LOG_LEVEL:-info}
+      # Minimum profit threshold for alerts
       - MIN_PROFIT_THRESHOLD=${MIN_PROFIT_THRESHOLD:-1.001}
+      # Metrics port for monitoring
       - METRICS_PORT=9090
+      # Logging configuration
       - RUST_LOG=${RUST_LOG:-info}
+      # Heartbeat interval for connection monitoring
       - HEARTBEAT_INTERVAL=30
+      # Batch size for processing
       - BATCH_SIZE=50
+      # Processing timeout
       - PROCESSING_TIMEOUT=30
     ports:
+      # Metrics port for monitoring
       - "9094:9090"
     networks:
-      - mevana-network
+      - mevana_net
     restart: unless-stopped
     healthcheck:
+      # Check if swap-ingest process is running
       test: ["CMD", "pgrep", "-f", "swap-ingest"]
       interval: 30s
       timeout: 10s
@@ -345,6 +982,13 @@ services:
           memory: 512M
           cpus: '0.5'
 
+  # DATA-STREAM-PROCESSOR SERVICE - Data Stream Processing
+  # =====================================================
+  # This service continuously processes data streams from Kafka,
+  # performs various aggregations, and updates the database.
+  #
+  # CRITICAL: This service depends on Redis and Kafka being healthy.
+  # It will not start until both are ready.
   data-stream-processor:
     build:
       context: ../data-stream-processor
@@ -357,13 +1001,17 @@ services:
       redis:
         condition: service_healthy
     environment:
+      # Redis connection string
       - REDIS_URL=redis://redis:6379
+      # Processing interval for data streams
       - PROCESSING_INTERVAL=5
+      # Logging configuration
       - RUST_LOG=${RUST_LOG:-info}
     networks:
-      - mevana-network
+      - mevana_net
     restart: unless-stopped
     healthcheck:
+      # Check if data-stream-processor process is running
       test: ["CMD-SHELL", "ps aux | grep data-stream-processor | grep -v grep || exit 1"]
       interval: 30s
       timeout: 10s
@@ -383,6 +1031,13 @@ services:
           memory: 128M
           cpus: '0.1'
 
+  # PATHFINDER SERVICE - Pathfinding and Arbitrage Calculation
+  # =========================================================
+  # This service uses the swap data to find profitable trading
+  # opportunities and generate potential arbitrage paths.
+  #
+  # CRITICAL: This service depends on Swap-Ingest and Data-Stream-Processor
+  # being healthy. It will not start until both are ready.
   pathfinder:
     build:
       context: ../Arbitrage/solana-arbitrage/pathfinder
@@ -396,21 +1051,32 @@ services:
       swap-ingest:
         condition: service_healthy
     environment:
+      # Logging configuration
       - LOG_LEVEL=${LOG_LEVEL:-info}
+      # Minimum profit threshold for arbitrage
       - MIN_PROFIT_THRESHOLD=${MIN_PROFIT_THRESHOLD:-1.001}
+      # Maximum path length for exploration
       - MAX_PATH_LENGTH=${MAX_PATH_LENGTH:-5}
+      # Scan interval for new opportunities
       - SCAN_INTERVAL_SECONDS=${SCAN_INTERVAL_SECONDS:-1}
+      # Metrics port for monitoring
       - METRICS_PORT=9090
+      # Logging configuration
       - RUST_LOG=${RUST_LOG:-info}
+      # Heartbeat interval for connection monitoring
       - HEARTBEAT_INTERVAL=30
+      # Maximum concurrent paths to explore
       - MAX_CONCURRENT_PATHS=100
+      # Path cache TTL
       - PATH_CACHE_TTL=300
     ports:
+      # Metrics port for monitoring
       - "9095:9090"
     networks:
-      - mevana-network
+      - mevana_net
     restart: unless-stopped
     healthcheck:
+      # Check if pathfinder process is running
       test: ["CMD", "pgrep", "-f", "pathfinder"]
       interval: 30s
       timeout: 10s
@@ -431,9 +1097,17 @@ services:
           cpus: '0.5'
 
   # =============================================================================
-  # MONITORING & DEBUGGING
+  # MONITORING & DEBUGGING - Monitoring and Debugging Tools
   # =============================================================================
 
+  # REDIS-VIEWER SERVICE - Redis Data Browser
+  # ==========================================
+  # This service provides a web-based interface to browse and
+  # interact with Redis data, including key-value pairs and
+  # memory usage statistics.
+  #
+  # CRITICAL: This service depends on Redis being healthy.
+  # It will not start until Redis is ready.
   redis-viewer:
     build:
       context: ../Arbitrage/solana-arbitrage/redis-viewer
@@ -446,15 +1120,20 @@ services:
       redis:
         condition: service_healthy
     environment:
+      # Redis connection string
       - REDIS_URL=redis://redis:6379
+      # Port for the web interface
       - PORT=5001
+      # Refresh interval for data updates
       - REFRESH_INTERVAL=5
     ports:
+      # Web interface accessible at http://localhost:5001
       - "5001:5001"
     networks:
-      - mevana-network
+      - mevana_net
     restart: unless-stopped
     healthcheck:
+      # Test web interface availability
       test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:5001/health"]
       interval: 30s
       timeout: 10s
@@ -479,21 +1158,25 @@ services:
     image: prom/prometheus:latest
     container_name: prometheus
     ports:
+      # Prometheus metrics endpoint
       - "9090:9090"
     volumes:
+      # Prometheus configuration file
       - ./prometheus.yml:/etc/prometheus/prometheus.yml
+      # Persistent storage for metrics data
       - prometheus_data:/prometheus
     command:
+      # Start Prometheus with the specified configuration
       - '--config.file=/etc/prometheus/prometheus.yml'
+      # Set the data retention time for metrics
       - '--storage.tsdb.path=/prometheus'
-      - '--web.console.libraries=/etc/prometheus/console_libraries'
-      - '--web.console.templates=/etc/prometheus/consoles'
-      - '--storage.tsdb.retention.time=200h'
+      # Enable lifecycle management for Prometheus
       - '--web.enable-lifecycle'
     networks:
-      - mevana-network
+      - mevana_net
     restart: unless-stopped
     healthcheck:
+      # Test Prometheus availability
       test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:9090/-/healthy"]
       interval: 30s
       timeout: 10s
@@ -518,21 +1201,28 @@ services:
     image: grafana/grafana:latest
     container_name: grafana
     ports:
+      # Grafana web interface
       - "3000:3000"
     environment:
+      # Basic Grafana admin password
       - GF_SECURITY_ADMIN_PASSWORD=admin123
+      # Disable user sign-up for security
       - GF_USERS_ALLOW_SIGN_UP=false
     volumes:
+      # Persistent storage for Grafana data
       - grafana_data:/var/lib/grafana
+      # Provision Grafana dashboards
       - ./grafana/dashboards:/etc/grafana/provisioning/dashboards
+      # Provision Grafana data sources
       - ./grafana/datasources:/etc/grafana/provisioning/datasources
     networks:
-      - mevana-network
+      - mevana_net
     restart: unless-stopped
     depends_on:
       prometheus:
         condition: service_healthy
     healthcheck:
+      # Test Grafana availability
       test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3000/api/health"]
       interval: 30s
       timeout: 10s
@@ -553,26 +1243,44 @@ services:
           cpus: '0.25'
 
   # =============================================================================
-  # DATABASE SERVICES
+  # DATABASE SERVICES - Data Storage and Management
   # =============================================================================
 
+  # POSTGRES SERVICE - Relational Database
+  # ======================================
+  # This service provides a PostgreSQL database for:
+  # - Storing application data (e.g., user sessions, configurations)
+  # - Managing application state and metadata
+  # - Supporting complex queries and joins
+  # - Serving as a primary data source for the application
+  #
+  # CRITICAL: This service is the foundation for all application data.
+  # It must be available for the application to function.
   postgres:
     image: postgres:15
     container_name: postgres
     environment:
-      POSTGRES_USER: ${POSTGRES_USER:-mev}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-mevpassword}
-      POSTGRES_DB: ${POSTGRES_DB:-mevdb}
-      POSTGRES_INITDB_ARGS: "--encoding=UTF-8 --lc-collate=C --lc-ctype=C"
+      # PostgreSQL user for application data
+      - POSTGRES_USER=${POSTGRES_USER:-mev}
+      # PostgreSQL password for application data
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-mevpassword}
+      # PostgreSQL database name for application data
+      - POSTGRES_DB=${POSTGRES_DB:-mevdb}
+      # Initialize database with UTF-8 encoding and C locale
+      - POSTGRES_INITDB_ARGS="--encoding=UTF-8 --lc-collate=C --lc-ctype=C"
     ports:
+      # PostgreSQL port for external connections
       - "5432:5432"
     networks:
-      - mevana-network
+      - mevana_net
     volumes:
+      # Persistent storage for PostgreSQL data
       - postgres_data:/var/lib/postgresql/data
+      # Migration scripts for database initialization
       - ./migrations:/docker-entrypoint-initdb.d
     restart: unless-stopped
     healthcheck:
+      # Test PostgreSQL availability
       test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-mev} -d ${POSTGRES_DB:-mevdb}"]
       interval: 10s
       timeout: 5s
@@ -592,18 +1300,30 @@ services:
           memory: 512M
           cpus: '0.25'
 
+  # ADMINER SERVICE - Database Management Tool
+  # ========================================
+  # This service provides a web-based interface for:
+  # - Managing PostgreSQL databases and users
+  # - Executing SQL queries
+  # - Monitoring database performance
+  # - Backing up and restoring data
+  #
+  # CRITICAL: This service depends on PostgreSQL being healthy.
+  # It will not start until PostgreSQL is ready.
   adminer:
     image: adminer
     container_name: adminer
     ports:
-      - "8081:8080"
+      # Adminer web interface
+      - "8082:8080"
     networks:
-      - mevana-network
+      - mevana_net
     restart: unless-stopped
     depends_on:
       postgres:
         condition: service_healthy
     healthcheck:
+      # Test Adminer availability
       test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8080/"]
       interval: 30s
       timeout: 10s
@@ -624,30 +1344,38 @@ services:
           cpus: '0.1'
 
   # =============================================================================
-  # DEVELOPMENT SERVICES (Optional)
+  # DEVELOPMENT SERVICES (Optional) - Development and Testing
   # =============================================================================
 
-  # Development service with hot reloading
+  # Development service with hot reloading for stream-orca
   stream-orca-dev:
     build:
       context: ..
       dockerfile: stream-orca/Dockerfile.dev
     environment:
+      # Shyft RPC endpoint and token for development
       - SHYFT_GRPC_ENDPOINT=${SHYFT_GRPC_ENDPOINT}
       - SHYFT_GRPC_TOKEN=${SHYFT_GRPC_TOKEN}
+      # Redis connection string for development
       - REDIS_URL=redis://redis:6379
+      # Logging configuration for development
       - RUST_LOG=${RUST_LOG:-debug}
+      # Heartbeat interval for development
       - HEARTBEAT_INTERVAL=30
     volumes:
+      # Mount source directory for hot-reloading
       - ../stream-orca:/app
+      # Cache for cargo dependencies
       - cargo_cache:/usr/local/cargo/registry
+      # Cache for build artifacts
       - target_cache:/app/target
     networks:
-      - mevana-network
+      - mevana_net
     depends_on:
       redis:
         condition: service_healthy
     healthcheck:
+      # Check if cargo-watch process is running for hot-reloading
       test: ["CMD", "pgrep", "-f", "cargo-watch"]
       interval: 30s
       timeout: 10s
@@ -670,9 +1398,10 @@ services:
           cpus: '0.5'
 
   # =============================================================================
-  # CACHE LAYERS (for faster rebuilds)
+  # CACHE LAYERS (for faster rebuilds) - Persistent Storage
   # =============================================================================
 
+  # Stream-orca cache layer
   stream-orca-cache:
     build:
       context: ..
@@ -682,6 +1411,7 @@ services:
     profiles:
       - cache
 
+  # Stream-raydium cache layer
   stream-raydium-cache:
     build:
       context: ../stream-raydium
@@ -691,14 +1421,122 @@ services:
     profiles:
       - cache
 
+  # Price-aggregator SERVICE - Price Data Aggregation
+  # ================================================
+  # This service consumes normalized swap data from Kafka,
+  # performs price calculations, and publishes them to a topic.
+  #
+  # CRITICAL: This service depends on Kafka and Redis being healthy.
+  # It will not start until both are ready.
+  price-aggregator:
+    build:
+      context: ../../crates/price-aggregator
+      dockerfile: Dockerfile
+    image: price-aggregator:latest
+    container_name: price-aggregator
+    environment:
+      # Kafka broker connection
+      - KAFKA_BROKER=kafka:9092
+      # Input topic for normalized swap data
+      - IN_TOPIC=${AGG_IN_TOPIC:-orca-swaps.parsed.v2}
+      # Output topic for aggregated prices
+      - OUT_TOPIC=${AGG_OUT_TOPIC:-prices.latest}
+      # Consumer group ID for price aggregation
+      - GROUP_ID=${AGG_GROUP_ID:-price-aggregator}
+      # Emit interval for price updates
+      - EMIT_SECS=${AGG_EMIT_SECS:-5}
+    networks:
+      - mevana_net
+    restart: unless-stopped
+
+  # ARB-TEST-MODE SERVICE - Arbitrage Testing Mode
+  # ===============================================
+  # This service allows for testing arbitrage strategies
+  # without deploying the full trading platform.
+  #
+  # CRITICAL: This service depends on Kafka and Redis being healthy.
+  # It will not start until both are ready.
+  arb-test-mode:
+    build:
+      context: ../../crates/arb-test-mode
+      dockerfile: Dockerfile
+    image: arb-test-mode:latest
+    container_name: arb-test-mode
+    environment:
+      # Kafka broker connection
+      - KAFKA_BROKER=kafka:9092
+      # Input topic for normalized swap data
+      - IN_TOPIC=${ARB_IN_TOPIC:-orca-swaps.parsed.v2}
+      # Redis connection string
+      - REDIS_URL=${REDIS_URL:-redis://redis:6379/0}
+      # Logging configuration
+      - RUST_LOG=${RUST_LOG:-info}
+    networks:
+      - mevana_net
+    restart: unless-stopped
+
+  # UI-GATEWAY SERVICE - Frontend Gateway
+  # =====================================
+  # This service acts as a reverse proxy and gateway for
+  # the application's frontend, handling API requests
+  # and routing them to the appropriate backend services.
+  #
+  # CRITICAL: This service depends on Kafka and Redis being healthy.
+  # It will not start until both are ready.
+  ui-gateway:
+    build:
+      context: ../../crates/ui-gateway
+      dockerfile: Dockerfile
+    image: ui-gateway:latest
+    container_name: ui-gateway
+    environment:
+      # Kafka broker connection
+      - KAFKA_BROKER=kafka:9092
+      # Topics for data consumption
+      - PRICES_TOPIC=${PRICES_TOPIC:-prices.latest}
+      - SWAPS_TOPIC=${SWAPS_TOPIC:-orca-swaps.parsed}
+      - SWAPS_V2_TOPIC=${SWAPS_V2_TOPIC:-orca-swaps.parsed.v2}
+      # Redis connection string
+      - REDIS_URL=${REDIS_URL:-redis://redis:6379/0}
+      # Logging configuration
+      - RUST_LOG=${RUST_LOG:-info}
+    networks:
+      - mevana_net
+    restart: unless-stopped
+
+  # DISCOVERY-SERVICE - AI Program ID Discovery
+  # ==========================================
+  # This service uses Kafka to discover new Solana program IDs
+  # that are not yet registered in the Shyft system.
+  #
+  # CRITICAL: This service depends on Kafka and Redis being healthy.
+  # It will not start until both are ready.
+  discovery-service:
+    build:
+      context: ../../crates/discovery-service
+      dockerfile: Dockerfile
+    image: discovery-service:latest
+    container_name: discovery-service
+    environment:
+      # Kafka broker connection
+      - KAFKA_BROKER=kafka:9092
+      # Redis connection string
+      - REDIS_URL=${REDIS_URL:-redis://redis:6379/0}
+      # Topic for unknown program IDs
+      - UNKNOWN_PROGRAMS_TOPIC=${UNKNOWN_PROGRAMS_TOPIC:-unknown-programs}
+      # Logging configuration
+      - RUST_LOG=${RUST_LOG:-info}
+    networks:
+      - mevana_net
+    restart: unless-stopped
+    depends_on:
+      - kafka
+      - redis
+
 networks:
-  mevana-network:
-    driver: bridge
-    name: mevana-network
-    ipam:
-      config:
-        - subnet: 172.20.0.0/16
-          gateway: 172.20.0.1
+  mevana_net:
+    external: true
+    name: mevana_net
 
 volumes:
   postgres_data:

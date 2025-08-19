@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # Production Environment Deployment Script
-# This script deploys the dex-stream-universal-v2 service in production mode
+# This script deploys the dex-stream-universal service in production mode
 
 set -e
 
@@ -59,7 +59,7 @@ if curl -f http://:8082/health > /dev/null 2>&1; then
     echo "✅ Production service is healthy!"
 else
     echo "❌ Production service health check failed!"
-    docker compose --profile prod logs dex_stream_universal_v2_prod
+    docker compose --profile prod logs dex_stream_universal_prod
     exit 1
 fi
 
@@ -75,7 +75,7 @@ echo "   Kafka Broker: $PROD_KAFKA_BROKER"
 echo "   Topic: ${PROD_TOPIC:-dex-transactions}"
 echo "   Security Level: ${PROD_SECURITY_LEVEL:-standard}"
 echo ""
-echo "🔍 To view logs: docker compose --profile prod logs -f dex_stream_universal_v2_prod"
+echo "🔍 To view logs: docker compose --profile prod logs -f dex_stream_universal_prod"
 echo "🛑 To stop: docker compose --profile prod down"
 echo ""
 echo "⚠️  IMPORTANT: Monitor the service closely in production!"

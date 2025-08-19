@@ -11,36 +11,77 @@ use dotenv::dotenv;
 use env_logger;
 use log::{error, info, warn};
 use rdkafka::consumer::{Consumer, StreamConsumer};
-use rdkafka::ClientConfig;
-use rdkafka::Message as _;
-use std::time::Duration;
+use rdkafka::{ClientConfig, Message as _};
 use yellowstone_grpc_proto::prelude as ypp;
 use yellowstone_grpc_proto::prost::Message as _;
+
+// NEW: Configuration structure with validation
+#[derive(Debug, Clone)]
+struct ServiceConfig {
+    broker: String,
+    in_topic: String,
+    group_id: String,
+}
+
+impl ServiceConfig {
+    fn from_env() -> Result<Self> {
+        // Load environment variables with validation
+        let broker = std::env::var("KAFKA_BROKER")
+            .map_err(|_| anyhow::anyhow!("KAFKA_BROKER environment variable is required"))?;
+
+        let in_topic = std::env::var("IN_TOPIC")
+            .unwrap_or_else(|_| "orca-swaps".to_string());
+
+        let group_id = std::env::var("GROUP_ID")
+            .unwrap_or_else(|_| "tap-orca-decode".to_string());
+
+        Ok(Self {
+            broker,
+            in_topic,
+            group_id,
+        })
+    }
+
+    fn log_config(&self) {
+        info!("=== TAP ORCA DECODE SERVICE CONFIGURATION ===");
+        info!("Kafka Broker: {}", self.broker);
+        info!("Input Topic: {}", self.in_topic);
+        info!("Group ID: {}", self.group_id);
+        info!("==========================================");
+    }
+}
 
 #[tokio::main]
 async fn main() -> Result<()> {
     dotenv().ok();
     env_logger::init();
 
-    let broker = std::env::var("KAFKA_BROKER").unwrap_or_else(|_| "localhost:29092".into());
-    let in_topic = std::env::var("IN_TOPIC").unwrap_or_else(|_| "orca-swaps".into());
-    let group_id = std::env::var("GROUP_ID").unwrap_or_else(|_| "tap-orca-decode".into());
+    // Load and validate configuration
+    let config = ServiceConfig::from_env()
+        .context("Failed to load service configuration")?;
+    
+    config.log_config();
 
-    info!("tap_orca_decode: broker={broker} topic={in_topic} group_id={group_id}");
+    info!("tap_orca_decode: Starting decode service");
 
     let consumer: StreamConsumer = ClientConfig::new()
-        .set("bootstrap.servers", &broker)
-        .set("group.id", &group_id)
+        .set("bootstrap.servers", &config.broker)
+        .set("group.id", &config.group_id)
         .set("enable.auto.commit", "false")
         .set("auto.offset.reset", "latest")
         .create()
         .context("create consumer")?;
 
-    consumer.subscribe(&[&in_topic]).context("subscribe")?;
+    if let Err(e) = consumer.subscribe(&[&config.in_topic]) {
+        error!("Failed to subscribe to topic: {}", e);
+        return Err(anyhow::anyhow!("Failed to subscribe: {}", e));
+    }
 
-    // Let’s print what decoders are registered (program_id → module)
+    info!("Successfully subscribed to topic: {}", config.in_topic);
+
+    // Let's print what decoders are registered (program_id → module)
     {
-        // the generated::registry() returns extractors (we won’t use them),
+        // the generated::registry() returns extractors (we won't use them),
         // but calling it ensures codegen is wired; we also list decoder keys:
         let mut count = 0usize;
         let pids = known_program_ids();
@@ -52,6 +93,8 @@ async fn main() -> Result<()> {
             warn!("No registered decoders! Check your idls/ + profiles/ and build.rs.");
         }
     }
+
+    info!("Starting message processing loop");
 
     loop {
         match consumer.recv().await {

@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # Test Environment Deployment Script
-# This script deploys the dex-stream-universal-v2 service in test mode
+# This script deploys the dex-stream-universal service in test mode
 
 set -e
 
@@ -44,7 +44,7 @@ if curl -f http://:8081/health > /dev/null 2>&1; then
     echo "✅ Test service is healthy!"
 else
     echo "❌ Test service health check failed!"
-    docker compose --profile test logs dex_stream_universal_v2_test
+    docker compose --profile test logs dex_stream_universal_test
     exit 1
 fi
 
@@ -56,5 +56,5 @@ echo "   Metrics: http://:8081/metrics"
 echo "   Kafka Broker: $TEST_KAFKA_BROKER"
 echo "   Topic: ${TEST_TOPIC:-dex-transactions}"
 echo ""
-echo "🔍 To view logs: docker compose --profile test logs -f dex_stream_universal_v2_test"
+echo "🔍 To view logs: docker compose --profile test logs -f dex_stream_universal_test"
 echo "🛑 To stop: docker compose --profile test down"

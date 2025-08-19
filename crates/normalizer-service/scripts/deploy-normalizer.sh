@@ -16,15 +16,15 @@ else
     echo "⚠️  No env.dev file found, using system defaults"
 fi
 
-# Check if mevana-network exists
+# Check if mevana_net exists
 echo "🔍 Checking Docker network..."
-if ! docker network ls | grep -q "mevana-network"; then
-    echo "❌ mevana-network not found. Please create it first:"
-    echo "   docker network create mevana-network"
+if ! docker network ls | grep -q "mevana_net"; then
+    echo "❌ mevana_net not found. Please create it first:"
+    echo "   docker network create mevana_net"
     exit 1
 fi
 
-echo "✅ mevana-network found"
+echo "✅ mevana_net found"
 
 # Build and deploy the service
 echo "🔨 Building and deploying normalizer service..."
@@ -57,7 +57,7 @@ echo "🎉 Normalizer Service deployed successfully!"
 echo "📍 Health endpoint: http://localhost:${HEALTH_PORT:-8085}/health"
 echo "📊 Metrics endpoint: http://localhost:${HEALTH_PORT:-8085}/metrics"
 echo "🐳 Container: normalizer_service_dev"
-echo "🌐 Network: mevana-network"
+echo "🌐 Network: mevana_net"
 
 # Show running containers
 echo ""
