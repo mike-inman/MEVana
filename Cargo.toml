@@ -18,6 +18,8 @@ members = [
     "crates/shyft-pool-depth",
     "crates/shyft-validator",
     "crates/shyft-transaction-fetcher",
+    "crates/shyft-raw-price-feed",
+    "crates/token-registry-service",
     "tests",
 #    "crates/geyser-producer",
 #    "crates/dex-data-parser",

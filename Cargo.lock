@@ -4417,6 +4417,25 @@ dependencies = [
 ]
 
 [[package]]
+name = "shyft-raw-price-feed"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "chrono",
+ "clap",
+ "dotenv",
+ "env_logger 0.11.8",
+ "futures-util",
+ "log",
+ "lru",
+ "rdkafka 0.34.0",
+ "reqwest 0.12.23",
+ "serde",
+ "serde_json",
+ "tokio",
+]
+
+[[package]]
 name = "shyft-transaction-fetcher"
 version = "0.1.0"
 dependencies = [
@@ -6206,6 +6225,24 @@ name = "tinyvec_macros"
 version = "0.1.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1f3ccbac311fea05f86f61904b462b55fb3df8837a366dfc601a0161d0532f20"
+
+[[package]]
+name = "token-registry-service"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "axum 0.7.9",
+ "base64 0.22.1",
+ "chrono",
+ "dotenv",
+ "env_logger 0.11.8",
+ "log",
+ "redis",
+ "reqwest 0.12.23",
+ "serde",
+ "serde_json",
+ "tokio",
+]
 
 [[package]]
 name = "tokio"

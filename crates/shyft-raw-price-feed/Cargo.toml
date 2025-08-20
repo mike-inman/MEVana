@@ -1,0 +1,20 @@
+[package]
+name = "shyft-raw-price-feed"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+anyhow = { workspace = true }
+log = { workspace = true }
+env_logger = { workspace = true }
+tokio = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+rdkafka = { version = "0.34", features = ["cmake-build"] }
+clap = { workspace = true }
+chrono = { workspace = true }
+dotenv = { workspace = true }
+futures-util = { workspace = true }
+reqwest = { workspace = true }
+lru = { workspace = true }
+
