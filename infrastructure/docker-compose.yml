@@ -1584,6 +1584,40 @@ services:
           memory: 256M
           cpus: '0.25'
 
+  # SHYFT-RAW-PRICE-FEED - Live price feed from Shyft RAW transactions
+  # ================================================================
+  # Consumes only live RAW transaction data and emits normalized price updates
+  shyft-raw-price-feed:
+    build:
+      context: ..
+      dockerfile: crates/shyft-raw-price-feed/Dockerfile
+    container_name: shyft-raw-price-feed
+    depends_on:
+      kafka:
+        condition: service_healthy
+    environment:
+      - RUST_LOG=info
+      - KAFKA_BROKER=kafka:9092
+      - INPUT_TOPIC=shyft-full-transactions-raw
+      - OUTPUT_TOPIC=prices.latest.raw
+      - GROUP_ID=shyft-raw-price-feed
+    networks:
+      - mevana_net
+    restart: unless-stopped
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "50m"
+        max-file: "5"
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+          cpus: '0.25'
+        reservations:
+          memory: 128M
+          cpus: '0.10'
+
 networks:
   mevana_net:
     external: true
