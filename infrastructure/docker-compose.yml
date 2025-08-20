@@ -56,6 +56,10 @@ services:
       ZOOKEEPER_CLIENT_PORT: 2181
       # Heartbeat interval in milliseconds
       ZOOKEEPER_TICK_TIME: 2000
+      # Autopurge settings to limit snapshot/log growth
+      # Retain the last 3 snapshots; purge every 24 hours
+      ZOOKEEPER_AUTOPURGE_SNAP_RETAIN_COUNT: 3
+      ZOOKEEPER_AUTOPURGE_PURGE_INTERVAL: 24
       # Maximum number of client connections
       ZOOKEEPER_MAX_CLIENT_CNXNS: 60
       # Sync limit for follower synchronization
