@@ -20,7 +20,10 @@ members = [
     "crates/shyft-transaction-fetcher",
     "crates/shyft-raw-price-feed",
     "crates/token-registry-service",
+    "crates/whirlpool-core",
     "tests",
+ #   "crates/stream_and_parse_whirlpool_account_updates"
+
 #    "crates/geyser-producer",
 #    "crates/dex-data-parser",
 #    "crates/ops-tools",

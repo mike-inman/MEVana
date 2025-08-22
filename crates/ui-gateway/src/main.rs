@@ -75,9 +75,9 @@ async fn main() -> Result<()> {
         .route("/healthz", get(|| async { "ok" }))
         .with_state(Arc::new(state));
 
-    let addr = "0.0.0.0:8081";
-    let listener = TcpListener::bind(addr).await?;
-    info!("ui-gateway listening on {addr}");
+    let bind_addr = std::env::var("BIND_ADDRESS").unwrap_or_else(|_| "0.0.0.0:8081".to_string());
+    let listener = TcpListener::bind(&bind_addr).await?;
+    info!("ui-gateway listening on {bind_addr}");
     info!("consuming topic={}", prices_topic);
     info!("consuming topic={}", swaps_topic);
     info!("consuming topic={}", swaps_v2_topic);
