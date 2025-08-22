@@ -44,6 +44,8 @@ cargo run -p normalizer-service
 
 **🏗️ [Architecture](docs/architecture/)** - System design and components
 
+**⚡ [Arbitrage Strategy & Architecture (AI-friendly)](docs/AI_ARBITRAGE_STRATEGY_2025-08-21.md)** - Hot-path rules, Edge model, coherency, scaling
+
 **👨‍💻 [Development](docs/development/)** - Setup and development guides
 
 **🚀 [Deployment](docs/deployment/)** - Infrastructure and deployment
