@@ -8,6 +8,7 @@ Welcome to the MEVana Solana AI Trading Platform documentation.
 - **[Architecture Overview](ARCHITECTURE_OVERVIEW.md)** - Comprehensive platform architecture
 - **[Crate Inventory](CRATE_INVENTORY.md)** - Complete crate status and dependencies
 - **[UI Crates Analysis](UI_CRATES_ANALYSIS.md)** - Detailed analysis of UI components
+- **[Arbitrage Strategy & Architecture (AI-friendly)](AI_ARBITRAGE_STRATEGY_2025-08-21.md)** - Hot-path rules, Edge model, coherency, and scaling plan
 
 ### 🚀 Getting Started
 - **[Development Guide](development/getting-started.md)** - Setup and development workflow

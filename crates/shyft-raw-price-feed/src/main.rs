@@ -1,4 +1,5 @@
 use anyhow::{Context, Result};
+use chrono::TimeZone;
 use chrono::Utc;
 use futures_util::TryStreamExt;
 use log::{error, info, warn};
@@ -275,11 +276,17 @@ async fn process_message(
                     || m == "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v"
             };
 
-            let ts = result
-                .get("timestamp")
-                .and_then(|s| s.as_str())
-                .unwrap_or("")
-                .to_string();
+            // Prefer blockTime from Shyft RAW for stable tx_time; fall back to empty
+            let block_time_opt = result.get("blockTime").and_then(|s| s.as_i64());
+            let ts = match block_time_opt {
+                Some(bt) => Utc
+                    .timestamp_opt(bt, 0)
+                    .single()
+                    .map(|dt| dt.to_rfc3339())
+                    .unwrap_or_default(),
+                None => String::new(),
+            };
+            let slot_val = result.get("slot").and_then(|n| n.as_u64()).unwrap_or(0);
             let signature = v
                 .get("transaction_signature")
                 .and_then(|s| s.as_str())
@@ -304,6 +311,7 @@ async fn process_message(
                         amount_out,
                         pool,
                         &ts,
+                        slot_val,
                         signature,
                     )
                     .await?;
@@ -325,6 +333,7 @@ async fn process_message(
                         amount_out,
                         pool,
                         &ts,
+                        slot_val,
                         signature,
                     )
                     .await?;
@@ -346,6 +355,7 @@ async fn process_message(
                         amount_out,
                         pool,
                         &ts,
+                        slot_val,
                         signature,
                     )
                     .await?;
@@ -365,6 +375,7 @@ async fn process_message(
                         amount_out,
                         pool,
                         &ts,
+                        slot_val,
                         signature,
                     )
                     .await?;
@@ -391,6 +402,7 @@ async fn publish_price(
     amount_out: f64,
     pool: &str,
     ts_str: &str,
+    slot: u64,
     signature: &str,
 ) -> Result<()> {
     // compute price_usd if quoted in USDC/USDT
@@ -407,6 +419,7 @@ async fn publish_price(
         "source": "shyft_raw",
         "timestamp": now,
         "tx_time": ts_str,
+        "slot": slot,
         "signature": signature,
         "pair": format!("{}/{}", base_symbol, quote_symbol),
         "base_mint": base_mint,
