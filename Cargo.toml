@@ -25,7 +25,7 @@ members = [
     "crates/edge-assembler",
     "crates/searcher",
     "crates/executor",
-    "tests",
+    "tests", "executor-service", "crates/dex-registry",
  #   "crates/stream_and_parse_whirlpool_account_updates"
 
 #    "crates/geyser-producer",

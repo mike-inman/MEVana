@@ -1,72 +1,169 @@
-### MEVana Network Port Registry
+# Network Port Registry
+## MEVana Services Port Allocation
 
-Last updated: 2025-08-20 03:36 UTC
+**Updated**: August 25, 2025  
+**Purpose**: Track network addresses and ports to prevent conflicts
 
-This document tracks bind addresses and ports for all services to prevent conflicts across local dev, Docker, and production. Update this file whenever a port or bind address changes.
+## 🌐 **PORT ALLOCATION STRATEGY**
 
-#### Port Allocation Policy
-- 8084 is RESERVED for dex-stream-universal (primary data origin). Do not assign this port to any other service.
-- Reserve one health/HTTP port per service. Avoid reusing ports across services on the same host.
-- Always set network via env/config files; do not hardcode.
-- Use 8088+ for temporary local experiments to avoid collisions with reserved ports.
-- Check availability before starting: `lsof -nP -iTCP:<port> -sTCP:LISTEN`.
+### **Port Ranges**
+- **8080-8089**: Main application services
+- **9090-9099**: Metrics and monitoring
+- **8090-8099**: Health checks and status
 
-#### Core Services (HTTP/Health)
+## 📋 **CURRENT ALLOCATIONS**
 
-| Service | Bind address env | Default bind | Health/HTTP endpoints | Source refs | Notes |
-|---|---|---|---|---|---|
-| token-registry-service | `BIND_ADDRESS` | `0.0.0.0:8083` | `/healthz` | `crates/token-registry-service/src/main.rs` | Use 8083 for registry; avoid 8084 to prevent conflicts. |
-| dex-stream-universal | `BIND_ADDRESS`, `HEALTH_PORT` | `0.0.0.0:8084` | `/health`, `/metrics` | `crates/dex-stream-universal/src/main.rs`, `env.*` | Standardized on 8084. |
-| normalizer-service | `BIND_ADDRESS`, `HEALTH_PORT` | `0.0.0.0:8085` | `/health`, `/metrics` | `crates/normalizer-service/Dockerfile`, `network-config.yml` | Default 8085. |
-| shyft-validator | `BIND_ADDRESS`, `HEALTH_PORT` | `0.0.0.0:8086` | `/health`, `/metrics` | `crates/shyft-validator/README.md`, `network-config.yml` | Default 8086. |
-| shyft-pool-depth | `BIND_ADDRESS`, `HEALTH_PORT` | `0.0.0.0:8087` | `/health`, `/metrics` | `crates/shyft-pool-depth/network-config.yml` | Default 8087. |
-| ui-gateway | `BIND_ADDRESS` | `0.0.0.0:8081` | `/healthz` | `crates/ui-gateway/src/main.rs` | Configurable via env; default 8081. |
+| Service | Port | Type | Purpose | Status | Notes |
+|---------|------|------|---------|--------|-------|
+| **dex-stream-universal** | 8084 | HTTP | **PRIMARY DATA ORIGIN** | 🔒 RESERVED | Core Geyser stream - DO NOT REASSIGN |
+| **token-registry-service** | 8083 | HTTP | Token metadata API | ✅ Active | Default assignment |
+| **ui-gateway** | 8082 | HTTP | WebSocket gateway | ✅ Active | UI connections |
+| **dex-registry** | 8085 | HTTP | DEX registry API | ✅ Active | New service |
+| **executor-service** | 8080 | HTTP | Arbitrage executor | ✅ Active | Isolated service |
+| **normalizer-service** | 8081 | HTTP | Data normalizer | ✅ Active | Processing pipeline |
+| **shyft-pool-depth** | 8086 | HTTP | Pool depth service | ✅ Active | Shyft integration |
+| **shyft-validator** | 8087 | HTTP | Transaction validator | ✅ Active | Validation pipeline |
+| **price-aggregator** | 8088 | HTTP | Price aggregation | ✅ Active | Price feeds |
+| **jupiter-integration** | 8089 | HTTP | Jupiter API client | ✅ Active | Signal generation |
 
-#### External Services / Dependencies
+### **Metrics Ports (Prometheus)**
+| Service | Port | Purpose | Status |
+|---------|------|---------|---------|
+| **dex-stream-universal** | 9084 | Geyser metrics | ✅ Active |
+| **dex-registry** | 9091 | Registry metrics | ✅ Active |
+| **executor-service** | 9090 | Executor metrics | ✅ Active |
+| **normalizer-service** | 9081 | Normalizer metrics | ✅ Active |
+| **jupiter-integration** | 9089 | Jupiter metrics | ✅ Active |
 
-- Redis: `6379` (host → container mapping typically `6379:6379`)
-- Kafka: `9092` (internal), host listener `29092`
-- Zookeeper: `2181`
-- Prometheus: `9090`
-- Grafana: `3000`
+### **Health Check Ports**
+| Service | Port | Purpose | Status |
+|---------|------|---------|---------|
+| **executor-service** | 8080 | Health endpoint | ✅ Active |
 
-References: `infrastructure/docker-compose.yml`, `crates/*/docker-compose.yml`, `crates/dex-stream-universal/env.monitoring`.
+## 🔧 **CONFIGURATION PATTERNS**
 
-#### Known Host Port Mappings (Docker)
-- Example mappings from `infrastructure/docker-compose.yml`:
-  - `8084:8084`, `8085:8085` (multiple services)
-  - `8083:8081` (host 8083 mapped to a service internal 8081)
-  - `9090:9090` (Prometheus), `3000:3000` (Grafana), `29092:29092` (Kafka HOST), `2181:2181` (ZK)
+### **Environment Variables**
+```bash
+# Main service port
+HTTP_PORT=8085
+BIND_ADDRESS=0.0.0.0:${HTTP_PORT}
 
-When running locally and in Docker simultaneously, ensure host ports (left side of mapping) do not collide with locally started binaries.
+# Metrics port  
+METRICS_PORT=9091
 
-#### Current Observations (local dev)
-- 2025-08-20 03:33 UTC:
-  - 8084: Docker is listening due to `dex-stream-universal` container (expected). No stray local processes found.
-  - 8083: No active listeners detected at this moment; previously used by token-registry-service.
-  - 8085: Docker is listening (likely normalizer-service in containers).
+# Health check port
+HEALTH_CHECK_PORT=8090
+```
 
-#### Recommended Reserved Port Map (host)
-- 8081: ui-gateway (HTTP/WS)
-- 8083: token-registry-service
-- 8084: dex-stream-universal (health/metrics) [RESERVED]
-- 8085: normalizer-service (health/metrics)
-- 8086: shyft-validator (health/metrics)
-- 8087: shyft-pool-depth (health/metrics)
-- 8088+: ad hoc local tests
+### **Service Discovery**
+```bash
+# Registry lookups
+DEX_REGISTRY_URL=http://localhost:8085
+TOKEN_REGISTRY_URL=http://localhost:8083
+EXECUTOR_SERVICE_URL=http://localhost:8080
+```
 
-#### Update Procedure
-1. Before starting a new service, choose a reserved or free port per this registry.
-2. Set `BIND_ADDRESS`/`HEALTH_PORT` in env or config files (never in code).
-3. Verify availability: `lsof -nP -iTCP:<port> -sTCP:LISTEN`.
-4. Update this document with:
-   - Change summary
-   - Timestamp
-   - Adjusted reserved map and references
+## 🚨 **RESERVED PORTS**
 
-#### Change Log
-- 2025-08-20 03:25 UTC: Initial registry created. Noted 8084 conflict; standardized token-registry-service on 8083. Marked 8084 as RESERVED for dex-stream-universal.
-- 2025-08-20 03:36 UTC: Externalized `ui-gateway` bind to `BIND_ADDRESS`; updated registry.
-- 2025-08-20 03:33 UTC: Audited ports — 8084 in use by dex-stream-universal (Docker), no accidental local listeners; 8083 currently free.
+### **Port 8084 - CRITICAL RESERVE**
+- **Service**: `dex-stream-universal`
+- **Purpose**: Primary Geyser data stream origin
+- **Status**: 🔒 **PERMANENTLY RESERVED**
+- **Warning**: **DO NOT REASSIGN** - This is the foundation data source
 
+### **Port Conflict Resolution**
+1. Check `lsof -i :PORT` before assignment
+2. Update this document immediately upon changes
+3. Use `netstat -tulpn | grep PORT` for verification
+4. Prefer environment variable configuration
 
+## 📊 **PORT USAGE AUDIT**
+
+### **Current System Status** (August 25, 2025)
+```bash
+# Active listeners audit
+lsof -i :8080-8089  # Main service ports
+lsof -i :9080-9099  # Metrics ports
+
+# Expected services running:
+# ✅ dex-stream-universal:8084
+# ✅ token-registry-service:8083  
+# ✅ ui-gateway:8082
+# ✅ dex-registry:8085
+# ✅ executor-service:8080
+```
+
+### **Service Dependencies**
+```
+dex-stream-universal:8084 → (PRIMARY DATA SOURCE)
+    ↓
+normalizer-service:8081 → processes Geyser stream
+    ↓
+dex-registry:8085 → enriches with metadata
+    ↓
+executor-service:8080 → consumes enriched data
+```
+
+## 🔄 **DOCKER COMPOSE MAPPING**
+
+```yaml
+services:
+  dex-stream-universal:
+    ports:
+      - "8084:8084"  # RESERVED - DO NOT CHANGE
+      - "9084:9084"  # Metrics
+      
+  dex-registry:
+    ports:
+      - "8085:8085"  # HTTP API
+      - "9091:9091"  # Metrics
+      
+  executor-service:
+    ports:
+      - "8080:8080"  # HTTP API
+      - "9090:9090"  # Metrics
+```
+
+## 🔧 **TROUBLESHOOTING**
+
+### **Port Conflict Detection**
+```bash
+# Check if port is in use
+lsof -i :8085
+
+# Kill process using port (if safe)
+sudo kill -9 $(lsof -t -i:8085)
+
+# Find available ports in range
+for port in {8080..8089}; do
+  if ! lsof -i :$port > /dev/null 2>&1; then
+    echo "Port $port is available"
+  fi
+done
+```
+
+### **Service Health Checks**
+```bash
+# Test service connectivity
+curl -f http://localhost:8085/api/v1/status  # dex-registry
+curl -f http://localhost:8083/tokens          # token-registry
+curl -f http://localhost:8084/health          # dex-stream-universal
+```
+
+## 📈 **FUTURE EXPANSION**
+
+### **Reserved for Growth**
+- **8090-8099**: Additional services
+- **9092-9099**: Additional metrics endpoints
+- **7000-7999**: Development/testing services
+
+### **External Integrations**
+- **6379**: Redis (standard)
+- **29092**: Kafka (standard)
+- **5432**: PostgreSQL (if upgraded from SQLite)
+
+---
+
+**🚨 CRITICAL REMINDER**: Port 8084 is the **PRIMARY DATA ORIGIN** for the entire MEVana system. Any disruption to this service affects all downstream arbitrage operations.
+
+**📝 UPDATE POLICY**: Any port changes must be immediately reflected in this document with timestamp and reason for change.
