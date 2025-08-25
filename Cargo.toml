@@ -21,6 +21,10 @@ members = [
     "crates/shyft-raw-price-feed",
     "crates/token-registry-service",
     "crates/whirlpool-core",
+    "crates/jupiter-integration",
+    "crates/edge-assembler",
+    "crates/searcher",
+    "crates/executor",
     "tests",
  #   "crates/stream_and_parse_whirlpool_account_updates"
 

@@ -1,0 +1,70 @@
+syntax = "proto3";
+
+package edge;
+
+// Normalized edge representing a quotable swap opportunity
+message EdgeDelta {
+    // Identity
+    uint64 edge_id = 1;
+    uint32 venue_id = 2;  // 1=OrcaWhirlpool, 2=RaydiumCpmm, 3=MeteoraDlmm, 4=Phoenix
+    bytes pool_pubkey = 3;
+    bytes token_in = 4;
+    bytes token_out = 5;
+    uint32 direction = 6;  // 0=AtoB, 1=BtoA
+    
+    // Meta
+    uint32 decimals_in = 7;
+    uint32 decimals_out = 8;
+    uint32 fee_bps_total = 9;
+    
+    // Quote-critical state (variant based on venue_id)
+    oneof state {
+        ClmmState clmm = 10;
+        CpmmState cpmm = 11;
+        DlmmState dlmm = 12;
+        ClobState clob = 13;
+    }
+    
+    // Bookkeeping
+    uint64 slot = 14;
+    uint64 write_version = 15;
+    uint64 updated_at_ns = 16;
+    
+    // Optional derived hints
+    bytes marginal_price_q64 = 17;  // u128 as bytes
+    bytes size_to_next_boundary_in = 18;  // u128 as bytes
+    uint32 cu_estimate = 19;
+}
+
+message ClmmState {
+    bytes sqrt_price_x64 = 1;  // u128
+    bytes liquidity = 2;       // u128
+    int32 tick_current = 3;
+    int32 tick_spacing = 4;
+    bytes size_to_next_in = 5; // u128
+}
+
+message CpmmState {
+    bytes reserve_in = 1;  // u128
+    bytes reserve_out = 2; // u128
+}
+
+message DlmmState {
+    int32 active_bin = 1;
+    bytes bin_price_q64 = 2;  // u128
+    bytes depth_hint_in = 3;  // u128
+}
+
+message ClobState {
+    bytes best_bid_px_q64 = 1;  // u128
+    bytes best_bid_size = 2;    // u64 as bytes
+    bytes best_ask_px_q64 = 3;  // u128
+    bytes best_ask_size = 4;    // u64 as bytes
+}
+
+// Compact snapshot for warm start
+message EdgeSnapshot {
+    repeated EdgeDelta edges = 1;
+    uint64 timestamp_ns = 2;
+    uint64 slot = 3;
+}
