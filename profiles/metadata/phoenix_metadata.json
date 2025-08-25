@@ -1,0 +1,139 @@
+{
+  "dex_info": {
+    "name": "phoenix",
+    "display_name": "Phoenix",
+    "protocol_type": "CLOB",
+    "program_ids": ["PhoeNiXZ8ByJGLkxNfZRnkUfjvmuYqLR89jjFHGqdXY"],
+    "website": "https://phoenix.trade",
+    "documentation": "https://ellipsis-labs.gitbook.io/phoenix-dex",
+    "twitter": "@PhoenixTrade",
+    "launch_date": "2023-03-15",
+    "total_value_locked": null,
+    "market_share_percent": 3.2
+  },
+  "technical_specs": {
+    "pricing_model": "OrderBook",
+    "fee_structure": {
+      "trading_fee_bps": 0,
+      "protocol_fee_bps": 0,
+      "lp_fee_bps": 0,
+      "variable_fees": true,
+      "fee_tiers": [0, 5, 10]
+    },
+    "supported_tokens": {
+      "native_tokens": ["SOL", "USDC"],
+      "supports_spl_tokens": true,
+      "supports_nfts": false,
+      "minimum_liquidity": null
+    },
+    "transaction_finality": {
+      "average_confirmation_time_ms": 400,
+      "supports_partial_fills": true,
+      "mev_protection": true,
+      "requires_seat": false
+    }
+  },
+  "arbitrage_profile": {
+    "liquidity_depth": "High",
+    "price_impact": "Low",
+    "optimal_trade_sizes": {
+      "min_profitable_usd": 1000,
+      "max_efficient_usd": 500000,
+      "sweet_spot_usd": 50000
+    },
+    "latency_characteristics": {
+      "quote_time_ms": 5,
+      "execution_time_ms": 400,
+      "settlement_time_ms": 400
+    },
+    "arbitrage_advantages": [
+      "Deep order book liquidity",
+      "Precise price control with limit orders",
+      "No impermanent loss for liquidity providers",
+      "MEV protection via seat system",
+      "Atomic matching and settlement"
+    ],
+    "arbitrage_considerations": [
+      "More complex than AMM swaps",
+      "Order book might be sparse for some pairs",
+      "Time-based order expiration",
+      "Requires understanding of CLOB mechanics"
+    ],
+    "cross_dex_opportunities": [
+      "Phoenix vs AMM price divergence",
+      "Large size execution with better pricing than AMM slippage",
+      "Institutional arbitrage between CLOB and retail AMMs"
+    ]
+  },
+  "market_dynamics": {
+    "primary_use_cases": [
+      "Institutional trading",
+      "Large size execution",
+      "Precise price targeting",
+      "Professional market making"
+    ],
+    "target_audience": "Institution",
+    "peak_activity_hours": "14:00-22:00 UTC",
+    "dominant_pairs": ["SOL/USDC", "ETH/USDC"],
+    "seasonal_patterns": "Higher activity during market volatility",
+    "competitor_analysis": {
+      "main_competitors": ["Serum", "Mango", "OpenBook"],
+      "unique_advantages": [
+        "On-chain order book with atomic settlement",
+        "No maker fees incentivize liquidity",
+        "Built-in MEV protection",
+        "Composable with other Solana protocols"
+      ],
+      "market_position": "Challenger"
+    }
+  },
+  "integration_data": {
+    "plugin_version": "1.0.0",
+    "last_updated": "2025-01-20",
+    "instruction_coverage": {
+      "total_instructions": 16,
+      "parsed_instructions": 2,
+      "coverage_percentage": 12.5
+    },
+    "testing_status": {
+      "unit_tests": true,
+      "integration_tests": true,
+      "production_verified": false
+    },
+    "performance_metrics": {
+      "parse_success_rate": 0.98,
+      "average_parse_time_us": 150,
+      "error_rate": 0.02
+    }
+  },
+  "ai_insights": {
+    "trend_indicators": [
+      "Institutional adoption increasing",
+      "Order book depth correlates with market volatility",
+      "Seat utilization growing steadily"
+    ],
+    "anomaly_patterns": [
+      "Unusual spread widening during low liquidity hours",
+      "Large order imbalances preceding price movements"
+    ],
+    "correlation_signals": [
+      "Phoenix spreads tighten when AMM volumes increase",
+      "Arbitrage opportunities peak during high volatility periods"
+    ],
+    "strategic_recommendations": [
+      "Focus on SOL/USDC pair for highest liquidity",
+      "Monitor order book depth for optimal entry sizes",
+      "Consider seat acquisition for advanced features"
+    ],
+    "risk_factors": [
+      "Order book liquidity concentration risk",
+      "Smart contract complexity",
+      "Regulatory uncertainty for CLOB protocols"
+    ],
+    "opportunity_indicators": [
+      "Growing institutional interest in on-chain order books",
+      "MEV protection features attracting sophisticated traders",
+      "Integration opportunities with other DeFi protocols"
+    ]
+  }
+}
