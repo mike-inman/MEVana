@@ -22,6 +22,12 @@ Each DEX plugin includes a `{dex_name}_metadata.json` file with the following st
     "website": "string",
     "documentation": "string",
     "twitter": "string",
+    "logo_url": "string",
+    "logo_svg": "string|null",
+    "brand_colors": {
+      "primary": "#hex",
+      "secondary": "#hex|null"
+    },
     "launch_date": "YYYY-MM-DD",
     "total_value_locked": "number|null",
     "market_share_percent": "number|null"
@@ -170,3 +176,38 @@ Metadata files should be updated:
 - **Major releases**: Plugin versions and testing status
 
 This system creates a comprehensive knowledge base that grows smarter over time while providing immediate operational value.
+
+## Token Registry Enhancement
+
+Each token in the registry should include:
+
+```json
+{
+  "token_info": {
+    "mint_address": "string",
+    "symbol": "string", 
+    "name": "string",
+    "decimals": "number",
+    "logo_url": "string",
+    "logo_svg": "string|null",
+    "website": "string|null",
+    "twitter": "string|null",
+    "coingecko_id": "string|null",
+    "coinmarketcap_id": "string|null"
+  },
+  "market_data": {
+    "market_cap": "number|null",
+    "volume_24h": "number|null", 
+    "price_usd": "number|null",
+    "stability_score": "number",
+    "volatility_score": "number"
+  },
+  "metadata_sources": {
+    "logo_source": "CoinGecko|CoinMarketCap|Jupiter|Official|Custom",
+    "data_source": "string",
+    "last_updated": "timestamp"
+  }
+}
+```
+
+This enhancement provides visual polish and professional appearance for token displays in the UI.
