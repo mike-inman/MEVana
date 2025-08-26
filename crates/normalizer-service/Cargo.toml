@@ -5,6 +5,7 @@ edition = "2021"
 
 [build-dependencies]
 normalizer-codegen = { path = "../normalizer-codegen" }
+mevana-idl-registry = { path = "../mevana-idl-registry" }
 
 [dependencies]
 normalizer-runtime = { path = "../normalizer-runtime" }

@@ -1,0 +1,26 @@
+[
+  {
+    "name": "saber_stable_swap",
+    "program_id": "SSwpkEEGUMDSSx7AMXKN85Ec4NUP6Nc8LbFnqJzXKzr",
+    "anchor_repo": "https://github.com/saber-hq/stable-swap",
+    "expected_idl_names": ["stable_swap.json", "saber_stable_swap.json"]
+  },
+  {
+    "name": "lifinity_v2", 
+    "program_id": "2wT8Yq49kHgDzXuPxZSaeLaH1qbmGXtEyPy64bL7aD3c",
+    "anchor_repo": "https://github.com/Lifinity/lifinity-sdk",
+    "expected_idl_names": ["lifinity.json", "lifinity_v2.json"]
+  },
+  {
+    "name": "invariant",
+    "program_id": "HyaB3W9q6XdA5xwpU4XnSZV94htfmbmqJXZcEbRaJutt", 
+    "anchor_repo": "https://github.com/invariant-labs/protocol-a0",
+    "expected_idl_names": ["invariant.json", "protocol.json"]
+  },
+  {
+    "name": "serum_dex",
+    "program_id": "9xQeWvG816bUx9EPjHmaT23yvVM2ZWbrrpZb9PusVFin",
+    "anchor_repo": "https://github.com/project-serum/serum-dex",
+    "expected_idl_names": ["serum_dex.json", "dex.json"]
+  }
+]

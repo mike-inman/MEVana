@@ -26,8 +26,8 @@ members = [
     "crates/searcher",
     "crates/executor",
     "tests", "executor-service", "crates/dex-registry",
- #   "crates/stream_and_parse_whirlpool_account_updates"
-
+    "crates/mevana-idl-registry"
+#   "crates/stream_and_parse_whirlpool_account_updates"
 #    "crates/geyser-producer",
 #    "crates/dex-data-parser",
 #    "crates/ops-tools",
