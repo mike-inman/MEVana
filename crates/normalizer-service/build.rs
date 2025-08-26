@@ -11,6 +11,9 @@ fn write_empty_registry(out_dir: &PathBuf) {
 }
 
 fn main() {
+    // Ensure IDLs are present before compiling this crate.
+    mevana_idl_registry::sync_idls();
+    
     let out_dir = PathBuf::from(env::var("OUT_DIR").unwrap());
     let manifest_dir = PathBuf::from(env::var("CARGO_MANIFEST_DIR").unwrap());
 

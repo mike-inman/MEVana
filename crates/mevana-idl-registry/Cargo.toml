@@ -1,0 +1,19 @@
+[package]
+name = "mevana-idl-registry"
+version = "0.1.0"
+edition = "2021"
+license = "MIT"
+description = "Build-time helper to fetch/build Solana DEX IDLs into a shared workspace registry."
+repository = "https://example.com/your/repo"
+build = "build.rs"
+
+[dependencies]
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+which = "6"
+
+[dev-dependencies]
+
+[[bin]]
+name = "idl-sync"
+path = "src/bin/idl-sync.rs"
