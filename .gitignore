@@ -3,3 +3,5 @@ logs/
 tmp/
 infra/docker/.env.docker
 .env
+crates/normalizer-service/target/
+.env*

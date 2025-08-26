@@ -1,21 +1,21 @@
 //! Parser Validation Framework
-//! 
+//!
 //! Comprehensive testing system for validating parser accuracy, completeness,
 //! reliability, latency, and DEX coverage against live data sources.
 
+pub mod database;
 pub mod ground_truth;
 pub mod validation;
-pub mod database;
+pub mod streaming;
+pub mod pipeline;
 // TODO: Implement remaining modules
-// pub mod streaming;
-// pub mod pipeline;
 // pub mod dashboard;
 // pub mod reporting;
 // pub mod metrics;
 
-pub use validation::ValidationFramework;
 pub use ground_truth::GroundTruthAggregator;
-// pub use pipeline::ValidationPipeline;
+pub use validation::ValidationFramework;
+pub use pipeline::{ValidationPipeline, ValidationPipelineConfig};
 
 use anyhow::Result;
 use serde::{Deserialize, Serialize};
@@ -27,29 +27,29 @@ pub struct ValidationConfig {
     /// Shyft API configuration
     pub shyft_api_key: String,
     pub shyft_rpc_url: String,
-    
+
     /// Helius API configuration  
     pub helius_api_key: String,
     pub helius_rpc_url: String,
-    
+
     /// Solscan API configuration
     pub solscan_api_key: String,
-    
+
     /// Database configuration
     pub database_url: String,
-    
+
     /// Validation parameters
     pub validation_duration: Duration,
     pub accuracy_threshold: f64,
     pub completeness_threshold: f64,
     pub latency_threshold_ms: u64,
-    
+
     /// Target DEXs to validate
     pub target_dexes: Vec<String>,
-    
+
     /// Load testing configuration
     pub load_test_levels: Vec<u32>, // TPS levels
-    
+
     /// Dashboard configuration
     pub dashboard_host: String,
     pub dashboard_port: u16,
@@ -63,7 +63,8 @@ impl Default for ValidationConfig {
             helius_api_key: std::env::var("HELIUS_API_KEY").unwrap_or_default(),
             helius_rpc_url: "https://rpc.helius.xyz".to_string(),
             solscan_api_key: std::env::var("SOLSCAN_API_KEY").unwrap_or_default(),
-            database_url: "postgresql://postgres:password@localhost:5432/mevana_validation".to_string(),
+            database_url: "postgresql://postgres:password@localhost:5432/mevana_validation"
+                .to_string(),
             validation_duration: Duration::from_secs(3600), // 1 hour
             accuracy_threshold: 0.99,
             completeness_threshold: 0.95,
@@ -88,12 +89,12 @@ impl Default for ValidationConfig {
 /// Main entry point for the validation framework
 pub async fn run_validation_framework(config: ValidationConfig) -> Result<()> {
     tracing::info!("🧪 Starting Parser Validation Framework");
-    
+
     // Initialize database
     let db = database::ValidationDatabase::new(&config.database_url).await?;
     db.run_migrations().await?;
     tracing::info!("✅ Database initialized");
-    
+
     // Set up ground truth sources
     let ground_truth = GroundTruthAggregator::new(
         config.shyft_api_key.clone(),
@@ -101,17 +102,18 @@ pub async fn run_validation_framework(config: ValidationConfig) -> Result<()> {
         config.solscan_api_key.clone(),
     );
     tracing::info!("✅ Ground truth sources configured");
-    
+
     // Initialize validation framework
-    let framework = ValidationFramework::new(ground_truth, db);
+    let framework = ValidationFramework::new(ground_truth, db.clone());
     tracing::info!("✅ Validation framework initialized");
+
+    // Start validation pipeline
+    let pipeline_config = ValidationPipelineConfig::default();
+    let pipeline = ValidationPipeline::new(framework, db, pipeline_config);
+    tracing::info!("🚀 Starting validation pipeline");
     
-    // TODO: Implement validation pipeline
-    // let pipeline = ValidationPipeline::new(framework, config.clone());
-    // tracing::info!("🚀 Starting validation pipeline");
-    // pipeline.start().await?;
-    
-    tracing::info!("🚧 Validation framework ready (pipeline not yet implemented)");
+    pipeline.start().await?;
+
     Ok(())
 }
 

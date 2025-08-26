@@ -38,9 +38,20 @@ tracing-subscriber = "0.3"
 # CLI
 clap = { version = "4.0", features = ["derive", "env"] }
 
+# Kafka
+rdkafka = "0.36"
+tokio-stream = "0.1"
+
+# Solana transaction decoding
+yellowstone-grpc-proto = "1.14.0"
+prost = "0.12"
+bs58 = "0.5"
+
 # MEVana dependencies
 shared-core = { path = "../shared-core" }
 normalizer-service = { path = "../normalizer-service" }
+normalizer-runtime = { path = "../normalizer-runtime" }
+normalizer-generated = { path = "../normalizer-generated" }
 
 [dev-dependencies]
 criterion = "0.5"

@@ -1,5 +1,5 @@
 //! Solscan API Client for Ground Truth Data
-//! 
+//!
 //! Third validation source for consensus building.
 
 use super::RawTransactionData;
@@ -20,13 +20,13 @@ impl SolscanClient {
             api_key,
         }
     }
-    
+
     /// Get transaction details from Solscan API
     pub async fn get_transaction_details(&self, _tx_signature: &str) -> Result<RawTransactionData> {
         // TODO: Implement Solscan API calls
         anyhow::bail!("Solscan client not yet implemented");
     }
-    
+
     /// Test connection to Solscan API
     pub async fn test_connection(&self) -> Result<()> {
         // TODO: Implement connectivity test

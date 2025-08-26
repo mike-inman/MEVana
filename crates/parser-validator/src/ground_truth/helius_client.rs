@@ -1,5 +1,5 @@
 //! Helius API Client for Ground Truth Data
-//! 
+//!
 //! Secondary validation source for cross-checking transaction data.
 
 use super::RawTransactionData;
@@ -20,13 +20,13 @@ impl HeliusClient {
             api_key,
         }
     }
-    
+
     /// Get transaction details from Helius API
     pub async fn get_transaction_details(&self, _tx_signature: &str) -> Result<RawTransactionData> {
         // TODO: Implement Helius API calls
         anyhow::bail!("Helius client not yet implemented");
     }
-    
+
     /// Test connection to Helius API
     pub async fn test_connection(&self) -> Result<()> {
         // TODO: Implement connectivity test
