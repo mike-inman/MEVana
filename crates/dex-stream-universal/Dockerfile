@@ -13,10 +13,13 @@ RUN apt-get update && apt-get install -y \
 WORKDIR /usr/src/app
 
 # Copy the entire workspace
-COPY . .
+    COPY . .
 
-# Build the application
-RUN cargo build --release --bin dex-stream-universal
+    # Set DATABASE_URL for sqlx macros (offline mode)
+    ENV DATABASE_URL=postgresql://user:pass@localhost/db
+
+    # Build the application
+    RUN cargo build --release --bin dex-stream-universal
 
 # Production stage
 FROM debian:bookworm-slim

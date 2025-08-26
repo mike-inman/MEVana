@@ -13,6 +13,7 @@ use rdkafka::{
 };
 use reqwest;
 use serde_json::json;
+use sqlx::{PgPool, Row};
 use std::collections::HashSet;
 use std::sync::Arc;
 use std::time::Duration;
@@ -20,6 +21,7 @@ use tokio::net::TcpListener;
 use tokio::sync::RwLock;
 use tonic::transport::channel::ClientTlsConfig;
 use tonic::transport::Server;
+use uuid::Uuid;
 use yellowstone_grpc_client::GeyserGrpcClient;
 use yellowstone_grpc_proto::{
     geyser::SubscribeRequestFilterTransactions,
@@ -122,11 +124,16 @@ pub struct Args {
         help = "Geyser authentication token (from X_TOKEN env var or --x-token)"
     )]
     x_token: Option<String>,
-    #[arg(long, help = "Comma-separated list of program IDs to filter by")]
+    #[arg(
+        long,
+        env = "PROGRAM_IDS",
+        help = "Comma-separated list of program IDs to filter by (from PROGRAM_IDS env var or --program-ids)"
+    )]
     program_ids: Option<String>,
     #[arg(
         long,
-        help = "DEX filtering mode: ON (filtered) or OFF (wide open)",
+        env = "DEX_FILTERING",
+        help = "DEX filtering mode: ON (filtered) or OFF (wide open) (from DEX_FILTERING env var or --dex-filtering)",
         default_value = "ON"
     )]
     pub dex_filtering: String,
@@ -144,6 +151,12 @@ pub struct Args {
         help = "Bind address for HTTP server (from BIND_ADDRESS env var or --bind-address)"
     )]
     bind_address: String,
+    #[arg(
+        long,
+        env = "DATABASE_URL",
+        help = "PostgreSQL database URL for raw transaction logging (from DATABASE_URL env var or --database-url)"
+    )]
+    database_url: Option<String>,
 }
 
 // Prometheus metrics
@@ -220,7 +233,7 @@ pub fn analyze_transaction_for_discovery(
     // Extract program IDs from transaction instructions
     if let Some(transaction_info) = &update.transaction {
         if let Some(transaction) = &transaction_info.transaction {
-            if let Some(message) = &transaction.message {
+            if let Some(message) = transaction.message.as_ref() {
                 for instruction in &message.instructions {
                     let program_id_index = instruction.program_id_index as usize;
                     if let Some(program_id) = message.account_keys.get(program_id_index) {
@@ -228,21 +241,6 @@ pub fn analyze_transaction_for_discovery(
                         if !known_program_ids.contains(&program_id_str) {
                             unknown_programs.push(program_id_str);
                         }
-                    }
-                }
-            }
-        }
-    }
-
-    // Extract program IDs from account keys
-    if let Some(transaction_info) = &update.transaction {
-        if let Some(transaction) = &transaction_info.transaction {
-            if let Some(message) = &transaction.message {
-                for account_key in &message.account_keys {
-                    let account_key_str = bs58::encode(account_key).into_string();
-                    if !known_program_ids.contains(&account_key_str) {
-                        // This might be a program ID, add it for discovery
-                        unknown_programs.push(account_key_str);
                     }
                 }
             }
@@ -436,6 +434,7 @@ struct ServiceConfig {
     dex_filtering: String,
     health_port: u16,
     bind_address: String,
+    database_url: String,
 }
 
 impl ServiceConfig {
@@ -480,6 +479,11 @@ impl ServiceConfig {
             return Err(missing_configs);
         }
 
+        let database_url = args.database_url.clone().unwrap_or_else(|| {
+            // Default to port 5433 (avoiding local PostgreSQL conflict)
+            "postgresql://mev:mevpassword@localhost:5433/mevdb".to_string()
+        });
+
         let config = Self {
             broker,
             topic,
@@ -489,6 +493,7 @@ impl ServiceConfig {
             dex_filtering: args.dex_filtering.clone(),
             health_port: args.health_port,
             bind_address: args.bind_address.clone(),
+            database_url,
         };
 
         // Log missing configurations
@@ -594,6 +599,161 @@ async fn metrics_handler(State(_state): State<AppState>) -> String {
     let encoder = prometheus::TextEncoder::new();
     encoder.encode(&REGISTRY.gather(), &mut buffer).unwrap();
     String::from_utf8(buffer).unwrap()
+}
+
+/// Log EVERY transaction to PostgreSQL with extracted program IDs
+async fn log_every_transaction_to_db(
+    pool: &PgPool,
+    update: &yellowstone_grpc_proto::prelude::SubscribeUpdateTransaction,
+) -> Result<()> {
+    if let Some(transaction) = &update.transaction {
+        if !transaction.signature.is_empty() {
+            let signature_str = bs58::encode(&transaction.signature).into_string();
+            let slot = update.slot as i64;
+            let block_time = chrono::DateTime::from_timestamp(
+                transaction
+                    .meta
+                    .as_ref()
+                    .map(|_| update.slot as i64) // Use slot as timestamp
+                    .unwrap_or(0),
+                0,
+            )
+            .unwrap_or_else(chrono::Utc::now);
+
+            // Extract program IDs from transaction instructions
+            let mut extracted_program_ids = Vec::new();
+            if let Some(inner_transaction) = transaction.transaction.as_ref() {
+                if let Some(message) = inner_transaction.message.as_ref() {
+                    let account_keys: Vec<String> = message
+                        .account_keys
+                        .iter()
+                        .map(|key| bs58::encode(key).into_string())
+                        .collect();
+
+                    for instruction in &message.instructions {
+                        if let Some(program_id) =
+                            account_keys.get(instruction.program_id_index as usize)
+                        {
+                            extracted_program_ids.push(program_id.clone());
+                        }
+                    }
+                }
+            }
+
+            // Create raw message JSON
+            let mut buf = Vec::new();
+            update
+                .encode(&mut buf)
+                .map_err(|e| anyhow::anyhow!("Encode error: {}", e))?;
+            let raw_message = serde_json::json!({
+                "slot": update.slot,
+                "signature": signature_str,
+                "encoded_data": bs58::encode(&buf).into_string(),
+                "extracted_program_ids": extracted_program_ids,
+                "timestamp": chrono::Utc::now().to_rfc3339()
+            });
+
+                                    // Log each program ID as a separate row
+                        for program_id in &extracted_program_ids {
+                            let dex_name = match program_id.as_str() {
+                                "JUP4Fb2cqiRUcaTHdrPC8h2gNsA2ETXiPDD33WcGuJB" => "Jupiter_V6",
+                                "JUP6LkbZbafMNUBhDSDueet2ApgUKPKodDhqWFLVvZpg" => "Jupiter_Swap",
+                                "jupoNjAxXgZ4rjzxzPMP4oxduvQsQtZzyknqvzYNrNu" => "Jupiter_Limit_Order",
+                                "whirLbMiicVdio4qvUfM5KAg6Ct8VwpYzGff3uctyCc" => "Whirlpool",
+                                "675kPXNDfGNzVz7eY9Me1Lw2feN9WbVraN5D1CR1KwJ" => "Raydium_AMM_V4",
+                                "EhhTKFNriT2CgK5K8a7Z8aXjLw1f7og2c2x2D52f2222" => "Phoenix",
+                                "27G8MtK7VtTcCHkpASjSDdkWWYfoqT6ggEuKidVJidD4" => "Meteora",
+                                _ => "Unknown",
+                            };
+
+                sqlx::query(
+                    r#"
+                    INSERT INTO raw_dex_transactions (
+                        block_time, slot_number, transaction_signature, program_id, dex_name, raw_message
+                    ) VALUES ($1, $2, $3, $4, $5, $6)
+                    ON CONFLICT (transaction_signature) DO NOTHING
+                    "#,
+                )
+                .bind(block_time)
+                .bind(slot)
+                .bind(&signature_str)
+                .bind(program_id)
+                .bind(dex_name)
+                .bind(&raw_message)
+                .execute(pool)
+                .await
+                .map_err(|e| anyhow::anyhow!("Database insert error: {}", e))?;
+            }
+        }
+    }
+    Ok(())
+}
+
+/// Log raw transaction data to PostgreSQL
+async fn log_transaction_to_db(
+    pool: &PgPool,
+    update: &yellowstone_grpc_proto::prelude::SubscribeUpdateTransaction,
+    program_ids: &[String],
+) -> Result<()> {
+    if let Some(transaction) = &update.transaction {
+        if !transaction.signature.is_empty() {
+            let signature_str = bs58::encode(&transaction.signature).into_string();
+            let slot = update.slot as i64;
+            let block_time = chrono::DateTime::from_timestamp(
+                transaction
+                    .meta
+                    .as_ref()
+                    .map(|_| update.slot as i64) // Use slot as timestamp
+                    .unwrap_or(0),
+                0,
+            )
+            .unwrap_or_else(chrono::Utc::now);
+
+            // Create raw message JSON
+            let mut buf = Vec::new();
+            update
+                .encode(&mut buf)
+                .map_err(|e| anyhow::anyhow!("Encode error: {}", e))?;
+            let raw_message = serde_json::json!({
+                "slot": update.slot,
+                "signature": signature_str,
+                "encoded_data": bs58::encode(&buf).into_string(),
+                "program_ids": program_ids,
+                "timestamp": chrono::Utc::now().to_rfc3339()
+            });
+
+            // Log each program ID as a separate row
+            for program_id in program_ids {
+                let dex_name = match program_id.as_str() {
+                    "JUP4Fb2cqiRUcaTHdrPC8h2gNsA2ETXiPDD33WcGuJB" => "Jupiter",
+                    "whirLbMiicVdio4qvUfM5KAg6Ct8VwpYzGff3uctyCc" => "Whirlpool",
+                    "675kPXNDfGNzVz7eY9Me1Lw2feN9WbVraN5D1CR1KwJ" => "Raydium_AMM_V4",
+                    "EhhTKFNriT2CgK5K8a7Z8aXjLw1f7og2c2x2D52f2222" => "Phoenix",
+                    "27G8MtK7VtTcCHkpASjSDdkWWYfoqT6ggEuKidVJidD4" => "Meteora",
+                    _ => "Unknown",
+                };
+
+                sqlx::query(
+                    r#"
+                    INSERT INTO raw_dex_transactions (
+                        block_time, slot_number, transaction_signature, program_id, dex_name, raw_message
+                    ) VALUES ($1, $2, $3, $4, $5, $6)
+                    ON CONFLICT (transaction_signature) DO NOTHING
+                    "#,
+                )
+                .bind(block_time)
+                .bind(slot)
+                .bind(&signature_str)
+                .bind(program_id)
+                .bind(dex_name)
+                .bind(&raw_message)
+                .execute(pool)
+                .await
+                .map_err(|e| anyhow::anyhow!("Database insert error: {}", e))?;
+            }
+        }
+    }
+    Ok(())
 }
 
 #[tokio::main]
@@ -708,6 +868,13 @@ async fn main() -> Result<()> {
         None
     };
 
+    // Create PostgreSQL connection pool for raw transaction logging
+    info!("🗃️ Connecting to PostgreSQL: {}", config.database_url);
+    let db_pool = sqlx::PgPool::connect(&config.database_url)
+        .await
+        .map_err(|e| anyhow::anyhow!("Failed to connect to PostgreSQL: {}", e))?;
+    info!("✅ PostgreSQL connected successfully");
+
     // Create a set of known program IDs for fast lookup
     let known_program_ids: HashSet<String> = config.program_ids.iter().cloned().collect();
 
@@ -770,6 +937,7 @@ async fn main() -> Result<()> {
             let discovery_producer = discovery_producer.clone();
             let config = config.clone();
             let known_program_ids = known_program_ids.clone();
+            let db_pool = db_pool.clone();
 
             async move {
                 let mut client = GeyserGrpcClient::build_from_shared(config.endpoint.clone())
@@ -822,6 +990,12 @@ async fn main() -> Result<()> {
                                         Duration::from_secs(10),
                                     )
                                     .await;
+
+                                // Log raw transaction to PostgreSQL - EVERY TRANSACTION
+                                if let Err(e) = log_every_transaction_to_db(&db_pool, &update).await
+                                {
+                                    warn!("Failed to log transaction to database: {}", e);
+                                }
 
                                 // Discovery mode: analyze transaction for unknown program IDs
                                 if discovery_mode {

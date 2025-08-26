@@ -361,6 +361,8 @@ services:
     depends_on:
       kafka:
         condition: service_healthy
+      postgres:
+        condition: service_healthy
     environment:
       # Core service configuration
       - RUST_LOG=info
@@ -370,8 +372,10 @@ services:
       - X_TOKEN=${X_TOKEN:-efff2d23-97ae-4c5f-8b8b-9a6265001189}
       - HEALTH_PORT=8084
       - BIND_ADDRESS=0.0.0.0
-      - DEX_FILTERING=OFF
-      - PROGRAM_IDS=whirLbMiicVdio4qvUfM5KAg6Ct8VwpYzGff3uctyCc
+      - DEX_FILTERING=ON
+      - PROGRAM_IDS=JUP4Fb2cqiRUcaTHdrPC8h2gNsA2ETXiPDD33WcGuJB,jupoNjAxXgZ4rjzxzPMP4oxduvQsQtZzyknqvzYNrNu
+      # PostgreSQL connection for raw transaction logging
+      - DATABASE_URL=postgresql://mev:mevpassword@postgres:5432/mevdb
     ports:
       - "8084:8084"
     networks:
@@ -1271,10 +1275,10 @@ services:
       # PostgreSQL database name for application data
       - POSTGRES_DB=${POSTGRES_DB:-mevdb}
       # Initialize database with UTF-8 encoding and C locale
-      - POSTGRES_INITDB_ARGS="--encoding=UTF-8 --lc-collate=C --lc-ctype=C"
+      - POSTGRES_INITDB_ARGS=--encoding=UTF8 --lc-collate=C --lc-ctype=C
     ports:
-      # PostgreSQL port for external connections
-      - "5432:5432"
+      # PostgreSQL port for external connections (mapped to 5433 to avoid local PostgreSQL conflict)
+      - "5433:5432"
     networks:
       - mevana_net
     volumes:
@@ -1617,6 +1621,45 @@ services:
         reservations:
           memory: 128M
           cpus: '0.10'
+
+  # =============================================================================
+  # PARSER SERVICES - Individual DEX Parser Microservices  
+  # =============================================================================
+  
+  # Jupiter Parser Service - Isolated Jupiter V6 Transaction Processing
+  jupiter-parser-service:
+    build:
+      context: ..
+      dockerfile: crates/jupiter-parser-service/Dockerfile
+    container_name: jupiter-parser-service
+    profiles: ["parsers", "jupiter"]
+    environment:
+      - RUST_LOG=${RUST_LOG:-info}
+      - SERVICE_PORT=8086
+      - BIND_ADDRESS=0.0.0.0
+      - KAFKA_BROKERS=kafka:9092
+      - KAFKA_TOPIC=dex-transactions
+      - REDIS_URL=redis://redis:6379
+    ports:
+      - "8086:8086"
+    networks:
+      - mevana_net
+    depends_on:
+      kafka:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8086/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    restart: unless-stopped
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.jupiter-parser.rule=Host(`jupiter-parser.local`)"
+      - "traefik.http.services.jupiter-parser.loadbalancer.server.port=8086"
 
 networks:
   mevana_net:
