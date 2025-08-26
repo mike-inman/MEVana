@@ -29,8 +29,42 @@ fn default_dexes() -> Vec<Dex> {
         Dex {
             name: "jupiter_idl".into(),
             program_id: "JUP4Fb2cqiRUcaTHdrPC8h2gNsA2ETXiPDD33WcGuJB".into(),
-            anchor_repo: None, // Jupiter aggregator - IDL might not be available
-            expected_idl_names: vec!["jupiter.json".into(), "jupiter_idl.json".into()],
+            anchor_repo: None, // Jupiter aggregator v4
+            expected_idl_names: vec![
+                "jupiter_aggregator_v4.json".into(),
+                "jupiter_idl.json".into(),
+                "jupiter.json".into(),
+            ],
+            fallback_idl_git: None,
+        },
+        // Jupiter Aggregator v6 (Swap Router)
+        Dex {
+            name: "jupiter_aggregator_v6".into(),
+            program_id: "JUP6LkbZbjS1jKKwapdHNy74zcZ3tLUZoi5QNyVTaV4".into(),
+            anchor_repo: None,
+            expected_idl_names: vec![
+                "jupiter_aggregator_v6.json".into(),
+            ],
+            fallback_idl_git: None,
+        },
+        // Jupiter Limit Order Program v1 (jupo...)
+        Dex {
+            name: "jupiter_limit_order".into(),
+            program_id: "jupoNjAxXgZ4rjzxzPMP4oxduvQsQtZzyknqvzYNrNu".into(),
+            anchor_repo: None,
+            expected_idl_names: vec![
+                "jupiter_limit_order.json".into(),
+            ],
+            fallback_idl_git: None,
+        },
+        // Jupiter Limit Order Program v2 (j1o2...)
+        Dex {
+            name: "jupiter_limit_order_v2".into(),
+            program_id: "j1o2qRpjcyUwEvwtcfhEQefh773ZgjxcVRry7LDqg5X".into(),
+            anchor_repo: None,
+            expected_idl_names: vec![
+                "jupiter_limit_order_v2.json".into(),
+            ],
             fallback_idl_git: None,
         },
         Dex {
@@ -125,7 +159,6 @@ fn default_dexes() -> Vec<Dex> {
             expected_idl_names: vec!["stable_swap.json".into(), "saber_stable_swap.json".into()],
             fallback_idl_git: None,
         },
-        
         // Lifinity v2 — verified mainnet program ID from Medium post
         Dex {
             name: "lifinity_v2".into(),
@@ -134,11 +167,10 @@ fn default_dexes() -> Vec<Dex> {
             expected_idl_names: vec!["lifinity.json".into(), "lifinity_v2.json".into()],
             fallback_idl_git: Some((
                 "https://github.com/bitquery/solana-idl-lib".into(),
-                "lifinity/idl-0.1.1.json".into(),   // correct repo path
-                "lifinity_v2.json".into(),          // output filename
+                "lifinity/idl-0.1.1.json".into(), // correct repo path
+                "lifinity_v2.json".into(),        // output filename
             )),
         },
-        
         // Invariant — verified mainnet program ID from docs.invariant.app
         Dex {
             name: "invariant".into(),
