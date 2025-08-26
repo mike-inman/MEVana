@@ -51,29 +51,49 @@ fn default_dexes() -> Vec<Dex> {
             name: "meteora_damm".into(),
             program_id: "cpamdpZCGKUy5JxQXB4dcpGPiikHawvSWAd6mEn1sGG".into(),
             anchor_repo: Some("https://github.com/MeteoraAg/dlmm-sdk".into()),
-            expected_idl_names: vec!["meteora.json".into(), "meteora_damm.json".into(), "cp_amm.json".into()],
-            fallback_idl_git: None,
+            expected_idl_names: vec![
+                "meteora.json".into(),
+                "meteora_damm.json".into(),
+                "cp_amm.json".into(),
+            ],
+            fallback_idl_git: Some((
+                "https://github.com/bitquery/solana-idl-lib".into(),
+                "meteora/cp_amm_011.json".into(),
+                "meteora_damm.json".into(),
+            )),
         },
         Dex {
             name: "raydium_amm".into(),
             program_id: "675kPX9MHTjS2zt1qfr1NYHuzeLXfQM9H24wFSUt1Mp8".into(),
             anchor_repo: Some("https://github.com/raydium-io/raydium-amm".into()),
             expected_idl_names: vec!["raydium_amm.json".into(), "amm.json".into()],
-            fallback_idl_git: None,
+            fallback_idl_git: Some((
+                "https://github.com/bitquery/solana-idl-lib".into(),
+                "raydium/raydium_amm.json".into(),
+                "raydium_amm.json".into(),
+            )),
         },
         Dex {
             name: "raydium_clmm".into(),
             program_id: "5Q544fKrFoe6tsEbD7S8EmxGTJYAKtTVhAW5Q5pge4j1".into(),
             anchor_repo: Some("https://github.com/raydium-io/raydium-clmm".into()),
             expected_idl_names: vec!["raydium_clmm.json".into(), "amm_v3.json".into()],
-            fallback_idl_git: None,
+            fallback_idl_git: Some((
+                "https://github.com/bitquery/solana-idl-lib".into(),
+                "raydium/amm_v3.json".into(),
+                "raydium_clmm.json".into(),
+            )),
         },
         Dex {
             name: "pump".into(),
             program_id: "6EF8rrecthR5Dkzon8Nwu78hRvfCKubJ14M5uBEwF6P".into(),
             anchor_repo: None, // Pump.fun bonding curve
             expected_idl_names: vec!["pump.json".into(), "pump_0.1.0.json".into()],
-            fallback_idl_git: None,
+            fallback_idl_git: Some((
+                "https://github.com/bitquery/solana-idl-lib".into(),
+                "pumpfun/pump.json".into(),
+                "pump.json".into(),
+            )),
         },
         Dex {
             name: "pump_amm".into(),
@@ -96,8 +116,7 @@ fn default_dexes() -> Vec<Dex> {
             expected_idl_names: vec!["goosefx.json".into(), "gfx_ssl_v2.json".into()],
             fallback_idl_git: None,
         },
-        
-        // === Legacy/Fallback DEXs ===
+        // === Legacy/Additional DEXs ===
         Dex {
             name: "saber_stable_swap".into(),
             // Canonical Saber StableSwap program ID:
@@ -107,32 +126,31 @@ fn default_dexes() -> Vec<Dex> {
             fallback_idl_git: None,
         },
         
-        // === Templates (disabled) ===
-        // Fill these with confirmed IDs when ready:
-        // Dex {
-        //     name: "lifinity_v2".into(),
-        //     program_id: "PUT_LIFINITY_PROGRAM_ID_HERE".into(),
-        //     anchor_repo: None, // no public Anchor workspace known
-        //     expected_idl_names: vec!["lifinity.json".into(), "lifinity_v2.json".into()],
-        //     fallback_idl_git: Some((
-        //         "https://github.com/bitquery/solana-idl-lib".into(),
-        //         "lifinity/lifinity.json".into(),
-        //         "lifinity_v2.json".into(),
-        //     )),
-        //     // Or replace with your own vetted copy.
-        //     fallback_idl_git: None,
-        // },
-        // Dex {
-        //     name: "invariant".into(),
-        //     program_id: "PUT_INVARIANT_PROGRAM_ID_HERE".into(),
-        //     anchor_repo: Some("https://github.com/invariant-labs/protocol".into()),
-        //     expected_idl_names: vec![
-        //         "invariant.json".into(),
-        //         "invariant_protocol.json".into(),
-        //         "protocol.json".into(),
-        //     ],
-        //     fallback_idl_git: None,
-        // },
+        // Lifinity v2 — verified mainnet program ID from Medium post
+        Dex {
+            name: "lifinity_v2".into(),
+            program_id: "2wT8Yq49kHgDzXuPxZSaeLaH1qbmGXtEyPy64bL7aD3c".into(), // Lifinity v2 mainnet
+            anchor_repo: None, // no public Anchor workspace known
+            expected_idl_names: vec!["lifinity.json".into(), "lifinity_v2.json".into()],
+            fallback_idl_git: Some((
+                "https://github.com/bitquery/solana-idl-lib".into(),
+                "lifinity/idl-0.1.1.json".into(),   // correct repo path
+                "lifinity_v2.json".into(),          // output filename
+            )),
+        },
+        
+        // Invariant — verified mainnet program ID from docs.invariant.app
+        Dex {
+            name: "invariant".into(),
+            program_id: "48XDC18nH5FLq8kKfE6MJK2hcPFD7xsJQc4dSAgQWNAi".into(), // Invariant mainnet
+            anchor_repo: Some("https://github.com/invariant-labs/protocol".into()),
+            expected_idl_names: vec![
+                "invariant.json".into(),
+                "invariant_protocol.json".into(),
+                "protocol.json".into(),
+            ],
+            fallback_idl_git: None, // Invariant not available in Bitquery repo
+        },
     ]
 }
 
