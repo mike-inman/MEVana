@@ -16,6 +16,7 @@
 | Service | Port | Type | Purpose | Status | Notes |
 |---------|------|------|---------|--------|-------|
 | **dex-stream-universal** | 8084 | HTTP | **PRIMARY DATA ORIGIN** | 🔒 RESERVED | Core Geyser stream - DO NOT REASSIGN |
+| **whirlpool-tx-stream** | 8091 | HTTP | Whirlpool TX-only stream | ✅ Active | Uses slim Dockerfile; filtered to Whirlpool program |
 | **token-registry-service** | 8083 | HTTP | Token metadata API | ✅ Active | Default assignment |
 | **ui-gateway** | 8082 | HTTP | WebSocket gateway | ✅ Active | UI connections |
 | **dex-registry** | 8085 | HTTP | DEX registry API | ✅ Active | New service |
