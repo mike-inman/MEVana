@@ -1,7 +1,7 @@
-use solana_program::{pubkey::Pubkey, program_option::COption};
-use spl_token::instruction::{AuthorityType, TokenInstruction};
-use serde::{Serialize, Deserialize};
+use serde::{Deserialize, Serialize};
 use serde_with::{serde_as, DisplayFromStr};
+use solana_program::{program_option::COption, pubkey::Pubkey};
+use spl_token::instruction::{AuthorityType, TokenInstruction};
 
 // Helper function to convert COption<Pubkey> to Option<Pubkey>
 fn convert_coption<T>(coption: COption<T>) -> Option<T> {
@@ -25,7 +25,6 @@ fn convert_set_authority(
         new_authority: new_authority.into(), // Convert COption<Pubkey> to Option<Pubkey>
     }
 }
-
 
 #[serde_as]
 #[derive(Serialize, Deserialize)]
@@ -63,36 +62,68 @@ pub struct SerializableTransfer {
 pub enum SerializableTokenInstruction {
     InitializeMint(SerializableInitializeMint),
     InitializeAccount,
-    InitializeMultisig { m: u8 },
+    InitializeMultisig {
+        m: u8,
+    },
     Transfer(SerializableTransfer),
-    Approve { amount: u64 },
+    Approve {
+        amount: u64,
+    },
     Revoke,
     SetAuthority(SerializableSetAuthority),
-    MintTo { amount: u64 },
-    Burn { amount: u64 },
+    MintTo {
+        amount: u64,
+    },
+    Burn {
+        amount: u64,
+    },
     CloseAccount,
     FreezeAccount,
     ThawAccount,
-    TransferChecked { amount: u64, decimals: u8 },
-    ApproveChecked { amount: u64, decimals: u8 },
-    MintToChecked { amount: u64, decimals: u8 },
-    BurnChecked { amount: u64, decimals: u8 },
-    InitializeAccount2 { #[serde_as(as = "DisplayFromStr")] owner: Pubkey },
+    TransferChecked {
+        amount: u64,
+        decimals: u8,
+    },
+    ApproveChecked {
+        amount: u64,
+        decimals: u8,
+    },
+    MintToChecked {
+        amount: u64,
+        decimals: u8,
+    },
+    BurnChecked {
+        amount: u64,
+        decimals: u8,
+    },
+    InitializeAccount2 {
+        #[serde_as(as = "DisplayFromStr")]
+        owner: Pubkey,
+    },
     SyncNative,
     InitializeAccount3(SerializableInitializeAccount3),
-    InitializeMultisig2 { m: u8 },
+    InitializeMultisig2 {
+        m: u8,
+    },
     InitializeMint2(SerializableInitializeMint),
     GetAccountDataSize,
     InitializeImmutableOwner,
-    AmountToUiAmount { amount: u64 },
-    UiAmountToAmount { ui_amount: String },
+    AmountToUiAmount {
+        amount: u64,
+    },
+    UiAmountToAmount {
+        ui_amount: String,
+    },
 }
-
 
 // Convert TokenInstruction to SerializableTokenInstruction
 pub fn convert_to_serializable(ix: TokenInstruction) -> SerializableTokenInstruction {
     match ix {
-        TokenInstruction::InitializeMint { decimals, mint_authority, freeze_authority } => {
+        TokenInstruction::InitializeMint {
+            decimals,
+            mint_authority,
+            freeze_authority,
+        } => {
             SerializableTokenInstruction::InitializeMint(SerializableInitializeMint {
                 decimals,
                 mint_authority,
@@ -100,13 +131,21 @@ pub fn convert_to_serializable(ix: TokenInstruction) -> SerializableTokenInstruc
             })
         }
         TokenInstruction::InitializeAccount => SerializableTokenInstruction::InitializeAccount,
-        TokenInstruction::InitializeMultisig { m } => SerializableTokenInstruction::InitializeMultisig { m },
-        TokenInstruction::Transfer { amount } => SerializableTokenInstruction::Transfer(SerializableTransfer { amount }),
+        TokenInstruction::InitializeMultisig { m } => {
+            SerializableTokenInstruction::InitializeMultisig { m }
+        }
+        TokenInstruction::Transfer { amount } => {
+            SerializableTokenInstruction::Transfer(SerializableTransfer { amount })
+        }
         TokenInstruction::Approve { amount } => SerializableTokenInstruction::Approve { amount },
         TokenInstruction::Revoke => SerializableTokenInstruction::Revoke,
-        TokenInstruction::SetAuthority { authority_type, new_authority } => {
-            SerializableTokenInstruction::SetAuthority(convert_set_authority(authority_type, new_authority))
-        }
+        TokenInstruction::SetAuthority {
+            authority_type,
+            new_authority,
+        } => SerializableTokenInstruction::SetAuthority(convert_set_authority(
+            authority_type,
+            new_authority,
+        )),
         TokenInstruction::MintTo { amount } => SerializableTokenInstruction::MintTo { amount },
         TokenInstruction::Burn { amount } => SerializableTokenInstruction::Burn { amount },
         TokenInstruction::CloseAccount => SerializableTokenInstruction::CloseAccount,
@@ -129,23 +168,33 @@ pub fn convert_to_serializable(ix: TokenInstruction) -> SerializableTokenInstruc
         }
         TokenInstruction::SyncNative => SerializableTokenInstruction::SyncNative,
         TokenInstruction::InitializeAccount3 { owner } => {
-            SerializableTokenInstruction::InitializeAccount3(SerializableInitializeAccount3 { owner })
+            SerializableTokenInstruction::InitializeAccount3(SerializableInitializeAccount3 {
+                owner,
+            })
         }
         TokenInstruction::InitializeMultisig2 { m } => {
             SerializableTokenInstruction::InitializeMultisig2 { m }
         }
-        TokenInstruction::InitializeMint2 { decimals, mint_authority, freeze_authority } => {
-            SerializableTokenInstruction::InitializeMint2(SerializableInitializeMint {
-                decimals,
-                mint_authority,
-                freeze_authority: freeze_authority.into(),
-            })
-        }
+        TokenInstruction::InitializeMint2 {
+            decimals,
+            mint_authority,
+            freeze_authority,
+        } => SerializableTokenInstruction::InitializeMint2(SerializableInitializeMint {
+            decimals,
+            mint_authority,
+            freeze_authority: freeze_authority.into(),
+        }),
         TokenInstruction::GetAccountDataSize => SerializableTokenInstruction::GetAccountDataSize,
-        TokenInstruction::InitializeImmutableOwner => SerializableTokenInstruction::InitializeImmutableOwner,
-        TokenInstruction::AmountToUiAmount { amount } => SerializableTokenInstruction::AmountToUiAmount { amount },
+        TokenInstruction::InitializeImmutableOwner => {
+            SerializableTokenInstruction::InitializeImmutableOwner
+        }
+        TokenInstruction::AmountToUiAmount { amount } => {
+            SerializableTokenInstruction::AmountToUiAmount { amount }
+        }
         TokenInstruction::UiAmountToAmount { ui_amount } => {
-            SerializableTokenInstruction::UiAmountToAmount { ui_amount: ui_amount.to_string() }
+            SerializableTokenInstruction::UiAmountToAmount {
+                ui_amount: ui_amount.to_string(),
+            }
         }
     }
 }
