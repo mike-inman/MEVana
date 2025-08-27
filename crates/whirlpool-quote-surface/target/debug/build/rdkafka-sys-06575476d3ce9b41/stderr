@@ -1,0 +1,119 @@
+Building and linking librdkafka statically
+Running command: "cp -a librdkafka/. /Users/michaelinman/Repos/MEVana/crates/whirlpool-quote-surface/target/debug/build/rdkafka-sys-06575476d3ce9b41/out" in dir: .
+Running command: "/Users/michaelinman/Repos/MEVana/crates/whirlpool-quote-surface/target/debug/build/rdkafka-sys-06575476d3ce9b41/out/configure --disable-ssl --disable-gssapi --disable-curl --disable-zstd --disable-lz4-ext" in dir: /Users/michaelinman/Repos/MEVana/crates/whirlpool-quote-surface/target/debug/build/rdkafka-sys-06575476d3ce9b41/out
+Running command: "make libs" in dir: /Users/michaelinman/Repos/MEVana/crates/whirlpool-quote-surface/target/debug/build/rdkafka-sys-06575476d3ce9b41/out
+rdkafka_broker.c:844:13: warning: variable 'idx' set but not used [-Wunused-but-set-variable]
+  844 |         int idx = -1;
+      |             ^
+rdkafka_cgrp.c:1675:13: warning: variable 'not_revoking' set but not used [-Wunused-but-set-variable]
+ 1675 |         int not_revoking   = 0;
+      |             ^
+rdkafka_request.c:3368:29: warning: format specifies type 'long' but the argument has type 'int64_t' (aka 'long long') [-Wformat]
+ 3367 |                             "Received session lifetime %ld ms from broker",
+      |                                                        ~~~
+      |                                                        %lld
+ 3368 |                             session_lifetime_ms);
+      |                             ^~~~~~~~~~~~~~~~~~~
+./rdkafka_int.h:1031:66: note: expanded from macro 'rd_kafka_dbg'
+ 1031 |                                       (RD_KAFKA_DBG_##ctx), fac, __VA_ARGS__); \
+      |                                                                  ^~~~~~~~~~~
+1 warning generated.
+rdbuf.c:912:16: warning: variable 'remains' set but not used [-Wunused-but-set-variable]
+  912 |         size_t remains = size;
+      |                ^
+rdmap.c:503:13: warning: variable 'fails' set but not used [-Wunused-but-set-variable]
+  503 |         int fails = 0;
+      |             ^
+1 warning generated.
+1 warning generated.
+1 warning generated.
+rdkafka_telemetry_decode.c:898:13: warning: implicit conversion from enumeration type 'rd_kafka_telemetry_consumer_metric_name_t' to different enumeration type 'rd_kafka_telemetry_producer_metric_name_t' [-Wenum-conversion]
+  896 |         fails += unit_test_telemetry(
+      |                  ~~~~~~~~~~~~~~~~~~~
+  897 |             RD_KAFKA_CONSUMER,
+  898 |             RD_KAFKA_TELEMETRY_METRIC_CONSUMER_CONNECTION_CREATION_RATE,
+      |             ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+rdkafka_telemetry_decode.c:907:13: warning: implicit conversion from enumeration type 'rd_kafka_telemetry_consumer_metric_name_t' to different enumeration type 'rd_kafka_telemetry_producer_metric_name_t' [-Wenum-conversion]
+  905 |         fails += unit_test_telemetry(
+      |                  ~~~~~~~~~~~~~~~~~~~
+  906 |             RD_KAFKA_CONSUMER,
+  907 |             RD_KAFKA_TELEMETRY_METRIC_CONSUMER_NODE_REQUEST_LATENCY_AVG,
+      |             ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+rdkafka_telemetry_decode.c:916:13: warning: implicit conversion from enumeration type 'rd_kafka_telemetry_consumer_metric_name_t' to different enumeration type 'rd_kafka_telemetry_producer_metric_name_t' [-Wenum-conversion]
+  914 |         fails += unit_test_telemetry(
+      |                  ~~~~~~~~~~~~~~~~~~~
+  915 |             RD_KAFKA_CONSUMER,
+  916 |             RD_KAFKA_TELEMETRY_METRIC_CONSUMER_NODE_REQUEST_LATENCY_MAX,
+      |             ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+rdkafka_telemetry_decode.c:925:13: warning: implicit conversion from enumeration type 'rd_kafka_telemetry_consumer_metric_name_t' to different enumeration type 'rd_kafka_telemetry_producer_metric_name_t' [-Wenum-conversion]
+  923 |         fails += unit_test_telemetry(
+      |                  ~~~~~~~~~~~~~~~~~~~
+  924 |             RD_KAFKA_CONSUMER,
+  925 |             RD_KAFKA_TELEMETRY_METRIC_CONSUMER_COORDINATOR_ASSIGNED_PARTITIONS,
+      |             ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+rdkafka_telemetry_decode.c:934:13: warning: implicit conversion from enumeration type 'rd_kafka_telemetry_consumer_metric_name_t' to different enumeration type 'rd_kafka_telemetry_producer_metric_name_t' [-Wenum-conversion]
+  932 |         fails += unit_test_telemetry(
+      |                  ~~~~~~~~~~~~~~~~~~~
+  933 |             RD_KAFKA_CONSUMER,
+  934 |             RD_KAFKA_TELEMETRY_METRIC_CONSUMER_COORDINATOR_REBALANCE_LATENCY_AVG,
+      |             ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+rdkafka_telemetry_decode.c:944:13: warning: implicit conversion from enumeration type 'rd_kafka_telemetry_consumer_metric_name_t' to different enumeration type 'rd_kafka_telemetry_producer_metric_name_t' [-Wenum-conversion]
+  942 |         fails += unit_test_telemetry(
+      |                  ~~~~~~~~~~~~~~~~~~~
+  943 |             RD_KAFKA_CONSUMER,
+  944 |             RD_KAFKA_TELEMETRY_METRIC_CONSUMER_COORDINATOR_REBALANCE_LATENCY_MAX,
+      |             ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+rdkafka_telemetry_decode.c:954:13: warning: implicit conversion from enumeration type 'rd_kafka_telemetry_consumer_metric_name_t' to different enumeration type 'rd_kafka_telemetry_producer_metric_name_t' [-Wenum-conversion]
+  952 |         fails += unit_test_telemetry(
+      |                  ~~~~~~~~~~~~~~~~~~~
+  953 |             RD_KAFKA_CONSUMER,
+  954 |             RD_KAFKA_TELEMETRY_METRIC_CONSUMER_FETCH_MANAGER_FETCH_LATENCY_AVG,
+      |             ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+rdkafka_telemetry_decode.c:963:13: warning: implicit conversion from enumeration type 'rd_kafka_telemetry_consumer_metric_name_t' to different enumeration type 'rd_kafka_telemetry_producer_metric_name_t' [-Wenum-conversion]
+  961 |         fails += unit_test_telemetry(
+      |                  ~~~~~~~~~~~~~~~~~~~
+  962 |             RD_KAFKA_CONSUMER,
+  963 |             RD_KAFKA_TELEMETRY_METRIC_CONSUMER_FETCH_MANAGER_FETCH_LATENCY_MAX,
+      |             ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+rdkafka_telemetry_decode.c:972:13: warning: implicit conversion from enumeration type 'rd_kafka_telemetry_consumer_metric_name_t' to different enumeration type 'rd_kafka_telemetry_producer_metric_name_t' [-Wenum-conversion]
+  970 |         fails += unit_test_telemetry(
+      |                  ~~~~~~~~~~~~~~~~~~~
+  971 |             RD_KAFKA_CONSUMER,
+  972 |             RD_KAFKA_TELEMETRY_METRIC_CONSUMER_POLL_IDLE_RATIO_AVG,
+      |             ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+rdkafka_telemetry_decode.c:980:13: warning: implicit conversion from enumeration type 'rd_kafka_telemetry_consumer_metric_name_t' to different enumeration type 'rd_kafka_telemetry_producer_metric_name_t' [-Wenum-conversion]
+  978 |         fails += unit_test_telemetry(
+      |                  ~~~~~~~~~~~~~~~~~~~
+  979 |             RD_KAFKA_CONSUMER,
+  980 |             RD_KAFKA_TELEMETRY_METRIC_CONSUMER_COORDINATOR_COMMIT_LATENCY_AVG,
+      |             ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+rdkafka_telemetry_decode.c:989:13: warning: implicit conversion from enumeration type 'rd_kafka_telemetry_consumer_metric_name_t' to different enumeration type 'rd_kafka_telemetry_producer_metric_name_t' [-Wenum-conversion]
+  987 |         fails += unit_test_telemetry(
+      |                  ~~~~~~~~~~~~~~~~~~~
+  988 |             RD_KAFKA_CONSUMER,
+  989 |             RD_KAFKA_TELEMETRY_METRIC_CONSUMER_COORDINATOR_COMMIT_LATENCY_MAX,
+      |             ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+rdkafka_telemetry_decode.c:1018:13: warning: implicit conversion from enumeration type 'rd_kafka_telemetry_consumer_metric_name_t' to different enumeration type 'rd_kafka_telemetry_producer_metric_name_t' [-Wenum-conversion]
+ 1016 |         fails += unit_test_telemetry(
+      |                  ~~~~~~~~~~~~~~~~~~~
+ 1017 |             RD_KAFKA_CONSUMER,
+ 1018 |             RD_KAFKA_TELEMETRY_METRIC_CONSUMER_CONNECTION_CREATION_TOTAL,
+      |             ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+rdkafka_telemetry_decode.c:1028:13: warning: implicit conversion from enumeration type 'rd_kafka_telemetry_consumer_metric_name_t' to different enumeration type 'rd_kafka_telemetry_producer_metric_name_t' [-Wenum-conversion]
+ 1026 |         fails += unit_test_telemetry(
+      |                  ~~~~~~~~~~~~~~~~~~~
+ 1027 |             RD_KAFKA_CONSUMER,
+ 1028 |             RD_KAFKA_TELEMETRY_METRIC_CONSUMER_CONNECTION_CREATION_TOTAL,
+      |             ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+rdkafka_telemetry_decode.c:1037:13: warning: implicit conversion from enumeration type 'rd_kafka_telemetry_consumer_metric_name_t' to different enumeration type 'rd_kafka_telemetry_producer_metric_name_t' [-Wenum-conversion]
+ 1035 |         fails += unit_test_telemetry(
+      |                  ~~~~~~~~~~~~~~~~~~~
+ 1036 |             RD_KAFKA_CONSUMER,
+ 1037 |             RD_KAFKA_TELEMETRY_METRIC_CONSUMER_COORDINATOR_REBALANCE_LATENCY_TOTAL,
+      |             ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+14 warnings generated.
+snappy.c:1440:9: warning: variable 'written' set but not used [-Wunused-but-set-variable]
+ 1440 |         size_t written = 0;
+      |                ^
+1 warning generated.
+1 warning generated.

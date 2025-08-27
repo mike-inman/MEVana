@@ -42,9 +42,7 @@ fn default_dexes() -> Vec<Dex> {
             name: "jupiter_aggregator_v6".into(),
             program_id: "JUP6LkbZbjS1jKKwapdHNy74zcZ3tLUZoi5QNyVTaV4".into(),
             anchor_repo: None,
-            expected_idl_names: vec![
-                "jupiter_aggregator_v6.json".into(),
-            ],
+            expected_idl_names: vec!["jupiter_aggregator_v6.json".into()],
             fallback_idl_git: None,
         },
         // Jupiter Limit Order Program v1 (jupo...)
@@ -52,9 +50,7 @@ fn default_dexes() -> Vec<Dex> {
             name: "jupiter_limit_order".into(),
             program_id: "jupoNjAxXgZ4rjzxzPMP4oxduvQsQtZzyknqvzYNrNu".into(),
             anchor_repo: None,
-            expected_idl_names: vec![
-                "jupiter_limit_order.json".into(),
-            ],
+            expected_idl_names: vec!["jupiter_limit_order.json".into()],
             fallback_idl_git: None,
         },
         // Jupiter Limit Order Program v2 (j1o2...)
@@ -62,9 +58,7 @@ fn default_dexes() -> Vec<Dex> {
             name: "jupiter_limit_order_v2".into(),
             program_id: "j1o2qRpjcyUwEvwtcfhEQefh773ZgjxcVRry7LDqg5X".into(),
             anchor_repo: None,
-            expected_idl_names: vec![
-                "jupiter_limit_order_v2.json".into(),
-            ],
+            expected_idl_names: vec!["jupiter_limit_order_v2.json".into()],
             fallback_idl_git: None,
         },
         Dex {

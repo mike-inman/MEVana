@@ -1,0 +1,11 @@
+/Users/michaelinman/Repos/MEVana/crates/whirlpool-quote-surface/target/debug/deps/five8-87b45e9cef399521.d: /Users/michaelinman/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/five8-0.2.1/src/lib.rs /Users/michaelinman/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/five8-0.2.1/src/decode.rs /Users/michaelinman/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/five8-0.2.1/src/encode.rs /Users/michaelinman/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/five8-0.2.1/src/unlikely.rs /Users/michaelinman/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/five8-0.2.1/src/../README.md
+
+/Users/michaelinman/Repos/MEVana/crates/whirlpool-quote-surface/target/debug/deps/libfive8-87b45e9cef399521.rlib: /Users/michaelinman/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/five8-0.2.1/src/lib.rs /Users/michaelinman/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/five8-0.2.1/src/decode.rs /Users/michaelinman/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/five8-0.2.1/src/encode.rs /Users/michaelinman/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/five8-0.2.1/src/unlikely.rs /Users/michaelinman/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/five8-0.2.1/src/../README.md
+
+/Users/michaelinman/Repos/MEVana/crates/whirlpool-quote-surface/target/debug/deps/libfive8-87b45e9cef399521.rmeta: /Users/michaelinman/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/five8-0.2.1/src/lib.rs /Users/michaelinman/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/five8-0.2.1/src/decode.rs /Users/michaelinman/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/five8-0.2.1/src/encode.rs /Users/michaelinman/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/five8-0.2.1/src/unlikely.rs /Users/michaelinman/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/five8-0.2.1/src/../README.md
+
+/Users/michaelinman/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/five8-0.2.1/src/lib.rs:
+/Users/michaelinman/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/five8-0.2.1/src/decode.rs:
+/Users/michaelinman/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/five8-0.2.1/src/encode.rs:
+/Users/michaelinman/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/five8-0.2.1/src/unlikely.rs:
+/Users/michaelinman/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/five8-0.2.1/src/../README.md:

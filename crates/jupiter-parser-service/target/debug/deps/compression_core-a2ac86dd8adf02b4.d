@@ -1,0 +1,10 @@
+/Users/michaelinman/Repos/MEVana/crates/jupiter-parser-service/target/debug/deps/compression_core-a2ac86dd8adf02b4.d: /Users/michaelinman/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/compression-core-0.4.28/src/lib.rs /Users/michaelinman/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/compression-core-0.4.28/src/level.rs /Users/michaelinman/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/compression-core-0.4.28/src/unshared.rs /Users/michaelinman/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/compression-core-0.4.28/src/util.rs
+
+/Users/michaelinman/Repos/MEVana/crates/jupiter-parser-service/target/debug/deps/libcompression_core-a2ac86dd8adf02b4.rlib: /Users/michaelinman/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/compression-core-0.4.28/src/lib.rs /Users/michaelinman/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/compression-core-0.4.28/src/level.rs /Users/michaelinman/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/compression-core-0.4.28/src/unshared.rs /Users/michaelinman/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/compression-core-0.4.28/src/util.rs
+
+/Users/michaelinman/Repos/MEVana/crates/jupiter-parser-service/target/debug/deps/libcompression_core-a2ac86dd8adf02b4.rmeta: /Users/michaelinman/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/compression-core-0.4.28/src/lib.rs /Users/michaelinman/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/compression-core-0.4.28/src/level.rs /Users/michaelinman/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/compression-core-0.4.28/src/unshared.rs /Users/michaelinman/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/compression-core-0.4.28/src/util.rs
+
+/Users/michaelinman/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/compression-core-0.4.28/src/lib.rs:
+/Users/michaelinman/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/compression-core-0.4.28/src/level.rs:
+/Users/michaelinman/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/compression-core-0.4.28/src/unshared.rs:
+/Users/michaelinman/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/compression-core-0.4.28/src/util.rs:

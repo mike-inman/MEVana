@@ -18,8 +18,9 @@ WORKDIR /usr/src/app
     # Set DATABASE_URL for sqlx macros (offline mode)
     ENV DATABASE_URL=postgresql://user:pass@localhost/db
 
-    # Build the application
-    RUN cargo build --release --bin dex-stream-universal
+    # Build: normalize only the 0.14.x line to 0.14.5 (keep <0.14 lines intact for borsh)
+    RUN cargo update -p hashbrown@0.14.0 --precise 0.14.5 && \
+        cargo build --release --bin dex-stream-universal
 
 # Production stage
 FROM debian:bookworm-slim
@@ -55,3 +56,7 @@ HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
 
 # Default command
 CMD ["./dex-stream-universal"]
+
+
+
+

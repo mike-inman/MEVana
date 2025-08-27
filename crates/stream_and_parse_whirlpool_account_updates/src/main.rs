@@ -22,6 +22,9 @@ use {
     }, solana_program::pubkey::Pubkey
 };
 use solana_client::rpc_client::RpcClient;
+use axum::{routing::get, Router, http::StatusCode, response::Json};
+use tokio::net::TcpListener;
+use redis::{aio::MultiplexedConnection, AsyncCommands};
 mod helpers;
 use helpers::{
     derive_tick_array_address,
@@ -132,6 +135,23 @@ async fn main() -> anyhow::Result<()> {
     env_logger::init();
 
     let args = Args::parse();
+
+    // Health/metrics server
+    let bind = std::env::var("BIND_ADDRESS").unwrap_or_else(|_| "0.0.0.0".to_string());
+    let port: u16 = std::env::var("HEALTH_PORT").unwrap_or_else(|_| "8093".to_string()).parse().unwrap_or(8093);
+    tokio::spawn(async move {
+        let app = Router::new()
+            .route("/health", get(|| async { (StatusCode::OK, Json(serde_json::json!({"status":"ok"}))) }))
+            .route("/metrics", get(|| async { (StatusCode::OK, Json(serde_json::json!({"status":"ready"}))) }));
+        let addr = format!("{}:{}", bind, port);
+        if let Ok(listener) = TcpListener::bind(&addr).await {
+            if let Err(e) = axum::serve(listener, app).await {
+                eprintln!("health server error: {}", e);
+            }
+        } else {
+            eprintln!("failed to bind health server on {}", addr);
+        }
+    });
     let zero_attempts = Arc::new(Mutex::new(true));
 
     // The default exponential backoff strategy intervals:
@@ -177,6 +197,11 @@ async fn geyser_subscribe(
 
     info!("stream opened");
 
+    // Optional Redis connection for outputs
+    let redis_url = std::env::var("REDIS_URL").unwrap_or_else(|_| "redis://redis:6379/0".to_string());
+    let redis_client = redis::Client::open(redis_url).ok();
+    let mut redis_conn: Option<MultiplexedConnection> = if let Some(c) = &redis_client { c.get_multiplexed_async_connection().await.ok() } else { None };
+
     // Track pools we've subscribed tick arrays for, to avoid duplicate requests
     let mut subscribed_pools: HashSet<String> = HashSet::new();
     // Map pool_pubkey -> tick_spacing
@@ -219,27 +244,36 @@ async fn geyser_subscribe(
                             }
                         };
                 
-                        println!(
-                            "\n[ACCOUNT] slot={} pubkey={} owner={} lamports={} exec={}",
-                            slot, pubkey_str, owner, lamports, executable
-                        );
+                        info!("account slot={} pubkey={} owner={} exec={} len={}", slot, pubkey_str, owner, executable, account_data.data.len());
 
                         // If this account is one of the expected TickArrays, run validation/logging
-                        if let Some((pool_b58, expected_start)) = ta_expect.get(&pubkey_str).cloned() {
-                            if let Ok(pool_bytes) = bs58::decode(&pool_b58).into_vec() {
-                                if let Ok(pool_arr) = <[u8;32]>::try_from(pool_bytes.as_slice()) {
-                                    let pool_pk = Pubkey::new_from_array(pool_arr);
-                                    if let Some(spacing) = pool_tick_spacing.get(&pool_b58).cloned() {
-                                        let data_len = account_data.data.len();
-                                        let disc_ok = account_data.data.len() >= 8 && &account_data.data[..8] == &TICK_ARRAY_ACCOUNT_DISCM;
-                                        println!(
-                                            "\n[TICK_ARRAY] addr={} data_len={} discriminator_ok={} expected_start={}",
-                                            pubkey_str, data_len, disc_ok, expected_start
-                                        );
-                                        if let Err(e) = on_tick_array_update(&pool_pk, expected_start, spacing, &account_data.data) {
-                                            eprintln!("tick_array validation error: {}", e);
+                        // Decode and publish TickArray snapshot to Redis regardless of expected map
+                        if account_data.data.len() >= 8 && &account_data.data[..8] == &TICK_ARRAY_ACCOUNT_DISCM {
+                            if let Ok(ta) = TickArrayAccount::deserialize(&account_data.data) {
+                                let pool_pk = ta.0.whirlpool;
+                                let expected_start = ta.0.start_tick_index;
+                                let pool_b58 = bs58::encode(pool_pk).into_string();
+                                let spacing = pool_tick_spacing.get(&pool_b58).cloned().unwrap_or(0);
+                                info!("tick_array addr={} len={} start={} pool={} spacing={}", pubkey_str, account_data.data.len(), expected_start, pool_b58, spacing);
+                                if let Some(conn) = redis_conn.as_mut() {
+                                    let mut idxs = Vec::new();
+                                    for (i, t) in ta.0.ticks.iter().enumerate() {
+                                        if t.liquidity_gross > 0 {
+                                            let idx_tick = expected_start + (i as i32) * spacing.max(1);
+                                            idxs.push(idx_tick);
                                         }
                                     }
+                                    let key = format!("whirlpool:tickarray:{}:{}", expected_start, pool_b58);
+                                    let payload = serde_json::json!({
+                                        "pool": pool_b58,
+                                        "tick_array": pubkey_str,
+                                        "expected_start": expected_start,
+                                        "tick_spacing": spacing,
+                                        "slot": slot,
+                                        "initialized_count": idxs.len(),
+                                        "initialized_indices": idxs,
+                                    });
+                                    let _ : Result<(), _> = conn.set_ex(key, payload.to_string(), 180).await;
                                 }
                             }
                         }
@@ -253,26 +287,17 @@ async fn geyser_subscribe(
                             let tick_spacing = pool.tick_spacing as i32;
                             pool_tick_spacing.insert(bs58::encode(pool_pubkey).into_string(), tick_spacing);
                             let total_fee_bps = pool.fee_rate as u32 + pool.protocol_fee_rate as u32;
-                            let price_b_per_a = marginal_price_b_per_a(pool.sqrt_price, 0, 0); // decimals unknown here
-                            let price_a_per_b = if price_b_per_a > 0.0 { 1.0 / price_b_per_a } else { 0.0 };
-                            let fee_mult = (10000u32.saturating_sub(total_fee_bps)) as f64 / 10000.0;
-                            println!(
-                                "[WHIRLPOOL] slot={}\n  pool={}\n  program={}\n  tokenA={} (decA=?)\n  tokenB={} (decB=?)\n  sqrt_price_x64={}\n  liquidity={}\n  tick_current={}\n  tick_spacing={}\n  fee_lp_bps={} protocol_fee_bps={} total_fee_bps={}\n  price(B/A)={} price(A/B)={}\n  fee_effective_input_multiplier={}",
+                            let price_b_per_a = marginal_price_b_per_a(pool.sqrt_price, 0, 0);
+                            info!(
+                                "whirlpool slot={} pool={} tick={} spacing={} fee_lp_bps={} protocol_fee_bps={} total_fee_bps={} price_b_per_a={}",
                                 slot,
                                 bs58::encode(pool_pubkey).into_string(),
-                                WHIRLPOOL_PROGRAM_ID,
-                                bs58::encode(pool.token_mint_a).into_string(),
-                                bs58::encode(pool.token_mint_b).into_string(),
-                                pool.sqrt_price,
-                                pool.liquidity,
                                 pool.tick_current_index,
                                 tick_spacing,
                                 pool.fee_rate,
                                 pool.protocol_fee_rate,
                                 total_fee_bps,
-                                price_b_per_a,
-                                price_a_per_b,
-                                fee_mult,
+                                price_b_per_a
                             );
                             let ticks_per_array: i32 = 88;
                             let span = tick_spacing * ticks_per_array;
@@ -294,25 +319,47 @@ async fn geyser_subscribe(
                             let ta_upper = derive_ta(upper_start);
 
                             let pool_key_str = bs58::encode(pool_pubkey).into_string();
-                            // Seed the three TickArrays once via RPC (if enabled and not yet seeded)
+                            // Seed the three TickArrays once via RPC (if enabled and not yet seeded), and publish snapshots
                             if seeding_enabled && !seeded_pools.contains(&pool_key_str) {
                                 if let Some(ref rpc) = rpc_client {
-                                    seed_tick_arrays_via_rpc(
-                                        rpc,
-                                        &program_id,
-                                        &pool_pubkey,
-                                        curr_tick,
-                                        tick_spacing,
-                                        lower_start,
-                                        current_start,
-                                        upper_start,
-                                    )
-                                    .ok();
+                                    let addrs = vec![ta_lower, ta_current, ta_upper];
+                                    if let Ok(accounts) = rpc.get_multiple_accounts(&addrs) {
+                                        for (idx, acc_opt) in accounts.into_iter().enumerate() {
+                                            if let Some(acc) = acc_opt {
+                                                let data = acc.data.as_slice();
+                                                if data.len() >= 8 && &data[..8] == &TICK_ARRAY_ACCOUNT_DISCM {
+                                                    if let Ok(ta) = TickArrayAccount::deserialize(data) {
+                                                        let start = ta.0.start_tick_index;
+                                                        let mut idxs = Vec::new();
+                                                        for (i, t) in ta.0.ticks.iter().enumerate() {
+                                                            if t.liquidity_gross > 0 {
+                                                                let idx_tick = start + (i as i32) * tick_spacing;
+                                                                idxs.push(idx_tick);
+                                                            }
+                                                        }
+                                                        if let Some(conn) = redis_conn.as_mut() {
+                                                            let key = format!("whirlpool:tickarray:{}:{}", start, pool_key_str);
+                                                            let payload = serde_json::json!({
+                                                                "pool": pool_key_str,
+                                                                "tick_array": bs58::encode(addrs[idx]).into_string(),
+                                                                "expected_start": start,
+                                                                "tick_spacing": tick_spacing,
+                                                                "slot": slot,
+                                                                "initialized_count": idxs.len(),
+                                                                "initialized_indices": idxs,
+                                                            });
+                                                            let _ : Result<(), _> = conn.set_ex(key, payload.to_string(), 180).await;
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
                                     seeded_pools.insert(pool_key_str.clone());
                                 }
                             }
-                            println!(
-                                "[TICK_PDAS]\n  span={}  // tick_spacing({}) * 88 ticks per array\n  starts=(lower={}, current={}, upper={})\n  lower= {}\n  current={}\n  upper= {}",
+                            info!(
+                                "tick_pdas span={} spacing={} starts=({}, {}, {}) lower={} current={} upper={}",
                                 span,
                                 tick_spacing,
                                 lower_start,
@@ -322,6 +369,25 @@ async fn geyser_subscribe(
                                 bs58::encode(ta_current).into_string(),
                                 bs58::encode(ta_upper).into_string(),
                             );
+                            // Publish pool snapshot to Redis (TTL 180s). Use strings for 128-bit ints.
+                            if let Some(conn) = redis_conn.as_mut() {
+                                let key = format!("whirlpool:pool:{}", bs58::encode(&pool_pubkey).into_string());
+                                let payload = serde_json::json!({
+                                    "pool": bs58::encode(&pool_pubkey).into_string(),
+                                    "program": WHIRLPOOL_PROGRAM_ID,
+                                    "token_a": bs58::encode(pool.token_mint_a).into_string(),
+                                    "token_b": bs58::encode(pool.token_mint_b).into_string(),
+                                    "sqrt_price_x64": pool.sqrt_price.to_string(),
+                                    "liquidity": pool.liquidity.to_string(),
+                                    "tick_current": pool.tick_current_index,
+                                    "tick_spacing": tick_spacing,
+                                    "fee_bps": pool.fee_rate,
+                                    "protocol_fee_bps": pool.protocol_fee_rate,
+                                    "slot": slot,
+                                    "tick_array_starts": [lower_start, current_start, upper_start],
+                                });
+                                let _ : Result<(), _> = conn.set_ex(key, payload.to_string(), 180).await;
+                            }
                             if !subscribed_pools.contains(&pool_key_str) {
                                 let mut accs = HashMap::new();
                                 accs.insert(
@@ -368,7 +434,7 @@ async fn geyser_subscribe(
                             }
                         }
                     } else {
-                        println!("Account data is None for slot: {}", slot);
+                        info!("Account data is None for slot: {}", slot);
                     }
 
                     
@@ -416,7 +482,7 @@ pub fn decode_account_data(buf: &[u8]) -> Result<DecodedAccount, AccountDecodeEr
                 .map_err(|e| AccountDecodeError {
                     message: format!("Failed to deserialize WhirlpoolsConfigAccount: {}", e),
                 })?;
-            println!("\nDecoded Whirlpool Config Account Structure: {:#?}", data);
+            info!("decoded whirlpool_config");
             Ok(DecodedAccount::WhirlpoolsConfig(data.0)) // Unwrapping the inner BondingCurve struct
         }
         WHIRLPOOLS_CONFIG_EXTENSION_ACCOUNT_DISCM => {
@@ -425,7 +491,7 @@ pub fn decode_account_data(buf: &[u8]) -> Result<DecodedAccount, AccountDecodeEr
                     message: format!("Failed to deserialize WhirlpoolsConfigExtAccount: {}", e),
                 })?;
 
-            println!("\nDecoded Whirlpool Config Ext Account Structure: {:#?}", data);
+            info!("decoded whirlpool_config_extension");
             Ok(DecodedAccount::WhirlpoolsConfigExtension(data.0)) // Unwrapping the inner BondingCurve struct
         }
         FEE_TIER_ACCOUNT_DISCM => {
@@ -434,7 +500,7 @@ pub fn decode_account_data(buf: &[u8]) -> Result<DecodedAccount, AccountDecodeEr
                     message: format!("Failed to deserialize FreeTier Account: {}", e),
                 })?;
 
-            println!("\nDecoded Fee Tier Account Structure: {:#?}", data);
+            info!("decoded fee_tier");
             Ok(DecodedAccount::FeeTier(data.0)) // Unwrapping the inner BondingCurve struct
         }
         POSITION_BUNDLE_ACCOUNT_DISCM => {
@@ -442,7 +508,7 @@ pub fn decode_account_data(buf: &[u8]) -> Result<DecodedAccount, AccountDecodeEr
                 .map_err(|e| AccountDecodeError {
                     message: format!("Failed to deserialize PositionBundleAccount: {}", e),
                 })?;
-            println!("\nDecoded Position Bundle Account Structure: {:#?}", data);
+            info!("decoded position_bundle");
             Ok(DecodedAccount::PositionBundle(data.0)) // Unwrapping the inner BondingCurve struct
         }
         POSITION_ACCOUNT_DISCM => {
@@ -450,7 +516,7 @@ pub fn decode_account_data(buf: &[u8]) -> Result<DecodedAccount, AccountDecodeEr
                 .map_err(|e| AccountDecodeError {
                     message: format!("Failed to deserialize PositionAccount: {}", e),
                 })?;
-            println!("\nDecoded Position Account Structure: {:#?}", data);
+            info!("decoded position");
             Ok(DecodedAccount::Position(data.0)) // Unwrapping the inner BondingCurve struct
         }
         TICK_ARRAY_ACCOUNT_DISCM => {
@@ -458,7 +524,7 @@ pub fn decode_account_data(buf: &[u8]) -> Result<DecodedAccount, AccountDecodeEr
                 .map_err(|e| AccountDecodeError {
                     message: format!("Failed to deserialize TickArrayAccount: {}", e),
                 })?;
-            println!("\nDecoded Tick Array Account Structure: {:#?}", data);
+            info!("decoded tick_array");
             Ok(DecodedAccount::TickArray(data.0)) // Unwrapping the inner BondingCurve struct
         }
         TOKEN_BADGE_ACCOUNT_DISCM => {
@@ -466,7 +532,7 @@ pub fn decode_account_data(buf: &[u8]) -> Result<DecodedAccount, AccountDecodeEr
                 .map_err(|e| AccountDecodeError {
                     message: format!("Failed to deserialize TokenBadgeAccount: {}", e),
                 })?;
-            println!("\nDecoded Token Badge Account Structure: {:#?}", data);
+            info!("decoded token_badge");
             Ok(DecodedAccount::TokenBadge(data.0)) // Unwrapping the inner BondingCurve struct
         }
         WHIRLPOOL_ACCOUNT_DISCM => {
@@ -474,7 +540,7 @@ pub fn decode_account_data(buf: &[u8]) -> Result<DecodedAccount, AccountDecodeEr
                 .map_err(|e| AccountDecodeError {
                     message: format!("Failed to deserialize WhirlpoolAccount: {}", e),
                 })?;
-            println!("\nDecoded Whirlpool Account Structure: {:#?}", data);
+            info!("decoded whirlpool");
             Ok(DecodedAccount::Whirlpool(data.0)) // Unwrapping the inner BondingCurve struct
         }
         _ => Err(AccountDecodeError {

@@ -1,5 +1,5 @@
 [package]
-name = "pump_fun_grpc_txn_stream_n_parse"
+name = "whirlpool-state-streamer"
 version = "0.1.0"
 edition = "2021"
 
@@ -29,4 +29,8 @@ solana-client="2.1.13"
 sha2 = "0.10.9"
 borsh = "1.5"
 
-[workspace]
+# Runtime outputs and HTTP health
+redis = { version = "0.24", features = ["tokio-comp"] }
+axum = { version = "0.7", features = ["json"] }
+
+# Standalone crate (not a workspace root)

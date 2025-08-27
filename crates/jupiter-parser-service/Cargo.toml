@@ -3,6 +3,8 @@ name = "jupiter-parser-service"
 version = "0.1.0"
 edition = "2021"
 
+#[workspace]
+
 [dependencies]
 # Async runtime
 tokio = { version = "1.0", features = ["full"] }
@@ -44,7 +46,8 @@ prometheus = "0.13"
 
 # Database  
 redis = { version = "0.24", features = ["tokio-comp"] }
+sha2 = "0.10"
 
-# MEVana dependencies
-normalizer-generated = { path = "../normalizer-generated" }
-normalizer-runtime = { path = "../normalizer-runtime" }
+# MEVana dependencies (temporarily disabled to avoid workspace resolver conflicts)
+# normalizer-generated = { path = "../normalizer-generated" }
+# normalizer-runtime = { path = "../normalizer-runtime" }

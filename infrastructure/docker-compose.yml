@@ -532,6 +532,354 @@ services:
           reservations:
             memory: 128M
             cpus: '0.10'
+
+  # Jupiter TX stream (reuses dex-stream-universal with Jupiter program filters)
+  # NOTE: TX-only; does NOT stream tick arrays. Emits raw Jupiter TXs to dex-transactions.
+  jupiter-tx-stream:
+    build:
+      context: ..
+      dockerfile: crates/dex-stream-universal/Dockerfile.slim
+    container_name: jupiter-tx-stream
+    depends_on:
+      kafka:
+        condition: service_healthy
+    environment:
+      - RUST_LOG=info
+      - KAFKA_BROKER=kafka:9092
+      - TOPIC=dex-transactions
+      - ENDPOINT=${ENDPOINT}
+      - X_TOKEN=${X_TOKEN}
+      - HEALTH_PORT=8092   # 8084 reserved; 8091 used by whirlpool
+      - BIND_ADDRESS=0.0.0.0
+      - DEX_FILTERING=ON
+      # Jupiter program IDs: aggregator v4, aggregator v6, limit v1, limit v2
+      - PROGRAM_IDS=JUP4Fb2cqiRUcaTHdrPC8h2gNsA2ETXiPDD33WcGuJB,JUP6LkbZbjS1jKKwapdHNy74zcZ3tLUZoi5QNyVTaV4,jupoNjAxXgZ4rjzxzPMP4oxduvQsQtZzyknqvzYNrNu,j1o2qRpjcyUwEvwtcfhEQefh773ZgjxcVRry7LDqg5X
+    ports:
+      - "8092:8092"
+    networks:
+      - mevana_net
+    restart: unless-stopped
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "50m"
+        max-file: "5"
+    deploy:
+      resources:
+          limits:
+            memory: 256M
+            cpus: '0.25'
+          reservations:
+            memory: 128M
+            cpus: '0.10'
+
+  # Jupiter parser service (enriched decode and re-publish)
+  jupiter-parser:
+    build:
+      context: ..
+      dockerfile: crates/jupiter-parser-service/Dockerfile.slim
+    container_name: jupiter-parser
+    depends_on:
+      kafka:
+        condition: service_healthy
+      jupiter-tx-stream:
+        condition: service_started
+    environment:
+      - RUST_LOG=info
+      - KAFKA_BROKERS=kafka:9092
+      - KAFKA_TOPIC=dex-transactions
+      - REDIS_URL=redis://redis:6379/0
+      - SERVICE_PORT=8086
+      - BIND_ADDRESS=0.0.0.0
+      - IDL_DIR=/app/idls
+      - JUPITER_OUT_TOPIC=jupiter.parsed
+      - JUPITER_OUT_SWAP_TOPIC=jupiter.swap.parsed
+      - JUPITER_OUT_LIMIT_TOPIC=jupiter.limit.parsed
+    ports:
+      - "8086:8086"
+    networks:
+      - mevana_net
+    restart: unless-stopped
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "50m"
+        max-file: "5"
+    volumes:
+      - ../idls:/app/idls:ro
+
+  # Raydium TX stream (reuses dex-stream-universal with Raydium program filter)
+  # NOTE: TX-only; streams Raydium AMM transactions for quote generation
+  raydium-tx-stream:
+    build:
+      context: ..
+      dockerfile: crates/dex-stream-universal/Dockerfile.slim
+    container_name: raydium-tx-stream
+    depends_on:
+      kafka:
+        condition: service_healthy
+    environment:
+      - RUST_LOG=info
+      - KAFKA_BROKER=kafka:9092
+      - TOPIC=dex-transactions
+      - ENDPOINT=${ENDPOINT}
+      - X_TOKEN=${X_TOKEN}
+      - HEALTH_PORT=8095   # Next available port after 8094 (pump)
+      - BIND_ADDRESS=0.0.0.0
+      - DEX_FILTERING=ON
+      # Raydium AMM program ID
+      - PROGRAM_IDS=675kPX9MHTjS2zt1qfr1NYHuzeLXfQM9H24wFSUt1Mp8
+    ports:
+      - "8095:8095"
+    networks:
+      - mevana_net
+    restart: unless-stopped
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "50m"
+        max-file: "5"
+    deploy:
+      resources:
+          limits:
+            memory: 256M
+            cpus: '0.25'
+          reservations:
+            memory: 128M
+            cpus: '0.10'
+
+  # Whirlpool state streamer (Geyser → Redis)
+  whirlpool-state-streamer:
+    build:
+      context: ..
+      dockerfile: crates/stream_and_parse_whirlpool_account_updates/Dockerfile.slim
+    container_name: whirlpool-state-streamer
+    depends_on:
+      redis:
+        condition: service_healthy
+    environment:
+      - RUST_LOG=info
+      - ENDPOINT=${ENDPOINT}
+      - X_TOKEN=${X_TOKEN}
+      - REDIS_URL=redis://redis:6379/0
+      - HEALTH_PORT=8093
+      - BIND_ADDRESS=0.0.0.0
+      # Optional seeding enabled to ensure initial Redis population
+      - SEED_TICK_ARRAYS=1
+      # - RPC_URL=https://api.mainnet-beta.solana.com
+    networks:
+      - mevana_net
+    ports:
+      - "8093:8093"
+    restart: unless-stopped
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "50m"
+        max-file: "5"
+
+  # Pump.fun transaction stream (Geyser-only)
+  pump-tx-stream:
+    build:
+      context: ..
+      dockerfile: crates/dex-stream-universal/Dockerfile.slim
+    container_name: pump-tx-stream
+    depends_on:
+      kafka:
+        condition: service_healthy
+    environment:
+      - RUST_LOG=info
+      - ENDPOINT=${ENDPOINT}
+      - X_TOKEN=${X_TOKEN}
+      - KAFKA_BROKERS=kafka:9092
+      - OUT_TOPIC=dex-transactions
+      # Legacy env names for universal streamer
+      - KAFKA_BROKER=kafka:9092
+      - TOPIC=dex-transactions
+      - SERVICE_NAME=pump-tx-stream
+      - HEALTH_PORT=8094
+      - BIND_ADDRESS=0.0.0.0
+      - PROGRAM_IDS=6EF8rrecthR5Dkzon8Nwu78hRvfCKubJ14M5uBEwF6P,pAMMBay6oceH9fJKBRHGP5D4bD4sWpmSwMn52FMfXEA
+    networks:
+      - mevana_net
+    ports:
+      - "8094:8094"
+    restart: unless-stopped
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "50m"
+        max-file: "5"
+  # Whirlpool quote surface: consumes Redis state → produces quotes.whirlpool.v1
+  whirlpool-quote-surface:
+    build:
+      context: ..
+      dockerfile: crates/whirlpool-quote-surface/Dockerfile.slim
+    container_name: whirlpool-quote-surface
+    depends_on:
+      kafka:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    environment:
+      - RUST_LOG=info
+      - REDIS_URL=redis://redis:6379/0
+      - KAFKA_BROKERS=kafka:9092
+      - OUT_TOPIC=quotes.whirlpool.v1
+      - QUOTE_SIZES=1000000,10000000,100000000
+      - QUOTE_INTERVAL_MS=1000
+      # Active pool selection
+      - MIN_LIQUIDITY=1
+      # Optional: force include pools (comma-separated pubkeys)
+      - QUOTE_POOL_ALLOWLIST=
+    networks:
+      - mevana_net
+    restart: unless-stopped
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "50m"
+        max-file: "5"
+
+  # Pump.fun quote service: streams real-time prices → produces quotes.pump.v1
+  pump-quote-service:
+    build:
+      context: ..
+      dockerfile: crates/pump-quote-service/Dockerfile
+    container_name: pump-quote-service
+    depends_on:
+      kafka:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    environment:
+      - RUST_LOG=info
+      - ENDPOINT=https://grpc.ny.shyft.to
+      - X_TOKEN=${X_TOKEN:-efff2d23-97ae-4c5f-8b8b-9a6265001189}
+      - KAFKA_BROKERS=kafka:9092
+      - OUT_TOPIC=quotes.pump.v1
+      - REDIS_URL=redis://redis:6379/0
+      - RPC_URL=https://api.mainnet-beta.solana.com
+    networks:
+      - mevana_net
+    restart: unless-stopped
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "50m"
+        max-file: "5"
+
+  # Raydium quote service: streams real-time prices → produces quotes.raydium.v1
+  raydium-quote-service:
+    build:
+      context: ..
+      dockerfile: crates/raydium-quote-service/Dockerfile
+    container_name: raydium-quote-service
+    depends_on:
+      kafka:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    environment:
+      - RUST_LOG=info
+      - ENDPOINT=https://grpc.ny.shyft.to
+      - X_TOKEN=${X_TOKEN:-efff2d23-97ae-4c5f-8b8b-9a6265001189}
+      - KAFKA_BROKERS=kafka:9092
+      - OUT_TOPIC=quotes.raydium.v1
+      - REDIS_URL=redis://redis:6379/0
+      - RPC_URL=https://api.mainnet-beta.solana.com
+    networks:
+      - mevana_net
+    restart: unless-stopped
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "50m"
+        max-file: "5"
+
+  # Meteora TX stream (reuses dex-stream-universal with Meteora DAMM program filter)
+  # NOTE: TX-only; streams Meteora DAMM transactions for quote generation
+  meteora-tx-stream:
+    build:
+      context: ..
+      dockerfile: crates/dex-stream-universal/Dockerfile.slim
+    container_name: meteora-tx-stream
+    depends_on:
+      kafka:
+        condition: service_healthy
+    environment:
+      - RUST_LOG=info
+      - KAFKA_BROKER=kafka:9092
+      - TOPIC=dex-transactions
+      - ENDPOINT=${ENDPOINT}
+      - X_TOKEN=${X_TOKEN}
+      - HEALTH_PORT=8096   # Next available port after raydium (8095)
+      - BIND_ADDRESS=0.0.0.0
+      - DEX_FILTERING=ON
+      # Meteora DAMM program ID
+      - PROGRAM_IDS=cpamdpZCGKUy5JxQXB4dcpGPiikHawvSWAd6mEn1sGG
+    networks:
+      - mevana_net
+    restart: unless-stopped
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "50m"
+        max-file: "5"
+
+  # Meteora quote service: streams real-time prices → produces quotes.meteora.v1
+  meteora-quote-service:
+    build:
+      context: ..
+      dockerfile: crates/meteora-quote-service/Dockerfile
+    container_name: meteora-quote-service
+    depends_on:
+      kafka:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    environment:
+      - RUST_LOG=info
+      - ENDPOINT=${ENDPOINT}
+      - X_TOKEN=${X_TOKEN}
+      - KAFKA_BROKERS=kafka:9092
+      - OUT_TOPIC=quotes.meteora.v1
+      - RPC_URL=https://api.mainnet-beta.solana.com
+    networks:
+      - mevana_net
+    restart: unless-stopped
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "50m"
+        max-file: "5"
+
+  # Jupiter Integration (publishes quotes/signals from API as a baseline comparator)
+  jupiter-integration:
+    build:
+      context: ..
+      dockerfile: crates/jupiter-integration/Dockerfile.slim
+    container_name: jupiter-integration
+    depends_on:
+      kafka:
+        condition: service_healthy
+    environment:
+      - RUST_LOG=info
+      - KAFKA_BROKER=kafka:9092
+      - JUPITER_SIGNALS_TOPIC=quotes.jupiter.v1
+      - JUPITER_API_URL=https://quote-api.jup.ag
+      - JUPITER_API_KEY=${JUPITER_API_KEY}
+      - JUPITER_POLL_INTERVAL_MS=1000
+      - MIN_AMOUNT_THRESHOLD=1000000
+      - MIN_PRICE_IMPACT_PCT=0.05
+    networks:
+      - mevana_net
+    restart: unless-stopped
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "50m"
+        max-file: "5"
   # GRAPHQL-BACKFILL SERVICE - Historical data processing
   # =====================================================
   # This service fetches historical data from Shyft's GraphQL API

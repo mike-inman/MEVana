@@ -132,11 +132,11 @@ pub fn seed_tick_arrays_via_rpc(
         let addr = addrs[idx];
         match acc_opt {
             None => {
-                println!("[TICK_ARRAY] addr={} missing (PDA not initialized)", addr);
+                log::info!("tick_array addr={} missing (PDA not initialized)", addr);
             }
             Some(acc) => {
                 if &acc.owner != program_id {
-                    println!("[TICK_ARRAY] addr={} wrong owner {}", addr, acc.owner);
+                    log::info!("tick_array addr={} wrong owner {}", addr, acc.owner);
                     continue;
                 }
                 let data = acc.data.as_slice();
@@ -144,8 +144,8 @@ pub fn seed_tick_arrays_via_rpc(
                 match decode_tick_array(data) {
                     Ok(ta) => {
                         let init_count = ta.ticks.iter().filter(|t| t.liquidity_gross > 0).count();
-                        println!(
-                            "[TICK_ARRAY] addr={} len={} disc_ok={} start_tick_index={} whirlpool_ok={} initialized_ticks={}",
+                        log::info!(
+                            "tick_array addr={} len={} disc_ok={} start_tick_index={} whirlpool_ok={} initialized_ticks={}",
                             addr,
                             data.len(),
                             disc_ok,
@@ -158,7 +158,7 @@ pub fn seed_tick_arrays_via_rpc(
                         for (i, t) in ta.ticks.iter().enumerate() {
                             if t.liquidity_gross > 0 {
                                 let idx_tick = ta.start_tick_index + (i as i32) * tick_spacing;
-                                println!("  init_tick={}", idx_tick);
+                                log::info!("init_tick={}", idx_tick);
                                 printed += 1;
                                 if printed >= 6 {
                                     break;
@@ -174,7 +174,7 @@ pub fn seed_tick_arrays_via_rpc(
                         );
                     }
                     Err(e) => {
-                        println!("[TICK_ARRAY] addr={} decode error: {}", addr, e);
+                        log::info!("tick_array addr={} decode error: {}", addr, e);
                     }
                 }
             }

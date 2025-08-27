@@ -1,7 +1,31 @@
-/target
+# Build artifacts
+/target/
+/**/target/
+crates/*/target/
+crates/**/target/
+
+# Logs
 logs/
+*.log
+
+# Temporary files
 tmp/
-infra/docker/.env.docker
+*.tmp
+
+# Environment files
 .env
-crates/normalizer-service/target/
 .env*
+infra/docker/.env.docker
+
+# IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Cargo lock files (optional - remove if you want to commit them)
+# Cargo.lock

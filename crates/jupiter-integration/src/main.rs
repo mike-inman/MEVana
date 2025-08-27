@@ -92,6 +92,7 @@ pub struct JupiterMonitor {
     poll_interval_ms: u64,
     min_amount_threshold: u64,
     min_price_impact: f64,
+    api_key: Option<String>,
 }
 
 impl JupiterMonitor {
@@ -101,11 +102,11 @@ impl JupiterMonitor {
         let output_topic =
             env::var("JUPITER_SIGNALS_TOPIC").unwrap_or_else(|_| "jupiter.signals.dev".to_string());
         let base_url =
-            env::var("JUPITER_API_URL").unwrap_or_else(|_| "https://api.jup.ag".to_string());
+            env::var("JUPITER_API_URL").unwrap_or_else(|_| "https://api.jup.ag/ultra".to_string());
         let poll_interval_ms = env::var("JUPITER_POLL_INTERVAL_MS")
-            .unwrap_or_else(|_| "1000".to_string())
+            .unwrap_or_else(|_| "20000".to_string())
             .parse()
-            .unwrap_or(1000);
+            .unwrap_or(20000);
         let min_amount_threshold = env::var("MIN_AMOUNT_THRESHOLD")
             .unwrap_or_else(|_| "1000000".to_string()) // 1 SOL in lamports
             .parse()
@@ -122,8 +123,13 @@ impl JupiterMonitor {
             .set("acks", "1")
             .create()?;
 
+        let timeout_ms = env::var("JUPITER_TIMEOUT_MS")
+            .ok()
+            .and_then(|s| s.parse::<u64>().ok())
+            .unwrap_or(2500);
+
         let client = Client::builder()
-            .timeout(Duration::from_millis(500)) // Fast timeout for high-frequency polling
+            .timeout(Duration::from_millis(timeout_ms))
             .build()?;
 
         Ok(Self {
@@ -134,6 +140,7 @@ impl JupiterMonitor {
             poll_interval_ms,
             min_amount_threshold,
             min_price_impact,
+            api_key: env::var("JUPITER_API_KEY").ok(),
         })
     }
 
@@ -144,7 +151,7 @@ impl JupiterMonitor {
         );
 
         // Popular token pairs to monitor
-        let token_pairs = vec![
+        let mut token_pairs = vec![
             // SOL/USDC
             (
                 "So11111111111111111111111111111111111111112",
@@ -163,13 +170,30 @@ impl JupiterMonitor {
             // Add more pairs as needed
         ];
 
-        let amounts_to_test = vec![
+        let mut amounts_to_test = vec![
             1_000_000u64,      // 0.001 SOL
             10_000_000u64,     // 0.01 SOL
             100_000_000u64,    // 0.1 SOL
             1_000_000_000u64,  // 1 SOL
             10_000_000_000u64, // 10 SOL
         ];
+
+        // Throttle calls under rate limiting
+        let max_pairs = env::var("MAX_PAIRS")
+            .ok()
+            .and_then(|s| s.parse::<usize>().ok())
+            .unwrap_or(1);
+        if token_pairs.len() > max_pairs {
+            token_pairs.truncate(max_pairs);
+        }
+
+        let max_amounts = env::var("MAX_AMOUNTS")
+            .ok()
+            .and_then(|s| s.parse::<usize>().ok())
+            .unwrap_or(2);
+        if amounts_to_test.len() > max_amounts {
+            amounts_to_test.truncate(max_amounts);
+        }
 
         loop {
             let start_time = Instant::now();
@@ -204,11 +228,15 @@ impl JupiterMonitor {
         let start_time = Instant::now();
 
         let quote_url = format!(
-            "{}/swap/v6/quote?inputMint={}&outputMint={}&amount={}&slippageBps=50",
+            "{}/v6/quote?inputMint={}&outputMint={}&amount={}&slippageBps=50",
             self.base_url, input_mint, output_mint, amount
         );
 
-        match self.client.get(&quote_url).send().await {
+        let mut req = self.client.get(&quote_url);
+        if let Some(ref key) = self.api_key {
+            req = req.header("x-api-key", key);
+        }
+        match req.send().await {
             Ok(response) => {
                 if response.status().is_success() {
                     let quote: QuoteResponse = response.json().await?;
