@@ -373,7 +373,8 @@ services:
       - HEALTH_PORT=8084
       - BIND_ADDRESS=0.0.0.0
       - DEX_FILTERING=ON
-      - PROGRAM_IDS=JUP4Fb2cqiRUcaTHdrPC8h2gNsA2ETXiPDD33WcGuJB,jupoNjAxXgZ4rjzxzPMP4oxduvQsQtZzyknqvzYNrNu
+      # Include all Jupiter entry programs: v4, v6, limit v1, limit v2
+      - PROGRAM_IDS=JUP4Fb2cqiRUcaTHdrPC8h2gNsA2ETXiPDD33WcGuJB,JUP6LkbZbjS1jKKwapdHNy74zcZ3tLUZoi5QNyVTaV4,jupoNjAxXgZ4rjzxzPMP4oxduvQsQtZzyknqvzYNrNu,j1o2qRpjcyUwEvwtcfhEQefh773ZgjxcVRry7LDqg5X
       # PostgreSQL connection for raw transaction logging
       - DATABASE_URL=postgresql://mev:mevpassword@postgres:5432/mevdb
     ports:
@@ -492,7 +493,45 @@ services:
         reservations:
           memory: 128M
           cpus: '0.10'
-
+  # Whirlpool TX stream (reuses dex-stream-universal with Whirlpool program filter)
+  # NOTE: TX-only; does NOT stream tick arrays. Safe to run alongside the universal stream.
+  whirlpool-tx-stream:
+    build:
+      context: ..
+      dockerfile: crates/dex-stream-universal/Dockerfile.slim
+    container_name: whirlpool-tx-stream
+    depends_on:
+      kafka:
+        condition: service_healthy
+    environment:
+      - RUST_LOG=info
+      - KAFKA_BROKER=kafka:9092
+      - TOPIC=dex-transactions
+      - ENDPOINT=https://grpc.ny.shyft.to
+      - X_TOKEN=${X_TOKEN}
+      - HEALTH_PORT=8091   # 8084 is reserved; use a free port
+      - BIND_ADDRESS=0.0.0.0
+      - DEX_FILTERING=ON
+      # Whirlpool program ID only — keeps TX stream focused
+      - PROGRAM_IDS=whirLbMiicVdio4qvUfM5KAg6Ct8VwpYzGff3uctyCc
+    ports:
+      - "8091:8091"
+    networks:
+      - mevana_net
+    restart: unless-stopped
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "50m"
+        max-file: "5"
+    deploy:
+      resources:
+          limits:
+            memory: 256M
+            cpus: '0.25'
+          reservations:
+            memory: 128M
+            cpus: '0.10'
   # GRAPHQL-BACKFILL SERVICE - Historical data processing
   # =====================================================
   # This service fetches historical data from Shyft's GraphQL API

@@ -1,10 +1,18 @@
 #!/usr/bin/env bash
-set -euo pipefail
+set -eo pipefail
 
 # Local environment loader for MEVana
 # Usage: source scripts/load-env.sh
 
-SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+# Support both bash and zsh for resolving script path
+if [ -n "${BASH_SOURCE:-}" ]; then
+  _SELF_PATH="${BASH_SOURCE[0]}"
+elif [ -n "${ZSH_VERSION:-}" ]; then
+  _SELF_PATH="${(%):-%x}"
+else
+  _SELF_PATH="$0"
+fi
+SCRIPT_DIR="$(cd -- "$(dirname -- "${_SELF_PATH}")" && pwd)"
 ROOT_DIR="$(cd -- "${SCRIPT_DIR}/.." && pwd)"
 
 ENV_CANDIDATES=(
