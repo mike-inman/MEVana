@@ -173,6 +173,7 @@ services:
         reservations:
           memory: 1G
           cpus: '0.5'
+          
 
   # KAFKA-UI SERVICE - Management Interface
   # =======================================

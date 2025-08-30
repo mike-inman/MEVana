@@ -1,0 +1,17 @@
+{
+    "slot": 9999,
+    "block_time_unix": 1712345678,
+    "signature": "SIG-TEMPLATE",
+    "meta_ok": true,
+    "instruction": {
+      "program_id": "REPLACE_WITH_PROGRAM_ID",
+      "account_keys": ["ProgramOrPool111...", "PoolOrMarket111...", "UserAuth111..."],
+      "account_indices": [1,2],
+      "data_b64": "AQ=="
+    },
+    "token_balance_changes": [
+      {"owner":"Ux","mint":"TOKEN_IN_MINT_B58","pre":"1000000","post":"900000"},
+      {"owner":"Ux","mint":"TOKEN_OUT_MINT_B58","pre":"0","post":"200000"}
+    ]
+  }
+  

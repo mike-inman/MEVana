@@ -1,0 +1,21 @@
+{
+    "slot": 462,
+    "block_time_unix": 1710000700,
+    "signature": "SIG-UNK6-001",
+    "meta_ok": true,
+    "instruction": {
+      "program_id": "6EF8rrecthR5Dkzon8Nwu78hRvfCKubJ14M5uBEwF6P",
+      "account_keys": [
+        "Dex6EF8rrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrr",
+        "Pool6EF8rrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrr",
+        "UserAuth77777777777777777777777777777777777"
+      ],
+      "account_indices": [1,2],
+      "data_b64": "AQ=="
+    },
+    "token_balance_changes": [
+      {"owner":"U8","mint":"So11111111111111111111111111111111111111112","pre":"900000","post":"800000"},
+      {"owner":"U8","mint":"USDC111111111111111111111111111111111111111","pre":"300000","post":"400000"}
+    ]
+  }
+  

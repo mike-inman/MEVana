@@ -1,0 +1,21 @@
+{
+    "slot": 463,
+    "block_time_unix": 1710000800,
+    "signature": "SIG-OPN-001",
+    "meta_ok": true,
+    "instruction": {
+      "program_id": "opnb2LAfJYbRMAHHvqjCwQxanZn7ReEHp1k81EohpZb",
+      "account_keys": [
+        "OpenBook11111111111111111111111111111111111",
+        "MarketOpen111111111111111111111111111111111",
+        "UserAuth88888888888888888888888888888888888"
+      ],
+      "account_indices": [1,2],
+      "data_b64": "AQ=="
+    },
+    "token_balance_changes": [
+      {"owner":"U9","mint":"USDC111111111111111111111111111111111111111","pre":"1100000","post":"1000000"},
+      {"owner":"U9","mint":"So11111111111111111111111111111111111111112","pre":"250000","post":"350000"}
+    ]
+  }
+  

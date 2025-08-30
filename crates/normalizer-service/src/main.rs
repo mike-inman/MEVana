@@ -1,29 +1,275 @@
 // crates/normalizer-service/src/main.rs
-mod raydium_map;   // raydium parsers
-mod meteora_map;   // meteora parsers
-mod orca_map;      // orca whirlpool parsers
-mod kafka;         // <- see notes at bottom for kafka.rs
+mod kafka;
+mod meteora_map; // meteora parsers
+mod orca_map; // orca whirlpool parsers
+mod raydium_map; // raydium parsers // <- see notes at bottom for kafka.rs
 
 // use anyhow::Result;
-use clap::Parser;
+use crate::kafka::{make_producer, publish_json_ff};
+//use clap::Parser;
 use lazy_static::lazy_static;
-use serde::Deserialize;
-use std::{fs, path::PathBuf};
-
-use normalizer_generated::registry as gen;
-use normalizer_runtime as rt;
+//use normalizer_generated::registry as gen;
+//use normalizer_runtime as rt;
 use normalizer_runtime::layouts::LayoutRegistry;
 use normalizer_runtime::models::SwapEvent;
-use crate::kafka::{make_producer, publish_json_ff};
+use serde::Deserialize;
+use std::env::args;
+use std::{fs, path::PathBuf};
 // use kafka::{make_producer, publish_json};
-
+use anyhow::{Context, Result};
 use normalizer_runtime::adapters::to_swap_event;
 
+use clap::{Parser, Subcommand};
+use normalizer_generated::registry as gen;
+use normalizer_runtime as rt;
+use rdkafka::consumer::{Consumer, StreamConsumer};
+use rdkafka::{ClientConfig, Message as _};
+use yellowstone_grpc_proto::prelude as ypp;
+use yellowstone_grpc_proto::prost::Message as _;
 
-use anyhow::{Result, Context};
+use rdkafka::producer::Producer; // trait import
 
+use lru::LruCache;
+use std::sync::{Arc, Mutex, Once};
+// type SlotTimeCache = Arc<Mutex<LruCache<u64, i64>>>;
 
+// static WARN_MISSING_BLOCKTIME: Once = Once::new();
 
+// ---- CLI ----
+#[derive(Parser)]
+#[command(name = "normalizer-service")]
+struct Cli {
+    #[command(subcommand)]
+    cmd: Cmd,
+}
+
+// ==== args ====
+#[derive(Parser, Debug, Clone)]
+struct Args {
+    /// If set, skip events that don't have a block_time yet
+    #[arg(long, default_value_t = false)]
+    require_block_time: bool,
+
+    /// Kafka broker (env still supported)
+    #[arg(long, env = "KAFKA_BROKER", default_value = "localhost:9092")]
+    kafka_broker: String,
+
+    /// Output topic for normalized swaps
+    #[arg(long, env = "SWAP_TOPIC", default_value = "enriched.swaps.all")]
+    swap_topic: String,
+}
+
+// Warn-once helper when block_time_unix==0
+use std::sync::atomic::{AtomicBool, Ordering};
+static WARNED_NO_BT: AtomicBool = AtomicBool::new(false);
+fn warn_no_block_time_once() {
+    if !WARNED_NO_BT.swap(true, Ordering::Relaxed) {
+        log::warn!(
+            "Yellowstone message has no block_time; using 0. Wire a block-stream/RPC later."
+        );
+    }
+}
+
+#[derive(Subcommand)]
+enum Cmd {
+    /// Run a local JSON fixture through the extractors
+    Fixture { path: std::path::PathBuf },
+
+    /// Read Yellowstone tx from Kafka and push normalized swaps to another topic
+    Pipe {
+        #[arg(long, env = "IN_TOPIC")]
+        in_topic: String,
+        #[arg(long, env = "OUT_TOPIC", default_value = "normalized.swaps")]
+        out_topic: String,
+        #[arg(long, env = "KAFKA_BROKER", default_value = "localhost:9092")]
+        broker: String,
+        #[arg(long, env = "GROUP_ID", default_value = "normalizer-pipe")]
+        group: String,
+    },
+
+    /// Tail a topic and print messages
+    Tail {
+        #[arg(long, env = "TOPIC")]
+        topic: String,
+        #[arg(long, env = "KAFKA_BROKER", default_value = "localhost:9092")]
+        broker: String,
+        #[arg(long, env = "GROUP_ID", default_value = "normalizer-tail")]
+        group: String,
+    },
+}
+
+#[tokio::main]
+async fn main() -> anyhow::Result<()> {
+    let cli = Cli::parse();
+    match cli.cmd {
+        Cmd::Fixture { path } => run_fixture(path), // your existing function
+        Cmd::Pipe {
+            in_topic,
+            out_topic,
+            broker,
+            group,
+        } => run_pipe(&broker, &group, &in_topic, &out_topic).await,
+        Cmd::Tail {
+            topic,
+            broker,
+            group,
+        } => run_tail(&broker, &group, &topic).await,
+    }
+}
+
+// ---- PIPE: raw Yellowstone -> normalized.swaps ----
+async fn run_pipe(
+    broker: &str,
+    group: &str,
+    in_topic: &str,
+    out_topic: &str,
+) -> anyhow::Result<()> {
+    env_logger::init();
+    log::info!("pipe: {in_topic} -> {out_topic} @ {broker} (group={group})");
+
+    let consumer: StreamConsumer = ClientConfig::new()
+        .set("bootstrap.servers", broker)
+        .set("group.id", group)
+        .set("enable.auto.commit", "false")
+        .set("auto.offset.reset", "latest")
+        .create()?;
+    consumer.subscribe(&[in_topic])?;
+
+    // let producer = crate::kafka::make_producer(broker)?;
+    let producer = crate::kafka::make_producer()?;
+    let extractors: Vec<Box<dyn rt::SwapExtractor>> = gen::registry();
+
+    loop {
+        match consumer.recv().await {
+            Err(e) => log::warn!("kafka recv error: {e:?}"),
+            Ok(m) => {
+                if let Some(bytes) = m.payload() {
+                    // handle_raw(payload, &extractors, &producer, &SWAP_TOPIC, slot_time.as_ref()).await?;
+
+                    if let Err(e) = handle_raw(bytes, &extractors, &producer, out_topic).await {
+                        log::error!("handle_raw error: {e:#}");
+                    }
+                }
+                let _ = consumer.commit_message(&m, rdkafka::consumer::CommitMode::Async);
+            }
+        }
+    }
+}
+
+async fn handle_raw(
+    payload: &[u8],
+    extractors: &[Box<dyn rt::SwapExtractor>],
+    producer: &rdkafka::producer::FutureProducer,
+    out_topic: &str,
+) -> anyhow::Result<()> {
+    let update = ypp::SubscribeUpdateTransaction::decode(payload)?;
+    let info = match update.transaction.as_ref() {
+        Some(i) => i,
+        None => return Ok(()),
+    };
+
+    if let Some(msg) = info.transaction.as_ref().and_then(|t| t.message.as_ref()) {
+        let keys_b58: Vec<String> = msg
+            .account_keys
+            .iter()
+            .map(|k| bs58::encode(k).into_string())
+            .collect();
+
+        for (ix_index, ci) in msg.instructions.iter().enumerate() {
+            let pid_index = ci.program_id_index as usize;
+            if pid_index >= keys_b58.len() {
+                continue;
+            }
+            let pid = &keys_b58[pid_index];
+
+            let (decoded_name, decoded_roles) = if let Some(dec) = gen::decoder_for(pid) {
+                if let Some((name, roles)) = dec(&ci.data, &ci.accounts, &keys_b58) {
+                    (Some(name), Some(roles))
+                } else {
+                    (None, None)
+                }
+            } else {
+                (None, None)
+            };
+
+            let token_changes: Vec<rt::TokenBalanceChange> = Vec::new();
+            warn_no_block_time_once();
+
+            let ctx = rt::TxContext {
+                slot: update.slot,
+                block_time_unix: 0,
+                signature: bs58::encode(&info.signature).into_string(),
+                ix_index: ix_index as u16,
+                program_id: pid.clone(),
+                meta_ok: info.meta.as_ref().map(|m| m.err.is_none()).unwrap_or(false),
+                token_balance_changes: &token_changes,
+                account_data_by_pubkey: None,
+                decoded_name,
+                decoded_args_json: None,
+                decoded_accounts_by_role: decoded_roles,
+            };
+
+            for ex in extractors.iter().filter(|e| e.program_id() == pid) {
+                if let Some(mut ns) = ex.try_extract(&ctx) {
+                    // 1) fill from decoded roles
+                    if ns.pool_id.is_empty() {
+                        if let Some(roles) = &ctx.decoded_accounts_by_role {
+                            if let Some(pid) = roles.get("whirlpool").or_else(|| roles.get("pool"))
+                            {
+                                ns.pool_id = pid.clone();
+                            }
+                        }
+                    }
+                    // 2) live fallback: first referenced account of this instruction
+                    if ns.pool_id.is_empty() {
+                        if let Some(first_idx) = ci.accounts.get(0) {
+                            if let Some(k) = keys_b58.get(*first_idx as usize) {
+                                ns.pool_id = k.clone();
+                            }
+                        } else if let Some(k) = keys_b58.get(0) {
+                            ns.pool_id = k.clone();
+                        }
+                    }
+
+                    let swap = normalizer_runtime::adapters::to_swap_event(&ns);
+                    crate::kafka::publish_json_ff(
+                        producer.clone(),
+                        out_topic.to_string(),
+                        swap.pool_id.clone(),
+                        swap.clone(),
+                    );
+                    log::info!(
+                        "→ normalized: {} {} -> {} (slot {})",
+                        ns.dex,
+                        ns.token_in_mint,
+                        ns.token_out_mint,
+                        ns.slot
+                    );
+                }
+            }
+        }
+    }
+    Ok(())
+}
+
+// ---- TAIL: print a topic ----
+async fn run_tail(broker: &str, group: &str, topic: &str) -> anyhow::Result<()> {
+    env_logger::init();
+    let c: StreamConsumer = ClientConfig::new()
+        .set("bootstrap.servers", broker)
+        .set("group.id", group)
+        .set("enable.auto.commit", "true")
+        .set("auto.offset.reset", "latest")
+        .create()?;
+    c.subscribe(&[topic])?;
+    log::info!("tailing topic {topic}");
+    loop {
+        let m = c.recv().await?;
+        if let Some(p) = m.payload() {
+            println!("{}", String::from_utf8_lossy(p));
+        }
+    }
+}
 
 // ---------------- env / topics ----------------
 
@@ -84,11 +330,17 @@ fn load_layouts() -> Result<LayoutRegistry> {
 
     // the rest
     let files = vec![
-        ("raydium_clmm/tickarray", "raydium_clmm/layout.tickarray.v1.json"),
+        (
+            "raydium_clmm/tickarray",
+            "raydium_clmm/layout.tickarray.v1.json",
+        ),
         ("meteora_dlmm/pool", "meteora_dlmm/layout.pool.v1.json"),
         ("meteora_dlmm/bin", "meteora_dlmm/layout.bin.v1.json"),
         ("orca_whirlpool/pool", "orca_whirlpool/layout.pool.v1.json"),
-        ("orca_whirlpool/tickarray", "orca_whirlpool/layout.tickarray.v1.json"),
+        (
+            "orca_whirlpool/tickarray",
+            "orca_whirlpool/layout.tickarray.v1.json",
+        ),
     ];
 
     for (key, filename) in files {
@@ -101,33 +353,38 @@ fn load_layouts() -> Result<LayoutRegistry> {
     Ok(reg)
 }
 
-// ---------------- CLI ----------------
+// // ---------------- CLI ----------------
 
-#[derive(Parser, Debug)]
-#[command(name = "normalizer-service", version)]
-enum Cmd {
-    Fixture { path: PathBuf }, // one instruction fixture
-    AccountFixture {
-        path: PathBuf,          // base64 account.data
-        kind: String,           // raydium:tickarray | meteora:pool | meteora:bin | orca:pool | orca:tickarray
-        pool_id: Option<String>,
-        slot: Option<u64>,
-    },
-    TestParsers,
-}
+// #[derive(Parser, Debug)]
+// #[command(name = "normalizer-service", version)]
+// enum Cmd {
+//     Fixture {
+//         path: PathBuf,
+//     }, // one instruction fixture
+//     AccountFixture {
+//         path: PathBuf, // base64 account.data
+//         kind: String, // raydium:tickarray | meteora:pool | meteora:bin | orca:pool | orca:tickarray
+//         pool_id: Option<String>,
+//         slot: Option<u64>,
+//     },
+//     TestParsers,
+// }
 
-// NOTE: use Tokio runtime because we send to Kafka asynchronously
-#[tokio::main]
-async fn main() -> Result<()> {
-    let cmd = Cmd::parse();
-    match cmd {
-        Cmd::Fixture { path } => run_fixture(path),
-        Cmd::AccountFixture { path, kind, pool_id, slot } => {
-            run_account_fixture(path, kind, pool_id, slot).await
-        }
-        Cmd::TestParsers => test_parsers().await,
-    }
-}
+// // NOTE: use Tokio runtime because we send to Kafka asynchronously
+// #[tokio::main]
+// async fn main() -> Result<()> {
+//     let cmd = Cmd::parse();
+//     match cmd {
+//         Cmd::Fixture { path } => run_fixture(path),
+//         Cmd::AccountFixture {
+//             path,
+//             kind,
+//             pool_id,
+//             slot,
+//         } => run_account_fixture(path, kind, pool_id, slot).await,
+//         Cmd::TestParsers => test_parsers().await,
+//     }
+// }
 
 // ---------------- Fixture format ----------------
 
@@ -162,54 +419,49 @@ fn parse_u128(s: &str) -> Result<u128> {
 }
 
 // ---------------- Core: run_fixture (uses generated extractors) ----------------
-
 fn run_fixture(path: PathBuf) -> Result<()> {
-    // 1) load fixture json
+    use base64::{engine::general_purpose, Engine as _};
+    use rdkafka::producer::Producer; // for flush()
+
+    // 1) load fixture
     let txt = fs::read_to_string(&path)?;
     let fx: Fixture = serde_json::from_str(&txt)?;
 
-    // 2) decode ix data (this is what the decoder wants as 1st arg)
-    use base64::{engine::general_purpose, Engine as _};
-    let ix_bytes: Vec<u8> = general_purpose::STANDARD
+    // 2) ix data bytes
+    let ix_bytes = general_purpose::STANDARD
         .decode(&fx.instruction.data_b64)
         .context("decode fx.instruction.data_b64 (base64)")?;
 
-    // 3) convert indices to u32 (decoder wants &[u32])
-    let acc_indices_u32: Vec<u32> = fx.instruction
-        .account_indices
+    // 3) token balance deltas
+    let token_changes: Vec<rt::TokenBalanceChange> = fx
+        .token_balance_changes
         .iter()
-        .map(|&i| i as u32)
-        .collect();
-
-    // 4) balance deltas
-    let mut token_changes = Vec::<rt::TokenBalanceChange>::new();
-    for c in &fx.token_balance_changes {
-        token_changes.push(rt::TokenBalanceChange {
+        .map(|c| rt::TokenBalanceChange {
             owner: c.owner.clone(),
             mint: c.mint.clone(),
-            pre: parse_u128(&c.pre)?,
-            post: parse_u128(&c.post)?,
-        });
-    }
+            pre: parse_u128(&c.pre).unwrap_or(0),
+            post: parse_u128(&c.post).unwrap_or(0),
+        })
+        .collect();
 
-    // 5) optional: IDL decode name/roles (uses the generated decoder)
-   // IDL decode name/roles
+    // 4) optional: decode name/roles via generated registry
     let (decoded_name, decoded_roles) =
-    if let Some(dec) = gen::decoder_for(&fx.instruction.program_id) {
-        if let Some((name, roles)) = dec(
-            &ix_bytes,
-            &fx.instruction.account_indices,   // <-- use &[u8] directly
-            &fx.instruction.account_keys
-        ) {
-            (Some(name), Some(roles))
+        if let Some(dec) = gen::decoder_for(&fx.instruction.program_id) {
+            // NOTE: decoder currently takes &[u8] for account indices
+            if let Some((name, roles)) = dec(
+                &ix_bytes,
+                &fx.instruction.account_indices,
+                &fx.instruction.account_keys,
+            ) {
+                (Some(name), Some(roles))
+            } else {
+                (None, None)
+            }
         } else {
             (None, None)
-        }
-    } else {
-        (None, None)
-    };
+        };
 
-    // 6) build TxContext
+    // 5) build TxContext
     let ctx = rt::TxContext {
         slot: fx.slot,
         block_time_unix: fx.block_time_unix,
@@ -224,38 +476,52 @@ fn run_fixture(path: PathBuf) -> Result<()> {
         decoded_accounts_by_role: decoded_roles,
     };
 
-    // 7) run extractors for this program id
+    // 6) run extractors & publish
     let extractors: Vec<Box<dyn rt::SwapExtractor>> = gen::registry();
+    let producer = crate::kafka::make_producer()?; // <- no arg
+    let topic = crate::kafka::SWAP_TOPIC.clone();
     let mut hits = 0usize;
 
-    // Kafka producer (non-blocking publish)
-    let producer = make_producer(&KAFKA_BROKER)?; // ensure KAFKA_BROKER & SWAP_TOPIC exist
-
-    for ex in extractors.iter().filter(|e| e.program_id() == fx.instruction.program_id.as_str()) {
-        if let Some(ns) = ex.try_extract(&ctx) {
+    for ex in extractors
+        .into_iter()
+        .filter(|e| e.program_id() == fx.instruction.program_id)
+    {
+        if let Some(mut ns) = ex.try_extract(&ctx) {
             hits += 1;
-            println!("✅ {} extracted: {} -> {} (slot {})",
-                ns.dex, ns.token_in_mint, ns.token_out_mint, ns.slot);
+            println!(
+                "✅ {} extracted: {} -> {} (slot {})",
+                ns.dex, ns.token_in_mint, ns.token_out_mint, ns.slot
+            );
 
-            let swap = map_ns_to_swap(&ns);
+            // Fill pool_id if extractor didn’t
+            if ns.pool_id.is_empty() {
+                if let Some(i) = fx.instruction.account_indices.get(0) {
+                    if let Some(k) = fx.instruction.account_keys.get(*i as usize) {
+                        ns.pool_id = k.clone();
+                    }
+                } else if let Some(k) = fx.instruction.account_keys.get(0) {
+                    ns.pool_id = k.clone();
+                }
+            }
 
-            // Fire-and-forget publish to Kafka (Send-safe helper)
-            publish_json_ff(
+            let swap = normalizer_runtime::adapters::to_swap_event(&ns);
+            crate::kafka::publish_json_ff(
                 producer.clone(),
-                SWAP_TOPIC.clone(),
+                topic.clone(),
                 swap.pool_id.clone(),
                 swap.clone(),
             );
             println!("✅ Published to Kafka: {}", swap.pool_id);
-
             println!("{}", serde_json::to_string(&swap)?);
         }
     }
 
+    // ensure delivery before exit
+    producer.flush(std::time::Duration::from_secs(2));
+
     if hits == 0 {
         println!("ℹ️ No extractor matched or discriminator didn’t match payload.");
     }
-
     Ok(())
 }
 
@@ -281,8 +547,9 @@ async fn run_account_fixture(
         }
         "meteora:pool" => {
             let pid = pool_id.unwrap_or_else(|| "<unknown>".into());
-            let snap = meteora_map::decode_meteora_pool_snapshot(&layouts, &data, &pid, slot.unwrap_or(0))
-                .ok_or_else(|| anyhow::anyhow!("not a meteora pool"))?;
+            let snap =
+                meteora_map::decode_meteora_pool_snapshot(&layouts, &data, &pid, slot.unwrap_or(0))
+                    .ok_or_else(|| anyhow::anyhow!("not a meteora pool"))?;
             println!("{}", serde_json::to_string_pretty(&snap)?);
         }
         "meteora:bin" => {
@@ -292,14 +559,19 @@ async fn run_account_fixture(
         }
         "orca:pool" => {
             let pid = pool_id.unwrap_or_else(|| "<unknown>".into());
-            let snap = orca_map::decode_orca_whirlpool_snapshot(&layouts, &data, &pid, slot.unwrap_or(0))
-                .ok_or_else(|| anyhow::anyhow!("not an orca whirlpool"))?;
+            let snap =
+                orca_map::decode_orca_whirlpool_snapshot(&layouts, &data, &pid, slot.unwrap_or(0))
+                    .ok_or_else(|| anyhow::anyhow!("not an orca whirlpool"))?;
             println!("{}", serde_json::to_string_pretty(&snap)?);
         }
         "orca:tickarray" => {
             let tick_array = orca_map::decode_orca_whirlpool_tick_array(&layouts, &data)
                 .ok_or_else(|| anyhow::anyhow!("not an orca tickarray"))?;
-            println!("tickarray start_tick={}, ticks={}", tick_array.start_tick_index, tick_array.ticks.len());
+            println!(
+                "tickarray start_tick={}, ticks={}",
+                tick_array.start_tick_index,
+                tick_array.ticks.len()
+            );
         }
         _ => anyhow::bail!("unknown kind"),
     }

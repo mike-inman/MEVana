@@ -8,6 +8,8 @@ normalizer-codegen = { path = "../normalizer-codegen" }
 mevana-idl-registry = { path = "../mevana-idl-registry" }
 
 [dependencies]
+axum = { version = "0.7", features = ["ws"] }
+tokio-stream = { version = "0.1.17", features = ["sync"] }   # for BroadcastStream
 lazy_static = { workspace = true }     
 normalizer-runtime = { path = "../normalizer-runtime" }
 normalizer-generated = { path = "../normalizer-generated" }
@@ -15,7 +17,7 @@ once_cell = "1"
 anyhow = "1"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
-clap = { version = "4.5", features = ["derive"] }
+clap = { version = "4.5", features = ["derive","env"] }
 base64 = "0.22"
 
 # NEW (needed for Capture + decode + logging)
@@ -31,10 +33,12 @@ redis = { version = "0.32", features = ["tokio-comp"] }
 lru = "0.12"
 
 # NEW: HTTP server for health endpoints
-axum = "0.7"
+# axum = "0.7"
 tower = "0.4"
 tower-http = { version = "0.5", features = ["cors"] }
 normalizer-codegen = { path = "../normalizer-codegen" }
+futures-util = "0.3.31"
+# tokio-stream = "0.1.17"
 
 [[bin]]
 name = "list"

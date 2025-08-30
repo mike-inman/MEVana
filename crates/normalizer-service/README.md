@@ -6,6 +6,22 @@
 
 ---
 
+docker exec -it afaf059271a445a3cd9beca08c56d81acbf1d51f641da2158634f6dc48c887d8 kafka-console-consumer  --bootstrap-server localhost:29092  --topic enriched.swaps.all  --from-beginning --max-messages 5
+docker exec -it afaf059271a445a3cd9beca08c56d81acbf1d51f641da2158634f6dc48c887d8 kafka-topics --bootstrap-server localhost:29092 --list | grep enriched.swaps.all
+
+export KAFKA_BROKER=localhost:29092
+export OUT_TOPIC=enriched.swaps.all
+RUST_LOG=info,rdkafka=info cargo run -p normalizer-service --bin normalizer-service -- fixture crates/normalizer-service/fixtures/whirlpool_fixture.json
+RUST_LOG=info,rdkafka=info cargo run -p normalizer-service --bin normalizer-service -- fixture crates/normalizer-service/fixtures/jupiter_fixture.json
+RUST_LOG=info,rdkafka=info cargo run -p normalizer-service --bin normalizer-service -- fixture crates/normalizer-service/fixtures/meteora_fixture.json
+RUST_LOG=info,rdkafka=info cargo run -p normalizer-service --bin normalizer-service -- fixture crates/normalizer-service/fixtures/openbook_like_fixture.json
+RUST_LOG=info,rdkafka=info cargo run -p normalizer-service --bin normalizer-service -- fixture crates/normalizer-service/fixtures/phoenix_fixture.json
+RUST_LOG=info,rdkafka=info cargo run -p normalizer-service --bin normalizer-service -- fixture crates/normalizer-service/fixtures/pumpfun_fixture.json
+RUST_LOG=info,rdkafka=info cargo run -p normalizer-service --bin normalizer-service -- fixture crates/normalizer-service/fixtures/raydium_amm_fixture.json
+RUST_LOG=info,rdkafka=info cargo run -p normalizer-service --bin normalizer-service -- fixture crates/normalizer-service/fixtures/template_fixture.json 
+RUST_LOG=info,rdkafka=info cargo run -p normalizer-service --bin normalizer-service -- fixture crates/normalizer-service/fixtures/unknown6_fixture.json 
+
+
 ## 🎯 **Overview**
 
 The **Normalizer Service** is a critical component in the MEVana data pipeline that processes raw Solana transaction data from the DEX Stream Service and normalizes it into structured, business-ready formats. This service implements the same professional standards established for `dex-stream-universal`.

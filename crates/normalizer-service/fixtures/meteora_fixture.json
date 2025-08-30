@@ -1,0 +1,21 @@
+{
+    "slot": 460,
+    "block_time_unix": 1710000500,
+    "signature": "SIG-MET-001",
+    "meta_ok": true,
+    "instruction": {
+      "program_id": "LBUZKhRxPF3XUpBCjp4YzTKgLccjZhT68b6Y1LfEiNX",
+      "account_keys": [
+        "Meteora11111111111111111111111111111111111",
+        "PoolMeteora1111111111111111111111111111111",
+        "UserAuth55555555555555555555555555555555555"
+      ],
+      "account_indices": [1,2],
+      "data_b64": "AQ=="
+    },
+    "token_balance_changes": [
+      {"owner":"U6","mint":"So11111111111111111111111111111111111111112","pre":"4200000","post":"4000000"},
+      {"owner":"U6","mint":"USDC111111111111111111111111111111111111111","pre":"500000","post":"700000"}
+    ]
+  }
+  

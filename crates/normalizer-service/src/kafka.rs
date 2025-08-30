@@ -1,18 +1,28 @@
 // crates/normalizer-service/src/kafka.rs
 use anyhow::Result;
 use rdkafka::config::ClientConfig;
-use rdkafka::producer::{FutureProducer, FutureRecord};
 use rdkafka::consumer::StreamConsumer; // (no need to import `Consumer` if unused)
+use rdkafka::producer::{FutureProducer, FutureRecord};
 use serde::Serialize;
 use std::time::Duration;
 
-pub fn make_producer(broker: &str) -> Result<FutureProducer> {
-    Ok(ClientConfig::new()
-        .set("bootstrap.servers", broker)
-        .set("linger.ms", "0")
-        .set("compression.type", "lz4")
-        .set("enable.idempotence", "true")
-        .create()?)
+// crates/normalizer-service/src/kafka.rs (or a common config module)
+use once_cell::sync::Lazy;
+
+pub static KAFKA_BROKER: Lazy<String> =
+    Lazy::new(|| std::env::var("KAFKA_BROKER").unwrap_or_else(|_| "localhost:9092".to_string()));
+
+pub static SWAP_TOPIC: Lazy<String> =
+    Lazy::new(|| std::env::var("OUT_TOPIC").unwrap_or_else(|_| "enriched.swaps.all".to_string()));
+
+pub fn make_producer() -> Result<FutureProducer> {
+    let mut cfg = ClientConfig::new();
+    cfg.set("bootstrap.servers", &*KAFKA_BROKER)
+        .set("message.timeout.ms", "5000")
+        // turn on debug while diagnosing; remove later
+        .set("debug", "broker,topic,msg,protocol,metadata");
+
+    Ok(cfg.create()?)
 }
 
 pub async fn publish_json<T: Serialize>(
@@ -23,7 +33,10 @@ pub async fn publish_json<T: Serialize>(
 ) -> Result<()> {
     let payload = serde_json::to_vec(value)?;
     producer
-        .send(FutureRecord::to(topic).key(key).payload(&payload), Duration::from_millis(0))
+        .send(
+            FutureRecord::to(topic).key(key).payload(&payload),
+            Duration::from_millis(0),
+        )
         .await
         .map_err(|(e, _)| anyhow::anyhow!(e))?;
     Ok(())

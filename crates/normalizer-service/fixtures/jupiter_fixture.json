@@ -1,0 +1,21 @@
+{
+    "slot": 458,
+    "block_time_unix": 1710000300,
+    "signature": "SIG-JUP-001",
+    "meta_ok": true,
+    "instruction": {
+      "program_id": "JUP4Fb2cqiRUcaTHdrPC8h2gNsA2ETXiPDD33WcGuJB",
+      "account_keys": [
+        "JupiterAgg111111111111111111111111111111111",
+        "RouteCfg1111111111111111111111111111111111",
+        "UserAuth33333333333333333333333333333333333"
+      ],
+      "account_indices": [1,2],
+      "data_b64": "AQ=="
+    },
+    "token_balance_changes": [
+      {"owner":"U4","mint":"So11111111111111111111111111111111111111112","pre":"800000","post":"700000"},
+      {"owner":"U4","mint":"USDC111111111111111111111111111111111111111","pre":"2000000","post":"2100000"}
+    ]
+  }
+  
