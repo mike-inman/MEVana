@@ -25,7 +25,7 @@ stop_and_remove_containers() {
     echo "🛑 Stopping and removing existing containers..."
     
     # Stop all running containers
-    docker-compose -f infrastructure/docker-compose.yml down --remove-orphans
+    docker compose -f infrastructure/docker-compose.yml down --remove-orphans
     
     # Remove any remaining containers
     docker container prune -f
@@ -84,7 +84,7 @@ start_fresh_infrastructure() {
     echo "🚀 Starting fresh infrastructure..."
     
     # Start infrastructure services
-    docker-compose -f infrastructure/docker-compose.yml up -d
+    docker compose -f infrastructure/docker-compose.yml up -d
     
     echo "✅ Infrastructure services started"
     echo ""
@@ -99,7 +99,7 @@ verify_services_health() {
     sleep 30
     
     # Check service status
-    docker-compose -f infrastructure/docker-compose.yml ps
+    docker compose -f infrastructure/docker-compose.yml ps
     
     echo ""
     echo "Service health status:"
@@ -204,7 +204,7 @@ main() {
         echo ""
     else
         echo "⏸️  Infrastructure ready but not started"
-        echo "💡 To start later, run: docker-compose -f infrastructure/docker-compose.yml up -d"
+        echo "💡 To start later, run: docker compose -f infrastructure/docker-compose.yml up -d"
         echo ""
     fi
 }

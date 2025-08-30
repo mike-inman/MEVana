@@ -1,202 +1,547 @@
-version: '3.8'
-
-# MEVana Infrastructure-Only Docker Compose
-# This file contains only infrastructure services for a clean fresh start
-# Custom application containers have been removed
+# =============================================================================
+# SOLANA AI TRADING PLATFORM - ENHANCED DOCKER COMPOSE
+# =============================================================================
+# Enhanced version with improved connectivity, monitoring, and resource management
+#
+# NETWORK ARCHITECTURE OVERVIEW:
+# =============================
+# This compose file establishes a complete infrastructure foundation for the MEVana
+# trading platform. Services are deployed in dependency order with proper health
+# checks to ensure reliable startup sequences.
+#
+# DEPLOYMENT ORDER (CRITICAL):
+# 1. Zookeeper (2181) - Kafka coordination service
+# 2. Kafka (9092/29092) - Message broker (depends on Zookeeper)
+# 3. Kafka-UI (8080) - Management interface (depends on Kafka)
+# 4. Redis (6379) - Data caching service
+# 5. Redis-UI (8083) - Management interface (depends on Redis)
+#
+# NETWORK ISOLATION:
+# - All services use 'mevana_net' external network
+# - Internal communication via Docker DNS (e.g., kafka:9092)
+# - External access via localhost ports for development
+#
+# HEALTH CHECK STRATEGY:
+# - Zookeeper: Basic connectivity test
+# - Kafka: Topic listing capability
+# - Redis: Ping/incr operation
+# - UI Services: HTTP endpoint availability
+#
+# RESOURCE MANAGEMENT:
+# - Memory and CPU limits set for production stability
+# - Log rotation configured to prevent disk space issues
+# - Graceful restart policies for service recovery
+# =============================================================================
 
 services:
-  # PostgreSQL Database
-  postgres:
-    image: postgres:15-alpine
-    container_name: mevana-postgres
-    restart: unless-stopped
-    environment:
-      POSTGRES_DB: mevana
-      POSTGRES_USER: mevana_user
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-mevana_password}
-      POSTGRES_INITDB_ARGS: "--encoding=UTF-8 --lc-collate=C --lc-ctype=C"
-    volumes:
-      - postgres_data:/var/lib/postgresql/data
-      - ./postgres/init:/docker-entrypoint-initdb.d
-    ports:
-      - "5432:5432"
-    networks:
-      - mevana-network
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U mevana_user -d mevana"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 40s
-
-  # Zookeeper for Kafka coordination
+  # =============================================================================
+  # INFRASTRUCTURE SERVICES - CORE MESSAGE BROKER STACK
+  # =============================================================================
+  
+  # ZOOKEEPER SERVICE - Kafka Coordination Foundation
+  # ================================================
+  # Zookeeper is the coordination service that Kafka requires for:
+  # - Leader election and failover
+  # - Configuration management
+  # - Distributed synchronization
+  # - Service discovery
+  #
+  # CRITICAL: This service MUST start first and be healthy before Kafka
+  # can initialize. All Kafka operations depend on Zookeeper availability.
   zookeeper:
     image: confluentinc/cp-zookeeper:7.4.0
-    container_name: mevana-zookeeper
-    restart: unless-stopped
+    container_name: zookeeper
     environment:
+      # Client connection port - used by Kafka and other services
       ZOOKEEPER_CLIENT_PORT: 2181
+      # Heartbeat interval in milliseconds
       ZOOKEEPER_TICK_TIME: 2000
-      ZOOKEEPER_INIT_LIMIT: 5
+      # Autopurge settings to limit snapshot/log growth
+      # Retain the last 3 snapshots; purge every 24 hours
+      ZOOKEEPER_AUTOPURGE_SNAP_RETAIN_COUNT: 3
+      ZOOKEEPER_AUTOPURGE_PURGE_INTERVAL: 24
+      # Maximum number of client connections
+      ZOOKEEPER_MAX_CLIENT_CNXNS: 60
+      # Sync limit for follower synchronization
       ZOOKEEPER_SYNC_LIMIT: 2
-    volumes:
-      - zookeeper_data:/var/lib/zookeeper/data
-      - zookeeper_logs:/var/lib/zookeeper/log
+      # Initial limit for leader election
+      ZOOKEEPER_INIT_LIMIT: 5
+    healthcheck:
+      # Test Zookeeper connectivity by attempting a basic operation
+      test: ["CMD", "bash", "-c", "echo stat | nc localhost 2181"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
     ports:
+      # Expose Zookeeper port for external monitoring and debugging
       - "2181:2181"
     networks:
-      - mevana-network
-    healthcheck:
-      test: ["CMD-SHELL", "echo ruok | nc localhost 2181"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
+      - mevana_net
+    restart: unless-stopped
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+          cpus: '0.5'
+        reservations:
+          memory: 256M
+          cpus: '0.25'
 
-  # Kafka Message Broker
+  # KAFKA SERVICE - Message Broker Core
+  # ===================================
+  # Kafka is the central message broker that handles:
+  # - High-throughput message streaming
+  # - Topic management and partitioning
+  # - Consumer group coordination
+  # - Message persistence and replication
+  #
+  # CRITICAL: This service depends on Zookeeper being healthy.
+  # Kafka will not start until Zookeeper reports healthy status.
+  # All application services depend on Kafka availability.
   kafka:
     image: confluentinc/cp-kafka:7.4.0
-    container_name: mevana-kafka
-    restart: unless-stopped
+    container_name: kafka
     depends_on:
       zookeeper:
         condition: service_healthy
     environment:
+      # Unique broker identifier in the cluster
       KAFKA_BROKER_ID: 1
+      # Zookeeper connection string for coordination
       KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
+      # Network listeners configuration
+      # PLAINTEXT://0.0.0.0:9092 - Internal Docker network listener
+      # PLAINTEXT_HOST://0.0.0.0:29092 - External host access listener
+      KAFKA_LISTENERS: PLAINTEXT://0.0.0.0:9092,PLAINTEXT_HOST://0.0.0.0:29092
+      # Advertised listeners for client connections
+      # PLAINTEXT://kafka:9092 - Internal Docker DNS name
+      # PLAINTEXT_HOST://localhost:29092 - External localhost access
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092,PLAINTEXT_HOST://localhost:29092
+      # Security protocol mapping for each listener
       KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
-      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092,PLAINTEXT_HOST://localhost:9093
+      # Internal broker communication listener
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+      # Enable automatic topic creation for development
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"
+      # Replication factor for system topics
       KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
-      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
-      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
-      KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
-      KAFKA_JMX_PORT: 9101
-      KAFKA_JMX_HOSTNAME: localhost
-      KAFKA_AUTO_CREATE_TOPICS_ENABLE: 'true'
-      KAFKA_DELETE_TOPIC_ENABLE: 'true'
+      # JVM heap configuration for performance
+      KAFKA_HEAP_OPTS: "-Xmx1G -Xms1G"
+      # Log retention policy (7 days)
       KAFKA_LOG_RETENTION_HOURS: 168
+      # Log segment size for efficient storage
       KAFKA_LOG_SEGMENT_BYTES: 1073741824
-      KAFKA_LOG_RETENTION_CHECK_INTERVAL_MS: 300000
-      KAFKA_LOG_CLEANER_ENABLE: 'true'
-      KAFKA_LOG_CLEANER_DELETE_RETENTION_MS: 86400000
-      KAFKA_LOG_CLEANER_MIN_COMPACTION_LAG_MS: 0
-      KAFKA_LOG_CLEANER_MIN_CLEANABLE_RATIO: 0.5
-      KAFKA_LOG_CLEANER_THREADS: 1
-      KAFKA_LOG_CLEANER_IO_BUFFER_SIZE: 524288
-      KAFKA_LOG_CLEANER_IO_BUFFER_LOAD_FACTOR: 0.9
-      KAFKA_LOG_CLEANER_BACKOFF_MS: 15000
-      KAFKA_LOG_CLEANER_DUMP_ALLOCATION: 'false'
-    volumes:
-      - kafka_data:/var/lib/kafka/data
+      # Default number of partitions for new topics
+      KAFKA_NUM_PARTITIONS: 3
+      # Default replication factor for new topics
+      KAFKA_DEFAULT_REPLICATION_FACTOR: 1
+      # Minimum in-sync replicas for durability
+      KAFKA_MIN_INSYNC_REPLICAS: 1
+      # Enable topic deletion for development flexibility
+      KAFKA_DELETE_TOPIC_ENABLE: "true"
     ports:
-      - "9093:9093"
-      - "9101:9101"
+      # Internal Docker network access
+      - "9092:9092"
+      # External host access for development and debugging
+      - "29092:29092"
     networks:
-      - mevana-network
+      - mevana_net
+    restart: unless-stopped
     healthcheck:
+      # Test Kafka functionality by listing topics
       test: ["CMD-SHELL", "kafka-topics --bootstrap-server localhost:9092 --list"]
       interval: 30s
       timeout: 10s
-      retries: 3
-      start_period: 60s
+      retries: 5
+      start_period: 30s
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "50m"
+        max-file: "5"
+    deploy:
+      resources:
+        limits:
+          memory: 2G
+          cpus: '1.0'
+        reservations:
+          memory: 1G
+          cpus: '0.5'
 
-  # Redis Cache
-  redis:
-    image: redis:7-alpine
-    container_name: mevana-redis
-    restart: unless-stopped
-    command: redis-server --appendonly yes --maxmemory 2gb --maxmemory-policy allkeys-lru
-    volumes:
-      - redis_data:/data
+  # KAFKA-UI SERVICE - Management Interface
+  # =======================================
+  # Kafka-UI provides a web-based interface for:
+  # - Topic management and monitoring
+  # - Consumer group status
+  # - Message browsing and production
+  # - Cluster health monitoring
+  # - Performance metrics visualization
+  #
+  # CRITICAL: This service depends on Kafka being healthy.
+  # UI will not start until Kafka reports healthy status.
+  # KAFKA-UI SERVICE - Management Interface
+  # =======================================
+  # Kafka-UI provides a web-based interface for:
+  # - Topic browsing and management
+  # - Message inspection and debugging
+  # - Consumer group monitoring
+  # - Cluster health and performance metrics
+  # - Real-time data flow visualization
+  #
+  # CRITICAL CONFIGURATION REQUIREMENT:
+  # ===================================
+  # Kafka-UI MUST have environment variables to connect to Kafka.
+  # Without these, the service will start but show no topics/data.
+  # 
+  # REQUIRED ENVIRONMENT VARIABLES:
+  # - KAFKA_CLUSTERS_0_NAME: Cluster identifier
+  # - KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS: Kafka broker address (use Docker DNS)
+  # - KAFKA_CLUSTERS_0_READONLY: Management permissions
+  #
+  # TROUBLESHOOTING: If Kafka-UI shows no topics, verify these env vars exist.
+  kafka-ui:
+    image: provectuslabs/kafka-ui:v0.7.2
+    container_name: kafka-ui
+    depends_on:
+      kafka:
+        condition: service_healthy
+    environment:
+      # Kafka cluster configuration - REQUIRED for Kafka-UI to connect
+      - KAFKA_CLUSTERS_0_NAME=local
+      - KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS=kafka:9092
+      - KAFKA_CLUSTERS_0_READONLY=false
+      # Optional: Enable topic creation and management
+      - KAFKA_CLUSTERS_0_TOPICCONFIG=0
+      - KAFKA_CLUSTERS_0_TOPICREPLICATION=1
     ports:
-      - "6379:6379"
+      # Web interface accessible at http://localhost:8080
+      - "8080:8080"
     networks:
-      - mevana-network
+      - mevana_net
+    restart: unless-stopped
     healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
+      # Test web interface availability
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8080"]
       interval: 30s
       timeout: 10s
       retries: 3
+      start_period: 10s
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+          cpus: '0.25'
+        reservations:
+          memory: 128M
+          cpus: '0.10'
 
-  # Prometheus Metrics Collection
-  prometheus:
-    image: prom/prometheus:v2.45.0
-    container_name: mevana-prometheus
-    restart: unless-stopped
-    command:
-      - '--config.file=/etc/prometheus/prometheus.yml'
-      - '--storage.tsdb.path=/prometheus'
-      - '--web.console.libraries=/etc/prometheus/console_libraries'
-      - '--web.console.templates=/etc/prometheus/consoles'
-      - '--storage.tsdb.retention.time=200h'
-      - '--web.enable-lifecycle'
-      - '--web.enable-admin-api'
-    volumes:
-      - ./prometheus.yml:/etc/prometheus/prometheus.yml:ro
-      - prometheus_data:/prometheus
+  # REDIS SERVICE - Data Caching Foundation
+  # =======================================
+  # Redis provides high-performance data caching for:
+  # - Token metadata and pricing information
+  # - Pool state and liquidity data
+  # - User session and configuration data
+  # - Temporary computation results
+  # - Rate limiting and throttling
+  #
+  # Redis operates independently of the Kafka stack and can start
+  # in parallel with Zookeeper for faster overall startup.
+  redis:
+    image: redis:7-alpine
+    container_name: redis
     ports:
-      - "9090:9090"
+      # Redis protocol access for external clients and debugging
+      - "6379:6379"
     networks:
-      - mevana-network
+      - mevana_net
+    restart: unless-stopped
     healthcheck:
+      # Test Redis functionality with ping and increment operation
+      test: ["CMD", "redis-cli", "--raw", "incr", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 5s
+    command: redis-server --appendonly yes --maxmemory 512mb --maxmemory-policy allkeys-lru --save 900 1 --save 300 10 --save 60 10000
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+    deploy:
+      resources:
+        limits:
+          memory: 1G
+          cpus: '0.5'
+        reservations:
+          memory: 512M
+          cpus: '0.25'
+
+  # REDIS-UI SERVICE - Management Interface
+  # =======================================
+  # Redis-UI provides a web-based interface for:
+  # - Key-value browsing and editing
+  # - Memory usage monitoring
+  # - Performance statistics
+  # - Database operations and debugging
+  # - Connection management
+  #
+  # CRITICAL: This service depends on Redis being healthy.
+  # UI will not start until Redis reports healthy status.
+  redis-ui:
+    image: rediscommander/redis-commander:latest
+    container_name: redis-ui
+    depends_on:
+      redis:
+        condition: service_healthy
+    environment:
+      # Redis connection configuration
+      - REDIS_HOSTS=local:redis:6379
+      # Basic authentication for security
+      - HTTP_USER=admin
+      - HTTP_PASSWORD=admin123
+    ports:
+      # Web interface accessible at http://localhost:8083
+      # Note: Redis-Commander uses internal port 8081, mapped to host 8083
+      - "8083:8081"
+    networks:
+      - mevana_net
+    restart: unless-stopped
+    healthcheck:
+      # Test web interface availability
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8081/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+          cpus: '0.25'
+        reservations:
+          memory: 128M
+          cpus: '0.1'
+
+  # =============================================================================
+  # MONITORING & DEBUGGING - Monitoring and Debugging Tools
+  # =============================================================================
+
+  # Prometheus for metrics collection
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: prometheus
+    ports:
+      # Prometheus metrics endpoint
+      - "9090:9090"
+    volumes:
+      # Prometheus configuration file
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml
+      # Persistent storage for metrics data
+      - prometheus_data:/prometheus
+    command:
+      # Start Prometheus with the specified configuration
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      # Set the data retention time for metrics
+      - '--storage.tsdb.path=/prometheus'
+      # Enable lifecycle management for Prometheus
+      - '--web.enable-lifecycle'
+    networks:
+      - mevana_net
+    restart: unless-stopped
+    healthcheck:
+      # Test Prometheus availability
       test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:9090/-/healthy"]
       interval: 30s
       timeout: 10s
       retries: 3
+      start_period: 10s
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+          cpus: '0.5'
+        reservations:
+          memory: 256M
+          cpus: '0.25'
 
-  # Grafana Dashboards
+  # Grafana for metrics visualization
   grafana:
-    image: grafana/grafana:10.0.0
-    container_name: mevana-grafana
-    restart: unless-stopped
-    environment:
-      GF_SECURITY_ADMIN_USER: admin
-      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_PASSWORD:-admin}
-      GF_USERS_ALLOW_SIGN_UP: 'false'
-      GF_INSTALL_PLUGINS: grafana-clock-panel,grafana-simple-json-datasource
-    volumes:
-      - grafana_data:/var/lib/grafana
-      - ./grafana/provisioning:/etc/grafana/provisioning
-      - ./grafana/dashboards:/var/lib/grafana/dashboards
+    image: grafana/grafana:latest
+    container_name: grafana
     ports:
+      # Grafana web interface
       - "3000:3000"
+    environment:
+      # Basic Grafana admin password
+      - GF_SECURITY_ADMIN_PASSWORD=admin123
+      # Disable user sign-up for security
+      - GF_USERS_ALLOW_SIGN_UP=false
+    volumes:
+      # Persistent storage for Grafana data
+      - grafana_data:/var/lib/grafana
+      # Provision Grafana dashboards
+      - ./grafana/dashboards:/etc/grafana/provisioning/dashboards
+      # Provision Grafana data sources
+      - ./grafana/datasources:/etc/grafana/provisioning/datasources
     networks:
-      - mevana-network
+      - mevana_net
+    restart: unless-stopped
     depends_on:
       prometheus:
         condition: service_healthy
     healthcheck:
-      test: ["CMD-SHELL", "curl -f http://localhost:3000/api/health || exit 1"]
+      # Test Grafana availability
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3000/api/health"]
       interval: 30s
       timeout: 10s
       retries: 3
+      start_period: 30s
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+          cpus: '0.5'
+        reservations:
+          memory: 256M
+          cpus: '0.25'
+
+  # =============================================================================
+  # DATABASE SERVICES - Data Storage and Management
+  # =============================================================================
+
+  # POSTGRES SERVICE - Relational Database
+  # ======================================
+  # This service provides a PostgreSQL database for:
+  # - Storing application data (e.g., user sessions, configurations)
+  # - Managing application state and metadata
+  # - Supporting complex queries and joins
+  # - Serving as a primary data source for the application
+  #
+  # CRITICAL: This service is the foundation for all application data.
+  # It must be available for the application to function.
+  postgres:
+    image: postgres:15
+    container_name: postgres
+    environment:
+      # PostgreSQL user for application data
+      - POSTGRES_USER=${POSTGRES_USER:-mev}
+      # PostgreSQL password for application data
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-mevpassword}
+      # PostgreSQL database name for application data
+      - POSTGRES_DB=${POSTGRES_DB:-mevdb}
+      # Initialize database with UTF-8 encoding and C locale
+      - POSTGRES_INITDB_ARGS=--encoding=UTF8 --lc-collate=C --lc-ctype=C
+    ports:
+      # PostgreSQL port for external connections (mapped to 5433 to avoid local PostgreSQL conflict)
+      - "5433:5432"
+    networks:
+      - mevana_net
+    volumes:
+      # Persistent storage for PostgreSQL data
+      - postgres_data:/var/lib/postgresql/data
+      # Migration scripts for database initialization
+      - ./migrations:/docker-entrypoint-initdb.d
+    restart: unless-stopped
+    healthcheck:
+      # Test PostgreSQL availability
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-mev} -d ${POSTGRES_DB:-mevdb}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+    deploy:
+      resources:
+        limits:
+          memory: 1G
+          cpus: '0.5'
+        reservations:
+          memory: 512M
+          cpus: '0.25'
+
+  # ADMINER SERVICE - Database Management Tool
+  # ========================================
+  # This service provides a web-based interface for:
+  # - Managing PostgreSQL databases and users
+  # - Executing SQL queries
+  # - Monitoring database performance
+  # - Backing up and restoring data
+  #
+  # CRITICAL: This service depends on PostgreSQL being healthy.
+  # It will not start until PostgreSQL is ready.
+  adminer:
+    image: adminer
+    container_name: adminer
+    ports:
+      # Adminer web interface
+      - "8082:8080"
+    networks:
+      - mevana_net
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      # Test Adminer availability
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8080/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+          cpus: '0.25'
+        reservations:
+          memory: 128M
+          cpus: '0.1'
+
+networks:
+  mevana_net:
+    external: true
+    name: mevana_net
 
 volumes:
   postgres_data:
-    driver: local
-  zookeeper_data:
-    driver: local
-  zookeeper_logs:
-    driver: local
-  kafka_data:
-    driver: local
-  redis_data:
     driver: local
   prometheus_data:
     driver: local
   grafana_data:
     driver: local
-
-networks:
-  mevana-network:
-    driver: bridge
-    ipam:
-      config:
-        - subnet: 172.20.0.0/16
-          gateway: 172.20.0.1
-    driver_opts:
-      com.docker.network.bridge.name: mevana-br0
-      com.docker.network.bridge.enable_icc: "true"
-      com.docker.network.bridge.enable_ip_masquerade: "true"
-      com.docker.network.bridge.host_binding_ipv4: "0.0.0.0"
-      com.docker.network.bridge.mtu: "1500"
-      com.docker.network.driver.mtu: "1500"

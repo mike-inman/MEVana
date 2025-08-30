@@ -6,10 +6,10 @@ This document captures the network configuration settings from the MEVana Docker
 
 ## Network Configuration
 
-### Primary Network: `mevana-network`
+### Primary Network: `mevana_net`
 ```yaml
 networks:
-  mevana-network:
+  mevana_net:
     driver: bridge
     ipam:
       config:
@@ -79,7 +79,7 @@ networks:
 ```bash
 # Check network status
 docker network ls
-docker network inspect mevana-network
+docker network inspect mevana_net
 
 # Check bridge interface
 ip addr show mevana-br0
