@@ -1,0 +1,25 @@
+{
+  "name": "orca_whirlpool_pool",
+  "version": "v1",
+  "fields": [
+    { "name": "whirlpools_config", "offset": 8, "type": "Pubkey" },
+    { "name": "whirlpool_bump", "offset": 40, "type": "u8[1]" },
+    { "name": "tick_spacing", "offset": 41, "type": "u16" },
+    { "name": "tick_spacing_seed", "offset": 43, "type": "u8[2]" },
+    { "name": "fee_rate", "offset": 45, "type": "u16" },
+    { "name": "protocol_fee_rate", "offset": 47, "type": "u16" },
+    { "name": "liquidity", "offset": 49, "type": "u128" },
+    { "name": "sqrt_price", "offset": 65, "type": "u128" },
+    { "name": "tick_current_index", "offset": 81, "type": "i32" },
+    { "name": "protocol_fee_owed_a", "offset": 85, "type": "u64" },
+    { "name": "protocol_fee_owed_b", "offset": 93, "type": "u64" },
+    { "name": "token_mint_a", "offset": 101, "type": "Pubkey" },
+    { "name": "token_vault_a", "offset": 133, "type": "Pubkey" },
+    { "name": "fee_growth_global_a", "offset": 165, "type": "u128" },
+    { "name": "token_mint_b", "offset": 181, "type": "Pubkey" },
+    { "name": "token_vault_b", "offset": 213, "type": "Pubkey" },
+    { "name": "fee_growth_global_b", "offset": 245, "type": "u128" },
+    { "name": "reward_last_updated_timestamp", "offset": 261, "type": "u64" },
+    { "name": "reward_infos", "offset": 269, "type": "u8[336]" }
+  ]
+}

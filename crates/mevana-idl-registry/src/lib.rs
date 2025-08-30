@@ -1,3 +1,5 @@
+// crates/mevana-idl-registry/src/lib.rs
+
 use serde::Deserialize;
 use std::{
     env, fs, io,
@@ -252,11 +254,13 @@ pub fn sync_idls() {
             }
         }
 
+        copy_layouts_into(&registry_dir);
+
         println!("cargo:warning=❌ Could not obtain IDL for {}", d.name);
     }
 }
 
-fn resolve_registry_dir() -> PathBuf {
+pub fn resolve_registry_dir() -> PathBuf {
     if let Ok(custom) = env::var("IDL_REGISTRY_DIR") {
         return PathBuf::from(custom);
     }
@@ -390,3 +394,25 @@ fn load_config(config_path: &Path) -> io::Result<Vec<Dex>> {
         .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))?;
     Ok(dexes)
 }
+
+fn copy_layouts_into(registry_dir: &Path) {
+    // source-of-truth under repo:
+    let src_root = Path::new("idl-registry");
+    let dexes = ["raydium_clmm", "meteora_dlmm", "orca_whirlpool"]; // extend as needed
+
+    for dex in dexes {
+        let src = src_root.join(dex);
+        let dst = registry_dir.join(dex);
+        let _ = fs::create_dir_all(&dst);
+        if let Ok(read_dir) = fs::read_dir(&src) {
+            for entry in read_dir.flatten() {
+                let p = entry.path();
+                let fname = p.file_name().and_then(|s| s.to_str()).unwrap_or("");
+                if fname.starts_with("layout.") && fname.ends_with(".json") {
+                    let _ = fs::copy(&p, dst.join(fname));
+                }
+            }
+        }
+    }
+}
+

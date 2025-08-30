@@ -1,0 +1,145 @@
+{
+  "dex_info": {
+    "name": "pump_fun",
+    "display_name": "Pump.fun Bonding Curve",
+    "protocol_type": "BondingCurve",
+    "program_ids": ["6EF8rrecthR5Dkzon8Nwu78hRvfCKubJ14M5uBEwF6P"],
+    "website": "https://pump.fun",
+    "documentation": "https://docs.pump.fun",
+    "twitter": "@pumpdotfun",
+    "launch_date": "2024-01-15",
+    "total_value_locked": 2400000000,
+    "market_share_percent": 25.8
+  },
+  "technical_specs": {
+    "pricing_model": "Linear",
+    "fee_structure": {
+      "trading_fee_bps": 100,
+      "protocol_fee_bps": 100,
+      "lp_fee_bps": 0,
+      "variable_fees": false,
+      "fee_tiers": [100]
+    },
+    "supported_tokens": {
+      "native_tokens": ["SOL"],
+      "supports_spl_tokens": true,
+      "supports_nfts": false,
+      "minimum_liquidity": 0
+    },
+    "transaction_finality": {
+      "average_confirmation_time_ms": 400,
+      "supports_partial_fills": false,
+      "mev_protection": false,
+      "requires_seat": false
+    }
+  },
+  "arbitrage_profile": {
+    "liquidity_depth": "Medium",
+    "price_impact": "High",
+    "optimal_trade_sizes": {
+      "min_profitable_usd": 50,
+      "max_efficient_usd": 10000,
+      "sweet_spot_usd": 1000
+    },
+    "latency_characteristics": {
+      "quote_time_ms": 2,
+      "execution_time_ms": 400,
+      "settlement_time_ms": 400
+    },
+    "arbitrage_advantages": [
+      "Early access to emerging tokens",
+      "Predictable linear pricing model",
+      "High volatility creates frequent opportunities",
+      "No traditional LP requirements",
+      "Instant liquidity for new tokens"
+    ],
+    "arbitrage_considerations": [
+      "High price impact for larger trades",
+      "Bonding curve completion risk",
+      "Token graduation to external AMMs",
+      "High volatility and risk",
+      "Limited to SOL pairs"
+    ],
+    "cross_dex_opportunities": [
+      "Pump.fun vs PumpSwap arbitrage during graduation",
+      "Early token discovery before major exchange listings",
+      "Meme coin arbitrage across different platforms"
+    ]
+  },
+  "market_dynamics": {
+    "primary_use_cases": [
+      "Meme coin creation and trading",
+      "Token price discovery",
+      "Early-stage token speculation",
+      "Community-driven launches"
+    ],
+    "target_audience": "Retail",
+    "peak_activity_hours": "16:00-02:00 UTC",
+    "dominant_pairs": ["TOKEN/SOL"],
+    "seasonal_patterns": "Correlated with meme trends and social media cycles",
+    "competitor_analysis": {
+      "main_competitors": ["Raydium", "Jupiter", "Traditional Launchpads"],
+      "unique_advantages": [
+        "Linear bonding curve for fair token distribution",
+        "No initial liquidity requirements",
+        "Built-in price discovery mechanism",
+        "Community-driven token launches",
+        "Automatic graduation to AMM when curve completes"
+      ],
+      "market_position": "Leader"
+    }
+  },
+  "integration_data": {
+    "plugin_version": "1.0.0",
+    "last_updated": "2025-01-20",
+    "instruction_coverage": {
+      "total_instructions": 11,
+      "parsed_instructions": 2,
+      "coverage_percentage": 18.2
+    },
+    "testing_status": {
+      "unit_tests": true,
+      "integration_tests": true,
+      "production_verified": false
+    },
+    "performance_metrics": {
+      "parse_success_rate": 0.99,
+      "average_parse_time_us": 95,
+      "error_rate": 0.01
+    }
+  },
+  "ai_insights": {
+    "trend_indicators": [
+      "Meme coin cycles follow social media trends",
+      "Volume spikes correlate with viral content",
+      "Token graduation rate indicates market health"
+    ],
+    "anomaly_patterns": [
+      "Unusual large purchases on new tokens",
+      "Rapid bonding curve completion patterns",
+      "Coordinated trading across multiple tokens"
+    ],
+    "correlation_signals": [
+      "Social media sentiment drives trading volume",
+      "Market-wide volatility affects token launches",
+      "Graduation events create arbitrage windows"
+    ],
+    "strategic_recommendations": [
+      "Monitor social media for emerging trends",
+      "Track bonding curve completion rates",
+      "Focus on tokens with strong community engagement"
+    ],
+    "risk_factors": [
+      "Highly speculative token ecosystem",
+      "Regulatory uncertainty for meme coins",
+      "Smart contract risks",
+      "High volatility and potential for total loss"
+    ],
+    "opportunity_indicators": [
+      "Growing meme coin market adoption",
+      "Integration with major social platforms",
+      "Celebrity and influencer participation",
+      "Cross-platform arbitrage potential"
+    ]
+  }
+}

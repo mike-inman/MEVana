@@ -1,0 +1,11 @@
+# Raydium Stream Service Environment Variables
+# Copy this to .env and replace with your actual values
+
+# Shyft gRPC endpoint
+ENDPOINT=https://grpc.ny.shyft.to
+
+# Your Shyft API token
+X_TOKEN=your_actual_shyft_token_here
+
+# Optional: Log level (trace, debug, info, warn, error)
+RUST_LOG=info

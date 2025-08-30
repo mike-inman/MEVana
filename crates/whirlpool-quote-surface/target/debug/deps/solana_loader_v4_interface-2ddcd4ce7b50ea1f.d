@@ -1,9 +1,0 @@
-/Users/michaelinman/Repos/MEVana/crates/whirlpool-quote-surface/target/debug/deps/solana_loader_v4_interface-2ddcd4ce7b50ea1f.d: /Users/michaelinman/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/solana-loader-v4-interface-2.2.1/src/lib.rs /Users/michaelinman/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/solana-loader-v4-interface-2.2.1/src/instruction.rs /Users/michaelinman/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/solana-loader-v4-interface-2.2.1/src/state.rs
-
-/Users/michaelinman/Repos/MEVana/crates/whirlpool-quote-surface/target/debug/deps/libsolana_loader_v4_interface-2ddcd4ce7b50ea1f.rlib: /Users/michaelinman/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/solana-loader-v4-interface-2.2.1/src/lib.rs /Users/michaelinman/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/solana-loader-v4-interface-2.2.1/src/instruction.rs /Users/michaelinman/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/solana-loader-v4-interface-2.2.1/src/state.rs
-
-/Users/michaelinman/Repos/MEVana/crates/whirlpool-quote-surface/target/debug/deps/libsolana_loader_v4_interface-2ddcd4ce7b50ea1f.rmeta: /Users/michaelinman/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/solana-loader-v4-interface-2.2.1/src/lib.rs /Users/michaelinman/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/solana-loader-v4-interface-2.2.1/src/instruction.rs /Users/michaelinman/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/solana-loader-v4-interface-2.2.1/src/state.rs
-
-/Users/michaelinman/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/solana-loader-v4-interface-2.2.1/src/lib.rs:
-/Users/michaelinman/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/solana-loader-v4-interface-2.2.1/src/instruction.rs:
-/Users/michaelinman/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/solana-loader-v4-interface-2.2.1/src/state.rs:

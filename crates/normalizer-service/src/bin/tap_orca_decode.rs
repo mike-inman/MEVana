@@ -1,9 +1,6 @@
 // crates/normalizer-service/src/bin/tap_orca_decode.rs
 
-// Pull in the generated registry (built by build.rs via normalizer-codegen)
-mod generated {
-    include!(concat!(env!("OUT_DIR"), "/registry.rs"));
-}
+use normalizer_generated::registry as generated;
 
 use anyhow::{Context, Result};
 use bs58;

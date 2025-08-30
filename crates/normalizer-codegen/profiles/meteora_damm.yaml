@@ -1,0 +1,11 @@
+program_name: meteora_damm
+program_id: LBUZKhRxPF3XUpBCjp4YzTKgLccjZhT68b6Y1LfEiNX
+# idl_file: meteora_damm.json    # <— add this so codegen can find the IDL  
+idl_file: meteora_damm.json    # <— add this so codegen can find the IDL
+swap_instructions:
+  - name: swap
+    kind: CPMM
+    pool_account_roles: ["pool"]
+    user_authority_roles: ["user"]
+    token_accounts_roles_in: ["user_token_a"]
+    token_accounts_roles_out: ["user_token_b"]

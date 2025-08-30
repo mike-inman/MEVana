@@ -1,404 +1,433 @@
-use anyhow::{anyhow, Context, Result};
+use anyhow::{Context, Result};
 use serde::Deserialize;
 use sha2::{Digest, Sha256};
-use std::{fs, path::Path};
+use std::{collections::BTreeMap, fs, path::{Path, PathBuf}};
 
 #[derive(Debug, Deserialize)]
-pub struct Profile {
-    pub program_name: String,
-    pub program_id: String,
-    pub swap_instructions: Vec<SwapInstr>,
-}
-
-fn discriminator8(name: &str) -> [u8; 8] {
-    // Anchor discriminator: first 8 bytes of sha256("global:<name>")
-    let mut h = Sha256::new();
-    h.update(format!("global:{}", name));
-    let out = h.finalize();
-    let mut d = [0u8; 8];
-    d.copy_from_slice(&out[..8]);
-    d
-}
-
-fn flatten_account_names(v: &serde_json::Value, out: &mut Vec<String>) {
-    let Some(arr) = v.as_array() else {
-        return;
-    };
-    for entry in arr {
-        if let Some(name) = entry.get("name").and_then(|x| x.as_str()) {
-            out.push(name.to_string());
-        }
-        if let Some(sub) = entry.get("accounts") {
-            flatten_account_names(sub, out);
-        }
-    }
+struct Profile {
+    program_name: String,
+    program_id: String,
+    idl_file: String,
+    swap_instructions: Vec<IxProfile>,
 }
 
 #[derive(Debug, Deserialize)]
-pub struct SwapInstr {
-    pub name: String,
-    pub kind: String, // "CLMM" | "CPMM" | "Aggregator" | "Other"
-    pub pool_account_roles: Vec<String>,
-    pub user_authority_roles: Vec<String>,
-    #[serde(default)]
-    pub token_accounts_roles_in: Vec<String>,
-    #[serde(default)]
-    pub token_accounts_roles_out: Vec<String>,
-    #[serde(default)]
-    pub clmm_state_account: Option<String>,
+struct IxProfile {
+    name: String,
+    kind: String, // "CLMM" | "CPMM" | "AGGREGATOR" | ...
+    pool_account_roles: Option<Vec<String>>,
+    user_authority_roles: Option<Vec<String>>,
+    token_accounts_roles_in:  Option<Vec<String>>,
+    token_accounts_roles_out: Option<Vec<String>>,
+    clmm_state_account: Option<String>,
 }
 
 #[derive(Debug)]
 struct Idl {
-    program_name: String,
-    program_id: String,
-    raw: serde_json::Value, // we’ll parse more deeply in Step 3
+    name: String,
+    instructions: Vec<IdlIx>,
+}
+#[derive(Debug)]
+struct IdlIx {
+    name: String,
+    accounts: Vec<String>, // ordered idl account names
 }
 
-fn load_idls(idl_dir: &Path) -> Result<Vec<Idl>> {
-    let mut out = vec![];
-    for entry in fs::read_dir(idl_dir)? {
-        let path = entry?.path();
-        if path.extension().and_then(|s| s.to_str()) == Some("json") {
-            let txt = fs::read_to_string(&path)?;
-            let val: serde_json::Value = serde_json::from_str(&txt)?;
-            // Best effort program_id/name (Anchor IDLs have "metadata" or "address")
-            let program_id = val
-                .pointer("/metadata/address")
-                .or_else(|| val.pointer("/address"))
-                .and_then(|v| v.as_str())
-                .unwrap_or_default()
-                .to_string();
-            let program_name = val
-                .pointer("/name")
-                .and_then(|v| v.as_str())
-                .unwrap_or_else(|| path.file_stem().unwrap().to_str().unwrap())
-                .to_string();
-            out.push(Idl {
-                program_name,
-                program_id,
-                raw: val,
-            });
-        }
-    }
-    Ok(out)
-}
-
-fn load_profiles(profiles_dir: &Path) -> Result<Vec<Profile>> {
-    let mut out = vec![];
-    for entry in fs::read_dir(profiles_dir)? {
-        let path = entry?.path();
-        if path.extension().and_then(|s| s.to_str()) == Some("yaml") {
-            let txt = fs::read_to_string(&path)?;
-            let prof: Profile = serde_yaml::from_str(&txt)?;
-            out.push(prof);
-        }
-    }
-    Ok(out)
-}
-
-pub fn generate(idl_dir: &Path, profiles_dir: &Path, out_dir: &Path) -> Result<()> {
-    fs::create_dir_all(out_dir)?;
-
-    let idls = load_idls(idl_dir).context("loading IDLs")?;
-    let profiles = load_profiles(profiles_dir).context("loading profiles")?;
-
-    // Join profiles to idls by program_id or program_name
-    let mut modules = vec![];
-    for profile in &profiles {
-        fn norm(s: &str) -> String {
-            s.to_ascii_lowercase().replace(['-', '_'], "")
-        }
-
-        let maybe_idl = idls.iter().find(|i| {
-    // Prefer PID match when both sides have it
-    (!profile.program_id.is_empty() && !i.program_id.is_empty() && i.program_id == profile.program_id)
-    // Else fall back to normalized name match ("orca_whirlpool" ↔ "whirlpool")
-    || norm(&i.program_name) == norm(&profile.program_name)
-});
-
-        let Some(idl) = maybe_idl else {
-            eprintln!(
-                "WARN: No IDL match for profile {} (pid: {}). Loaded IDLs: {}",
-                profile.program_name,
-                profile.program_id,
-                idls.iter()
-                    .map(|x| format!("{}:{}", x.program_name, x.program_id))
-                    .collect::<Vec<_>>()
-                    .join(", ")
-            );
-            continue; // skip instead of error
-        };
-
-        // Prefer profile override when provided; else use IDL address
-        let effective_pid = if !profile.program_id.is_empty() {
-            &profile.program_id
-        } else {
-            &idl.program_id
-        };
-
-        // ...when you push to `modules`, use effective_pid:
-        //
-
-        // let maybe_idl = idls.iter().find(|i| {
-        //     (!profile.program_id.is_empty() && i.program_id == profile.program_id)
-        //         || i.program_name == profile.program_name
-        // });
-
-        // let Some(idl) = maybe_idl else {
-        //     eprintln!(
-        //         "WARN: No IDL match for profile {} (pid: {}) — skipping",
-        //         profile.program_name, profile.program_id
-        //     );
-        //     continue;
-        // };
-
-        let mod_src = render_program_module(&profile, idl)?;
-        let mod_name = format!("program_{}", profile.program_name.replace('-', "_"));
-        let mod_path = out_dir.join(format!("{mod_name}.rs"));
-        fs::write(&mod_path, mod_src)?;
-        modules.push((mod_name, effective_pid.to_string()));
-    }
-
-    eprintln!("INFO: Loaded IDLs:");
-    for i in &idls {
-        eprintln!("  - name='{}' pid='{}'", i.program_name, i.program_id);
-    }
-
-    eprintln!("INFO: Loaded profiles:");
-    for p in &profiles {
-        eprintln!("  - name='{}' pid='{}'", p.program_name, p.program_id);
-    }
-
-    // registry.rs
-    let registry_src = render_registry(&modules)?;
-    fs::write(out_dir.join("registry.rs"), registry_src)?;
-
-    Ok(())
-}
-
-fn render_program_module(profile: &Profile, idl: &Idl) -> Result<String> {
-    // Build decode arms only for the swap instructions listed in the profile
-    let mut decode_arms = String::new();
-    let mut extract_arms = String::new();
-
-    // Look up IDL instructions map: name -> flattened account roles
-    let mut idl_roles: std::collections::HashMap<String, Vec<String>> =
-        std::collections::HashMap::new();
-    if let Some(instrs) = idl.raw.get("instructions").and_then(|x| x.as_array()) {
-        for i in instrs {
-            if let Some(name) = i.get("name").and_then(|x| x.as_str()) {
-                let mut roles = Vec::new();
-                if let Some(accs) = i.get("accounts") {
-                    flatten_account_names(accs, &mut roles);
+fn load_idl(path: &Path) -> Result<Idl> {
+    let raw = fs::read_to_string(path)
+        .with_context(|| format!("read idl {}", path.display()))?;
+    let v: serde_json::Value = serde_json::from_str(&raw)?;
+    let name = v.get("name").and_then(|x| x.as_str()).unwrap_or("unknown").to_string();
+    let mut out = Vec::new();
+    if let Some(ixs) = v.get("instructions").and_then(|x| x.as_array()) {
+        for ix in ixs {
+            let ix_name = ix.get("name").and_then(|x| x.as_str()).unwrap_or("").to_string();
+            let mut accs = Vec::new();
+            if let Some(arr) = ix.get("accounts").and_then(|x| x.as_array()) {
+                for a in arr {
+                    if let Some(n) = a.get("name").and_then(|x| x.as_str()) {
+                        accs.push(n.to_string());
+                    }
                 }
-                idl_roles.insert(name.to_string(), roles);
             }
+            out.push(IdlIx { name: ix_name, accounts: accs });
         }
     }
+    Ok(Idl { name, instructions: out })
+}
 
-    for instr in &profile.swap_instructions {
-        // ------------- Decoder arm -------------
-        let disc = discriminator8(&instr.name);
-        let disc_bytes = disc
-            .iter()
-            .map(|b| format!("{}u8", b))
-            .collect::<Vec<_>>()
-            .join(", ");
-        let roles = idl_roles.get(&instr.name).cloned().unwrap_or_default();
-        let roles_lit = roles
-            .iter()
-            .map(|r| format!("\"{}\"", r))
-            .collect::<Vec<_>>()
-            .join(", ");
+fn anchor_disc(ix_name: &str) -> [u8; 8] {
+    let s = format!("global:{}", ix_name);
+    let mut h = Sha256::new();
+    h.update(s.as_bytes());
+    let d = h.finalize();
+    let mut out = [0u8; 8];
+    out.copy_from_slice(&d[..8]);
+    out
+}
 
-        decode_arms.push_str(&format!(
-            r#"
-            if &ix_data[..8] == &[{disc}] {{
-                // IDL-declared role order for {name}
-                const ROLES: &[&str] = &[{roles}];
-                let mut map = std::collections::HashMap::new();
-                for (i, role) in ROLES.iter().enumerate() {{
-                    if let Some(ai) = account_indices.get(i) {{
-                        if let Some(pk) = account_keys.get(*ai as usize) {{
-                            map.insert((*role).to_string(), pk.clone());
-                        }}
-                    }}
-                }}
-                return Some(("{name}".to_string(), map));
-            }}
-        "#,
-            disc = disc_bytes,
-            name = instr.name,
-            roles = roles_lit
-        ));
 
-        // ------------- Extractor arm -------------
-        extract_arms.push_str(&format!(
-            r#"
-            "{name}" => {{
-                // Pool: first matching role
-                let pool_id = ctx.decoded_accounts_by_role
-                    .as_ref()
-                    .and_then(|m| [{pool_roles}].iter().find_map(|r| m.get(*r)))
-                    .cloned()
-                    .unwrap_or_default();
-                let pool_resolved = !pool_id.is_empty();
+//use std::path::{Path, PathBuf};
 
-                // User authority (hint)
-                let user_auth = ctx.decoded_accounts_by_role
-                    .as_ref()
-                    .and_then(|m| [{auth_roles}].iter().find_map(|r| m.get(*r)))
-                    .cloned();
+// fn resolve_idl_path(profiles_dir: &Path, idl_file: &str) -> PathBuf {
+//     // profiles_dir = <workspace>/crates/normalizer-codegen/profiles
+//     // workspace_root = profiles_dir/../..
+//     let workspace_root = profiles_dir
+//         .parent()
+//         .and_then(|p| p.parent())
+//         .unwrap_or_else(|| Path::new("."))
+//         .to_path_buf();
 
-                // Infer amounts from meta (owner hint if available)
-                let inferred = rt::infer_amounts_from_meta(
-                    ctx.token_balance_changes,
-                    user_auth.as_deref()
-                )?;
+//     // Try <workspace>/crates/mevana-idl-registry/idls/<idl_file>
+//     let p1 = workspace_root
+//         .join("crates")
+//         .join("mevana-idl-registry")
+//         .join("idls")
+//         .join(idl_file);
+//     if p1.exists() {
+//         return p1;
+//     }
 
-                let price = rt::compute_raw_price(inferred.amount_in, inferred.amount_out);
+//     // Try <workspace>/idls/<idl_file>
+//     let p2 = workspace_root.join("idls").join(idl_file);
+//     if p2.exists() {
+//         return p2;
+//     }
 
-                Some(rt::NormalizedSwapV1 {{
-                    slot: ctx.slot,
-                    block_time_unix: ctx.block_time_unix,
-                    signature: ctx.signature.clone(),
-                    ix_index: ctx.ix_index,
-                    program_id: self.program_id.to_string(),
-                    dex: "{dex}".to_string(),
-                    pool_id,
-                    swap_kind: {swap_kind},
-                    token_in_mint: inferred.token_in_mint,
-                    token_out_mint: inferred.token_out_mint,
-                    amount_in: inferred.amount_in,
-                    amount_out: inferred.amount_out,
-                    fee_bps_estimate: None,
-                    price,
-                    tick_index: None,
-                    sqrt_price_x64: None,
-                    user_authority: user_auth,
-                    success: ctx.meta_ok,
-                    quality: rt::QualityFlags {{
-                        idl_decoded: ctx.decoded_name.is_some(),
-                        from_profile: true,
-                        amounts_from_meta: true,
-                        pool_resolved,
-                    }},
-                }})
-            }}"#,
-            name = instr.name,
-            dex = profile.program_name,
-            pool_roles = instr
-                .pool_account_roles
-                .iter()
-                .map(|r| format!("\"{r}\""))
-                .collect::<Vec<_>>()
-                .join(", "),
-            auth_roles = instr
-                .user_authority_roles
-                .iter()
-                .map(|r| format!("\"{r}\""))
-                .collect::<Vec<_>>()
-                .join(", "),
-            swap_kind = match instr.kind.as_str() {
-                "CLMM" => "rt::SwapKind::Clmm",
-                "CPMM" => "rt::SwapKind::Cpmm",
-                "Aggregator" => "rt::SwapKind::Aggregator",
-                _ => "rt::SwapKind::Other",
-            },
-        ));
-        extract_arms.push(',');
+//     // Optional: try nested layout dirs you might use
+//     let p3 = workspace_root
+//         .join("idl-registry")
+//         .join(idl_file);
+//     if p3.exists() {
+//         return p3;
+//     }
+
+//     // Nothing matched; return the most likely absolute path (p1) to surface in the error
+//     p1
+// }
+
+
+
+fn resolve_idl_path(profiles_dir: &Path, idl_file: &str) -> PathBuf {
+    // profiles_dir = <workspace>/crates/normalizer-codegen/profiles (absolute)
+    let workspace_root = profiles_dir
+        .parent()  // normalizer-codegen
+        .and_then(|p| p.parent()) // crates
+        .and_then(|p| p.parent()) // workspace root
+        .unwrap_or_else(|| Path::new("/"))
+        .to_path_buf();
+
+    // 1) crates/mevana-idl-registry/idls/<idl_file>
+    let p1 = workspace_root
+        .join("crates")
+        .join("mevana-idl-registry")
+        .join("idls")
+        .join(idl_file);
+    if p1.exists() {
+        return p1;
     }
 
-    let src = format!(
-        r#"
-        use normalizer_runtime as rt;
+    // 2) idls/<idl_file> at workspace root
+    let p2 = workspace_root.join("idls").join(idl_file);
+    if p2.exists() {
+        return p2;
+    }
 
-        /// Return (instruction_name, accounts_by_role) if this instruction matches a known method.
-        pub fn decode_anchor(ix_data: &[u8], account_indices: &[u8], account_keys: &[String])
-            -> Option<(String, std::collections::HashMap<String, String>)>
-        {{
-            if ix_data.len() < 8 {{ return None; }}
-            {decode_arms}
-            None
-        }}
+    // 3) idl-registry/<idl_file> (optional)
+    let p3 = workspace_root.join("idl-registry").join(idl_file);
+    if p3.exists() {
+        return p3;
+    }
 
-        pub struct Extractor {{
-            pub program_id: &'static str,
-        }}
+    // Nothing found; return p1 so the error shows the most likely path
+    p1
+}
 
-        impl rt::SwapExtractor for Extractor {{
-            fn program_id(&self) -> &str {{ self.program_id }}
 
-            fn try_extract(&self, ctx: &rt::TxContext) -> Option<rt::NormalizedSwapV1> {{
-                let name = ctx.decoded_name.as_deref()?;
-                match name {{
-                    {extract_arms}
-                    _ => None,
+
+fn kind_to_enum(s: &str) -> &'static str {
+    match s.to_ascii_lowercase().as_str() {
+        "clmm" => "SwapKind::Clmm",
+        "cpmm" => "SwapKind::Cpmm",
+        "aggregator" => "SwapKind::Aggregator",
+        _ => "SwapKind::Other",
+    }
+}
+
+pub fn generate_extractors(profiles_dir_in: &std::path::Path, _out_dir: &std::path::Path) -> Result<String> {
+    // Make sure we work with an absolute path
+    let profiles_dir = profiles_dir_in
+        .canonicalize()
+        .unwrap_or_else(|_| profiles_dir_in.to_path_buf());
+
+    // ← THIS was missing
+    let mut profiles: Vec<Profile> = Vec::new();
+
+    // Read every YAML in the profiles dir
+    for entry in std::fs::read_dir(&profiles_dir)
+        .with_context(|| format!("read_dir {}", profiles_dir.display()))?
+    {
+        let p = entry?.path();
+        if p.extension().and_then(|s| s.to_str()) != Some("yaml") { continue; }
+        let txt = std::fs::read_to_string(&p)?;
+        let prof: Profile = serde_yaml::from_str(&txt)
+            .with_context(|| format!("parse profile {}", p.display()))?;
+        profiles.push(prof);
+    }
+
+    // 2) Load IDLs + precompute discriminator + role index mapping
+    struct IxGen {
+        ix_name: String,
+        disc: [u8;8],
+        // role_key -> list of (alias_name, index_in_accs). We’ll keep the alias_name as the map key in roles.
+        positions: Vec<(String, usize)>,
+    }
+    struct ProgramGen {
+        program_id: String,
+        dex_name: String, // from program_name
+        kind_by_ix: BTreeMap<String, String>, // ix_name -> SwapKind::<..> as string
+        ixs: Vec<IxGen>,
+    }
+
+    let mut progs = Vec::new();
+
+    for prof in profiles {
+        let idl_path = resolve_idl_path(&profiles_dir, &prof.idl_file);
+
+        let idl = load_idl(&idl_path)
+            .with_context(|| format!("load idl {}", idl_path.display()))?;
+
+        // Build a quick lookup: ix_name -> IdlIx
+        let mut idl_ix_by_name: BTreeMap<String, &IdlIx> = BTreeMap::new();
+        for ix in &idl.instructions {
+            idl_ix_by_name.insert(ix.name.clone(), ix);
+        }
+
+        let mut ixs: Vec<IxGen> = Vec::new();
+        let mut kind_by_ix: BTreeMap<String, String> = BTreeMap::new();
+
+        for sip in &prof.swap_instructions {
+            let Some(idl_ix) = idl_ix_by_name.get(&sip.name) else {
+                // If missing, just skip; you can make this a hard error if you prefer strictness.
+                continue;
+            };
+
+            // Build “positions” for all role groups you listed:
+            // We record each alias (e.g., "whirlpool", "pool", "whirlpoolOne") that actually exists in the IDL’s account list.
+            // At runtime we’ll pull keys[accs[pos]] and insert into the role map under that alias string.
+            let mut positions: Vec<(String, usize)> = Vec::new();
+
+            if let Some(list) = &sip.pool_account_roles {
+                for alias in list {
+                    if let Some(pos) = idl_ix.accounts.iter().position(|a| a == alias) {
+                        positions.push((alias.clone(), pos));
+                    }
+                }
+            }
+            if let Some(list) = &sip.user_authority_roles {
+                for alias in list {
+                    if let Some(pos) = idl_ix.accounts.iter().position(|a| a == alias) {
+                        positions.push((alias.clone(), pos));
+                    }
+                }
+            }
+            if let Some(list) = &sip.token_accounts_roles_in {
+                for alias in list {
+                    if let Some(pos) = idl_ix.accounts.iter().position(|a| a == alias) {
+                        positions.push((alias.clone(), pos));
+                    }
+                }
+            }
+            if let Some(list) = &sip.token_accounts_roles_out {
+                for alias in list {
+                    if let Some(pos) = idl_ix.accounts.iter().position(|a| a == alias) {
+                        positions.push((alias.clone(), pos));
+                    }
+                }
+            }
+            if let Some(alias) = &sip.clmm_state_account {
+                if let Some(pos) = idl_ix.accounts.iter().position(|a| a == alias) {
+                    positions.push((alias.clone(), pos));
+                }
+            }
+
+            ixs.push(IxGen {
+                ix_name: sip.name.clone(),
+                disc: anchor_disc(&sip.name),
+                positions,
+            });
+            kind_by_ix.insert(sip.name.clone(), kind_to_enum(&sip.kind).to_string());
+        }
+
+        progs.push(ProgramGen {
+            program_id: prof.program_id,
+            dex_name: prof.program_name, // we’ll CamelCase for type name and keep a snake-ish string for dex tag
+            kind_by_ix,
+            ixs,
+        });
+    }
+
+    // 3) Emit Rust source
+    let mut src = String::new();
+    src.push_str(r#"
+use std::collections::HashMap;
+use normalizer_runtime::{
+    SwapExtractor, TxContext, NormalizedSwapV1, SwapKind,
+    infer_amounts_from_meta, compute_raw_price, QualityFlags,
+};
+"#);
+
+    // ---- decoder_for switch ----
+    src.push_str("pub type DecFn = fn(data: &[u8], account_indices: &[u8], account_keys: &[String]) -> Option<(String, HashMap<String, String>)>;\n");
+    src.push_str("pub fn decoder_for(program_id: &str) -> Option<DecFn> {\n    match program_id {\n");
+    for pg in &progs {
+        src.push_str(&format!("        \"{}\" => Some(decode_{}),\n", pg.program_id, to_snake(&pg.dex_name)));
+    }
+    src.push_str("        _ => None,\n    }\n}\n");
+
+    // ---- one decoder per program ----
+    for pg in &progs {
+        // discriminators
+        for ix in &pg.ixs {
+            src.push_str(&format!(
+                "const DISC_{}_{}: [u8;8] = {:?};\n",
+                to_const(&pg.dex_name), to_const(&ix.ix_name), ix.disc
+            ));
+        }
+
+        // decoder body
+        src.push_str(&format!(
+r#"
+fn decode_{dex}(data: &[u8], accs: &[u8], keys: &[String]) -> Option<(String, HashMap<String,String>)> {{
+    if data.len() < 8 {{ return None; }}
+    let disc: [u8;8] = data[0..8].try_into().ok()?;
+    match disc {{"#,
+            dex = to_snake(&pg.dex_name),
+        ));
+
+        for ix in &pg.ixs {
+            src.push_str(&format!("\n        {} => {{\n            let mut roles = HashMap::new();\n",
+                format!("DISC_{}_{}", to_const(&pg.dex_name), to_const(&ix.ix_name))
+            ));
+            for (alias, pos) in &ix.positions {
+                src.push_str(&format!(
+                    "            if let Some(ai) = accs.get({}) {{ if let Some(pk) = keys.get(*ai as usize) {{ roles.insert(\"{}\".to_string(), pk.clone()); }} }}\n",
+                    pos, alias
+                ));
+            }
+            src.push_str(&format!("            Some((\"{}\".to_string(), roles))\n        }},\n", ix.ix_name));
+        }
+
+        src.push_str("        _ => None,\n    }\n}\n");
+    }
+
+    // ---- one SwapExtractor per program ----
+    for pg in &progs {
+        let ty = format!("{}SwapExtractor", to_camel(&pg.dex_name));
+        src.push_str(&format!(
+r#"
+pub struct {ty};
+impl SwapExtractor for {ty} {{
+    fn program_id(&self) -> &str {{ "{pid}" }}
+    fn try_extract(&self, ctx: &TxContext) -> Option<NormalizedSwapV1> {{
+        let ia = infer_amounts_from_meta(ctx.token_balance_changes, None)?;
+        // Prefer a single-pool role if present; fall back to any 'whirlpool*' role.
+        let pool_id = ctx.decoded_accounts_by_role.as_ref()
+            .and_then(|m| m.get("pool")).cloned()
+            .or_else(|| ctx.decoded_accounts_by_role.as_ref().and_then(|m| m.get("whirlpool")).cloned())
+            .or_else(|| ctx.decoded_accounts_by_role.as_ref().and_then(|m| m.get("whirlpoolOne")).cloned())
+            .or_else(|| ctx.decoded_accounts_by_role.as_ref().and_then(|m| m.get("whirlpoolTwo")).cloned())
+            .unwrap_or_default();
+
+        Some(NormalizedSwapV1 {{
+            slot: ctx.slot,
+            block_time_unix: ctx.block_time_unix,
+            signature: ctx.signature.clone(),
+            ix_index: ctx.ix_index,
+            program_id: ctx.program_id.clone(),
+            dex: "{dex_tag}".into(),
+            pool_id,
+            // We could dispatch by decoded_name to pick CLMM/CPMM/… exactly per-ix. For now, prefer CLMM if any ix kind is CLMM.
+            swap_kind: {{
+                match ctx.decoded_name.as_deref() {{
+                    {kind_match_arms}
+                    _ => SwapKind::Other,
                 }}
-            }}
-        }}
-    "#
-    );
+            }},
+            token_in_mint: ia.token_in_mint,
+            token_out_mint: ia.token_out_mint,
+            amount_in: ia.amount_in,
+            amount_out: ia.amount_out,
+            fee_bps_estimate: None,
+            price: compute_raw_price(ia.amount_in, ia.amount_out),
+            tick_index: None,
+            sqrt_price_x64: None,
+            user_authority: ctx.decoded_accounts_by_role.as_ref()
+                .and_then(|m| m.get("tokenAuthority")).cloned()
+                .or_else(|| ctx.decoded_accounts_by_role.as_ref().and_then(|m| m.get("authority")).cloned())
+                .or_else(|| ctx.decoded_accounts_by_role.as_ref().and_then(|m| m.get("owner")).cloned()),
+            success: ctx.meta_ok,
+            quality: QualityFlags::default(),
+        }})
+    }}
+}}
+"#,
+            ty = ty,
+            pid = pg.program_id,
+            dex_tag = to_snake(&pg.dex_name),
+            kind_match_arms = kind_match(&pg.kind_by_ix),
+        ));
+    }
+
+    // ---- registry() ----
+    src.push_str("pub fn registry() -> Vec<Box<dyn SwapExtractor>> { vec![\n");
+    for pg in &progs {
+        src.push_str(&format!("    Box::new({}SwapExtractor),\n", to_camel(&pg.dex_name)));
+    }
+    src.push_str("]}\n");
 
     Ok(src)
 }
 
-fn render_registry(mods: &[(String, String)]) -> Result<String> {
-    let mut mod_includes = String::new();
-    let mut inits = String::new();
-    let mut decoder_matches = String::new();
-    let mut pid_map_entries = String::new();
-
-    for (mod_name, pid) in mods {
-        mod_includes.push_str(&format!(
-            "mod {m} {{ include!(concat!(env!(\"OUT_DIR\"), \"/{m}.rs\")); }}\n",
-            m = mod_name
-        ));
-        inits.push_str(&format!(
-            "boxes.push(Box::new({m}::Extractor {{ program_id: PROGRAM_IDS.get(\"{m}\").unwrap() }}));\n",
-            m = mod_name
-        ));
-        decoder_matches.push_str(&format!(
-            "\"{pid}\" => Some({m}::decode_anchor),\n",
-            pid = pid,
-            m = mod_name
-        ));
-        pid_map_entries.push_str(&format!(
-            "map.insert(\"{m}\", \"{pid}\");\n",
-            m = mod_name,
-            pid = pid
-        ));
+fn to_camel(s: &str) -> String {
+    let mut out = String::new();
+    let mut cap = true;
+    for ch in s.chars() {
+        if !ch.is_alphanumeric() { cap = true; continue; }
+        if cap { out.push(ch.to_ascii_uppercase()); cap = false; } else { out.push(ch); }
     }
-
-    let src = format!(
-        r#"
-        {mod_includes}
-
-        static PROGRAM_IDS: once_cell::sync::Lazy<std::collections::HashMap<&'static str, &'static str>> =
-            once_cell::sync::Lazy::new(|| {{
-                let mut map: std::collections::HashMap<&'static str, &'static str> = std::collections::HashMap::new();
-                {pid_map_entries}
-                map
-            }});
-
-        pub fn registry() -> Vec<Box<dyn normalizer_runtime::SwapExtractor>> {{
-            let mut boxes: Vec<Box<dyn normalizer_runtime::SwapExtractor>> = Vec::new();
-            {inits}
-            boxes
-        }}
-
-        /// Get a decoder function for this program id, if available.
-        pub fn decoder_for(pid: &str) -> Option<
-            fn(&[u8], &[u8], &[String]) -> Option<(String, std::collections::HashMap<String, String>)>
-        > {{
-            match pid {{
-                {decoder_matches}
-                _ => None,
-            }}
-        }}
-    "#
-    );
-
-    Ok(src)
+    out
+}
+fn to_snake(s: &str) -> String {
+    let mut out = String::new();
+    for (i, ch) in s.chars().enumerate() {
+        if ch.is_ascii_uppercase() {
+            if i != 0 { out.push('_'); }
+            out.push(ch.to_ascii_lowercase());
+        } else if ch.is_alphanumeric() {
+            out.push(ch);
+        } else {
+            out.push('_');
+        }
+    }
+    out
+}
+fn to_const(s: &str) -> String {
+    let mut out = String::new();
+    for ch in s.chars() {
+        if ch.is_ascii_alphanumeric() {
+            out.push(ch.to_ascii_uppercase());
+        } else {
+            out.push('_');
+        }
+    }
+    out
+}
+fn kind_match(map: &BTreeMap<String, String>) -> String {
+    // emits arms like:  "swap" => SwapKind::Clmm, "swapV2" => SwapKind::Clmm, ...
+    let mut s = String::new();
+    for (ix, kind) in map {
+        s.push_str(&format!("Some(\"{}\") => {},\n                    ", ix, kind));
+    }
+    s
 }

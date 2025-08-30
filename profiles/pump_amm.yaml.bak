@@ -1,0 +1,25 @@
+# PumpSwap AMM Profile - Graduated Token Trading
+# Date: 2025-01-20
+# Program ID: pAMMBay6oceH9fJKBRHGP5D4bD4sWpmSwMn52FMfXEA  
+# Protocol: AMM for graduated tokens from Pump.fun
+
+program_name: "pump_amm"
+program_id: "pAMMBay6oceH9fJKBRHGP5D4bD4sWpmSwMn52FMfXEA"
+
+# Core AMM trading instructions
+swap_instructions:
+  # Buy tokens from AMM pool
+  - name: "buy"
+    kind: "CPMM"
+    pool_account_roles: ["pool"]
+    user_authority_roles: ["user"]
+    token_accounts_roles_in: ["user_quote_token_account"]
+    token_accounts_roles_out: ["user_base_token_account"]
+
+  # Sell tokens to AMM pool
+  - name: "sell"
+    kind: "CPMM"
+    pool_account_roles: ["pool"]
+    user_authority_roles: ["user"]
+    token_accounts_roles_in: ["user_base_token_account"]
+    token_accounts_roles_out: ["user_quote_token_account"]

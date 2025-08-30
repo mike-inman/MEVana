@@ -1,0 +1,13 @@
+{
+  "name": "meteora_dlmm_pool",
+  "version": "v1",
+  "fields": [
+    { "name": "token_mint_x", "offset": 8, "type": "Pubkey" },
+    { "name": "token_mint_y", "offset": 40, "type": "Pubkey" },
+    { "name": "decimals_x", "offset": 72, "type": "u8" },
+    { "name": "decimals_y", "offset": 73, "type": "u8" },
+    { "name": "active_bin_id", "offset": 80, "type": "i32" },
+    { "name": "bin_step", "offset": 84, "type": "i32" },
+    { "name": "base_fee_bps", "offset": 88, "type": "u16" }
+  ]
+}

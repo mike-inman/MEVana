@@ -1,0 +1,14 @@
+{
+	"folders": [
+		{
+			"path": "."
+		}
+	],
+	"settings": {
+		"rust-analyzer.procMacro.attributes.enable": true,
+		"rust-analyzer.showUnlinkedFileNotification": false,
+		"files.associations": {
+			".env*": "dotenv"
+		}
+	}
+}

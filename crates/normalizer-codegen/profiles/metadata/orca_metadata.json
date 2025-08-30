@@ -1,0 +1,146 @@
+{
+  "dex_info": {
+    "name": "whirlpool",
+    "display_name": "Orca Whirlpools",
+    "protocol_type": "CLMM",
+    "program_ids": ["whirLbMiicVdio4qvUfM5KAg6Ct8VwpYzGff3uctyCc"],
+    "website": "https://orca.so",
+    "documentation": "https://docs.orca.so",
+    "twitter": "@orca_so",
+    "logo_url": "https://raw.githubusercontent.com/solana-labs/token-list/main/assets/mainnet/orcaEKTdK7LKz57vaAYr9QeNsVEPfiu6QeMU1kektZE/logo.png",
+    "logo_svg": null,
+    "brand_colors": {
+      "primary": "#4B9DFF",
+      "secondary": "#00D4AA"
+    },
+    "launch_date": "2021-02-08",
+    "total_value_locked": 1200000000,
+    "market_share_percent": 15.2
+  },
+  "technical_specs": {
+    "pricing_model": "ConcentratedLiquidity",
+    "fee_structure": {
+      "trading_fee_bps": 25,
+      "protocol_fee_bps": 0,
+      "lp_fee_bps": 25,
+      "variable_fees": true,
+      "fee_tiers": [1, 5, 25, 100]
+    },
+    "supported_tokens": {
+      "native_tokens": ["SOL", "USDC", "USDT"],
+      "supports_spl_tokens": true,
+      "supports_nfts": false,
+      "minimum_liquidity": null
+    },
+    "transaction_finality": {
+      "average_confirmation_time_ms": 400,
+      "supports_partial_fills": false,
+      "mev_protection": false,
+      "requires_seat": false
+    }
+  },
+  "arbitrage_profile": {
+    "liquidity_depth": "VeryHigh",
+    "price_impact": "Low",
+    "optimal_trade_sizes": {
+      "min_profitable_usd": 500,
+      "max_efficient_usd": 1000000,
+      "sweet_spot_usd": 100000
+    },
+    "latency_characteristics": {
+      "quote_time_ms": 3,
+      "execution_time_ms": 400,
+      "settlement_time_ms": 400
+    },
+    "arbitrage_advantages": [
+      "Deepest liquidity on Solana",
+      "Concentrated liquidity for capital efficiency",
+      "Multiple fee tiers for optimization",
+      "High-precision mathematical model",
+      "Excellent price discovery mechanism"
+    ],
+    "arbitrage_considerations": [
+      "Complex concentrated liquidity calculations",
+      "Position management overhead",
+      "Tick spacing constraints",
+      "Impermanent loss considerations"
+    ],
+    "cross_dex_opportunities": [
+      "Orca vs Raydium arbitrage",
+      "Concentrated vs traditional AMM spreads",
+      "Multi-hop routing optimization"
+    ]
+  },
+  "market_dynamics": {
+    "primary_use_cases": [
+      "High-volume trading",
+      "Institutional liquidity provision",
+      "Cross-DEX arbitrage",
+      "Capital efficient market making"
+    ],
+    "target_audience": "All",
+    "peak_activity_hours": "14:00-22:00 UTC",
+    "dominant_pairs": ["SOL/USDC", "USDC/USDT", "SOL/ETH"],
+    "seasonal_patterns": "Consistent high volume with volatility spikes",
+    "competitor_analysis": {
+      "main_competitors": ["Raydium", "Jupiter", "Serum"],
+      "unique_advantages": [
+        "Pioneer in concentrated liquidity on Solana",
+        "Superior user experience and interface",
+        "Strong ecosystem integrations",
+        "Proven stability and reliability"
+      ],
+      "market_position": "Leader"
+    }
+  },
+  "integration_data": {
+    "plugin_version": "1.0.0",
+    "last_updated": "2025-01-20",
+    "instruction_coverage": {
+      "total_instructions": 42,
+      "parsed_instructions": 2,
+      "coverage_percentage": 4.8
+    },
+    "testing_status": {
+      "unit_tests": true,
+      "integration_tests": true,
+      "production_verified": true
+    },
+    "performance_metrics": {
+      "parse_success_rate": 0.99,
+      "average_parse_time_us": 120,
+      "error_rate": 0.01
+    }
+  },
+  "ai_insights": {
+    "trend_indicators": [
+      "Concentrated liquidity adoption increasing",
+      "Volume correlation with overall market volatility",
+      "Fee tier optimization patterns emerging"
+    ],
+    "anomaly_patterns": [
+      "Unusual tick concentration during high volatility",
+      "Large position movements preceding market events"
+    ],
+    "correlation_signals": [
+      "Strong correlation with Solana ecosystem health",
+      "Leading indicator for DeFi activity",
+      "Fee tier preferences reflect market sophistication"
+    ],
+    "strategic_recommendations": [
+      "Focus on SOL/USDC for maximum liquidity",
+      "Monitor concentrated positions for arbitrage",
+      "Leverage multiple fee tiers for optimization"
+    ],
+    "risk_factors": [
+      "Concentrated liquidity impermanent loss",
+      "Smart contract complexity",
+      "MEV extraction potential"
+    ],
+    "opportunity_indicators": [
+      "Growing institutional adoption",
+      "Expanding ecosystem integrations",
+      "Innovation in concentrated liquidity models"
+    ]
+  }
+}

@@ -1,0 +1,17 @@
+[package]
+name = "raydium-normalizer"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+normalizer-runtime = { path = "../normalizer-runtime" }
+normalizer-service = { path = "../normalizer-service" }
+tokio = { version = "1.0", features = ["full"] }
+anyhow = "1.0"
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+rdkafka = { version = "0.38", features = ["cmake-build"] }
+log = "0.4"
+env_logger = "0.10"
+clap = { version = "4.0", features = ["derive"] }
+base64 = "0.21"

@@ -1,0 +1,60 @@
+program_name: jupiter
+program_id: "JUP4Fb2cqiRUcaTHdrPC8h2gNsA2ETXiPDD33WcGuJB"  # Jupiter V6 aggregator
+idl_file: jupiter.json    # <— add this so codegen can find the IDL
+swap_instructions:
+  - name: "route"
+    kind: "Aggregator"
+    pool_account_roles: ["destinationTokenAccount"]
+    user_authority_roles: ["userTransferAuthority"]
+    token_accounts_roles_in: ["userTransferAuthority"]  # Authority controls source
+    token_accounts_roles_out: ["destinationTokenAccount"]  # Destination token account
+    
+  # Individual DEX-specific swaps through Jupiter
+  - name: "whirlpoolSwap"
+    kind: "CLMM"
+    pool_account_roles: ["whirlpool"]
+    user_authority_roles: ["userTransferAuthority"]
+    token_accounts_roles_in: ["tokenOwnerAccountA", "tokenOwnerAccountB"]
+    token_accounts_roles_out: ["tokenOwnerAccountB", "tokenOwnerAccountA"]
+    
+  - name: "raydiumSwap"
+    kind: "CPMM"
+    pool_account_roles: ["amm", "poolState"]
+    user_authority_roles: ["userTransferAuthority"]
+    token_accounts_roles_in: ["userSourceToken"]
+    token_accounts_roles_out: ["userDestinationToken"]
+    
+  - name: "raydiumClmmSwap"
+    kind: "CLMM"
+    pool_account_roles: ["poolState"]
+    user_authority_roles: ["userTransferAuthority"]
+    token_accounts_roles_in: ["inputTokenAccount"]
+    token_accounts_roles_out: ["outputTokenAccount"]
+    
+  - name: "meteoraSwap"
+    kind: "DLMM"
+    pool_account_roles: ["lbPair"]
+    user_authority_roles: ["userTransferAuthority"]
+    token_accounts_roles_in: ["userTokenIn"]
+    token_accounts_roles_out: ["userTokenOut"]
+    
+  - name: "phoenixSwap"
+    kind: "CLOB"
+    pool_account_roles: ["market"]
+    user_authority_roles: ["userTransferAuthority"]
+    token_accounts_roles_in: ["baseAccount"]
+    token_accounts_roles_out: ["quoteAccount"]
+    
+  - name: "lifinitySwap"
+    kind: "Other"
+    pool_account_roles: ["pool"]
+    user_authority_roles: ["userTransferAuthority"]
+    token_accounts_roles_in: ["fromTokenAccount"]
+    token_accounts_roles_out: ["toTokenAccount"]
+    
+  - name: "invariantSwap"
+    kind: "CLMM"
+    pool_account_roles: ["pool"]
+    user_authority_roles: ["userTransferAuthority"]
+    token_accounts_roles_in: ["accountX"]
+    token_accounts_roles_out: ["accountY"]

@@ -1,17 +1,35 @@
 # Raydium CLMM Profile - Concentrated Liquidity Market Maker
 # Date: 2025-01-20
-# Program ID: 5Q544fKrFoe6tsEbD7S8EmxGTJYAKtTVhAW5Q5pge4j1
+# Program ID: CAMMCzo5YL8w4VFF8KVHrK22GGUsp5VTaW7grrKgrWqK
 # Protocol: CLMM (Concentrated Liquidity Market Maker)
 
 program_name: "raydium_clmm"
-program_id: "5Q544fKrFoe6tsEbD7S8EmxGTJYAKtTVhAW5Q5pge4j1"
+program_id: "CAMMCzo5YL8w4VFF8KVHrK22GGUsp5VTaW7grrKgrWqK"
 
 # Core swap instructions for CLMM
 swap_instructions:
-  # Main swap instruction (deprecated but still used)
+  # Main swap instruction
   - name: "swap"
+    kind: "CLMM"
+    pool_account_roles: ["poolState", "ammConfig"]
+    user_authority_roles: ["payer"]
+    token_accounts_roles_in: ["inputTokenAccount", "inputVault"]
+    token_accounts_roles_out: ["outputTokenAccount", "outputVault"]
+    clmm_state_account: "poolState"
+
+  # Router swap instruction
+  - name: "swapRouterBaseIn"
     kind: "CLMM"
     pool_account_roles: ["poolState"]
     user_authority_roles: ["payer"]
     token_accounts_roles_in: ["inputTokenAccount"]
     token_accounts_roles_out: ["outputTokenAccount"]
+
+  # V2 swap instruction (supports Token-2022)
+  - name: "swapV2"
+    kind: "CLMM"
+    pool_account_roles: ["poolState", "ammConfig"]
+    user_authority_roles: ["payer"]
+    token_accounts_roles_in: ["inputTokenAccount", "inputVault"]
+    token_accounts_roles_out: ["outputTokenAccount", "outputVault"]
+    clmm_state_account: "poolState"

@@ -1,0 +1,57 @@
+# Rust Project Context
+# Tell the AI about your project's core technologies and goals.
+SYSTEM_CONTEXT: |
+  You are a senior Rust developer working on a microservice project.
+  The technology stack includes Rust, Docker, Kafka, Redis, and Postgres.
+  Adhere strictly to best practices for production-ready Rust code.
+  Your tasks will involve TDD, integration testing, and ensuring high code quality.
+  
+# Specific instructions for the AI
+# Use rules to enforce your TDD, documentation, and config standards.
+RULES:
+  # TDD workflow enforcement
+  - name: "TDD_Workflow"
+    description: "Follow the Test-Driven Development (TDD) workflow. Always write tests before writing implementation code for a new feature or bug fix."
+    globs: "*.rs"
+    content: |
+      Before writing any new function or feature implementation, a corresponding failing test must be added to the appropriate `tests/` module or integration test file.
+      Explain the TDD step you are taking (e.g., "Writing a failing test for the new feature...") in your commits or responses.
+
+  # Comprehensive documentation guidelines
+  - name: "Documentation_Standards"
+    description: "Ensure all public functions, structs, and modules are thoroughly documented using `rustdoc`. Include sections for Examples, Panics, and Errors."
+    globs: "*.rs"
+    content: |
+      - All public items must have clear `//!` or `///` documentation.
+      - Examples demonstrating usage should be included where appropriate.
+      - Document all potential panics (`# Panics`) and errors (`# Errors`).
+      - Keep documentation up-to-date with code changes.
+
+  # Config file documentation
+  - name: "Config_File_Documentation"
+    description: "All configuration files (Dockerfiles, docker-compose, etc.) must be well-commented and easy to understand."
+    globs:
+      - "**/Dockerfile*"
+      - "**/.env*"
+      - "**/docker-compose.yml"
+      - "**/config/*.toml"
+    content: |
+      - Every line or block with a non-obvious purpose must have a clear comment explaining its function.
+      - Use inline comments (`#`) where appropriate to describe individual parameters.
+
+  # Best practices for dependencies and code style
+  - name: "Rust_Best_Practices"
+    description: "Adhere to idiomatic Rust, using `cargo fmt`, `clippy`, and secure dependency management."
+    globs: "*.rs"
+    content: |
+      - Always run `cargo fmt` to format code.
+      - Always run `cargo clippy` to check for lints and follow its recommendations.
+      - Avoid using `unwrap()` or `expect()` outside of testing contexts. Prefer `?` or explicit error handling.
+      - Use `serde` for serialization/deserialization.
+      - Ensure dependencies in `Cargo.toml` are up-to-date and secure.
+
+# Automatically reference project docs
+# This tells the AI to use your project-specific knowledge base.
+DOCS_CONTEXT:
+  - path: "docs/architecture.md"
+  - path: "docs/api_spec.md"

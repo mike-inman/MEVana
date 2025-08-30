@@ -1,0 +1,28 @@
+# Pump.fun Profile - Bonding Curve & AMM
+# Date: 2025-01-20  
+# Program IDs: 
+# - Bonding Curve: 6EF8rrecthR5Dkzon8Nwu78hRvfCKubJ14M5uBEwF6P
+# - PumpSwap AMM: pAMMBay6oceH9fJKBRHGP5D4bD4sWpmSwMn52FMfXEA
+# Protocol: Bonding Curve + AMM
+
+program_name: "pump_fun"
+program_id: "6EF8rrecthR5Dkzon8Nwu78hRvfCKubJ14M5uBEwF6P"
+idl_file: pump_fun.json    # <— add this so codegen can find the IDL
+
+# Core trading instructions for bonding curve
+swap_instructions:
+  # Buy tokens from bonding curve
+  - name: "buy"
+    kind: "BondingCurve"
+    pool_account_roles: ["bonding_curve"]
+    user_authority_roles: ["user"]
+    token_accounts_roles_in: ["associated_user"]
+    token_accounts_roles_out: ["associated_bonding_curve"]
+
+  # Sell tokens to bonding curve  
+  - name: "sell"
+    kind: "BondingCurve"
+    pool_account_roles: ["bonding_curve"]
+    user_authority_roles: ["user"]
+    token_accounts_roles_in: ["associated_user"]
+    token_accounts_roles_out: ["associated_bonding_curve"]

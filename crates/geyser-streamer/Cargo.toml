@@ -1,0 +1,27 @@
+[package]
+name = "geyser-streamer"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+anyhow = "1.0"
+arbitrage-detector = { path = "../arbitrage-detector" }
+axum = "0.7"
+bs58 = "0.5"
+chrono = { version = "0.4", features = ["serde"] }
+clap = { version = "4.0", features = ["derive", "env"] }
+dotenv = "0.15"
+env_logger = "0.10"
+futures-util = "0.3"
+log = "0.4"
+normalizer-runtime = { path = "../normalizer-runtime" }
+normalizer-service = { path = "../normalizer-service" }
+prometheus = "0.13"
+reqwest = { version = "0.11", features = ["json"] }
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+tokio = { version = "1.0", features = ["full"] }
+tonic = { version = "0.11", features = ["tls"] }
+yellowstone-grpc-client = "4.2"
+yellowstone-grpc-proto = "4.2"
+base64 = "0.21"

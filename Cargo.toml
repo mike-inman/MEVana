@@ -9,7 +9,6 @@ members = [
     "crates/normalizer-service",
     "crates/dex-stream-orca",
     "crates/dex-stream-universal",
-    "crates/dex-stream-universal",
     "crates/ui-gateway",
     "crates/dev-fixtures",
     "crates/dex-backfill",
@@ -27,10 +26,12 @@ members = [
     "crates/executor",
     "tests", "executor-service", "crates/dex-registry",
     "crates/mevana-idl-registry",
-    "crates/jupiter-parser-service",
+    # "crates/jupiter-parser-service",  # Temporarily excluded - different yellowstone version
     "crates/whirlpool-quote-surface",
     "crates/raydium-quote-service",
-    "crates/meteora-quote-service"
+    "crates/meteora-quote-service",
+    "crates/raydium/stream_and_parse_raydium_accounts",
+    "crates/raydium/stream_and_parse_raydium_clmm_accounts"
 #   "crates/stream_and_parse_whirlpool_account_updates"
 #   "crates/pump-quote-service"
 #    "crates/geyser-producer",

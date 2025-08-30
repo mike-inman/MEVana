@@ -1,0 +1,13 @@
+project_context.md: Details the problem the project is solving and how it functions.
+
+✅ project_context.md: From all documentation in the docs directory please create a description of the objective or "problem/challenge" this application aims to solve. Save as project_context.md: in ./docs directory
+
+✅ tech_stack.md: based on all documentation in the docs directory,lists all technologies, major libraries, and dependencies, including versions and save as tech_stack.md in ./docs
+
+✅ system_patterns.md: based on all documentation in the docs directory,lists all key architectural decisions, design patterns, and common code idioms. Save as system_patterns.md in ./docs
+
+✅ progress.md: based on all documentation in the docs directory, Tracks the development lifecycle, keeping a record of major completed tasks. Save as progress.md in ./docs
+
+✅ docs_consolidation.md: consolidate files in docs directory so that there are not so many. You can summarize but try to use dates to give the most recent changes more weight. Save as README_CONSOLIDATED.md in ./docs directory
+
+🔄 next_task.md: based on all documentation in the docs directory, identify the next critical development task that should be prioritized. Save as next_task.md in ./docs directory

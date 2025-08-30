@@ -1,0 +1,8 @@
+{
+  "name": "meteora_dlmm_bin",
+  "version": "v1",
+  "fields": [
+    { "name": "liquidity_x", "offset": 16, "type": "u128" },
+    { "name": "liquidity_y", "offset": 32, "type": "u128" }
+  ]
+}

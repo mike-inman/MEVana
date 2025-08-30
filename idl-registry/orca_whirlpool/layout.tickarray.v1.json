@@ -1,0 +1,17 @@
+{
+  "name": "orca_whirlpool_tickarray",
+  "version": "v1",
+  "fields": [
+    { "name": "start_tick_index", "offset": 8, "type": "i32" },
+    { "name": "ticks", "offset": 12, "type": "array", "element": {
+      "fields": [
+        { "name": "initialized", "offset": 0, "type": "bool" },
+        { "name": "liquidity_net", "offset": 1, "type": "i128" },
+        { "name": "liquidity_gross", "offset": 17, "type": "u128" },
+        { "name": "fee_growth_outside_a", "offset": 33, "type": "u128" },
+        { "name": "fee_growth_outside_b", "offset": 49, "type": "u128" },
+        { "name": "reward_growths_outside", "offset": 65, "type": "u8[384]" }
+      ]
+    }}
+  ]
+}

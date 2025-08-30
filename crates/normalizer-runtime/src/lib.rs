@@ -1,5 +1,11 @@
+// crates/normalizer-runtime/src/lib.rs
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
+
+pub mod models;
+pub mod layouts;
+pub mod layout_parser;
+pub mod adapters;
 
 /// ---------- Normalized universal swap shape ----------
 
