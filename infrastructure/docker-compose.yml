@@ -534,6 +534,75 @@ services:
           memory: 128M
           cpus: '0.1'
 
+  # =============================================================================
+  # APPLICATION SERVICES - Core Trading Platform Components
+  # =============================================================================
+
+  # DEX-STREAM-UNIVERSAL SERVICE - Real-time DEX Transaction Streaming
+  # =================================================================
+  # This service provides real-time streaming of DEX transactions via Geyser:
+  # - Connects to Solana Geyser for live transaction feeds
+  # - Filters transactions by program ID (Whirlpool, Jupiter, etc.)
+  # - Publishes to Kafka topics for downstream processing
+  # - Logs raw transactions to PostgreSQL for analysis
+  # - Provides health monitoring and metrics
+  #
+  # CRITICAL: This is the primary data source for arbitrage detection.
+  # It must be running for the edge assembler to receive live data.
+  dex-stream-universal:
+    build:
+      context: ..
+      dockerfile: crates/dex-stream-universal/Dockerfile
+    container_name: dex-stream-universal
+    environment:
+      # Geyser connection settings
+      - ENDPOINT=https://grpc.ny.shyft.to
+      - X_TOKEN=efff2d23-97ae-4c5f-8b8b-9a6265001189
+      # DEX filtering configuration
+      - DEX_FILTERING=ON
+      - PROGRAM_IDS=whirLbMiicVdio4qvUfM5KAg6Ct8VwpYzGff3uctyCc
+      # Kafka configuration
+      - KAFKA_BROKER=kafka:9092
+      - KAFKA_TOPIC=raw.dex.transactions
+      - TOPIC=raw.dex.transactions
+      # PostgreSQL configuration
+      - DATABASE_URL=postgresql://mev:mevpassword@postgres:5432/mevdb
+      # Service configuration
+      - HEALTH_PORT=8084
+      - BIND_ADDRESS=0.0.0.0
+      - RUST_LOG=debug
+    ports:
+      # Health check and metrics endpoint
+      - "8084:8080"
+    networks:
+      - mevana_net
+    restart: unless-stopped
+    depends_on:
+      kafka:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      # Test service health endpoint
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+    deploy:
+      resources:
+        limits:
+          memory: 1G
+          cpus: '1.0'
+        reservations:
+          memory: 512M
+          cpus: '0.5'
+
 networks:
   mevana_net:
     external: true

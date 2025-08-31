@@ -14,6 +14,16 @@ async fn main() -> anyhow::Result<()> {
         .with_env_filter(EnvFilter::from_default_env().add_directive("arb_engine=info".parse()?))
         .init();
 
+    // Print feature information for debugging
+    let features = arb_engine::get_feature_info();
+    eprintln!("🔧 Arb-engine features enabled: {:?}", features);
+
+    #[cfg(feature = "stubs")]
+    eprintln!("🟡 DEVELOPMENT MODE: Using stub implementations - not for production use");
+
+    #[cfg(not(feature = "stubs"))]
+    eprintln!("✅ PRODUCTION MODE: Using real implementations");
+
     // 1) Register adapters (add Raydium/Meteora adapters next)
     let engine = Arc::new(Engine::new(vec![Arc::new(WhirlpoolAdapter::new())]));
 

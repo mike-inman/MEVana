@@ -13,6 +13,7 @@ members = [
   # "crates/geyser-streamer",
   "crates/whirlpool-core",
   "crates/shared-core",
+  "crates/dex-stream-integrated",
   # "crates/arb-engine",  
 ]
 
@@ -26,7 +27,11 @@ default-members = [
 # Put EXCLUDE **inside** [workspace]
 exclude = [
   "crates/_archive/*",
-  "crates/dex-stream-universal",
+  "cartes/whirlpool-state-streamer",
+  "cartes/shyft-pool-depth",
+  "cartes/geyser-streamer",
+      "crates/dex-stream-universal",
+  "crates/dex-stream-orca",
   "crates/raydium-clmm-stream",
   "crates/raydium-normalizer",
   "crates/raydium-quote-service",

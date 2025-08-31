@@ -1,17 +1,18 @@
+use arb_engine::whirlpool_meta::{self, WhirlpoolVaultsMsg};
+use rdkafka::consumer::{Consumer, StreamConsumer};
+use rdkafka::{ClientConfig, Message};
 use std::sync::Arc;
-use tokio::task::JoinSet;
 use tracing_subscriber::EnvFilter;
 
 //use crate::models::{ArbSignal, Pair, Quote};
 //use crate::plugin::DexPlugin;
 
 use arb_engine::{
-    config::get_knobs,
-    engine_fast::FastEngine,
-    executor::{BundleSubmitter, Executor, FastExecutor, FlashLoanProvider},
-    hotpath::SignalQueue,
-    DexPlugin, WhirlpoolAdapter,
+    config::get_knobs, engine_fast::FastEngine, hotpath::SignalQueue, DexPlugin, WhirlpoolAdapter,
 };
+
+#[cfg(feature = "stubs")]
+use arb_engine::executor::Executor;
 
 //use mevana_engine::{plugin::DexPlugin, whirlpool::WhirlpoolPlugin}; // your existing plugin
 
@@ -29,7 +30,7 @@ async fn main() -> anyhow::Result<()> {
     // 0) Hot signal ring
     let ring = SignalQueue::new(1024);
     let tx = ring.sender();
-    let rx = ring.receiver();
+    let _rx = ring.receiver();
 
     // 1) Fast engine
     let engine = Arc::new(FastEngine::new(tx));
@@ -51,7 +52,7 @@ async fn main() -> anyhow::Result<()> {
     // 4) Quote refresher loop (tick on pool updates ideally; here as periodic demo)
     let engine2 = engine.clone();
     let plugins2 = plugins.clone();
-    let mut js = JoinSet::new();
+    let mut js: tokio::task::JoinSet<anyhow::Result<()>> = tokio::task::JoinSet::new();
     js.spawn(async move {
         let watch_pairs = vec![]; // fill from Redis/Kafka or your curated list
         loop {
@@ -73,38 +74,62 @@ async fn main() -> anyhow::Result<()> {
 
     // 5) Executor task — drain signals and fire bundles
     js.spawn(async move {
-        // Plug your bundler + flash loan providers here
-        struct NoopBundler;
-        #[async_trait::async_trait]
-        impl BundleSubmitter for NoopBundler {
-            async fn submit_bundle(
-                &self,
-                _txs: &[solana_sdk::transaction::VersionedTransaction],
-            ) -> anyhow::Result<()> {
-                Ok(())
-            }
-        }
-        struct NoFlash;
-        #[async_trait::async_trait]
-        impl FlashLoanProvider for NoFlash {
-            async fn build_flash_loan_bundle(
-                &self,
-                _a: u64,
-                _r: &[solana_sdk::instruction::Instruction],
-            ) -> anyhow::Result<smallvec::SmallVec<[solana_sdk::instruction::Instruction; 16]>>
-            {
-                Ok(Default::default())
-            }
-        }
-        let fee_payer = solana_sdk::signature::Keypair::new();
-        let ex = arb_engine::executor::FastExecutor::new(fee_payer, NoopBundler, Some(NoFlash));
+        // Print feature information for debugging
+        let features = arb_engine::get_feature_info();
+        eprintln!("🔧 Arb-engine features enabled: {:?}", features);
 
-        loop {
-            if let Some(sig) = rx.try_recv() {
-                let _ = ex.execute(&sig).await; // fire and (optionally) forget for <10ms budget
-            } else {
-                tokio::task::yield_now().await;
+        // Plug your bundler + flash loan providers here
+        let _fee_payer = solana_sdk::signature::Keypair::new();
+
+        #[cfg(feature = "stubs")]
+        {
+            eprintln!("🟡 STUB: Using NoopBundler and NoFlash for development testing");
+
+            struct NoopBundler;
+            #[async_trait::async_trait]
+            impl arb_engine::BundleSubmitter for NoopBundler {
+                async fn submit_bundle(
+                    &self,
+                    _txs: &[solana_sdk::transaction::VersionedTransaction],
+                ) -> anyhow::Result<()> {
+                    eprintln!("🟡 STUB: NoopBundler - would submit {} transactions to bundle", _txs.len());
+                    Ok(())
+                }
             }
+
+            struct NoFlash;
+            #[async_trait::async_trait]
+            impl arb_engine::FlashLoanProvider for NoFlash {
+                async fn build_flash_loan_bundle(
+                    &self,
+                    amount: u64,
+                    route_instructions: &[solana_sdk::instruction::Instruction],
+                ) -> anyhow::Result<smallvec::SmallVec<[solana_sdk::instruction::Instruction; 16]>>
+                {
+                    eprintln!("🟡 STUB: NoFlash - would wrap {} instructions with flash loan for {} lamports",
+                             route_instructions.len(), amount);
+                    // Return original instructions unchanged
+                    Ok(route_instructions.iter().cloned().collect())
+                }
+            }
+
+            let ex = arb_engine::FastExecutor::new(_fee_payer, NoopBundler, Some(NoFlash));
+
+            loop {
+                if let Some(sig) = _rx.try_recv() {
+                    let _ = ex.execute(&sig).await; // fire and (optionally) forget for <10ms budget
+                } else {
+                    tokio::task::yield_now().await;
+                }
+            }
+        }
+
+        #[cfg(not(feature = "stubs"))]
+        {
+            eprintln!("✅ PRODUCTION: Using real bundler and flash loan providers");
+            // TODO: Implement real bundler and flash loan provider integration
+            // This would connect to Jito, other block engines, and flash loan protocols
+            return Err(anyhow::anyhow!("Production bundler and flash loan providers not implemented yet"));
         }
     });
 
@@ -119,7 +144,36 @@ async fn main() -> anyhow::Result<()> {
     });
 
     while let Some(res) = js.join_next().await {
-        res?;
+        let _ = res?;
     }
     Ok(())
 }
+
+/*
+
+Wire meta updates from Kafka (normalizer → arb-engine)
+4a) arb-engine consumer
+
+/ ...
+let topic_wmeta = std::env::var("TOPIC_WHIRL_META").unwrap_or("pools.whirlpool.meta.v1".into());
+let c_wmeta: StreamConsumer = ClientConfig::new()
+    .set("bootstrap.servers", &broker)
+    .set("group.id", "arb-hot.whirl.meta")
+    .set("auto.offset.reset", "latest")
+    .create()?;
+c_wmeta.subscribe(&[&topic_wmeta])?;
+
+// Spawn a task:
+js.spawn(async move {
+    loop {
+        let m = c_wmeta.recv().await.unwrap();
+        if let Some(Ok(payload)) = m.payload_view::<str>() {
+            if let Ok(msg) = serde_json::from_str::<WhirlpoolVaultsMsg>(payload) {
+                whirlpool_meta::upsert_vaults(&msg);
+            }
+        }
+    }
+});
+
+
+*/

@@ -45,4 +45,7 @@ pub struct ArbSignal {
     pub amount_in: u128,
     pub expected_profit_out: i128, // signed
     pub slot: u64,
+    // NEW: which pools to use for each leg
+    pub sell_pool_id: String,
+    pub buy_pool_id: String,
 }

@@ -1,9 +1,11 @@
-use normalizer_runtime::{
-    layouts::{LayoutJson, LayoutRegistry},
-    layout_parser::{read_scalar, ScalarValue},
-    models::{PoolSnapshot, SwapEvent, LiquidityEvent},
-};
 use bs58;
+use normalizer_runtime::{
+    layout_parser::{read_scalar, ScalarValue},
+    layouts::{LayoutJson, LayoutRegistry},
+    models::{LiquidityEvent, PoolSnapshot, SwapEvent},
+};
+
+use crate::kafka::{make_producer, publish_json_ff}; // you already have these
 
 /// Decode Orca Whirlpool pool state into PoolSnapshot
 pub fn decode_orca_whirlpool_snapshot(
@@ -14,27 +16,34 @@ pub fn decode_orca_whirlpool_snapshot(
 ) -> Option<PoolSnapshot> {
     let key = "orca_whirlpool/pool";
     let lj = reg.get(key)?;
-    let LayoutJson::Fields { fields, .. } = lj else { return None; };
+    let LayoutJson::Fields { fields, .. } = lj else {
+        return None;
+    };
 
-    let mut token_mint_a=[0u8;32]; let mut token_mint_b=[0u8;32];
-    let mut token_vault_a=[0u8;32]; let mut token_vault_b=[0u8;32];
-    let mut fee_rate=0u16; let mut protocol_fee_rate=0u16;
-    let mut liquidity=0u128; let mut sqrt_price=0u128;
-    let mut tick_current_index=0i32; let mut tick_spacing=0i16;
+    let mut token_mint_a = [0u8; 32];
+    let mut token_mint_b = [0u8; 32];
+    let mut token_vault_a = [0u8; 32];
+    let mut token_vault_b = [0u8; 32];
+    let mut fee_rate = 0u16;
+    let mut protocol_fee_rate = 0u16;
+    let mut liquidity = 0u128;
+    let mut sqrt_price = 0u128;
+    let mut tick_current_index = 0i32;
+    let mut tick_spacing = 0i16;
 
     for f in fields {
         let v = read_scalar(data, f).ok()?;
         match (f.name.as_str(), v) {
-            ("token_mint_a",        ScalarValue::Pubkey(p)) => token_mint_a = p,
-            ("token_mint_b",        ScalarValue::Pubkey(p)) => token_mint_b = p,
-            ("token_vault_a",       ScalarValue::Pubkey(p)) => token_vault_a = p,
-            ("token_vault_b",       ScalarValue::Pubkey(p)) => token_vault_b = p,
-            ("fee_rate",            ScalarValue::U16(n))    => fee_rate = n,
-            ("protocol_fee_rate",   ScalarValue::U16(n))    => protocol_fee_rate = n,
-            ("liquidity",           ScalarValue::U128(n))   => liquidity = n,
-            ("sqrt_price",          ScalarValue::U128(n))   => sqrt_price = n,
-            ("tick_current_index",  ScalarValue::I32(n))    => tick_current_index = n,
-            ("tick_spacing",        ScalarValue::U16(n))    => tick_spacing = n as i16,
+            ("token_mint_a", ScalarValue::Pubkey(p)) => token_mint_a = p,
+            ("token_mint_b", ScalarValue::Pubkey(p)) => token_mint_b = p,
+            ("token_vault_a", ScalarValue::Pubkey(p)) => token_vault_a = p,
+            ("token_vault_b", ScalarValue::Pubkey(p)) => token_vault_b = p,
+            ("fee_rate", ScalarValue::U16(n)) => fee_rate = n,
+            ("protocol_fee_rate", ScalarValue::U16(n)) => protocol_fee_rate = n,
+            ("liquidity", ScalarValue::U128(n)) => liquidity = n,
+            ("sqrt_price", ScalarValue::U128(n)) => sqrt_price = n,
+            ("tick_current_index", ScalarValue::I32(n)) => tick_current_index = n,
+            ("tick_spacing", ScalarValue::U16(n)) => tick_spacing = n as i16,
             _ => {}
         }
     }
@@ -55,6 +64,14 @@ pub fn decode_orca_whirlpool_snapshot(
         tick_spacing: tick_spacing as i32,
         fee_bps_total: fee_rate,
     })
+}
+
+#[derive(serde::Serialize)]
+struct WhirlpoolVaultsMsg {
+    pool_id: String,
+    token_vault_a: String,
+    token_vault_b: String,
+    token_program: String,
 }
 
 /// Extract SwapEvent from Orca Whirlpool swap instruction
@@ -105,7 +122,9 @@ pub fn decode_orca_whirlpool_tick_array(
 ) -> Option<WhirlpoolTickArray> {
     let key = "orca_whirlpool/tickarray";
     let lj = reg.get(key)?;
-    let LayoutJson::Fields { fields, .. } = lj else { return None; };
+    let LayoutJson::Fields { fields, .. } = lj else {
+        return None;
+    };
 
     let mut start_tick_index = 0i32;
     let mut ticks = Vec::new();

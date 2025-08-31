@@ -6,6 +6,8 @@ use crate::models::{Pair, Quote};
 use crate::plugin::DexPlugin;
 use normalizer_runtime::models::PoolSnapshot;
 
+use crate::whirlpool_meta; // add at top
+
 #[derive(Default)]
 struct WState {
     pools: DashMap<String, PoolSnapshot>, // pool_id -> snapshot
@@ -14,6 +16,13 @@ struct WState {
 
 pub struct WhirlpoolAdapter {
     state: Arc<WState>,
+}
+
+async fn on_pool_update(&self, mut snap: &PoolSnapshot) -> anyhow::Result<()> {
+    // ... your existing spacing alignment ...
+    whirlpool_meta::upsert_from_snapshot(&fixed); // ← add this line
+                                                  // ... store in local maps as you already do ...
+    Ok(())
 }
 
 impl WhirlpoolAdapter {

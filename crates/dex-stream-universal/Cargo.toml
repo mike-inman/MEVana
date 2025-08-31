@@ -3,6 +3,10 @@ name = "dex-stream-universal"
 version = "0.1.0"
 edition = "2021"
 
+[[bin]]
+name = "dex-stream-universal"
+path = "src/main.rs"
+
 [dependencies]
 anyhow = "1"
 dotenv = "0.15"

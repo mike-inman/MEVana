@@ -34,6 +34,11 @@ impl SignalTx {
     pub fn try_send(&self, s: ArbSignal) -> bool {
         self.q.push(s).is_ok()
     }
+    
+    /// Clone this SignalTx for sharing between components
+    pub fn clone(&self) -> Self {
+        SignalTx { q: self.q.clone() }
+    }
 }
 
 impl SignalRx {
