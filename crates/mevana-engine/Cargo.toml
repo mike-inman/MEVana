@@ -1,0 +1,18 @@
+[package]
+name = "mevana-engine"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+anyhow = "1"
+async-trait = "0.1"
+dashmap = "6"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+thiserror = "2"
+tokio = { version = "1", features = ["macros", "rt-multi-thread", "sync", "time", "signal"] }
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter", "fmt"] }
+
+# Optional if you want to plug directly into Kafka here (or keep it in your existing crates)
+# rdkafka = { version = "0.36", features = ["tokio", "cmake"] }

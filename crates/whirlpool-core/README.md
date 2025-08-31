@@ -29,7 +29,6 @@ sqrt_price at a tick is currently approximated with f64 for convenience; we’ll
 All public functions return integers; keep floats only for logs.
 
 
-
 Add an exact multi-tick quote_out implementation (integer Q64.64) to quoter.rs.
 
 Add a small EdgeDelta struct and serde/bincode encoding you can push to Kafka.

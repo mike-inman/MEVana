@@ -3,6 +3,8 @@
 resolver = "2"
 
 members = [
+  "crates/arb-engine",
+  "crates/mevana-engine",
   "crates/normalizer-runtime",
   "crates/normalizer-codegen",
   "crates/normalizer-generated",
