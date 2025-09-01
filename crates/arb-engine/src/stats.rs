@@ -186,6 +186,8 @@ pub struct StatsRegistry {
     latency_hist: Mutex<DynHistogram>, // edge -> signal latency
     ingest_latency_hist: Mutex<DynHistogram>, // kafka receive -> processed
     staleness_hist: Mutex<DynHistogram>, // arrival delay vs embedded updated_at_ns
+    size_util_hist: Mutex<DynHistogram>, // chosen/base size ratio (bps scale)
+    depth_factor_hist: Mutex<DynHistogram>, // applied depth adjustment factor (bps scale)
     profit_cfg: Mutex<DynHistogramConfig>,
     latency_cfg: Mutex<DynHistogramConfig>,
     last_resize_check: AtomicU64, // monotonic counter of records when last resize attempted
@@ -227,6 +229,14 @@ impl StatsRegistry {
             latency_hist: Mutex::new(DynHistogram::new(&lc)),
             ingest_latency_hist: Mutex::new(DynHistogram::new(&lc)),
             staleness_hist: Mutex::new(DynHistogram::new(&lc)),
+            size_util_hist: Mutex::new(DynHistogram::new(&DynHistogramConfig {
+                target_buckets: pc.target_buckets,
+                max_value_bps: 10_000,
+            })),
+            depth_factor_hist: Mutex::new(DynHistogram::new(&DynHistogramConfig {
+                target_buckets: pc.target_buckets,
+                max_value_bps: 10_000,
+            })),
             profit_cfg: Mutex::new(pc),
             latency_cfg: Mutex::new(lc),
             last_resize_check: AtomicU64::new(0),
@@ -247,6 +257,18 @@ impl StatsRegistry {
                     .load(Ordering::Relaxed)
                 + self
                     .staleness_hist
+                    .lock()
+                    .unwrap()
+                    .count
+                    .load(Ordering::Relaxed)
+                + self
+                    .size_util_hist
+                    .lock()
+                    .unwrap()
+                    .count
+                    .load(Ordering::Relaxed)
+                + self
+                    .depth_factor_hist
                     .lock()
                     .unwrap()
                     .count
@@ -281,6 +303,23 @@ impl StatsRegistry {
                     sh.maybe_resize(&lc);
                 }
             }
+            if let Ok(mut uh) = self.size_util_hist.lock() {
+                if let Ok(pc) = self.profit_cfg.lock() {
+                    // use profit cfg bucket count
+                    uh.maybe_resize(&DynHistogramConfig {
+                        target_buckets: pc.target_buckets,
+                        max_value_bps: 10_000,
+                    });
+                }
+            }
+            if let Ok(mut dh) = self.depth_factor_hist.lock() {
+                if let Ok(pc) = self.profit_cfg.lock() {
+                    dh.maybe_resize(&DynHistogramConfig {
+                        target_buckets: pc.target_buckets,
+                        max_value_bps: 10_000,
+                    });
+                }
+            }
         }
     }
     pub fn record_profit_bps(&self, bps: i32) {
@@ -307,14 +346,28 @@ impl StatsRegistry {
         }
         self.maybe_resize();
     }
+    pub fn record_size_util_bps(&self, bps: i32) {
+        if let Ok(uh) = self.size_util_hist.lock() {
+            uh.record(bps as i64);
+        }
+        self.maybe_resize();
+    }
+    pub fn record_depth_factor_bps(&self, bps: i32) {
+        if let Ok(dh) = self.depth_factor_hist.lock() {
+            dh.record(bps as i64);
+        }
+        self.maybe_resize();
+    }
     pub fn render(&self) -> String {
         let p = self.profit_hist.lock().unwrap();
         let l = self.latency_hist.lock().unwrap();
         let il = self.ingest_latency_hist.lock().unwrap();
         let sh = self.staleness_hist.lock().unwrap();
+        let su = self.size_util_hist.lock().unwrap();
+        let df = self.depth_factor_hist.lock().unwrap();
         #[allow(unused_mut)]
         let mut out = format!(
-            "{}{}{}{}",
+            "{}{}{}{}{}{}",
             p.render("arb_signal_profit_bps", "Arbitrage signal profit in bps"),
             l.render(
                 "arb_signal_latency_ms",
@@ -327,6 +380,14 @@ impl StatsRegistry {
             sh.render(
                 "arb_edge_staleness_ms_hist",
                 "Wall-clock arrival delay vs embedded updated_at_ns in ms"
+            ),
+            su.render(
+                "arb_size_utilization_bps",
+                "Chosen/base size ratio scaled by 1e4 (10000 = 100%)"
+            ),
+            df.render(
+                "arb_depth_adjust_factor_bps",
+                "Applied depth adjustment factor scaled by 1e4 (10000 = 1.0)"
             ),
         );
         #[cfg(feature = "diagnostics")]
@@ -382,6 +443,12 @@ pub fn record_ingest_latency_ns(ns: u64) {
 pub fn record_edge_staleness_ns(ns: u64) {
     STATS.record_edge_staleness_ns(ns);
 }
+pub fn record_size_utilization_bps(bps: i32) {
+    STATS.record_size_util_bps(bps);
+}
+pub fn record_depth_factor_bps(bps: i32) {
+    STATS.record_depth_factor_bps(bps);
+}
 pub fn render_all() -> String {
     let mut out = STATS.render();
     // Always-on ingestion gauges (not behind diagnostics)
@@ -417,6 +484,14 @@ pub fn render_all() -> String {
             .filter(|v| !v.is_empty())
             .unwrap_or_else(|| "arb-engine".into());
         let _ = write!(out, "# TYPE arb_build_info gauge\narb_build_info{{version=\"{}\",git_sha=\"{}\",service=\"{}\"}} 1\n", version, git_sha, service);
+        // Adaptive sizing multiplier (scaled 1e6 to float)
+        use crate::sizing::LAST_ADAPTIVE_MULTIPLIER;
+        let mult = LAST_ADAPTIVE_MULTIPLIER.load(Ordering::Relaxed) as f64 / 1_000_000.0;
+        let _ = write!(
+            out,
+            "# TYPE arb_adaptive_multiplier gauge\narb_adaptive_multiplier {}\n",
+            mult
+        );
     }
     #[cfg(feature = "diagnostics")]
     {

@@ -1,6 +1,7 @@
 use crate::ai_hooks::{add_advice, list_advice, list_recent, MAX_ADVICE, MAX_RECENT};
 use crate::edge_integration::{edge_threshold_snapshot, set_edge_thresholds};
 use crate::hotpath::SignalQueue;
+use crate::sizing::adaptive_state_snapshot;
 use crate::stats::compute_readiness;
 use crate::stats::reload_stats_config;
 use crate::stats::{CIRCUIT_OPEN, EDGE_DECODE_ERRORS, EDGE_PROCESS_ERRORS, LAST_EDGE_UPDATE_NS};
@@ -216,6 +217,11 @@ pub fn build_http_router(prom: PrometheusHandle, queue: Option<Arc<SignalQueue>>
                 },
             ),
         );
+    // Sizing snapshot
+    app = app.route(
+        "/ai/sizing",
+        get(|| async move { Json(serde_json::to_value(adaptive_state_snapshot()).unwrap()) }),
+    );
     if let Some(q) = queue {
         app = app.route("/ws/arbs", get(move |ws| ws_handler(ws, q.clone())));
     }

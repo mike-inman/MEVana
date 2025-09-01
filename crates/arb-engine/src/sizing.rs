@@ -1,4 +1,8 @@
 use once_cell::sync::Lazy;
+use serde::{Deserialize, Serialize};
+use std::fs;
+use std::io::{Read, Write};
+use std::path::Path;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Mutex;
 
@@ -21,6 +25,7 @@ impl SizingMode {
 /// Simple adaptive sizer that scales chosen size by a multiplier derived from
 /// the recent profit_bps distribution of emitted signals.
 /// This is an initial scaffold; future versions can plug in depth/slippage curves.
+#[derive(Serialize, Deserialize, Clone)]
 struct AdaptiveSizerInner {
     ring: Vec<i32>,
     cap: usize,
@@ -58,7 +63,7 @@ impl AdaptiveSizerInner {
         if max_mult > 1.0 {
             max_mult = 1.0;
         }
-        Self {
+        let mut s = Self {
             ring: vec![0; cap],
             cap,
             idx: 0,
@@ -69,7 +74,13 @@ impl AdaptiveSizerInner {
                 .ok()
                 .and_then(|v| v.parse().ok())
                 .unwrap_or(50) as i32,
+        };
+        if let Some(path) = ADAPT_STATE_PATH.as_ref() {
+            if let Some(loaded) = Self::load_from(path) {
+                s = loaded;
+            }
         }
+        s
     }
     fn record(&mut self, profit_bps: i32) {
         self.ring[self.idx] = profit_bps;
@@ -108,6 +119,58 @@ impl AdaptiveSizerInner {
     }
 }
 
+// Persistence helpers
+static ADAPT_STATE_PATH: Lazy<Option<String>> =
+    Lazy::new(|| std::env::var("ARB_ADAPT_STATE_PATH").ok());
+static ADAPT_PERSIST_INTERVAL: Lazy<usize> = Lazy::new(|| {
+    std::env::var("ARB_ADAPT_PERSIST_INTERVAL")
+        .ok()
+        .and_then(|v| v.parse().ok())
+        .unwrap_or(50)
+        .max(1)
+});
+
+impl AdaptiveSizerInner {
+    fn persist_if_needed(&self) {
+        if let Some(path) = ADAPT_STATE_PATH.as_ref() {
+            if self.count == 0 {
+                return;
+            }
+            if self.count % *ADAPT_PERSIST_INTERVAL != 0 {
+                return;
+            }
+            if let Ok(json) = serde_json::to_string(self) {
+                let tmp = format!("{}.tmp", path);
+                if let Ok(mut f) = fs::File::create(&tmp) {
+                    if f.write_all(json.as_bytes()).is_ok() {
+                        let _ = fs::rename(&tmp, path);
+                    }
+                }
+            }
+        }
+    }
+    fn load_from(path: &str) -> Option<Self> {
+        let p = Path::new(path);
+        if !p.exists() {
+            return None;
+        }
+        let mut f = fs::File::open(p).ok()?;
+        let mut buf = String::new();
+        f.read_to_string(&mut buf).ok()?;
+        let mut loaded: AdaptiveSizerInner = serde_json::from_str(&buf).ok()?;
+        if loaded.cap == 0 || loaded.ring.len() != loaded.cap {
+            return None;
+        }
+        if loaded.idx >= loaded.cap {
+            loaded.idx = 0;
+        }
+        if loaded.count > loaded.cap {
+            loaded.count = loaded.cap;
+        }
+        Some(loaded)
+    }
+}
+
 struct AdaptiveSizer {
     inner: Mutex<AdaptiveSizerInner>,
     mode: SizingMode,
@@ -126,6 +189,7 @@ impl AdaptiveSizer {
         }
         if let Ok(mut g) = self.inner.lock() {
             g.record(bps);
+            g.persist_if_needed();
         }
     }
     fn choose(&self, base_size: u128) -> u128 {
@@ -161,4 +225,50 @@ pub fn record_signal_profit_bps(bps: i32) {
 /// Public API: choose a final size given the boundary-derived base size.
 pub fn choose_size(base_size: u128) -> u128 {
     ADAPTIVE_SIZER.choose(base_size)
+}
+
+#[derive(Serialize, Deserialize)]
+pub struct AdaptiveSnapshot {
+    pub mode: &'static str,
+    pub history_len: usize,
+    pub count: usize,
+    pub median_profit_bps: i32,
+    pub multiplier: f64,
+    pub min_mult: f64,
+    pub max_mult: f64,
+    pub threshold_bps: i32,
+    pub state_path: Option<String>,
+}
+
+pub fn adaptive_state_snapshot() -> AdaptiveSnapshot {
+    let mode = ADAPTIVE_SIZER.mode;
+    let (history_len, count, median, mult, min_mult, max_mult, threshold) =
+        if let Ok(g) = ADAPTIVE_SIZER.inner.lock() {
+            (
+                g.cap,
+                g.count,
+                g.median(),
+                g.multiplier(),
+                g.min_mult,
+                g.max_mult,
+                g.threshold_bps,
+            )
+        } else {
+            (0, 0, 0, 1.0, 1.0, 1.0, 0)
+        };
+    AdaptiveSnapshot {
+        mode: if mode == SizingMode::Adaptive {
+            "adaptive"
+        } else {
+            "boundary"
+        },
+        history_len,
+        count,
+        median_profit_bps: median,
+        multiplier: mult,
+        min_mult,
+        max_mult,
+        threshold_bps: threshold,
+        state_path: ADAPT_STATE_PATH.clone(),
+    }
 }

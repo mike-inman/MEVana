@@ -5,8 +5,10 @@ use crate::quoting::depth_adjustment_factor;
 use crate::sizing::{choose_size, record_signal_profit_bps};
 #[cfg(feature = "diagnostics")]
 use crate::stats::{incr_cycles_examined, incr_cycles_profitable, incr_cycles_pruned};
+use crate::stats::{
+    record_depth_factor_bps, record_latency_ns, record_profit, record_size_utilization_bps,
+};
 use crate::stats::{record_edge_staleness_ns, LAST_EDGE_UPDATE_NS};
-use crate::stats::{record_latency_ns, record_profit};
 #[cfg(feature = "diagnostics")]
 use crate::stats::{AVG_ADJACENCY, EDGE_PAIR_COUNT, MAX_EDGE_FACTOR, TOKEN_COUNT};
 use anyhow::Result;
@@ -402,6 +404,12 @@ impl EdgeArbitrageDetector {
         }
         let chosen = choose_size(base_size);
         let adj = depth_adjustment_factor(chosen, base_size, 2);
+        if base_size > 0 {
+            let util_bps = ((chosen as f64 / base_size as f64) * 10_000.0) as i32;
+            record_size_utilization_bps(util_bps);
+        }
+        let depth_bps = (adj * 10_000.0) as i32;
+        record_depth_factor_bps(depth_bps);
         let gross = raw_gross * adj;
         if !gross.is_finite() {
             return None;
@@ -688,6 +696,12 @@ impl EdgeArbitrageDetector {
         }
         let chosen = choose_size(base_size);
         let adj = depth_adjustment_factor(chosen, base_size, 3);
+        if base_size > 0 {
+            let util_bps = ((chosen as f64 / base_size as f64) * 10_000.0) as i32;
+            record_size_utilization_bps(util_bps);
+        }
+        let depth_bps = (adj * 10_000.0) as i32;
+        record_depth_factor_bps(depth_bps);
         let gross = raw_gross * adj;
         if !gross.is_finite() {
             return None;
