@@ -41,11 +41,16 @@ pub struct Quote {
 pub struct ArbSignal {
     pub pair: Pair,
     pub dex_sell: String,
+    pub dex_mid: Option<String>,
     pub dex_buy: String,
     pub amount_in: u128,
     pub expected_profit_out: i128, // signed
     pub slot: u64,
     // NEW: which pools to use for each leg
     pub sell_pool_id: String,
+    pub mid_pool_id: Option<String>,
     pub buy_pool_id: String,
+    pub id: u64,
+    pub profit_bps: i32,
+    pub emitted_at_ns: u64,
 }

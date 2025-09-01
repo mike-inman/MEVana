@@ -2,9 +2,15 @@ pub mod config;
 // pub mod engine; // Temporarily disabled due to compilation errors
 pub mod engine_fast;
 // pub mod executor; // Temporarily disabled due to compilation errors
-pub mod hotpath;
-pub mod models;
+pub mod ai_hooks;
+pub mod circuit;
 pub mod edge_integration;
+pub mod hotpath;
+pub mod metrics_http;
+pub mod models;
+pub mod quoting;
+pub mod sizing;
+pub mod stats;
 // pub mod whirlpool_adapter; // Temporarily disabled due to compilation errors
 
 // Compile-time feature validation
@@ -44,6 +50,8 @@ pub use engine_fast::FastEngine;
 //     build_leg_buy, build_leg_sell, build_payer_tx, get_feature_info, BundleSubmitter, Executor,
 //     FastExecutor, FlashLoanProvider,
 // };
+#[cfg(test)]
+pub use edge_integration::EdgeArbitrageDetector;
 pub use hotpath::SignalQueue;
 pub use models::{ArbSignal, Pair, Quote};
 // pub use plugin::DexPlugin; // Temporarily disabled due to compilation errors

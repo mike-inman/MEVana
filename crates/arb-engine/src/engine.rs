@@ -69,13 +69,11 @@ impl Engine {
                 // NOTE: we keep amount_in fixed for the fast filter (super low latency).
                 let profit = (q2.amount_out as i128) - (q1.amount_in as i128);
                 if profit > 0 {
-                    // inside scan_pair, when you build `cand`:
-
                     let cand = ArbSignal {
                         pair: pair.clone(),
                         dex_sell: q1.dex.clone(),
                         dex_buy: q2.dex.clone(),
-                        amount_in,
+                        amount_in: test_size,
                         expected_profit_out: profit,
                         slot,
                         sell_pool_id: q1.pool_id.clone(), // NEW
@@ -88,7 +86,7 @@ impl Engine {
                         .unwrap_or_default()
                         < profit
                     {
-                        best = Some(sig);
+                        best = Some(cand);
                     }
                 }
             }

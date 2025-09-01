@@ -1,4 +1,5 @@
-use arb_engine::edge_integration::{EdgeArbitrageDetector, EdgeDelta, ClmmState};
+use arb_engine::edge_integration::EdgeArbitrageDetector;
+use edge_assembler::EdgeDelta;
 use arb_engine::hotpath::SignalQueue;
 use std::time::{SystemTime, UNIX_EPOCH};
 
@@ -29,6 +30,7 @@ fn main() {
         marginal_price_q64: vec![1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], // 1.0 in Q64
         size_to_next_boundary_in: vec![100, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], // 100 in little-endian
         cu_estimate: 50000,
+        state: None,
     };
     
     println!("✅ Created mock edge update");

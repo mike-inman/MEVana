@@ -3,10 +3,18 @@
 // use std::sync::Arc;
 use dashmap::DashMap;
 
+use crate::ai_hooks::record_recent_signal;
 use crate::config::get_knobs;
-use crate::edge_integration::{EdgeArbitrageDetector, EdgeDelta};
+use crate::edge_integration::EdgeArbitrageDetector;
 use crate::hotpath::SignalTx;
 use crate::models::{ArbSignal, Pair, Quote};
+use crate::stats::record_profit;
+use edge_assembler::edge::EdgeDelta;
+use metrics::counter;
+use std::sync::atomic::{AtomicU64, Ordering};
+use std::time::{SystemTime, UNIX_EPOCH};
+
+static QUOTE_ARB_ID: AtomicU64 = AtomicU64::new(1);
 
 pub struct FastEngine {
     // Also: use String instead of &'static str to avoid leaks from Box::leak
@@ -68,15 +76,30 @@ impl FastEngine {
                 if profit >= (kb.min_profit_lamports as i128) {
                     // inside scan_pair, when you build `cand`:
 
+                    let id = QUOTE_ARB_ID.fetch_add(1, Ordering::Relaxed);
+                    let profit_bps = if amount_in > 0 {
+                        ((profit as f64 / amount_in as f64) * 10_000.0) as i32
+                    } else {
+                        0
+                    };
+                    let emitted_at_ns = SystemTime::now()
+                        .duration_since(UNIX_EPOCH)
+                        .unwrap()
+                        .as_nanos() as u64;
                     let cand = ArbSignal {
                         pair: pair.clone(),
                         dex_sell: q1.dex.clone(),
+                        dex_mid: None,
                         dex_buy: q2.dex.clone(),
                         amount_in,
                         expected_profit_out: profit,
                         slot,
-                        sell_pool_id: q1.pool_id.clone(), // NEW
-                        buy_pool_id: q2.pool_id.clone(),  // NEW
+                        sell_pool_id: q1.pool_id.clone(),
+                        mid_pool_id: None,
+                        buy_pool_id: q2.pool_id.clone(),
+                        id,
+                        profit_bps,
+                        emitted_at_ns,
                     };
 
                     if best
@@ -91,7 +114,11 @@ impl FastEngine {
             }
         }
         if let Some(sig) = best {
-            let _ = self.out.try_send(sig);
+            if self.out.try_send(sig.clone()) {
+                record_recent_signal(sig.clone());
+                counter!("arb_signals_total", "path" => "quotes");
+                record_profit(sig.profit_bps);
+            }
         }
     }
 
@@ -102,9 +129,20 @@ impl FastEngine {
         self.edge_detector.process_edge_update(edge)
     }
 
+    #[cfg(feature = "diagnostics")]
+    pub fn refresh_structural_gauges(&self) {
+        self.edge_detector.refresh_structural_gauges();
+    }
+
     /// NEW: Update edge detector configuration (for AI agent tuning)
     pub fn update_edge_config(&mut self, min_profit_bps: u32, max_slippage_bps: u32) {
         self.edge_detector
             .update_config(min_profit_bps, max_slippage_bps);
+    }
+
+    /// Test helper to lower thresholds
+    #[cfg(test)]
+    pub fn _edge_detector_mut(&mut self) -> &mut EdgeArbitrageDetector {
+        &mut self.edge_detector
     }
 }
