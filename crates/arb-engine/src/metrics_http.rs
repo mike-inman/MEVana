@@ -1,6 +1,7 @@
 use crate::ai_hooks::{add_advice, list_advice, list_recent, MAX_ADVICE, MAX_RECENT};
 use crate::edge_integration::{edge_threshold_snapshot, set_edge_thresholds};
 use crate::hotpath::SignalQueue;
+use crate::quoting::update_depth_impact_bps;
 use crate::sizing::adaptive_state_snapshot;
 use crate::stats::compute_readiness;
 use crate::stats::reload_stats_config;
@@ -32,12 +33,14 @@ struct AdviceIn {
 struct ConfigUpdate {
     min_profit_bps: Option<u32>,
     max_slippage_bps: Option<u32>,
+    depth_impact_bps: Option<u32>,
 }
 
 #[derive(Serialize)]
 struct ConfigSnapshot {
     min_profit_bps: u32,
     max_slippage_bps: u32,
+    depth_impact_bps: u32,
 }
 
 fn auth_ok(headers: &axum::http::HeaderMap) -> bool {
@@ -187,10 +190,8 @@ pub fn build_http_router(prom: PrometheusHandle, queue: Option<Arc<SignalQueue>>
             "/ai/config",
             get(|| async move {
                 let (minp, maxs) = edge_threshold_snapshot();
-                Json(ConfigSnapshot {
-                    min_profit_bps: minp,
-                    max_slippage_bps: maxs,
-                })
+                let depth = std::env::var("ARB_DEPTH_PRICE_IMPACT_BPS").ok().and_then(|v| v.parse().ok()).unwrap_or(0);
+                Json(ConfigSnapshot { min_profit_bps: minp, max_slippage_bps: maxs, depth_impact_bps: depth })
             }),
         )
         .route(
@@ -209,11 +210,10 @@ pub fn build_http_router(prom: PrometheusHandle, queue: Option<Arc<SignalQueue>>
                     }
                     // Persist to env vars for now (process scope) & return snapshot (note: Edge detector reads its own fields until restarted)
                     set_edge_thresholds(upd.min_profit_bps, upd.max_slippage_bps);
+                    if let Some(d) = upd.depth_impact_bps { update_depth_impact_bps(d); std::env::set_var("ARB_DEPTH_PRICE_IMPACT_BPS", d.to_string()); }
                     let (minp, maxs) = edge_threshold_snapshot();
-                    Ok(Json(ConfigSnapshot {
-                        min_profit_bps: minp,
-                        max_slippage_bps: maxs,
-                    }))
+                    let depth = std::env::var("ARB_DEPTH_PRICE_IMPACT_BPS").ok().and_then(|v| v.parse().ok()).unwrap_or(0);
+                    Ok(Json(ConfigSnapshot { min_profit_bps: minp, max_slippage_bps: maxs, depth_impact_bps: depth }))
                 },
             ),
         );

@@ -24,7 +24,6 @@ impl SizingMode {
 
 /// Simple adaptive sizer that scales chosen size by a multiplier derived from
 /// the recent profit_bps distribution of emitted signals.
-/// This is an initial scaffold; future versions can plug in depth/slippage curves.
 #[derive(Serialize, Deserialize, Clone)]
 struct AdaptiveSizerInner {
     ring: Vec<i32>,
@@ -149,6 +148,22 @@ impl AdaptiveSizerInner {
             }
         }
     }
+    #[cfg(test)]
+    fn force_persist(&self) {
+        if let Some(path) = ADAPT_STATE_PATH.as_ref() {
+            if self.count == 0 {
+                return;
+            }
+            if let Ok(json) = serde_json::to_string(self) {
+                let tmp = format!("{}.tmp", path);
+                if let Ok(mut f) = fs::File::create(&tmp) {
+                    if f.write_all(json.as_bytes()).is_ok() {
+                        let _ = fs::rename(&tmp, path);
+                    }
+                }
+            }
+        }
+    }
     fn load_from(path: &str) -> Option<Self> {
         let p = Path::new(path);
         if !p.exists() {
@@ -157,7 +172,13 @@ impl AdaptiveSizerInner {
         let mut f = fs::File::open(p).ok()?;
         let mut buf = String::new();
         f.read_to_string(&mut buf).ok()?;
-        let mut loaded: AdaptiveSizerInner = serde_json::from_str(&buf).ok()?;
+        let mut loaded: AdaptiveSizerInner = match serde_json::from_str(&buf) {
+            Ok(v) => v,
+            Err(e) => {
+                eprintln!("adaptive_sizer_persist_corrupt: path={} err={}", path, e);
+                return None; // corruption guard: ignore bad file
+            }
+        };
         if loaded.cap == 0 || loaded.ring.len() != loaded.cap {
             return None;
         }
@@ -270,5 +291,39 @@ pub fn adaptive_state_snapshot() -> AdaptiveSnapshot {
         max_mult,
         threshold_bps: threshold,
         state_path: ADAPT_STATE_PATH.clone(),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::fs;
+
+    #[test]
+    fn test_persistence_reload_and_corruption_guard() {
+        // Skip if no path env configured (avoid interfering with real runs)
+        let tmp = tempfile::tempdir().unwrap();
+        let path = tmp.path().join("adapt_state.json");
+        std::env::set_var("ARB_ADAPT_STATE_PATH", path.display().to_string());
+        std::env::set_var("ARB_SIZING_MODE", "adaptive");
+        std::env::set_var("ARB_ADAPT_HISTORY", "32");
+        // Force new instance (ADAPT_PERSIST_INTERVAL already initialized before test; use force_persist)
+        let sizer = AdaptiveSizerInner::new();
+        assert_eq!(sizer.count, 0);
+        // Simulate writes
+        let mut s2 = sizer.clone();
+        for i in 0..40 {
+            s2.record(50 + (i as i32 % 10));
+        }
+        s2.force_persist();
+        // Ensure file exists
+        assert!(path.exists());
+        // Reload
+        let loaded = AdaptiveSizerInner::load_from(path.to_str().unwrap()).unwrap();
+        assert!(loaded.count > 0);
+        // Corrupt file
+        fs::write(&path, b"{not_json").unwrap();
+        let corrupt = AdaptiveSizerInner::load_from(path.to_str().unwrap());
+        assert!(corrupt.is_none());
     }
 }

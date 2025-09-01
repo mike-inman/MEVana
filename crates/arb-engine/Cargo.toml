@@ -65,6 +65,7 @@ serde_json = "1"
 metrics-exporter-prometheus = "0.14"
 hyper = { version = "0.14", features = ["client", "server"] }
 serial_test = "2"
+ tempfile = "3"
 
 [features]
 # Default features (always enabled)
