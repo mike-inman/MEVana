@@ -15,6 +15,9 @@ pub struct ExecutorConfig {
     pub shyft_rpc_url: String,
     pub shyft_geyser_url: String,
     pub shyft_jito_url: String,
+    pub shyft_geyser_x_token: String, // auth token (x_token) for geyser stream
+    pub shyft_graphql_url: Option<String>, // optional GraphQL endpoint
+    pub shyft_meta_api_key: Option<String>, // optional separate meta/key service key
 
     // Wallet configuration
     pub wallet_keypair_path: String,
@@ -66,6 +69,10 @@ impl ExecutorConfig {
                 .unwrap_or_else(|_| "https://geyser.shyft.to".to_string()),
             shyft_jito_url: env::var("SHYFT_JITO_URL")
                 .unwrap_or_else(|_| "https://jito.shyft.to".to_string()),
+            shyft_geyser_x_token: env::var("SHYFT_GEYSER_X_TOKEN")
+                .unwrap_or_else(|_| env::var("X_TOKEN").unwrap_or_default()),
+            shyft_graphql_url: env::var("SHYFT_GRAPHQL_URL").ok(),
+            shyft_meta_api_key: env::var("SHYFT_META_API_KEY").ok(),
 
             // Wallet configuration
             wallet_keypair_path: env::var("WALLET_KEYPAIR_PATH")
