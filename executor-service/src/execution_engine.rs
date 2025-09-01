@@ -97,6 +97,9 @@ pub struct ExecutionEngine {
     db: PgPool,
     registry_hash_cache: parking_lot::RwLock<Option<String>>, // cached last computed token registry hash
     live_trading_enabled: std::sync::atomic::AtomicBool,
+    circuit_consec_failures: std::sync::atomic::AtomicU64,
+    circuit_consec_unlanded: std::sync::atomic::AtomicU64,
+    circuit_open: std::sync::atomic::AtomicBool,
 }
 
 impl ExecutionEngine {
@@ -284,6 +287,9 @@ impl ExecutionEngine {
             db,
             registry_hash_cache: parking_lot::RwLock::new(None),
             live_trading_enabled: std::sync::atomic::AtomicBool::new(false),
+            circuit_consec_failures: std::sync::atomic::AtomicU64::new(0),
+            circuit_consec_unlanded: std::sync::atomic::AtomicU64::new(0),
+            circuit_open: std::sync::atomic::AtomicBool::new(false),
         })
     }
 
@@ -1067,7 +1073,7 @@ impl ExecutionEngine {
 
     async fn publish_execution_result(&self, result: ExecutionResult) -> Result<()> {
         let result_json = serde_json::to_string(&result)?;
-        let execution_id = result.execution_id.to_string();
+        let execution_id = result.execution_id;
 
         // Compute hashes
         let config_hash = std::env::var("CONFIG_HASH").ok();
@@ -1119,8 +1125,10 @@ impl ExecutionEngine {
             warn!("execution_result_persist_failed exec_id={} err={}", execution_id, e);
         }
 
+        // Kafka key must implement ToBytes; use string form of UUID
+        let key = execution_id.to_string();
         let record = FutureRecord::to(&self.config.results_topic)
-            .key(&execution_id)
+            .key(&key)
             .payload(&result_json);
 
         self.producer
@@ -1132,6 +1140,9 @@ impl ExecutionEngine {
             "Published execution result: {} (status: {:?}, profit: {} lamports)",
             result.execution_id, result.status, result.estimated_profit_lamports
         );
+
+        // Circuit breaker update (non-blocking logic) - run after logging but before returning
+        self.update_circuit_breaker_status(&result.status);
 
         // Replace file-based hash-chain with in-memory global logger
         {
@@ -1156,6 +1167,16 @@ impl ExecutionEngine {
             .store(true, std::sync::atomic::Ordering::SeqCst);
         self.metrics.trading_enable_events_total.inc();
         self.metrics.trading_enabled_gauge.set(1);
+        // Reset circuit breaker state on manual enable
+        self.circuit_consec_failures
+            .store(0, std::sync::atomic::Ordering::SeqCst);
+        self.circuit_consec_unlanded
+            .store(0, std::sync::atomic::Ordering::SeqCst);
+        self.circuit_open
+            .store(false, std::sync::atomic::Ordering::SeqCst);
+        self.metrics.circuit_breaker_open_gauge.set(0);
+        self.metrics.circuit_breaker_consec_failures.set(0);
+        self.metrics.circuit_breaker_consec_unlanded.set(0);
         log::info!("trading_enable_event source=api state=enabled");
     }
     pub fn disable_live_trading(&self) {
@@ -1168,6 +1189,85 @@ impl ExecutionEngine {
     pub fn live_trading_status(&self) -> bool {
         self.live_trading_enabled
             .load(std::sync::atomic::Ordering::Relaxed)
+    }
+    fn update_circuit_breaker_status(&self, status: &ExecutionStatus) {
+        use crate::audit_log::log_event;
+        let max_fail = std::env::var("CB_MAX_CONSECUTIVE_FAILURES")
+            .ok()
+            .and_then(|v| v.parse::<u64>().ok())
+            .unwrap_or(10);
+        let max_unlanded = std::env::var("CB_MAX_CONSECUTIVE_UNLANDED")
+            .ok()
+            .and_then(|v| v.parse::<u64>().ok())
+            .unwrap_or(5);
+        let status_str = format!("{:?}", status);
+        match status {
+            ExecutionStatus::Confirmed => {
+                // reset counters
+                self.circuit_consec_failures
+                    .store(0, std::sync::atomic::Ordering::SeqCst);
+                self.circuit_consec_unlanded
+                    .store(0, std::sync::atomic::Ordering::SeqCst);
+                self.metrics.circuit_breaker_consec_failures.set(0);
+                self.metrics.circuit_breaker_consec_unlanded.set(0);
+                return;
+            }
+            ExecutionStatus::Failed | ExecutionStatus::Rejected => {
+                let v = self
+                    .circuit_consec_failures
+                    .fetch_add(1, std::sync::atomic::Ordering::SeqCst)
+                    + 1;
+                self.metrics.circuit_breaker_consec_failures.set(v as i64);
+            }
+            ExecutionStatus::Unlanded => {
+                let v = self
+                    .circuit_consec_unlanded
+                    .fetch_add(1, std::sync::atomic::Ordering::SeqCst)
+                    + 1;
+                self.metrics.circuit_breaker_consec_unlanded.set(v as i64);
+            }
+            _ => {}
+        }
+        let f = self
+            .circuit_consec_failures
+            .load(std::sync::atomic::Ordering::Relaxed);
+        let u = self
+            .circuit_consec_unlanded
+            .load(std::sync::atomic::Ordering::Relaxed);
+        if !self.circuit_open.load(std::sync::atomic::Ordering::Relaxed)
+            && (f >= max_fail || u >= max_unlanded)
+        {
+            if self
+                .circuit_open
+                .compare_exchange(
+                    false,
+                    true,
+                    std::sync::atomic::Ordering::SeqCst,
+                    std::sync::atomic::Ordering::Relaxed,
+                )
+                .is_ok()
+            {
+                self.metrics.circuit_breaker_trips_total.inc();
+                self.metrics.circuit_breaker_open_gauge.set(1);
+                // Auto-disable live trading
+                self.live_trading_enabled
+                    .store(false, std::sync::atomic::Ordering::SeqCst);
+                self.metrics.trading_disable_events_total.inc();
+                self.metrics.trading_enabled_gauge.set(0);
+                log::error!(
+                    "circuit_breaker_trip trading_auto_disabled failures={} unlanded={} max_fail={} max_unlanded={}",
+                    f, u, max_fail, max_unlanded
+                );
+                let extra = serde_json::json!({
+                    "failures": f,
+                    "unlanded": u,
+                    "max_fail": max_fail,
+                    "max_unlanded": max_unlanded,
+                    "last_status": status_str
+                });
+                log_event("circuit_breaker_trip", None, None, true, true, Some(&extra));
+            }
+        }
     }
 }
 
