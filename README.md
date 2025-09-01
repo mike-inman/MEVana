@@ -68,6 +68,35 @@ MEVana consists of several key components:
 - **Monitoring**: Prometheus, Grafana
 - **Protocols**: Whirlpool, Raydium CLMM, Meteora DAMM
 
+## ♻️ Recent Arbitrage Engine Enhancements (August 2025)
+
+The arbitrage / MEV engine recently gained several adaptive intelligence and observability features:
+
+- Adaptive Position Sizing: Median profit-driven multiplier with min/max bounds and floor size
+- Depth & Slippage-Aware Quoting: Linear depth impact model producing adjustment factor per leg
+- Unified Evaluation Path: Consolidated 2-leg / 3-leg evaluation with integrated depth + sizing
+- Persistence: Adaptive sizing state periodically persisted to JSON (crash-safe recovery)
+- Runtime Introspection: `/ai/sizing` HTTP endpoint surfaces current adaptive state + history snapshot
+- Expanded Metrics: Size utilization, depth adjustment factor histograms, adaptive multiplier gauge
+
+### Key Environment Variables (Arb Engine)
+
+| Variable | Purpose |
+|----------|---------|
+| `ARB_SIZING_MODE` | `adaptive` or `fixed` sizing strategy selector |
+| `ARB_ADAPT_HISTORY` | Number of recent profit samples retained for median/multiplier calc |
+| `ARB_ADAPT_MIN_MULTIPLIER` / `ARB_ADAPT_MAX_MULTIPLIER` | Bounds on adaptive size multiplier |
+| `ARB_ADAPT_MIN_SIZE_LAMPORTS` | Floor notional (lamports) to enforce minimum trade size |
+| `ARB_DEPTH_PRICE_IMPACT_BPS` | Linear per-unit size depth impact (basis points) used in quoting |
+| `ARB_MIN_PROFIT_BPS` | Minimum net profit threshold after adjustments |
+| `ARB_MAX_SLIPPAGE_BPS` | Maximum allowed slippage before rejecting opportunity |
+| `ARB_ADAPT_STATE_PATH` | Optional path to persist adaptive state JSON (enables warm restart) |
+| `ARB_ADAPT_PERSIST_INTERVAL` | Minimum seconds between state persistence writes |
+
+HTTP Introspection now includes: `/metrics`, `/ai/config{, /reload}`, `/ai/advice`, `/ai/sizing`.
+
+> Tip: Point Prometheus at the metrics endpoint to scrape the new histograms and gauges for multiplier, depth factor distribution, and size utilization.
+
 ## 🔧 Development
 
 ```bash

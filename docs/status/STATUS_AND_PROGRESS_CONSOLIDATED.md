@@ -1,23 +1,25 @@
 # MEVana Status & Progress - Consolidated
 **Complete Project Status with Date-Weighted Information**
 
-*Last Updated: December 17, 2024*  
-*Status: Production-Ready Infrastructure (90% Complete)*
+*Last Updated: August 31, 2025*  
+*Status: Adaptive Arbitrage Engine Feature Sprint (95% Complete)*
 
 ---
 
 ## 🎯 **CURRENT STATUS - MOST RECENT (August 25-27, 2025)**
 
 ### **Executive Summary**
-- **Status**: 90% Complete - Ready for Test Trading
-- **Target**: End-of-day test trades with real market data
-- **Confidence**: High - Core systems operational, premium infrastructure identified
+- **Status**: 95% Complete - Adaptive sizing + depth-aware quoting integrated
+- **Target**: Run sustained test session validating adaptive sizing convergence & depth factor distribution
+- **Confidence**: High - Core evaluation loop stable, observability + persistence in place
 
-### **Immediate Priority Tasks (August 25, 2025)**
-1. **✅ Commit and Merge Progress** - Secure all completed work
-2. **🔧 Resolve Executor Dependencies** - Version alignment or Shyft.to integration
-3. **🔧 Multi-Flash-Loan Provider Setup** - Rate comparison framework
-4. **📋 Integration Testing** - End-to-end data flow validation
+### **Immediate Priority Tasks (Aug 31, 2025)**
+1. **✅ Adaptive Sizing Implementation** (median-based multiplier) – DONE
+2. **✅ Depth / Slippage-Aware Quoting** (linear impact model) – DONE
+3. **✅ Metrics & Introspection Expansion** (`/ai/sizing`, new histograms, multiplier gauge) – DONE
+4. **✅ Persistence of Adaptive State** (warm restart via JSON) – DONE
+5. **🔧 Runtime Config Mutation for Depth Impact** (optional endpoint) – PENDING
+6. **📋 Extended Backtest / Live Dry-Run** (distribution stability) – IN PROGRESS
 
 ### **End of Day Target (6 PM PST - August 25)**
 1. **🎯 First Test Trade** - Small position, real market data
@@ -61,11 +63,17 @@
 ## 🔧 **IN PROGRESS (90% Complete)**
 
 ### **5. Execution Engine (executor)**
-- **Architecture**: Complete - Jito bundles, flash loans, position management
-- **Core Logic**: Implemented - Opportunity processing, risk validation
-- **Issue**: Solana dependency version conflicts
-- **Solution**: Shyft.to API integration (reduces RPC dependency)
-- **ETA**: 1 hour to resolution
+- **Architecture**: Designed (Jito bundles, flash loans, position management)
+- **Status**: Awaiting dependency alignment; focus temporarily shifted to adaptive detection layer
+- **Next**: Rebase onto updated Solana SDK & integrate risk-fed sizing decisions
+
+### **6. Adaptive Intelligence Layer (arb-engine)**
+- **Adaptive Sizing**: Median profit BPS drives bounded multiplier (min/max + floor)
+- **Depth Impact Model**: Linear reduction (configurable via `ARB_DEPTH_PRICE_IMPACT_BPS`)
+- **Evaluation Path**: Unified 2-leg & 3-leg functions applying depth & size before profit check
+- **Persistence**: JSON snapshot (`ARB_ADAPT_STATE_PATH`, throttled by `ARB_ADAPT_PERSIST_INTERVAL`)
+- **Observability**: New metrics: size utilization, depth factor, adaptive multiplier gauge; HTTP `/ai/sizing` endpoint
+- **Result**: Closed loop ready for iterative refinement
 
 ---
 
@@ -73,8 +81,9 @@
 
 ### **Performance Optimizations Achieved**
 - **Hot Path Rules**: Integer-only math, zero cross-process calls
-- **Sub-10ms Latency**: Geyser → Detection → Execution pipeline
-- **Lock-free Algorithms**: Atomic operations, DashMap concurrent access
+- **Adaptive Overhead**: O(1) update per opportunity (median maintenance amortized)
+- **Sub-10ms Latency**: Geyser → Detection → Evaluation path preserved
+- **Lock-free Structures**: Atomic thresholds, DashMap for state
 - **Binary Serialization**: Protobuf inter-service communication
 
 ### **Premium Infrastructure Integration**
@@ -133,13 +142,13 @@
 - **Testing Framework**: End-to-end validation
 - **Performance Monitoring**: Real-time metrics
 
-### **Phase 4: Testing & Validation** 🔄 **IN PROGRESS (August 2024)**
-- **Observability**: Prometheus + Grafana operational
-- **Test Metrics**: Prometheus-compatible generation
-- **Basic Dashboards**: MEVana test monitoring
-- **Test Pipeline**: Automated validation scripts
+### **Phase 4: Testing & Validation** 🔄 **IN PROGRESS (August 2025)**
+- **Observability**: Prometheus + Grafana operational (added adaptive metrics)
+- **Metric Additions**: Size utilization, depth factor, multiplier gauge
+- **Dashboards**: Need panels for new histograms & gauge – PENDING
+- **Test Pipeline**: Extend to validate persistence reload & multiplier convergence
 
-### **Phase 5: Production Readiness** 📋 **PLANNED (September 2024)**
+### **Phase 5: Production Readiness** 📋 **UPCOMING (September 2025)**
 - **Wallet Management**: Secure key management
 - **Trade Execution**: Automated arbitrage execution
 - **Risk Management**: Position limits and stop losses
@@ -149,13 +158,13 @@
 
 ## 🔮 **FUTURE ROADMAP**
 
-### **Phase 6: AI-Driven Enhancement (Q4 2024)**
+### **Phase 6: AI-Driven Enhancement (Q4 2025)**
 - **Self-Learning Strategies**: AI agents optimizing arbitrage algorithms
 - **Predictive Analytics**: Market condition anticipation
 - **Automated Risk Management**: AI-driven assessment and mitigation
 - **Strategy Evolution**: Continuous improvement through learning
 
-### **Phase 7: Advanced Features (Q1 2025)**
+### **Phase 7: Advanced Features (Q1 2026)**
 - **Multi-Chain Support**: Extend beyond Solana ecosystem
 - **Institutional Features**: Advanced reporting and compliance
 - **Global Deployment**: Multi-region for optimal latency
@@ -181,23 +190,12 @@
 
 ## 🚀 **NEXT STEPS TO GO-LIVE**
 
-### **Phase 1: Final Integration (Today, 2-4 PM)**
-1. Commit all current progress to git
-2. Resolve executor dependency conflicts
-3. Implement multi-flash-loan provider framework
-4. Configure Shyft.to premium endpoints
-
-### **Phase 2: Test Trading (Today, 4-6 PM)**
-1. End-to-end integration testing with real data
-2. First small-position test trade
-3. Validate profit calculation accuracy
-4. Confirm risk management effectiveness
-
-### **Phase 3: Production Scaling (Tomorrow)**
-1. Increase position sizes gradually
-2. Add additional DEX venues (Raydium, Meteora)
-3. Optimize flash loan provider selection
-4. Implement advanced strategies
+### **Next Validation Loop (Current Focus)**
+1. Run controlled dry-run capturing distributions (profit BPS, depth factor, size utilization)
+2. Verify persistence restores identical multiplier trajectory after restart
+3. Add Grafana panels for new metrics
+4. Decide on dynamic endpoint for updating `ARB_DEPTH_PRICE_IMPACT_BPS`
+5. Re-integrate executor with adaptive sizing decisions feeding position size
 
 ---
 
@@ -208,7 +206,7 @@
 **Market Conditions**: Favorable - Sufficient arbitrage opportunities detected  
 **Infrastructure**: Premium-grade with Shyft.to partnership
 
-**Confidence Level**: 95% - Ready for test trading by end of day
+**Confidence Level**: 95% - Adaptive engine stable; pending executor reintegration & dashboard polish
 
 ---
 
