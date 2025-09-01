@@ -7,6 +7,7 @@ use rdkafka::producer::{FutureProducer, FutureRecord};
 use rdkafka::Message as KafkaMessage;
 use serde::{Deserialize, Serialize};
 use sqlx::PgPool;
+use std::collections::VecDeque;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 use tokio::time::sleep;
@@ -100,6 +101,45 @@ pub struct ExecutionEngine {
     circuit_consec_failures: std::sync::atomic::AtomicU64,
     circuit_consec_unlanded: std::sync::atomic::AtomicU64,
     circuit_open: std::sync::atomic::AtomicBool,
+    // Dedupe cache: recent opportunity hashes with insertion times
+    dedupe_cache: parking_lot::Mutex<OpportunityDedupe>,
+}
+
+// Lightweight dedupe entry set
+struct OpportunityDedupe {
+    entries: std::collections::HashSet<u64>,
+    order: VecDeque<(u64, u64)>, // (hash, inserted_unix_ms)
+}
+
+impl OpportunityDedupe {
+    fn new() -> Self {
+        Self {
+            entries: std::collections::HashSet::new(),
+            order: VecDeque::new(),
+        }
+    }
+    fn insert_and_check(&mut self, h: u64, now_ms: u64, ttl_ms: u64, max: usize) -> bool {
+        // Evict expired
+        while let Some(&(old_h, ts)) = self.order.front() {
+            if now_ms.saturating_sub(ts) > ttl_ms {
+                self.order.pop_front();
+                self.entries.remove(&old_h);
+            } else {
+                break;
+            }
+        }
+        if self.entries.contains(&h) {
+            return true;
+        }
+        if self.entries.len() >= max {
+            if let Some((old_h, _)) = self.order.pop_front() {
+                self.entries.remove(&old_h);
+            }
+        }
+        self.entries.insert(h);
+        self.order.push_back((h, now_ms));
+        false
+    }
 }
 
 impl ExecutionEngine {
@@ -290,6 +330,7 @@ impl ExecutionEngine {
             circuit_consec_failures: std::sync::atomic::AtomicU64::new(0),
             circuit_consec_unlanded: std::sync::atomic::AtomicU64::new(0),
             circuit_open: std::sync::atomic::AtomicBool::new(false),
+            dedupe_cache: parking_lot::Mutex::new(OpportunityDedupe::new()),
         })
     }
 
@@ -615,6 +656,36 @@ impl ExecutionEngine {
 
         // Parse opportunity from JSON
         let opportunity: ArbitrageOpportunity = serde_json::from_slice(payload)?;
+        // Dedupe: compute stable hash across core fields
+        let dedupe_ttl_ms = std::env::var("OPP_DEDUPE_TTL_MS")
+            .ok()
+            .and_then(|v| v.parse::<u64>().ok())
+            .unwrap_or(300); // default 300ms window
+        let dedupe_max = std::env::var("OPP_DEDUPE_MAX_ENTRIES")
+            .ok()
+            .and_then(|v| v.parse::<usize>().ok())
+            .unwrap_or(10_000);
+        let mut hasher = ahash::AHasher::default();
+        use std::hash::Hasher;
+        hasher.write(opportunity.token_in.as_slice());
+        hasher.write(opportunity.token_out.as_slice());
+        for e in &opportunity.edges {
+            hasher.write_u64(*e);
+        }
+        hasher.write_u64(opportunity.profit_bps);
+        hasher.write_u64(opportunity.max_size_in as u64);
+        let h = hasher.finish();
+        let now_ms = chrono::Utc::now().timestamp_millis() as u64;
+        let is_dup = {
+            let mut cache = self.dedupe_cache.lock();
+            cache.insert_and_check(h, now_ms, dedupe_ttl_ms, dedupe_max)
+        };
+        if is_dup {
+            self.metrics.record_dedupe_hit();
+            return Ok(()); // silently drop duplicate
+        } else {
+            self.metrics.record_dedupe_insert();
+        }
         // Persist raw opportunity (best-effort)
         {
             let db = self.db.clone();
@@ -1385,6 +1456,36 @@ impl ExecutionEngine {
     ) -> Result<()> {
         // Duplicate core of process_opportunity sans Kafka decode
         let execution_id = Uuid::new_v4();
+        // Dedupe for hotpath
+        let dedupe_ttl_ms = std::env::var("OPP_DEDUPE_TTL_MS")
+            .ok()
+            .and_then(|v| v.parse::<u64>().ok())
+            .unwrap_or(300);
+        let dedupe_max = std::env::var("OPP_DEDUPE_MAX_ENTRIES")
+            .ok()
+            .and_then(|v| v.parse::<usize>().ok())
+            .unwrap_or(10_000);
+        let mut hasher = ahash::AHasher::default();
+        use std::hash::Hasher;
+        hasher.write(opportunity.token_in.as_slice());
+        hasher.write(opportunity.token_out.as_slice());
+        for e in &opportunity.edges {
+            hasher.write_u64(*e);
+        }
+        hasher.write_u64(opportunity.profit_bps);
+        hasher.write_u64(opportunity.max_size_in as u64);
+        let h = hasher.finish();
+        let now_ms = chrono::Utc::now().timestamp_millis() as u64;
+        let is_dup = {
+            let mut cache = self.dedupe_cache.lock();
+            cache.insert_and_check(h, now_ms, dedupe_ttl_ms, dedupe_max)
+        };
+        if is_dup {
+            self.metrics.record_dedupe_hit();
+            return Ok(());
+        } else {
+            self.metrics.record_dedupe_insert();
+        }
         let mut execution_result = ExecutionResult {
             opportunity_id: opportunity.opportunity_id,
             execution_id,

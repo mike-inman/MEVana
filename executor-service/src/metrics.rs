@@ -6,6 +6,7 @@ use tokio_stream::wrappers::TcpListenerStream;
 use warp::Filter;
 
 /// Prometheus metrics server for monitoring executor performance
+#[allow(dead_code)]
 pub struct MetricsServer {
     registry: Arc<Registry>,
     port: u16,
@@ -83,8 +84,18 @@ pub struct MetricsServer {
     pub trading_enable_events_total: IntCounter,
     pub trading_disable_events_total: IntCounter,
     pub trading_enabled_gauge: IntGauge,
+    // Circuit breaker
+    pub circuit_breaker_trips_total: IntCounter,
+    pub circuit_breaker_open_gauge: IntGauge,
+    pub circuit_breaker_consec_failures: IntGauge,
+    pub circuit_breaker_consec_unlanded: IntGauge,
+    // Dedupe
+    pub opportunity_dedupe_hits_total: IntCounter,
+    pub opportunity_dedupe_inserts_total: IntCounter,
+    pub opportunity_dedupe_evictions_total: IntCounter,
 }
 
+#[allow(dead_code)]
 impl MetricsServer {
     pub fn new(port: u16) -> Result<Self> {
         let registry = Arc::new(Registry::new());
@@ -430,6 +441,45 @@ impl MetricsServer {
         )?;
         registry.register(Box::new(trading_enabled_gauge.clone()))?;
 
+        // Circuit breaker metrics
+        let circuit_breaker_trips_total = IntCounter::new(
+            "mevana_circuit_breaker_trips_total",
+            "Total number of times the circuit breaker tripped (auto disabled trading)",
+        )?;
+        registry.register(Box::new(circuit_breaker_trips_total.clone()))?;
+        let circuit_breaker_open_gauge = IntGauge::new(
+            "mevana_circuit_breaker_open",
+            "Gauge 1 if circuit breaker currently open (trading blocked)",
+        )?;
+        registry.register(Box::new(circuit_breaker_open_gauge.clone()))?;
+        let circuit_breaker_consec_failures = IntGauge::new(
+            "mevana_circuit_breaker_consec_failures",
+            "Current consecutive failed/rejected executions",
+        )?;
+        registry.register(Box::new(circuit_breaker_consec_failures.clone()))?;
+        let circuit_breaker_consec_unlanded = IntGauge::new(
+            "mevana_circuit_breaker_consec_unlanded",
+            "Current consecutive unlanded executions",
+        )?;
+        registry.register(Box::new(circuit_breaker_consec_unlanded.clone()))?;
+
+        // Dedupe metrics
+        let opportunity_dedupe_hits_total = IntCounter::new(
+            "mevana_opportunity_dedupe_hits_total",
+            "Total number of opportunities dropped due to dedupe hit (recent duplicate)",
+        )?;
+        registry.register(Box::new(opportunity_dedupe_hits_total.clone()))?;
+        let opportunity_dedupe_inserts_total = IntCounter::new(
+            "mevana_opportunity_dedupe_inserts_total",
+            "Total number of opportunities inserted into dedupe cache",
+        )?;
+        registry.register(Box::new(opportunity_dedupe_inserts_total.clone()))?;
+        let opportunity_dedupe_evictions_total = IntCounter::new(
+            "mevana_opportunity_dedupe_evictions_total",
+            "Total number of dedupe cache evictions (TTL or capacity)",
+        )?;
+        registry.register(Box::new(opportunity_dedupe_evictions_total.clone()))?;
+
         Ok(Self {
             registry,
             port,
@@ -492,6 +542,13 @@ impl MetricsServer {
             trading_enable_events_total,
             trading_disable_events_total,
             trading_enabled_gauge,
+            circuit_breaker_trips_total,
+            circuit_breaker_open_gauge,
+            circuit_breaker_consec_failures,
+            circuit_breaker_consec_unlanded,
+            opportunity_dedupe_hits_total,
+            opportunity_dedupe_inserts_total,
+            opportunity_dedupe_evictions_total,
         })
     }
 
@@ -671,5 +728,16 @@ impl MetricsServer {
 
     pub fn update_required_missing_accounts(&self, count: usize) {
         self.account_sets_required_missing.set(count as i64);
+    }
+
+    // Dedupe metrics recording
+    pub fn record_dedupe_hit(&self) {
+        self.opportunity_dedupe_hits_total.inc();
+    }
+    pub fn record_dedupe_insert(&self) {
+        self.opportunity_dedupe_inserts_total.inc();
+    }
+    pub fn record_dedupe_eviction(&self) {
+        self.opportunity_dedupe_evictions_total.inc();
     }
 }
