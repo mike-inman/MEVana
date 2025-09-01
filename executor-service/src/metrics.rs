@@ -33,6 +33,13 @@ pub struct MetricsServer {
     pub bundle_confirmations: IntCounter,
     pub bundle_failures: IntCounter,
     pub system_errors: IntCounter,
+
+    // Hotpath / low-latency feed metrics
+    pub hotpath_ws_reconnections: IntCounter,
+    pub hotpath_ws_errors: IntCounter,
+    pub hotpath_ws_messages: IntCounter,
+    pub hotpath_opportunities_processed: IntCounter,
+    pub hotpath_processing_time_seconds: Histogram,
 }
 
 impl MetricsServer {
@@ -147,6 +154,39 @@ impl MetricsServer {
         )?;
         registry.register(Box::new(system_errors.clone()))?;
 
+        // Hotpath metrics
+        let hotpath_ws_reconnections = IntCounter::new(
+            "mevana_hotpath_ws_reconnections_total",
+            "Total number of hotpath websocket reconnections"
+        )?;
+        registry.register(Box::new(hotpath_ws_reconnections.clone()))?;
+
+        let hotpath_ws_errors = IntCounter::new(
+            "mevana_hotpath_ws_errors_total",
+            "Total number of hotpath websocket errors"
+        )?;
+        registry.register(Box::new(hotpath_ws_errors.clone()))?;
+
+        let hotpath_ws_messages = IntCounter::new(
+            "mevana_hotpath_ws_messages_total",
+            "Total number of raw websocket messages received on hotpath"
+        )?;
+        registry.register(Box::new(hotpath_ws_messages.clone()))?;
+
+        let hotpath_opportunities_processed = IntCounter::new(
+            "mevana_hotpath_opportunities_processed_total",
+            "Total number of hotpath arbitrage opportunities processed"
+        )?;
+        registry.register(Box::new(hotpath_opportunities_processed.clone()))?;
+
+        let hotpath_processing_time_seconds = Histogram::with_opts(
+            prometheus::HistogramOpts::new(
+                "mevana_hotpath_processing_time_seconds",
+                "End-to-end processing time for hotpath opportunities"
+            ).buckets(vec![0.001, 0.002, 0.005, 0.01, 0.02, 0.05, 0.1])
+        )?;
+        registry.register(Box::new(hotpath_processing_time_seconds.clone()))?;
+
         Ok(Self {
             registry,
             port,
@@ -167,6 +207,11 @@ impl MetricsServer {
             bundle_confirmations,
             bundle_failures,
             system_errors,
+            hotpath_ws_reconnections,
+            hotpath_ws_errors,
+            hotpath_ws_messages,
+            hotpath_opportunities_processed,
+            hotpath_processing_time_seconds,
         })
     }
 

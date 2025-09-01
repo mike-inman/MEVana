@@ -11,12 +11,14 @@ use std::time::{Duration, Instant};
 use tokio::time::sleep;
 use uuid::Uuid;
 
+use crate::bundle_builder::BundleBuilder;
 use crate::config::ExecutorConfig;
 use crate::flash_loan::FlashLoanAggregator;
+use crate::hotpath_ws;
+use crate::metrics::MetricsServer;
+use crate::opportunity_processor::OpportunityProcessor;
 use crate::shyft_client::ShyftClient;
 use crate::wallet_service::WalletService;
-use crate::opportunity_processor::OpportunityProcessor;
-use crate::bundle_builder::BundleBuilder;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ArbitrageOpportunity {
@@ -73,34 +75,35 @@ pub struct ExecutionEngine {
     flash_loan_aggregator: Arc<FlashLoanAggregator>,
     opportunity_processor: OpportunityProcessor,
     bundle_builder: BundleBuilder,
+    metrics: Arc<MetricsServer>,
 }
 
 impl ExecutionEngine {
-    pub async fn new(config: ExecutorConfig) -> Result<Self> {
+    pub async fn new(config: ExecutorConfig, metrics: Arc<MetricsServer>) -> Result<Self> {
         let config = Arc::new(config);
-        
+
         // Validate configuration
         config.validate()?;
-        
+
         // Initialize Shyft.to client
         let shyft_client = Arc::new(ShyftClient::new(
             config.shyft_api_key.clone(),
             config.shyft_rpc_url.clone(),
             config.shyft_jito_url.clone(),
         )?);
-        
+
         // Initialize wallet service
         let wallet_service = Arc::new(WalletService::new(
             Arc::clone(&config),
             Arc::clone(&shyft_client),
         )?);
-        
+
         // Initialize flash loan aggregator
         let flash_loan_aggregator = Arc::new(FlashLoanAggregator::new(
             Arc::clone(&config),
             Arc::clone(&shyft_client),
         )?);
-        
+
         // Initialize Kafka consumer
         let consumer: StreamConsumer = ClientConfig::new()
             .set("group.id", &config.consumer_group)
@@ -119,14 +122,14 @@ impl ExecutionEngine {
             .set("linger.ms", "0")
             .set("acks", "1")
             .create()?;
-        
+
         // Initialize opportunity processor
         let opportunity_processor = OpportunityProcessor::new(
             Arc::clone(&config),
             Arc::clone(&wallet_service),
             Arc::clone(&flash_loan_aggregator),
         );
-        
+
         // Initialize bundle builder
         let bundle_builder = BundleBuilder::new(Arc::clone(&shyft_client));
 
@@ -145,15 +148,27 @@ impl ExecutionEngine {
             flash_loan_aggregator,
             opportunity_processor,
             bundle_builder,
+            metrics,
         })
     }
 
-    pub async fn start(&self) -> Result<()> {
+    pub async fn start(self: Arc<Self>) -> Result<()> {
         info!("🚀 Starting execution engine");
-        
+        if let Ok(ws_url) = std::env::var("ARB_ENGINE_WS") {
+            if !ws_url.is_empty() {
+                let _ = hotpath_ws::start_hotpath_ws(
+                    Arc::clone(&self),
+                    Arc::clone(&self.metrics),
+                    &ws_url,
+                )
+                .await;
+            }
+        }
+
         // Subscribe to opportunities topic
-        self.consumer.subscribe(&[&self.config.opportunities_topic])?;
-        
+        self.consumer
+            .subscribe(&[&self.config.opportunities_topic])?;
+
         // Start wallet balance refresh task
         let wallet_service_clone = Arc::clone(&self.wallet_service);
         tokio::spawn(async move {
@@ -170,12 +185,15 @@ impl ExecutionEngine {
             match self.consumer.recv().await {
                 Ok(message) => {
                     let start_time = Instant::now();
-                    
+
                     match self.process_opportunity(&message).await {
                         Ok(_) => {
                             let processing_time = start_time.elapsed();
                             if processing_time.as_millis() > 50 {
-                                warn!("Slow opportunity processing: {}ms", processing_time.as_millis());
+                                warn!(
+                                    "Slow opportunity processing: {}ms",
+                                    processing_time.as_millis()
+                                );
                             }
                         }
                         Err(e) => {
@@ -208,9 +226,11 @@ impl ExecutionEngine {
         // Parse opportunity from JSON
         let opportunity: ArbitrageOpportunity = serde_json::from_slice(payload)?;
         let execution_id = Uuid::new_v4();
-        
-        info!("Processing opportunity {} (execution: {})", 
-              opportunity.opportunity_id, execution_id);
+
+        info!(
+            "Processing opportunity {} (execution: {})",
+            opportunity.opportunity_id, execution_id
+        );
 
         let start_time = Instant::now();
         let mut execution_result = ExecutionResult {
@@ -219,7 +239,8 @@ impl ExecutionEngine {
             status: ExecutionStatus::Received,
             bundle_id: None,
             transaction_signatures: vec![],
-            estimated_profit_lamports: (opportunity.max_size_in as u64 * opportunity.profit_bps) / 10_000,
+            estimated_profit_lamports: (opportunity.max_size_in as u64 * opportunity.profit_bps)
+                / 10_000,
             actual_profit_lamports: None,
             execution_time_ms: 0,
             gas_used: opportunity.total_cu_estimate,
@@ -230,7 +251,11 @@ impl ExecutionEngine {
         };
 
         // Step 1: Validate opportunity
-        match self.opportunity_processor.validate_opportunity(&opportunity).await {
+        match self
+            .opportunity_processor
+            .validate_opportunity(&opportunity)
+            .await
+        {
             Ok(true) => {
                 execution_result.status = ExecutionStatus::Validated;
             }
@@ -250,17 +275,23 @@ impl ExecutionEngine {
 
         // Step 2: Get flash loan quote
         let token_in_mint = bs58::encode(&opportunity.token_in).into_string();
-        match self.flash_loan_aggregator.get_best_quote(&token_in_mint, opportunity.max_size_in as u64).await {
+        match self
+            .flash_loan_aggregator
+            .get_best_quote(&token_in_mint, opportunity.max_size_in as u64)
+            .await
+        {
             Ok(quote) => {
                 execution_result.status = ExecutionStatus::FlashLoanQuoted;
                 execution_result.flash_loan_provider = Some(format!("{:?}", quote.provider));
-                execution_result.flash_loan_fee_lamports = Some((opportunity.max_size_in as u64 * quote.fee_bps as u64) / 10_000);
-                
+                execution_result.flash_loan_fee_lamports =
+                    Some((opportunity.max_size_in as u64 * quote.fee_bps as u64) / 10_000);
+
                 // Check if still profitable after flash loan fees
                 if let Some(fee) = execution_result.flash_loan_fee_lamports {
                     if execution_result.estimated_profit_lamports <= fee {
                         execution_result.status = ExecutionStatus::Rejected;
-                        execution_result.error_message = Some("Not profitable after flash loan fees".to_string());
+                        execution_result.error_message =
+                            Some("Not profitable after flash loan fees".to_string());
                         self.publish_execution_result(execution_result).await?;
                         return Ok(());
                     }
@@ -275,7 +306,11 @@ impl ExecutionEngine {
         }
 
         // Step 3: Build bundle
-        match self.bundle_builder.build_arbitrage_bundle(&opportunity).await {
+        match self
+            .bundle_builder
+            .build_arbitrage_bundle(&opportunity)
+            .await
+        {
             Ok(bundle) => {
                 execution_result.status = ExecutionStatus::BundleBuilt;
                 execution_result.transaction_signatures = bundle.transaction_ids;
@@ -324,6 +359,83 @@ impl ExecutionEngine {
             result.execution_id, result.status, result.estimated_profit_lamports
         );
 
+        Ok(())
+    }
+}
+
+impl ExecutionEngine {
+    pub async fn process_hotpath_opportunity(
+        &self,
+        opportunity: ArbitrageOpportunity,
+    ) -> Result<()> {
+        // Duplicate core of process_opportunity sans Kafka decode
+        let execution_id = Uuid::new_v4();
+        let mut execution_result = ExecutionResult {
+            opportunity_id: opportunity.opportunity_id,
+            execution_id,
+            status: ExecutionStatus::Received,
+            bundle_id: None,
+            transaction_signatures: vec![],
+            estimated_profit_lamports: (opportunity.max_size_in as u64 * opportunity.profit_bps)
+                / 10_000,
+            actual_profit_lamports: None,
+            execution_time_ms: 0,
+            gas_used: opportunity.total_cu_estimate,
+            error_message: None,
+            executed_at_ns: chrono::Utc::now().timestamp_nanos() as u64,
+            flash_loan_provider: None,
+            flash_loan_fee_lamports: None,
+        };
+        // Validate
+        if !self
+            .opportunity_processor
+            .validate_opportunity(&opportunity)
+            .await
+            .unwrap_or(false)
+        {
+            execution_result.status = ExecutionStatus::Rejected;
+            self.publish_execution_result(execution_result).await?;
+            return Ok(());
+        }
+        execution_result.status = ExecutionStatus::Validated;
+        // Flash loan quote
+        let token_in_mint = bs58::encode(&opportunity.token_in).into_string();
+        if let Ok(quote) = self
+            .flash_loan_aggregator
+            .get_best_quote(&token_in_mint, opportunity.max_size_in as u64)
+            .await
+        {
+            execution_result.status = ExecutionStatus::FlashLoanQuoted;
+            execution_result.flash_loan_provider = Some(format!("{:?}", quote.provider));
+            execution_result.flash_loan_fee_lamports =
+                Some((opportunity.max_size_in as u64 * quote.fee_bps as u64) / 10_000);
+        } else {
+            execution_result.status = ExecutionStatus::Failed;
+            execution_result.error_message = Some("flash_loan_quote_failed".into());
+            self.publish_execution_result(execution_result).await?;
+            return Ok(());
+        }
+        // Bundle build
+        match self
+            .bundle_builder
+            .build_arbitrage_bundle(&opportunity)
+            .await
+        {
+            Ok(bundle) => {
+                execution_result.status = ExecutionStatus::BundleBuilt;
+                execution_result.transaction_signatures = bundle.transaction_ids;
+            }
+            Err(e) => {
+                execution_result.status = ExecutionStatus::Failed;
+                execution_result.error_message = Some(format!("bundle_build_error: {}", e));
+                self.publish_execution_result(execution_result).await?;
+                return Ok(());
+            }
+        }
+        execution_result.status = ExecutionStatus::Simulated; // future simulation
+        execution_result.status = ExecutionStatus::Submitted; // future: Jito submission
+        execution_result.bundle_id = Some(format!("bundle_{}", execution_id));
+        self.publish_execution_result(execution_result).await?;
         Ok(())
     }
 }
