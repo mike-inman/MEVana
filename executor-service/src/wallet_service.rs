@@ -9,6 +9,7 @@ use std::sync::Arc;
 
 use crate::config::ExecutorConfig;
 use crate::shyft_client::ShyftClient;
+use solana_sdk::signature::Signer;
 
 /// Comprehensive wallet service for secure, fault-tolerant trading operations
 pub struct WalletService {
@@ -127,6 +128,20 @@ impl WalletService {
             // Fallback to primary
             self.primary_wallet.clone()
         }
+    }
+
+    /// Get current cached SOL balance (lamports)
+    pub fn get_sol_balance_lamports(&self) -> i64 {
+        self.sol_balance.load(Ordering::Relaxed)
+    }
+
+    /// Get a snapshot of current token balances (mint -> balance)
+    pub fn get_token_balances_snapshot(&self) -> std::collections::HashMap<String, u64> {
+        let mut map = std::collections::HashMap::new();
+        for kv in self.token_balances.iter() {
+            map.insert(kv.key().clone(), *kv.value());
+        }
+        map
     }
 
     /// Check if we have sufficient balance for a trade
@@ -343,12 +358,19 @@ impl WalletService {
 
     fn load_wallet_address(keypair_path: &str) -> Result<String> {
         let expanded_path = shellexpand::tilde(keypair_path);
-        // In real implementation, would load keypair and extract public key
-        // For now, return a placeholder
-        Ok(format!(
-            "wallet_from_{}",
-            expanded_path.chars().take(8).collect::<String>()
-        ))
+        
+        // Load the actual Solana keypair and extract public key
+        match solana_sdk::signature::read_keypair_file(&*expanded_path) {
+            Ok(keypair) => {
+                let pubkey = keypair.pubkey().to_string();
+                info!("✅ Loaded wallet from {}: {}", expanded_path, pubkey);
+                Ok(pubkey)
+            }
+            Err(e) => {
+                error!("❌ Failed to load wallet from {}: {}", expanded_path, e);
+                anyhow::bail!("Failed to load wallet keypair: {}", e)
+            }
+        }
     }
 
     fn get_available_balance(&self, token_mint: &str) -> u64 {
