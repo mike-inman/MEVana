@@ -1,0 +1,230 @@
+name: Deploy to Production Server
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+    inputs:
+      force_deploy:
+        description: 'Force deployment even if no changes'
+        required: false
+        default: false
+        type: boolean
+
+env:
+  SERVER_HOST: 149.28.56.125
+  SERVER_USER: root
+  DEPLOYMENT_PATH: /opt/MEVana
+
+jobs:
+  deploy:
+    name: Deploy to Production
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main'
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Setup SSH
+      uses: webfactory/ssh-agent@v0.9.0
+      with:
+        ssh-private-key: ${{ secrets.VULTR_SERVER_SSH_KEY }}
+        
+    - name: Add server to known hosts
+      run: |
+        ssh-keyscan -H $SERVER_HOST >> ~/.ssh/known_hosts
+        
+    - name: Deploy to server
+      run: |
+        ssh $SERVER_USER@$SERVER_HOST << 'ENDSSH'
+          set -e
+          
+          echo "🚀 Starting MEVana deployment..."
+          
+          # Navigate to deployment directory
+          cd /opt/MEVana
+          
+          # Pull latest changes
+          echo "📦 Pulling latest changes..."
+          git fetch origin
+          git reset --hard origin/main
+          
+          # Stop existing services gracefully
+          echo "🛑 Stopping existing services..."
+          pkill -f "arb-engine" || true
+          pkill -f "whirlpool-live-stream" || true
+          sleep 5
+          
+          # Build latest version
+          echo "🔨 Building services..."
+          export PATH="$HOME/.cargo/bin:$PATH"
+          
+          # Clean build for reliability
+          cargo clean
+          cargo build --release --workspace --verbose
+          
+          if [ $? -ne 0 ]; then
+            echo "❌ Build failed"
+            cat /tmp/cargo-build.log || true
+            exit 1
+          fi
+          
+          # Create logs directory
+          mkdir -p logs
+          
+          # Start infrastructure if not running
+          echo "🐋 Ensuring infrastructure is running..."
+          cd infrastructure
+          
+          # Check if Docker services are running, start if needed
+          if ! docker ps | grep -q kafka; then
+            echo "Starting infrastructure services..."
+            docker compose up -d
+            sleep 30
+          else
+            echo "Infrastructure already running"
+          fi
+          
+          cd ..
+          
+          # Create venue configuration
+          cat > venue_config.env << 'EOF'
+          # Multi-venue configuration
+          ORCA_PROGRAM_ID=whirLbMiicVdio4qvUfM5KAg6Ct8VwpYzGff3uctyCc
+          RAYDIUM_PROGRAM_ID=675kPX9MHTjS2zt1qfr1NYHuzeLXfQM9H24wFSUt1Mp8
+          METEORA_PROGRAM_ID=Eo7WjKq67rjJQSZxS6z3YkapzY3eMj6Xy8X5EQVn5UaB
+          PHOENIX_PROGRAM_ID=PhoeNiXZ8ByJGLkxNfZRnkUfjvmuYqLR89jjFHGqdXY
+          
+          # Venue filtering (all enabled)
+          ENABLE_ORCA=true
+          ENABLE_RAYDIUM=true
+          ENABLE_METEORA=true
+          ENABLE_PHOENIX=true
+          
+          # Jupiter integration
+          ENABLE_JUPITER=true
+          JUPITER_API_URL=https://quote-api.jup.ag/v6
+          JUPITER_MAX_HOPS=3
+          
+          # Performance settings
+          ARB_MIN_PROFIT_BPS=5
+          ARB_MAX_SLIPPAGE_BPS=100
+          HOTPATH_LOG=true
+          EOF
+          
+          # Start discovery stream
+          echo "📡 Starting Orca discovery stream..."
+          nohup bash -c "
+              source venue_config.env
+              ENDPOINT=https://grpc.ny.shyft.to \
+              X_TOKEN=efff2d23-97ae-4c5f-8b8b-9a6265001189 \
+              KAFKA_BROKER=localhost:29092 \
+              PROGRAM_IDS=whirLbMiicVdio4qvUfM5KAg6Ct8VwpYzGff3uctyCc \
+              ./target/release/whirlpool-live-stream
+          " > logs/orca-discovery.log 2>&1 &
+          
+          ORCA_PID=$!
+          echo "Orca discovery started (PID: $ORCA_PID)"
+          
+          # Wait for discovery to establish
+          sleep 10
+          
+          # Start arbitrage engine with Jupiter
+          echo "⚡ Starting arbitrage engine with Jupiter integration..."
+          nohup bash -c "
+              source venue_config.env
+              KAFKA_BROKER=localhost:29092 \
+              HOTPATH_LOG=true \
+              ARB_MIN_PROFIT_BPS=5 \
+              ARB_MAX_SLIPPAGE_BPS=100 \
+              WS_BIND=0.0.0.0:8085 \
+              ENABLE_JUPITER=true \
+              JUPITER_API_URL=https://quote-api.jup.ag/v6 \
+              JUPITER_MAX_HOPS=3 \
+              ./target/release/arb-engine
+          " > logs/arb-engine.log 2>&1 &
+          
+          ARB_PID=$!
+          echo "Arbitrage engine started (PID: $ARB_PID)"
+          
+          # Wait for services to initialize
+          sleep 15
+          
+          # Health check
+          echo "🔍 Running health checks..."
+          
+          # Wait for services to fully initialize
+          echo "⏳ Waiting for services to initialize..."
+          sleep 20
+          
+          # Check if API is responding with retry logic
+          for i in {1..5}; do
+            if curl -s http://localhost:8085/ai/config >/dev/null 2>&1; then
+              echo "✅ Arbitrage engine API is healthy (attempt $i)"
+              break
+            else
+              echo "⏳ Arbitrage engine API not ready (attempt $i/5)..."
+              sleep 10
+            fi
+          done
+          
+          # Check if processes are running
+          if pgrep -f "arb-engine" >/dev/null; then
+            echo "✅ Arbitrage engine process is running"
+          else
+            echo "❌ Arbitrage engine process failed to start"
+            exit 1
+          fi
+          
+          if pgrep -f "whirlpool-live-stream" >/dev/null; then
+            echo "✅ Discovery stream process is running"  
+          else
+            echo "❌ Discovery stream process failed to start"
+            exit 1
+          fi
+          
+          echo "🎉 Deployment completed successfully!"
+          echo ""
+          echo "📊 Service Status:"
+          echo "   • Kafka UI:      http://149.28.56.125:8080"
+          echo "   • Arbitrage API: http://149.28.56.125:8085/ai/config"
+          echo "   • Grafana:       http://149.28.56.125:3000"
+          echo "   • Redis UI:      http://149.28.56.125:8083"
+          echo ""
+          echo "🤖 AI Trading Engine:"
+          echo "   • Arbitrage Engine: PID $ARB_PID (logs/arb-engine.log)"
+          echo "   • Discovery Stream: PID $ORCA_PID (logs/orca-discovery.log)"
+          echo ""
+          echo "📈 Paper Trading Mode Active:"
+          echo "   • All venues: Orca, Raydium, Meteora, Phoenix"
+          echo "   • Jupiter multi-hop routing: ENABLED"
+          echo "   • Minimum profit: 5 BPS"
+        ENDSSH
+        
+    - name: Test deployment
+      run: |
+        echo "🔍 Testing deployment..."
+        
+        # Wait a bit for services to fully start
+        sleep 10
+        
+        # Test API endpoint
+        if curl -s http://$SERVER_HOST:8085/ai/config; then
+          echo "✅ Deployment test passed - API is responding"
+        else
+          echo "❌ Deployment test failed - API not responding"
+          exit 1
+        fi
+        
+    - name: Notify deployment status
+      if: always()
+      run: |
+        if [ ${{ job.status }} == 'success' ]; then
+          echo "✅ MEVana deployment to production successful!"
+          echo "🚀 Live at: http://$SERVER_HOST:8085"
+          echo "📊 Grafana: http://$SERVER_HOST:3000"
+          echo "🎯 Ready for weekend trading development!"
+        else
+          echo "❌ MEVana deployment failed"
+        fi

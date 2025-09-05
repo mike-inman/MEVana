@@ -26,23 +26,24 @@ pub struct MockArbitrageOpportunity {
 
 impl From<MockArbitrageOpportunity> for ArbitrageOpportunity {
     fn from(mock: MockArbitrageOpportunity) -> Self {
+        use uuid::Uuid;
+        
         ArbitrageOpportunity {
-            opportunity_id: mock.opportunity_id,
-            profit_bps: mock.profit_bps,
-            volume_usd: mock.volume_usd,
-            timestamp: std::time::SystemTime::now()
+            opportunity_id: Uuid::parse_str(&mock.opportunity_id).unwrap_or(Uuid::new_v4()),
+            profit_bps: mock.profit_bps as u64,
+            // Mock token addresses as Vec<u8> (32 bytes each for Solana pubkeys)
+            token_in: vec![0u8; 32], // Mock SOL token
+            token_out: vec![1u8; 32], // Mock USDC token  
+            edges: vec![1, 2], // Mock edge IDs
+            venues: vec![0, 1], // Mock venue IDs (whirlpool, raydium)
+            max_size_in: (mock.volume_usd * 1_000_000.0) as u128, // Convert USD to micro-lamports
+            total_cu_estimate: 200_000, // Mock compute units
+            total_fees_bps: 30, // Mock fees (0.3%)
+            detected_at_ns: std::time::SystemTime::now()
                 .duration_since(std::time::UNIX_EPOCH)
                 .unwrap()
-                .as_millis() as u64,
-            // Add other required fields with default values for testing
-            token_a_mint: "So11111111111111111111111111111111111111112".to_string(), // SOL
-            token_b_mint: "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v".to_string(), // USDC
-            venue_a: "whirlpool".to_string(),
-            venue_b: "raydium".to_string(),
-            price_a: 100.0,
-            price_b: 100.2,
-            liquidity_a: 1000000.0,
-            liquidity_b: 1000000.0,
+                .as_nanos() as u64,
+            max_edge_age_ms: 5000, // 5 second max age
         }
     }
 }
@@ -54,24 +55,24 @@ async fn main() -> Result<()> {
     info!("🚀 Starting ExecutionOrchestrator Integration Test");
     
     // Create mock components for testing
-    let config = Arc::new(ExecutorConfig::default()); // Assuming default implementation exists
+    let config = Arc::new(ExecutorConfig::load()?); // Load config from environment
     let shyft_client = Arc::new(ShyftClient::new(
         "test_key".to_string(),
         "https://rpc.shyft.to".to_string(),
         "https://mainnet.block-engine.jito.wtf".to_string(),
     )?);
-    let wallet_service = Arc::new(WalletService::new(config.clone())?);
-    let bundle_builder = Arc::new(BundleBuilder::new(config.clone(), shyft_client.clone())?);
+    let wallet_service = Arc::new(WalletService::new(config.clone(), shyft_client.clone())?);
+    let bundle_builder = Arc::new(BundleBuilder::new(shyft_client.clone()));
     let flash_loan_aggregator = Arc::new(FlashLoanAggregator::new(config.clone(), shyft_client.clone())?);
-    let metrics_server = Arc::new(MetricsServer::new(config.clone())?);
+    let metrics_server = Arc::new(MetricsServer::new(config.metrics_port)?);
     
     // Create the ExecutionOrchestrator
     let orchestrator = ExecutionOrchestrator::new(
         config,
         shyft_client,
         wallet_service,
-        bundle_builder,
         flash_loan_aggregator,
+        bundle_builder,
         metrics_server,
     ).await?;
     
@@ -99,7 +100,11 @@ async fn main() -> Result<()> {
     // Test each opportunity in test mode first
     for mock_opp in &test_opportunities {
         let opportunity: ArbitrageOpportunity = mock_opp.clone().into();
-        let execution_mode = ExecutionMode::Test { simulate_latency: true };
+        let execution_mode = ExecutionMode::Test { 
+            simulate_success_rate: 0.9,
+            simulate_latency_ms: 100,
+            enable_logging: true,
+        };
         
         info!("📊 Testing opportunity: {} ({}bps profit)", 
               opportunity.opportunity_id, opportunity.profit_bps);
@@ -124,9 +129,9 @@ async fn main() -> Result<()> {
     /*
     info!("🔥 LIVE MODE execution example (commented out for safety):");
     let live_mode = ExecutionMode::Live {
+        enable_aggressive_optimization: true,
         max_slippage_bps: 100,
         force_profit_threshold_lamports: Some(50_000),
-        enable_circuit_breaker: true,
     };
     
     // This would execute real trades:
@@ -156,7 +161,7 @@ fn display_execution_result(result: &ComprehensiveExecutionResult) {
     
     info!("   ⏱️  Total Execution Time: {}ms", result.total_execution_time_ms);
     
-    match result.jito_result.as_ref() {
+    match result.jito_bundle_result.as_ref() {
         Some(jito) => {
             info!("   🎯 Jito Bundle: {} ({:?})", jito.bundle_id, jito.status);
             if let Some(slot) = jito.landed_slot {
@@ -168,12 +173,12 @@ fn display_execution_result(result: &ComprehensiveExecutionResult) {
     
     match result.flash_loan_result.as_ref() {
         Some(fl) => {
-            info!("   💸 Flash Loan: {:?} ({}bps fee)", fl.provider, fl.fee_bps);
+            info!("   💸 Flash Loan: {:?} ({} lamports fee)", fl.provider_used, fl.fee_paid_lamports);
         }
         None => info!("   💸 Flash Loan: None"),
     }
     
-    info!("   ⚠️  Risk Level: {:?}", result.risk_level);
-    info!("   📏 Performance Score: {:.2}", result.performance_score);
+    info!("   ⚠️  Status: {:?}", result.final_status);
+    info!("   📏 Efficiency Score: {:.2}", result.execution_efficiency_score);
     info!("");
 }
