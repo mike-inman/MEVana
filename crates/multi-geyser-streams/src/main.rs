@@ -14,14 +14,12 @@ use std::sync::{
     Arc,
 };
 use std::time::Instant;
-use tokio::time::Duration;
 use tokio::time::sleep;
+use tokio::time::Duration;
 use yellowstone_grpc_client::GeyserGrpcClient;
 use yellowstone_grpc_proto::{
     geyser::SubscribeRequestFilterTransactions,
-    prelude::{
-        subscribe_update::UpdateOneof, CommitmentLevel, SubscribeRequest,
-    },
+    prelude::{subscribe_update::UpdateOneof, CommitmentLevel, SubscribeRequest},
 };
 
 /// Multi-Geyser Stream Service
@@ -91,9 +89,9 @@ fn create_stream_configs(endpoint: &str, token: &str) -> Vec<StreamConfig> {
             name: "Jupiter Stream".to_string(),
             program_ids: vec![
                 "JUP6LkbZbjS1jKKwapdHNy74zcZ3tLUZoi5QNyVTaV4".to_string(), // Jupiter V6 Main
-                "JUP4Fb2cqiRUcaTHdrPC8h2gNsA2ETXiPDD33WcGuJB".to_string(),   // Jupiter V4
-                "JUP6LkbZbafMNUBhDSDueet2ApgUKPKodDhqWFLVvZpg".to_string(),   // Jupiter Swap
-                "jupoNjAxXgZ4rjzxzPMP4oxduvQsQtZzyknqvzYNrNu".to_string(),   // Jupiter Limit Order
+                "JUP4Fb2cqiRUcaTHdrPC8h2gNsA2ETXiPDD33WcGuJB".to_string(), // Jupiter V4
+                "JUP6LkbZbafMNUBhDSDueet2ApgUKPKodDhqWFLVvZpg".to_string(), // Jupiter Swap
+                "jupoNjAxXgZ4rjzxzPMP4oxduvQsQtZzyknqvzYNrNu".to_string(), // Jupiter Limit Order
             ],
             endpoint: endpoint.to_string(),
             token: token.to_string(),
@@ -114,11 +112,11 @@ fn create_stream_configs(endpoint: &str, token: &str) -> Vec<StreamConfig> {
             program_ids: vec![
                 "675kPX9MHTjS2zt1qfr1NYHuzeLXfQM9H24wFSUt1Mp8".to_string(), // Raydium AMM
                 "CAMMCzo5YL8w4VFF8KVHrK22GGUsp5VTaW7grrKgrWqGnT".to_string(), // Raydium CLMM
-                "LBUZKhRxPF3XUpBCjp4YzTKgLccjZhTSDM9YuVaPwxo".to_string(),   // Meteora DLMM
-                "PhoeNiXZ8ByJGLkxNfZRnkUfjvmuYqLR89jjFHGqdXY".to_string(),   // Phoenix
-                "srmqPvymJeFKQ4zGQed1GFppgkRHL9kaELCbyksJtPX".to_string(),   // OpenBook
-                "6EF8rrecthR5Dkzon8Nwu78hRvfCKubJ14M5uBEwF6P".to_string(),   // Pump.fun
-                "2wT8Yq49kHgDzXuPxZSaeLaH1qbmGXtEyPy64bL7aD3c".to_string(),   // Mystery DEX
+                "LBUZKhRxPF3XUpBCjp4YzTKgLccjZhTSDM9YuVaPwxo".to_string(),  // Meteora DLMM
+                "PhoeNiXZ8ByJGLkxNfZRnkUfjvmuYqLR89jjFHGqdXY".to_string(),  // Phoenix
+                "srmqPvymJeFKQ4zGQed1GFppgkRHL9kaELCbyksJtPX".to_string(),  // OpenBook
+                "6EF8rrecthR5Dkzon8Nwu78hRvfCKubJ14M5uBEwF6P".to_string(),  // Pump.fun
+                "2wT8Yq49kHgDzXuPxZSaeLaH1qbmGXtEyPy64bL7aD3c".to_string(), // Mystery DEX
             ],
             endpoint: endpoint.to_string(),
             token: token.to_string(),
@@ -145,7 +143,9 @@ fn get_dex_name_from_program_id(program_id: &str) -> String {
     }
 }
 
-async fn create_geyser_client(config: &StreamConfig) -> Result<yellowstone_grpc_client::GeyserGrpcClient<impl tonic::service::Interceptor>> {
+async fn create_geyser_client(
+    config: &StreamConfig,
+) -> Result<yellowstone_grpc_client::GeyserGrpcClient<impl tonic::service::Interceptor>> {
     let client = GeyserGrpcClient::build_from_shared(config.endpoint.clone())
         .map_err(|e| anyhow::anyhow!(e))?
         .x_token(Some(config.token.clone()))
@@ -159,7 +159,10 @@ async fn create_geyser_client(config: &StreamConfig) -> Result<yellowstone_grpc_
         .await
         .map_err(|e| anyhow::anyhow!(e))?;
 
-    info!("✅ Connected to Geyser for stream {}: {}", config.id, config.name);
+    info!(
+        "✅ Connected to Geyser for stream {}: {}",
+        config.id, config.name
+    );
     Ok(client)
 }
 
@@ -214,7 +217,10 @@ async fn process_geyser_stream(config: StreamConfig) -> Result<()> {
                 warn!("Stream {} ended normally, restarting...", stream_id);
             }
             Err(e) => {
-                error!("Stream {} error: {}. Retrying in 5 seconds...", stream_id, e);
+                error!(
+                    "Stream {} error: {}. Retrying in 5 seconds...",
+                    stream_id, e
+                );
                 sleep(Duration::from_secs(5)).await;
             }
         }
@@ -240,12 +246,15 @@ async fn run_stream_with_retry(config: &StreamConfig) -> Result<()> {
 
         match message {
             Ok(update_msg) => {
-                if let Some(UpdateOneof::Transaction(transaction_update)) = update_msg.update_oneof {
-                    let processing_result = process_transaction_update(config, transaction_update).await;
+                if let Some(UpdateOneof::Transaction(transaction_update)) = update_msg.update_oneof
+                {
+                    let processing_result =
+                        process_transaction_update(config, transaction_update).await;
                     let processing_time_us = start_time.elapsed().as_micros() as u64;
 
                     // Record metrics
-                    histogram!("geyser_transaction_processing_time_us").record(processing_time_us as f64);
+                    histogram!("geyser_transaction_processing_time_us")
+                        .record(processing_time_us as f64);
                     counter!("geyser_transactions_processed_total").increment(1);
 
                     if let Some(counter) = STREAM_COUNTERS.get(&stream_id) {
@@ -262,7 +271,8 @@ async fn run_stream_with_retry(config: &StreamConfig) -> Result<()> {
                             counter!("geyser_transactions_successful_total").increment(1);
 
                             // Update DEX counters
-                            DEX_COUNTERS.entry(metrics.dex_name.clone())
+                            DEX_COUNTERS
+                                .entry(metrics.dex_name.clone())
                                 .or_insert_with(|| AtomicU64::new(0))
                                 .fetch_add(1, Ordering::Relaxed);
                         }
@@ -271,7 +281,10 @@ async fn run_stream_with_retry(config: &StreamConfig) -> Result<()> {
                         }
                         Err(e) => {
                             counter!("geyser_transactions_failed_total").increment(1);
-                            error!("Failed to process transaction on stream {}: {}", stream_id, e);
+                            error!(
+                                "Failed to process transaction on stream {}: {}",
+                                stream_id, e
+                            );
                         }
                     }
                 }
@@ -340,7 +353,9 @@ fn extract_program_ids(
                     .collect();
 
                 for instruction in &message.instructions {
-                    if let Some(program_id) = account_keys.get(instruction.program_id_index as usize) {
+                    if let Some(program_id) =
+                        account_keys.get(instruction.program_id_index as usize)
+                    {
                         program_ids.push(program_id.clone());
                     }
                 }
@@ -376,7 +391,8 @@ async fn metrics_handler() -> Json<serde_json::Value> {
         let stream_id = entry.key();
         let last_seen = entry.value().load(Ordering::Relaxed);
         let seconds_since_last = now.saturating_sub(last_seen);
-        health_status[format!("stream_{}_seconds_since_last_message", stream_id)] = json!(seconds_since_last);
+        health_status[format!("stream_{}_seconds_since_last_message", stream_id)] =
+            json!(seconds_since_last);
         health_status[format!("stream_{}_healthy", stream_id)] = json!(seconds_since_last < 30);
     }
 
@@ -418,7 +434,7 @@ async fn main() -> Result<()> {
     info!("📊 Metrics port: {}", args.metrics_port);
 
     // Initialize Prometheus metrics
-    let _prometheus_handle = metrics_exporter_prometheus::PrometheusBuilder::new()
+    metrics_exporter_prometheus::PrometheusBuilder::new()
         .install()
         .expect("Failed to install Prometheus recorder");
 
@@ -427,7 +443,12 @@ async fn main() -> Result<()> {
 
     info!("🔧 Configured {} Geyser streams:", stream_configs.len());
     for config in &stream_configs {
-        info!("  Stream {}: {} ({} program IDs)", config.id, config.name, config.program_ids.len());
+        info!(
+            "  Stream {}: {} ({} program IDs)",
+            config.id,
+            config.name,
+            config.program_ids.len()
+        );
     }
 
     // Start metrics server
