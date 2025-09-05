@@ -1,0 +1,35 @@
+[Unit]
+Description=MEVana Executor Service
+After=network-online.target postgresql.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=mevana
+Group=mevana
+WorkingDirectory=/opt/mevana
+ExecStart=/opt/mevana/bin/executor-service
+Restart=on-failure
+RestartSec=5
+EnvironmentFile=-/etc/mevana/secrets.env
+AmbientCapabilities=
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=read-only
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+LockPersonality=true
+MemoryDenyWriteExecute=true
+RestrictRealtime=true
+RestrictSUIDSGID=true
+RemoveIPC=true
+RestrictNamespaces=true
+SystemCallFilter=@system-service @network-io @io @file-system @process
+SystemCallFilter=~@keyring @mount @module
+LimitNOFILE=16384
+ExecReload=/bin/kill -HUP $MAINPID
+
+[Install]
+WantedBy=multi-user.target

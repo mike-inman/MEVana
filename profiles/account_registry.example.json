@@ -1,0 +1,42 @@
+{
+  "flash_loans": {
+    "solend": {
+      "USDC": {
+        "reserve": "SoLeNdUsdcReserveExample1111111111111111111111111",
+        "liquidity_supply": "SoLeNdUsdcLiqSupplyExample1111111111111111",
+        "fee_receiver": "SoLeNdUsdcFeeReceiverExample111111111111111",
+        "oracle": "PythUsdcOracleExample1111111111111111111111111",
+        "mint": "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v",
+        "decimals": 6
+      },
+      "SOL": {
+        "reserve": "SoLeNdSolReserveExample1111111111111111111111111",
+        "liquidity_supply": "SoLeNdSolLiqSupplyExample1111111111111111",
+        "fee_receiver": "SoLeNdSolFeeReceiverExample111111111111111",
+        "oracle": "PythSolOracleExample1111111111111111111111111",
+        "mint": "So11111111111111111111111111111111111111112",
+        "decimals": 9
+      }
+    }
+  },
+  "clmm_pools": {
+    "raydium_usdc_sol": {
+      "pool": "RaydiumClmmUsdcSolPoolExample11111111111111111111",
+      "token_a_vault": "RaydiumClmmUsdcSolVaultAExample11111111111111",
+      "token_b_vault": "RaydiumClmmUsdcSolVaultBExample11111111111111",
+      "oracle_or_observation": null,
+      "tick_arrays": [
+        "RaydiumClmmUsdcSolTickArray0Example111111111111",
+        "RaydiumClmmUsdcSolTickArray1Example111111111111"
+      ],
+      "token_a_mint": "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v",
+      "token_b_mint": "So11111111111111111111111111111111111111112"
+    }
+  },
+  "orderbooks": {},
+  "oracles": {
+    "USDC": { "price": "PythUsdcPriceAcctExample1111111111111111111", "confidence_limit_bps": 50 },
+    "SOL": { "price": "PythSolPriceAcctExample11111111111111111111", "confidence_limit_bps": 75 }
+  },
+  "jito": { "tip_account": "JitoTipAcctExample1111111111111111111111111" }
+}

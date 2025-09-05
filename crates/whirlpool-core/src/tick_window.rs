@@ -1,6 +1,6 @@
 use crate::pda::actual_tick_index;
 use crate::types::tick_is_initialized;
-use crate::types::{Tick, TickArray};
+use crate::types::Tick;
 
 #[derive(Clone, Debug)]
 pub struct TickArrayView<'a> {

@@ -115,7 +115,7 @@ pub mod programs {
 
 /// Utility functions
 pub mod utils {
-    use super::*;
+    // (removed unused super import)
 
     /// Convert lamports to SOL
     pub fn lamports_to_sol(lamports: u64) -> f64 {

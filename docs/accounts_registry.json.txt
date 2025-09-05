@@ -1,0 +1,77 @@
+Place at executor-service/accounts_registry.json (or a shared top-level). Keep only what you actually use first.
+
+
+{
+  "version": 1,
+  "updated_at": 1725140000,
+  "flash_loans": {
+    "solend": {
+      "USDC": {
+        "reserve": "3v5xjQhj7VhZyYyXXXXXXXXXXXXXXXreserveAcct",
+        "liquidity_supply": "5Jc9nN3KJmYjXXXXXXXXXXXXXXXliqSupplyATA",
+        "fee_receiver": "9weQ6V5F2sdXXXXXXXXXXXXXXXfeeVault",
+        "oracle": "GjNt7hQ7PythUSDCPriceAcctXXXXXXXXXXXX",
+        "mint": "Es9vMFrzaCERZ4hQNZxxxxxxxxxxxxUSDCMint",
+        "decimals": 6
+      }
+    }
+  },
+  "clmm_pools": {
+    "RAYDIUM_SOL_USDC": {
+      "pool": "7Y7jWkCLMMSolUsdcPoolXXXXXXXXXXXXXXX",
+      "token_a_vault": "A1VaUltSoLSPLTokVaultXXXXXXXXXXXXXX",
+      "token_b_vault": "B2VaUltUsdCSPLTokVaultXXXXXXXXXXXXXX",
+      "oracle_or_observation": "ObsAccRaydiumXXXXXXXXXXXXObservation",
+      "tick_arrays": [
+        "TickArrayLowerXXXXXXXXXXXXXXX",
+        "TickArrayMidXXXXXXXXXXXXXXX",
+        "TickArrayUpperXXXXXXXXXXXXXXX"
+      ],
+      "token_a_mint": "So11111111111111111111111111111111111111112",
+      "token_b_mint": "Es9vMFrzaCERZ4hQNZxxxxxxxxxxxxUSDCMint"
+    }
+  },
+  "orderbooks": {},
+  "oracles": {
+    "SOL": { "price": "PythSolPriceAcctXXXXXXXXXXXX", "confidence_limit_bps": 150 },
+    "USDC": { "price": "PythUsdcPriceAcctXXXXXXXXXXX", "confidence_limit_bps": 50 }
+  },
+  "jito": {
+    "tip_account": "Tip111111111111111111111111111111111111111"
+  }
+}
+
+
+pub mod programs {
+    pub const RAYDIUM_AMM: &str = "675kPX9MHTjS2zt1qfr1NYHuzeLXfQM9H24wFSUt1Mp8";
+    pub const RAYDIUM_CLMM: &str = "CAMMCzo5YL8w4VFF8KVHrK22GGUsp5VTaW7grrKgrWqGnT";
+    pub const METEORA_DLMM: &str = "LBUZKhRxPF3XUpBCjp4YzTKgLccjZhTSDM9YuVaPwxo";
+    pub const ORCA_WHIRLPOOL: &str = "whirLbMiicVdio4qvUfM5KAg6Ct8VwpYzGff3uctyCc";
+    pub const JUPITER_V6: &str = "JUP4Fb2cqiRUcaTHdrPC8h2gNsA2ETXiPDD33WcGuJB";
+    pub const OPENBOOK: &str = "srmqPvymJeFKQ4zGQed1GFppgkRHL9kaELCbyksJtPX";
+    pub const PUMP_FUN: &str = "6EF8rrecthR5Dkzon8NQtPiZzmEg7WRKNgDh5kJcZ5M";
+
+    /// Get all known DEX program IDs
+    pub fn all_dex_programs() -> Vec<&'static str> {
+        vec![
+            RAYDIUM_AMM,
+            RAYDIUM_CLMM,
+            METEORA_DLMM,
+            ORCA_WHIRLPOOL,
+            JUPITER_V6,
+            OPENBOOK,
+            PUMP_FUN,
+        ]
+    }
+
+    /// Get program name from ID
+    pub fn program_name(program_id: &str) -> &'static str {
+        match program_id {
+            RAYDIUM_AMM => "Raydium AMM",
+            RAYDIUM_CLMM => "Raydium CLMM",
+            METEORA_DLMM => "Meteora DLMM",
+            ORCA_WHIRLPOOL => "Orca Whirlpool",
+            JUPITER_V6 => "Jupiter V6",
+            OPENBOOK => "OpenBook",
+            PUMP_FUN => "Pump.fun",
+            _ => "Unknown DEX",

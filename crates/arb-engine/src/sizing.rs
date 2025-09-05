@@ -211,6 +211,9 @@ impl AdaptiveSizer {
         if let Ok(mut g) = self.inner.lock() {
             g.record(bps);
             g.persist_if_needed();
+            // Update public multiplier gauge immediately (previously only updated during choose())
+            let mult = g.multiplier();
+            LAST_ADAPTIVE_MULTIPLIER.store((mult * 1_000_000.0) as u64, Ordering::Relaxed);
         }
     }
     fn choose(&self, base_size: u128) -> u128 {

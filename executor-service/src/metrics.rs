@@ -93,6 +93,14 @@ pub struct MetricsServer {
     pub opportunity_dedupe_hits_total: IntCounter,
     pub opportunity_dedupe_inserts_total: IntCounter,
     pub opportunity_dedupe_evictions_total: IntCounter,
+    // Reconciliation metrics
+    pub reconciliation_started_total: IntCounter,
+    pub reconciliation_success_total: IntCounter,
+    pub reconciliation_failure_total: IntCounter,
+    pub reconciliation_adjustments_total: IntCounter,
+    pub reconciliation_adjustment_lamports_total: Counter,
+    pub reconciliation_divergence_bps: Histogram,
+    pub reconciliation_last_divergence_bps: IntGauge,
 }
 
 #[allow(dead_code)]
@@ -480,6 +488,48 @@ impl MetricsServer {
         )?;
         registry.register(Box::new(opportunity_dedupe_evictions_total.clone()))?;
 
+        // Reconciliation metrics
+        let reconciliation_started_total = IntCounter::new(
+            "mevana_reconciliation_started_total",
+            "Total reconciliation tasks started",
+        )?;
+        registry.register(Box::new(reconciliation_started_total.clone()))?;
+        let reconciliation_success_total = IntCounter::new(
+            "mevana_reconciliation_success_total",
+            "Total reconciliation tasks succeeded",
+        )?;
+        registry.register(Box::new(reconciliation_success_total.clone()))?;
+        let reconciliation_failure_total = IntCounter::new(
+            "mevana_reconciliation_failure_total",
+            "Total reconciliation tasks failed",
+        )?;
+        registry.register(Box::new(reconciliation_failure_total.clone()))?;
+        let reconciliation_adjustments_total = IntCounter::new(
+            "mevana_reconciliation_adjustments_total",
+            "Count of daily PnL adjustments applied after reconciliation",
+        )?;
+        registry.register(Box::new(reconciliation_adjustments_total.clone()))?;
+        let reconciliation_adjustment_lamports_total = Counter::new(
+            "mevana_reconciliation_adjustment_lamports_total",
+            "Net lamports added (positive) or removed (negative aggregated) from daily PnL via reconciliation adjustments",
+        )?;
+        registry.register(Box::new(reconciliation_adjustment_lamports_total.clone()))?;
+        let reconciliation_divergence_bps = Histogram::with_opts(
+            prometheus::HistogramOpts::new(
+                "mevana_reconciliation_divergence_bps",
+                "Distribution of reconciliation divergence (abs divergence in bps)",
+            )
+            .buckets(vec![
+                10.0, 50.0, 100.0, 250.0, 500.0, 1000.0, 2500.0, 5000.0, 10000.0,
+            ]),
+        )?;
+        registry.register(Box::new(reconciliation_divergence_bps.clone()))?;
+        let reconciliation_last_divergence_bps = IntGauge::new(
+            "mevana_reconciliation_last_divergence_bps",
+            "Most recent reconciliation divergence in bps (signed)",
+        )?;
+        registry.register(Box::new(reconciliation_last_divergence_bps.clone()))?;
+
         Ok(Self {
             registry,
             port,
@@ -549,6 +599,13 @@ impl MetricsServer {
             opportunity_dedupe_hits_total,
             opportunity_dedupe_inserts_total,
             opportunity_dedupe_evictions_total,
+            reconciliation_started_total,
+            reconciliation_success_total,
+            reconciliation_failure_total,
+            reconciliation_adjustments_total,
+            reconciliation_adjustment_lamports_total,
+            reconciliation_divergence_bps,
+            reconciliation_last_divergence_bps,
         })
     }
 
@@ -581,17 +638,8 @@ impl MetricsServer {
 
         let addr: SocketAddr = format!("0.0.0.0:{}", self.port).parse()?;
         log::info!("Starting metrics server on {}", addr);
-        // Attempt a pre-bind to avoid panic inside warp if port in use.
-        match std::net::TcpListener::bind(addr) {
-            Ok(listener) => {
-                // Safety: convert to incoming and serve
-                let incoming = TcpListenerStream::new(tokio::net::TcpListener::from_std(listener)?);
-                warp::serve(routes).serve_incoming(incoming).await;
-            }
-            Err(e) => {
-                log::warn!("metrics_bind_failed_non_fatal addr={} err={}", addr, e);
-            }
-        }
+        // Simpler run to avoid std listener -> tokio registration panic.
+        warp::serve(routes).run(addr).await;
         Ok(())
     }
 
@@ -739,5 +787,25 @@ impl MetricsServer {
     }
     pub fn record_dedupe_eviction(&self) {
         self.opportunity_dedupe_evictions_total.inc();
+    }
+
+    // Reconciliation helpers
+    pub fn reconciliation_started(&self) {
+        self.reconciliation_started_total.inc();
+    }
+    pub fn reconciliation_success(&self) {
+        self.reconciliation_success_total.inc();
+    }
+    pub fn reconciliation_failure(&self) {
+        self.reconciliation_failure_total.inc();
+    }
+    pub fn reconciliation_adjustment(&self, diff: i64) {
+        self.reconciliation_adjustments_total.inc();
+        self.reconciliation_adjustment_lamports_total
+            .inc_by(diff as f64);
+    }
+    pub fn reconciliation_observe_divergence(&self, bps: i64) {
+        self.reconciliation_last_divergence_bps.set(bps);
+        self.reconciliation_divergence_bps.observe(bps.abs() as f64);
     }
 }

@@ -1,0 +1,118 @@
+{
+  "version": 1,
+  "updated_at": 1735689600,
+  "target_volume_percentage": 0.35,
+  "flash_loan": {
+    "program_id": "MFv2hWf31Z9kbCa1snEPYctwafyhdvnV7FZPxwGgKPg",
+    "global_config": "4qp6Fx6tnZkY5Wropq9wUYgtFxXKwE6viZxFHg3rdAG8",
+    "usdc_bank": {
+      "bank_address": "CCKtUs6Cgwo4aaQUmBPmyoApH2gUDErxNZCAntD6LYGh",
+      "vault": "3uxNepDbmkDNq6JhRja5Z8QwbTrfmkKP8AKZV5chYDGG", 
+      "mint": "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v",
+      "oracle": "Gnt27xtC473ZT2Mw5u8wZ68Z3gULkSTb5DuxJy7eJotD",
+      "available_liquidity": null,
+      "borrow_rate": null,
+      "flash_loan_fee_bps": 9
+    },
+    "sol_bank": {
+      "bank_address": "CCKtUs6Cgwo4aaQUmBPmyoApH2gUDErxNZCAntD6LYGh",
+      "vault": "8PbodeaosQP19SjYFx855UMqWxH2HynZLdBXmsrbac36",
+      "mint": "So11111111111111111111111111111111111111112",
+      "oracle": "H6ARHf6YXhGYeQfUzQNGk6rDNnLBQKrenN712K4AQJEG",
+      "available_liquidity": null,
+      "borrow_rate": null,
+      "flash_loan_fee_bps": 9
+    },
+    "usdt_bank": {
+      "bank_address": "2s37akK2eyBbp8DZgCm7RtsaEz8eJP3Nxd4urLHQv7yB",
+      "vault": "38Sb1QwkCU5zpWydJvKEwqNgfGVCquxHKUi8p8kH3KhZ",
+      "mint": "Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB",
+      "oracle": "3vxLXJqLqF3JG5TCbYycbKWRBbCJQLxQmBGCkyqEEefL",
+      "available_liquidity": null,
+      "borrow_rate": null,
+      "flash_loan_fee_bps": 9
+    }
+  },
+  "high_volume_pairs": {
+    "sol_usdc": {
+      "base_mint": "So11111111111111111111111111111111111111112",
+      "quote_mint": "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v",
+      "raydium_pool": {
+        "pool_address": "58oQChx4yWmvKdwLLZzBi4ChoCc2fqCUWBkwMihLYQo2",
+        "vault_a": "DQyrAcCrDXQ7NeoqGgDCZwBvWDcYmFCjSb9JtteuvPpz",
+        "vault_b": "HLmqeL62xR1QoZ1HKKbXRrdN1p3phKpxRMb2VVopvBBz",
+        "fee_rate": 25,
+        "sqrt_price_x64": null,
+        "liquidity": null,
+        "volume_24h": null
+      },
+      "orca_pool": {
+        "pool_address": "7qbRF6YsyGuLUVs6Y1q64bdVrfe4ZcUUz1JRdoVNUJnm",
+        "vault_a": "ANP74VNsHwSrq9uUSjiSNyNWvf6ZPrKTmE4gHoNd13Ld",
+        "vault_b": "75HgnSvXbWKZBpZHveX68ZzAhDqMzNDS29X6BGLtxMo1",
+        "fee_rate": 30
+      },
+      "meteora_pool": null,
+      "daily_volume_usd": null,
+      "ranking": 1
+    },
+    "sol_usdt": {
+      "base_mint": "So11111111111111111111111111111111111111112",
+      "quote_mint": "Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB",
+      "raydium_pool": {
+        "pool_address": "7XawhbbxtsRcQA8KTkHT9f9nc6d69UwqCDh6U5EEbEmX",
+        "vault_a": "876Z9waBygfzUrwwKFfnRcc7cfY4EQf6Kz5bJPr4vFcP",
+        "vault_b": "CB86HtaqpXbNWbq67L18y5x2RhqoJ6smb7xHUcyWdQAQ",
+        "fee_rate": 25,
+        "sqrt_price_x64": null,
+        "liquidity": null,
+        "volume_24h": null
+      },
+      "orca_pool": {
+        "pool_address": "Ak6XeNYR4751tSmadZVwbKnLrK9VNY8cDFLaVQZyGTKh",
+        "vault_a": "9vqYJjDUFecLL2xPUC4Rc7hyCtZ6iJ4mDiVZX7aFXoAe",
+        "vault_b": "6920FSnkJV2HDjqhYb8YrS1k2ZvQ6qhLk5Uz4KpQu5pW",
+        "fee_rate": 100
+      },
+      "meteora_pool": null,
+      "daily_volume_usd": null,
+      "ranking": 2
+    },
+    "msol_sol": {
+      "base_mint": "mSoLzYCxHdYgdzU16g5QSh3i5K3z3KZK7ytfqcJm7So",
+      "quote_mint": "So11111111111111111111111111111111111111112",
+      "raydium_pool": {
+        "pool_address": "EGyhb2uLAsRUbRx9dNFBjMVYnFaASWMvD6RE1aEf2LxL",
+        "vault_a": "8JUjWjAyXTMB4ZXCMy3BBaNZmZZ2CqgGL6LBqNDnrJ6F",
+        "vault_b": "6nmMV8WmXRYgK8hoMjF8FvSgSdVE7LHkRTWJ3xM7c86k",
+        "fee_rate": 25,
+        "sqrt_price_x64": null,
+        "liquidity": null,
+        "volume_24h": null
+      },
+      "orca_pool": {
+        "pool_address": "9cecrTXcUjJgkZFzz5UNLh9aMZNwUhBpJppXJVQaYYbs",
+        "vault_a": "6q2j3xjFbKTr1FUTYaXKyTqYjK5Eu6CbVjU2QZ1YqLAh",
+        "vault_b": "4xgB2eTHNRtc3cJG1b4LcvVnVXGLKhekHTJhAKsZCYZe",
+        "fee_rate": 30
+      },
+      "meteora_pool": null,
+      "daily_volume_usd": null,
+      "ranking": 3
+    }
+  },
+  "system": {
+    "spl_token_program": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA",
+    "associated_token_program": "ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL",
+    "compute_budget_program": "ComputeBudget111111111111111111111111111111",
+    "jito_tip_accounts": [
+      "96gYZGLnJYVFmbjzopPSU6QiEV5fGqZNyN9nmNhvrZU5",
+      "HFqU5x63VTqvQss8hp11i4wVV8bD44PvwucfZ2bU7gRe",
+      "Cw8CFyM9FkoMi7K7Crf6HNQqf4uEMzpKw6QNghXLvLkY", 
+      "ADaUMid9yfUytqMBgopwjb2DTLSokTSzL1zt6iGPaS49",
+      "DfXygSm4jCyNCybVYYK6DwvWqjKee8pbDmJGcLWNDXjh",
+      "ADuUkR4vqLUMWXxW9gh6D6L8pMSawimctcNZ5pGwDcEt",
+      "DttWaMuVvTiduZRnguLF7jNxTgiMBZ1hyAumKUiL2KRL",
+      "3AVi9Tg9Uo68tJfuvoKvqKNWKkC5wPdSSdeBnizKZ6jT"
+    ]
+  }}

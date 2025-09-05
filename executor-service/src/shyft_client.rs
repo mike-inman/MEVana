@@ -194,7 +194,10 @@ impl ShyftClient {
                 transaction,
                 {
                     "encoding": "base64",
-                    "commitment": "confirmed"
+                    "commitment": "confirmed",
+                    "replaceRecentBlockhash": true,
+                    "sigVerify": false,
+                    "innerInstructions": false
                 }
             ]),
         };

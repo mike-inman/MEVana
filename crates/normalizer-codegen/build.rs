@@ -1,6 +1,6 @@
-use std::path::Path;
+use sha2::Digest;
 use std::fs;
-use sha2::{Digest, Sha256};
+use std::path::Path;
 
 #[derive(Debug, serde::Deserialize)]
 struct Profile {
@@ -30,7 +30,10 @@ fn discriminator8(name: &str) -> [u8; 8] {
     d
 }
 
-fn generate_extractors(profiles_dir: &Path, out_dir: &Path) -> Result<(), Box<dyn std::error::Error>> {
+fn generate_extractors(
+    profiles_dir: &Path,
+    out_dir: &Path,
+) -> Result<(), Box<dyn std::error::Error>> {
     fs::create_dir_all(out_dir)?;
 
     // Load profiles
@@ -49,7 +52,10 @@ fn generate_extractors(profiles_dir: &Path, out_dir: &Path) -> Result<(), Box<dy
     for profile in &profiles {
         let effective_pid = &profile.program_id;
         if effective_pid.is_empty() {
-            eprintln!("WARN: Profile {} has no program_id - skipping", profile.program_name);
+            eprintln!(
+                "WARN: Profile {} has no program_id - skipping",
+                profile.program_name
+            );
             continue;
         }
 
@@ -83,8 +89,16 @@ fn generate_program_module(profile: &Profile) -> Result<String, Box<dyn std::err
 
         // Generate decoder arm
         let disc = discriminator8(&instr.name);
-        let disc_bytes = disc.iter().map(|b| format!("{}u8", b)).collect::<Vec<_>>().join(", ");
-        let roles_lit = roles.iter().map(|r| format!("\"{}\"", r)).collect::<Vec<_>>().join(", ");
+        let disc_bytes = disc
+            .iter()
+            .map(|b| format!("{}u8", b))
+            .collect::<Vec<_>>()
+            .join(", ");
+        let roles_lit = roles
+            .iter()
+            .map(|r| format!("\"{}\"", r))
+            .collect::<Vec<_>>()
+            .join(", ");
 
         decode_arms.push_str(&format!(
             r#"
@@ -106,8 +120,18 @@ fn generate_program_module(profile: &Profile) -> Result<String, Box<dyn std::err
         ));
 
         // Generate extractor arm
-        let pool_roles = instr.pool_account_roles.iter().map(|r| format!("\"{r}\"")).collect::<Vec<_>>().join(", ");
-        let auth_roles = instr.user_authority_roles.iter().map(|r| format!("\"{r}\"")).collect::<Vec<_>>().join(", ");
+        let pool_roles = instr
+            .pool_account_roles
+            .iter()
+            .map(|r| format!("\"{r}\""))
+            .collect::<Vec<_>>()
+            .join(", ");
+        let auth_roles = instr
+            .user_authority_roles
+            .iter()
+            .map(|r| format!("\"{r}\""))
+            .collect::<Vec<_>>()
+            .join(", ");
         let swap_kind = match instr.kind.as_str() {
             "CLMM" => "rt::SwapKind::Clmm",
             "CPMM" => "rt::SwapKind::Cpmm",
@@ -282,7 +306,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     std::fs::write(out_crate.join("lib.rs"), lib_rs)?;
 
     // Copy registry.rs to the workspace root so normalizer-service can find it
-    let workspace_registry = std::path::PathBuf::from("../../normalizer-service/src/generated_registry.rs");
+    let workspace_registry =
+        std::path::PathBuf::from("../../normalizer-service/src/generated_registry.rs");
     if let Some(parent) = workspace_registry.parent() {
         std::fs::create_dir_all(parent)?;
     }
@@ -291,7 +316,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     Ok(())
 }
-
 
 // fn main() {
 //     // Ensure IDLs are synced before codegen

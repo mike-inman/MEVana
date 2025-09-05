@@ -14,7 +14,11 @@ members = [
   "crates/whirlpool-core",
   "crates/shared-core",
   "crates/dex-stream-integrated",
+  "crates/dex-registry",
+  "crates/discovery-service",
+  "crates/token-registry-service",
   "executor-service",
+  "crates/shared-protocol",
   # "crates/arb-engine",  
 ]
 

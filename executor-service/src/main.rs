@@ -13,12 +13,13 @@ mod execution_engine;
 mod flash_loan;
 mod hash_chain_logger;
 mod hotpath_ws;
+mod live_stream;
 mod metrics;
 mod opportunity_processor;
 mod readiness;
 mod shyft_client;
 mod token_registry;
-mod wallet_service;
+mod wallet_service; // new live edge ingestion (opt-in)
 
 use config::ExecutorConfig;
 use execution_engine::ExecutionEngine;
@@ -37,6 +38,55 @@ async fn main() -> Result<()> {
 
     let config = ExecutorConfig::load()?;
     info!("Configuration loaded successfully");
+
+    // Geyser-only diagnostic mode: skip DB, migrations, engine init, wallet, kafka; just stream.
+    let geyser_only = std::env::var("GEYSER_ONLY")
+        .ok()
+        .map(|v| v == "1" || v.eq_ignore_ascii_case("true"))
+        .unwrap_or(false);
+    if geyser_only {
+        info!("geyser_only_mode_enabled - skipping DB, engine, wallet, kafka; streaming only");
+        if std::env::var("ENABLE_LIVE_EDGE_STREAM")
+            .ok()
+            .map(|v| v == "1" || v.eq_ignore_ascii_case("true"))
+            .unwrap_or(false)
+        {
+            let endpt_res = std::env::var("GEYSER_ENDPOINT").or_else(|_| std::env::var("ENDPOINT"));
+            let x_token_res = std::env::var("GEYSER_X_TOKEN").or_else(|_| std::env::var("X_TOKEN"));
+            if let (Ok(endpt), Ok(x_token)) = (endpt_res, x_token_res) {
+                log::info!(
+                    "live_edge_stream_enabled endpoint={} token_present=1 (geyser_only)",
+                    endpt
+                );
+                let (_handle, mut rx) = live_stream::start_live_stream(&endpt, &x_token).await?;
+                tokio::spawn(async move {
+                    use log::info;
+                    let mut count: u64 = 0;
+                    while let Some(snap) = rx.recv().await {
+                        count += 1;
+                        if count <= 20 {
+                            info!("snapshot_sample={:?}", snap);
+                        }
+                        if count % 1000 == 0 {
+                            info!("live_snapshots_received count={}", count);
+                        }
+                    }
+                });
+                // Park main until Ctrl+C
+                signal::ctrl_c().await.ok();
+                info!("geyser_only_mode_exiting");
+                return Ok(());
+            } else {
+                log::warn!(
+                    "geyser_only_mode_missing_env GEYSER_ENDPOINT or GEYSER_X_TOKEN not set"
+                );
+                return Ok(());
+            }
+        } else {
+            log::warn!("geyser_only_mode ENABLE_LIVE_EDGE_STREAM not enabled - nothing to do");
+            return Ok(());
+        }
+    }
 
     let metrics_server = Arc::new(MetricsServer::new(config.metrics_port)?);
     let metrics_clone = Arc::clone(&metrics_server);
@@ -68,12 +118,53 @@ async fn main() -> Result<()> {
             let mut applied = 0u32;
             let mut paths: Vec<_> = entries.flatten().map(|e| e.path()).collect();
             paths.sort();
+            fn split_pg_statements(input: &str) -> Vec<String> {
+                let mut out = Vec::new();
+                let mut buf = String::new();
+                let mut chars = input.chars().peekable();
+                let mut in_dollar = false;
+                while let Some(c) = chars.next() {
+                    if c == '$' && chars.peek() == Some(&'$') {
+                        // toggle $$ block
+                        buf.push(c);
+                        buf.push(chars.next().unwrap());
+                        in_dollar = !in_dollar;
+                        continue;
+                    }
+                    if c == ';' && !in_dollar {
+                        let trimmed = buf.trim();
+                        if !trimmed.is_empty() && !trimmed.starts_with("--") {
+                            out.push(trimmed.to_string());
+                        }
+                        buf.clear();
+                    } else {
+                        buf.push(c);
+                    }
+                }
+                let trimmed = buf.trim();
+                if !trimmed.is_empty() && !trimmed.starts_with("--") {
+                    out.push(trimmed.to_string());
+                }
+                out
+            }
             for path in paths {
                 if path.extension().and_then(|s| s.to_str()) == Some("sql") {
-                    if let Ok(sql) = std::fs::read_to_string(&path) {
-                        if let Err(e) = sqlx::query(&sql).execute(&pg_pool).await {
-                            log::warn!("migration_apply_failed path={:?} err={}", path, e);
-                        } else {
+                    if let Ok(sql_raw) = std::fs::read_to_string(&path) {
+                        let statements = split_pg_statements(&sql_raw);
+                        let mut ok = true;
+                        for stmt in statements {
+                            if let Err(e) = sqlx::query(&stmt).execute(&pg_pool).await {
+                                log::warn!(
+                                    "migration_apply_failed path={:?} snippet='{}' err={}",
+                                    path,
+                                    stmt.chars().take(80).collect::<String>(),
+                                    e
+                                );
+                                ok = false;
+                                break;
+                            }
+                        }
+                        if ok {
                             applied += 1;
                         }
                     }
@@ -130,6 +221,47 @@ async fn main() -> Result<()> {
         .token_registry
         .start_background_enrichment(token_registry::NoopEnricher)
         .await;
+
+    // Optional live edge stream (geyser) startup
+    if std::env::var("ENABLE_LIVE_EDGE_STREAM")
+        .ok()
+        .map(|v| v == "1" || v.eq_ignore_ascii_case("true"))
+        .unwrap_or(false)
+    {
+        // Endpoint precedence: GEYSER_ENDPOINT > ENDPOINT
+        let endpt_res = std::env::var("GEYSER_ENDPOINT").or_else(|_| std::env::var("ENDPOINT"));
+        let x_token_res = std::env::var("GEYSER_X_TOKEN").or_else(|_| std::env::var("X_TOKEN"));
+        if let (Ok(endpt), Ok(x_token)) = (endpt_res, x_token_res) {
+            log::info!(
+                "live_edge_stream_enabled endpoint={} token_present=1",
+                endpt
+            );
+            let (_handle, mut rx) = live_stream::start_live_stream(&endpt, &x_token).await?;
+            // Minimal in-process edge detector (currently only OrcaWhirlpool edges built).
+            use arb_engine::edge_integration::EdgeArbitrageDetector;
+            use arb_engine::hotpath::SignalQueue;
+            use live_stream::snapshot_to_edges;
+            let q = Arc::new(SignalQueue::new(1024));
+            let detector = Arc::new(EdgeArbitrageDetector::new(q.sender()));
+            tokio::spawn(async move {
+                use log::info;
+                let mut count: u64 = 0;
+                while let Some(snap) = rx.recv().await {
+                    for edge in snapshot_to_edges(&snap) {
+                        if let Err(e) = detector.process_edge_update(edge) {
+                            log::warn!("edge_update_failed err={}", e);
+                        }
+                    }
+                    count += 1;
+                    if count % 1000 == 0 {
+                        info!("live_snapshots_received count={}", count);
+                    }
+                }
+            });
+        } else {
+            log::warn!("live_edge_stream_missing_env GEYSER_ENDPOINT or GEYSER_X_TOKEN not set");
+        }
+    }
     // Initialize live trading flag based on env (will still honor dry-run + allow_live gating)
     if std::env::var("EXECUTION_LIVE_FLAG_INITIAL")
         .ok()

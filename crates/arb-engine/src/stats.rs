@@ -451,6 +451,24 @@ pub fn record_depth_factor_bps(bps: i32) {
 }
 pub fn render_all() -> String {
     let mut out = STATS.render();
+    // Backward-compatible alias histograms expected by existing Grafana dashboard JSON
+    {
+        use std::fmt::Write as _;
+        if let Ok(ph) = STATS.profit_hist.lock() {
+            let alias = ph.render(
+                "arb_profit_bps",
+                "Alias (original arb_signal_profit_bps). Will be removed after dashboard update.",
+            );
+            let _ = write!(out, "{}", alias);
+        }
+        if let Ok(df) = STATS.depth_factor_hist.lock() {
+            let alias = df.render(
+                "arb_depth_factor_bps",
+                "Alias (original arb_depth_adjust_factor_bps). Will be removed after dashboard update.",
+            );
+            let _ = write!(out, "{}", alias);
+        }
+    }
     // Always-on ingestion gauges (not behind diagnostics)
     {
         use std::fmt::Write as _;
@@ -470,6 +488,19 @@ pub fn render_all() -> String {
             "# TYPE arb_edge_circuit_open gauge\narb_edge_circuit_open {}\n# TYPE arb_edge_circuit_half_open gauge\narb_edge_circuit_half_open {}\n# TYPE arb_edge_error_ratio gauge\narb_edge_error_ratio {}\n# TYPE arb_edge_readiness gauge\narb_edge_readiness {}\n# TYPE arb_edge_messages_total counter\narb_edge_messages_total {}\n# TYPE arb_edge_errors_total counter\narb_edge_errors_total {}\n# TYPE arb_edge_circuit_half_open_total counter\narb_edge_circuit_half_open_total {}\n# TYPE arb_edge_circuit_half_open_errors counter\narb_edge_circuit_half_open_errors {}\n",
             if circuit {1} else {0}, if half_open {1} else {0}, err_ratio, if ready {1} else {0}, total, errs,
             CIRCUIT_HALF_OPEN_TOTAL.load(Ordering::Relaxed), CIRCUIT_HALF_OPEN_ERRORS.load(Ordering::Relaxed));
+        // Per-type error counters expected by dashboard
+        let decode_err = EDGE_DECODE_ERRORS.load(Ordering::Relaxed);
+        let proc_err = EDGE_PROCESS_ERRORS.load(Ordering::Relaxed);
+        let _ = write!(out,
+            "# TYPE arb_edge_process_errors_total counter\narb_edge_process_errors_total {}\n# TYPE arb_edge_decode_errors_total counter\narb_edge_decode_errors_total {}\n",
+            proc_err, decode_err);
+        // Signals emitted counter (increment elsewhere when we enqueue an ArbSignal)
+        let sigs = SIGNALS_EMITTED.load(Ordering::Relaxed);
+        let _ = write!(
+            out,
+            "# TYPE arb_signals_emitted_total counter\narb_signals_emitted_total {}\n",
+            sigs
+        );
         // build info gauge (labels)
         let version = std::env::var("BUILD_VERSION")
             .ok()
@@ -492,6 +523,22 @@ pub fn render_all() -> String {
             "# TYPE arb_adaptive_multiplier gauge\narb_adaptive_multiplier {}\n",
             mult
         );
+        // Always emit staleness gauge (was previously diagnostics-gated)
+        let last_edge = LAST_EDGE_UPDATE_NS.load(Ordering::Relaxed);
+        if last_edge > 0 {
+            let now_ns = SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .unwrap()
+                .as_nanos() as u64;
+            if now_ns > last_edge {
+                let age_ms = (now_ns - last_edge) / 1_000_000;
+                let _ = write!(
+                    out,
+                    "# TYPE arb_edge_staleness_ms gauge\narb_edge_staleness_ms {}\n",
+                    age_ms
+                );
+            }
+        }
     }
     #[cfg(feature = "diagnostics")]
     {
@@ -535,6 +582,11 @@ pub fn reload_stats_config() {
     STATS.reload_config();
 }
 
+/// Increment signals emitted counter (used in tests or non-hotpath code)
+pub fn incr_signals_emitted() {
+    SIGNALS_EMITTED.fetch_add(1, Ordering::Relaxed);
+}
+
 // --- Diagnostics counters (feature-gated) ---
 #[cfg(feature = "diagnostics")]
 pub static CYCLES_EXAMINED: AtomicU64 = AtomicU64::new(0);
@@ -558,6 +610,8 @@ pub static LAST_EDGE_UPDATE_NS: AtomicU64 = AtomicU64::new(0);
 pub static EDGE_TOTAL: AtomicU64 = AtomicU64::new(0);
 pub static EDGE_DECODE_ERRORS: AtomicU64 = AtomicU64::new(0);
 pub static EDGE_PROCESS_ERRORS: AtomicU64 = AtomicU64::new(0);
+// Total arbitrage signals emitted (increment in signal emission path)
+pub static SIGNALS_EMITTED: AtomicU64 = AtomicU64::new(0);
 pub static CIRCUIT_OPEN: AtomicBool = AtomicBool::new(false);
 pub static CIRCUIT_HALF_OPEN: AtomicBool = AtomicBool::new(false);
 pub static CIRCUIT_LAST_OPEN_NS: AtomicU64 = AtomicU64::new(0);

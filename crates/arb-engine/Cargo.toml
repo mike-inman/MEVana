@@ -18,6 +18,7 @@ tracing-subscriber = { version = "0.3", features = ["env-filter", "fmt"] }
 crossbeam-queue = "0.3"
 smallvec = "1"
 crossbeam-channel = "0.5"
+shared-protocol = { path = "../shared-protocol" }
 
 # Optional: switch to simd-json for ingest if you still have JSON at the boundary
 # simd-json = { version = "0.13", optional = true, features = ["runtime-dispatch-simd"] }
@@ -54,8 +55,10 @@ tokio-stream = "0.1"
 futures-util = "0.3"
 metrics = "0.22"
 metrics-exporter-prometheus = "0.14"
+reqwest = { version = "0.12", features = ["json", "rustls-tls"] }
 libc = { version = "0.2", optional = true }
 base64 = "0.22"
+hex = "0.4"
 rand = "0.8"
 pprof = { version = "0.13", optional = true, features = ["flamegraph","prost-codec"] }
 

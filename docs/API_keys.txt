@@ -1,0 +1,201 @@
+Below is a concise, actionable inventory.
+
+1. Warning suppression with reminder
+Implement:
+
+Create account_registry.rs holding placeholder builders and mark with #[allow(dead_code)].
+Maintain const MISSING: &[&str] = &[\"solend.reserve_mapping\", \"raydium.clmm.tick_array_loader\", ...];
+On startup: log a single structured line (and expose gauge) summarizing missing_count.
+Metrics: add mevana_account_sets_missing (gauge) and mevana_account_sets_loaded.
+Optional feature flag:
+Default: allow placeholders.
+--features strict-accounts: if MISSING non-empty, panic (CI gate).
+Use #[expect(unused)] (if on stable with that feature) instead of broad allow to keep compiler nag if names change.
+2. Account sources needed (by category)
+Universal / System
+Payer signer keypair (hot wallet or bundle signer)
+SPL Token Program ID (Token v1 & optionally Token2022)
+Associated Token Program ID
+Sysvars: Clock, Rent, Instructions, SlotHashes (rare), RecentBlockhashes (legacy), EpochSchedule (rare)
+Compute Budget Program (for priority fee & CU limits)
+Jito tip account (if sending tip txn separately)
+Tokens in route
+For each unique mint in the arbitrage path:
+
+Mint account (decimals, supply)
+Payer’s associated token account (ATA); create if absent (or WSOL unwrap plan)
+Temporary WSOL ATA if SOL wrapped
+Flash Loan Providers
+Solend (and similar for PortFinance/Tulip style lending):
+
+Program ID
+Lending market account
+Lending market authority PDA
+Reserve account (for the borrowed asset)
+Reserve liquidity supply SPL token account
+Reserve liquidity fee receiver account
+(Optional host fee receiver account)
+Obligation account (some protocols require; Solend flash instructions may not)
+Token mint & oracle price feed (Pyth/Switchboard) for valuation Data needed: reserve liquidity available, fee bps, cumulative borrow rate, decimals.
+Marginfi:
+
+Program ID
+Group/global config
+Bank (asset) account
+Bank vault liquidity token account
+Fee vault / insurance or risk fund account
+Oracle feed (Pyth/Switchboard)
+Control / account authority PDAs (if required) Data: fee tiers, utilization, borrow rate.
+Mango (v4-ish):
+
+Program ID
+Group (MangoGroup) account
+Bank / token index mapping
+Root / cache (price + interest cache)
+Token oracle
+Vault token account
+Stub or temp account for flash loan instruction (depends on API) Data: token index, cache slot, borrow fee.
+PortFinance / Tulip / Jet: Similar pattern to Solend/Marginfi:
+
+Market / Global config
+Reserve / Bank
+Liquidity supply token account
+Fee receiver
+Oracle
+Authority PDA
+DEX Venues
+Raydium CLMM:
+
+Program ID
+Pool state account
+Token A vault
+Token B vault
+Observation / oracle account (if needed for TWAP)
+Position-related (not needed for swap)
+Tick arrays (one or more based on price range) Data: sqrt_price, liquidity, tick spacing, fee rate.
+Orca Whirlpool:
+
+Program ID
+Whirlpool (pool) account
+Token A vault
+Token B vault
+Tick arrays (up to 2–3 arrays depending on crossing)
+Oracle (optional) Data: sqrt_price, liquidity, fee_rate, tick_current_index.
+Meteora DLMM:
+
+Program ID
+Pool (DLMM) state
+Bins bitmap / active bin indices
+Token A/B vaults
+Config / parameters Data: active bin, fee config, bin liquidity distribution.
+Phoenix (central limit order book):
+
+Program ID
+Market account
+Event queue
+Bids slab
+Asks slab
+Base & quote vault token accounts Data: best bid/ask, lot size, tick size.
+OpenBook (orderbook):
+
+Program ID
+Market account
+Bids slab
+Asks slab
+Event queue
+Request queue (legacy)
+Base vault
+Quote vault Data: best levels, fees, lot sizes.
+Price Oracles (if using for checks/slippage):
+Pyth price accounts for each required token
+Switchboard aggregators (optional) Fields: expo/decimals, confidence interval, recent slot.
+Priority Fee / Tip
+Compute Budget instruction parameters (desired CU limit, additional fee per CU)
+Jito tip destination account (validator tip; equals a known tip aggregator or block engine address)
+3. Data you must fetch per account
+Category	Fields Needed	Use
+Pool / Reserve	liquidity, fee, rate params, oracle price	Dynamic sizing, repay calc
+Pool/CLMM	sqrt_price, liquidity, fee_rate, tick indices	Quote min_out & CU estimate
+Orderbook	best bid/ask (1–N levels), fees	Edge profitability & slippage
+Oracle	price, confidence, ema (optional)	Validation & dynamic thresholds
+Token Mint	decimals	Amount scaling, serialization
+Reserve	available liquidity, utilization	Capacity check & fallback provider
+Bank/Reserve Fees	borrow fee bps, flash fee, host fee share	RepayAmount dynamic field
+Slot / Blockhash	recent blockhash	Transaction build
+CU usage stats (internal)	avg CU per instruction type	Pre-sizing bundle CU estimate
+4. Where to obtain each
+Static program IDs: hard-code constants documented in protocol repos.
+Market / pool lists:
+Pull from official JSON registries (Raydium, Orca, Meteora publish)
+Fallback: scan on-chain via RPC filters (program scan) and cache to disk.
+Reserves / banks: fetch by enumerating reserve list PDA (e.g., Solend config or on-chain)
+Oracles: mapping from mint -> oracle account (protocol docs / registry)
+Tick arrays / bins: derived addresses (pool base + tick index seeds) computed at runtime given current price and route.
+Jito tip account: config/env.
+Feature: build a bootstrap script that downloads and persists accounts_registry.json.
+5. Suggested Registry Schema (JSON)
+6. Runtime layering
+Load static registry file.
+Patch with live RPC fetch (refresh intervals):
+Price & liquidity (every block or X slots)
+Reserve utilization (every few seconds)
+Tick arrays / bin sets (on-demand per route)
+Validate: if any required account missing for a route, skip template and increment mevana_account_sets_missing.
+7. Concrete TODO list (fill these)
+Flash Loans:
+
+For each provider + token: reserve, liquidity supply, fee receiver, oracle, decimals. Swaps (per edge):
+Pool/pair or orderbook identifiers
+Vault token accounts
+Dynamic state fields (price/liquidity or orderbook top levels) Global:
+Compute Budget parameters policy
+Jito tip account
+Oracles mapping
+8. Implementation for reminders
+Add (example):
+
+Wrap in #[allow(dead_code)] but call report_missing_accounts at startup so warning goes away while still logging.
+
+9. Priority order to gather
+Jito tip & compute budget (simple config)
+Solend (or primary flash loan provider) reserve for the most common quote token (e.g., USDC)
+One CLMM (Raydium or Orca) pool for a liquid pair (e.g., SOL/USDC)
+Oracle accounts for tokens in that test path
+Extend coverage outward (additional pools, more providers)
+10. Edge cases
+Reserve temporarily exhausted: need fallback provider
+Pool tick arrays missing or closed: abort route
+Oracle stale/confidence too wide: reject opportunity
+Decimals mismatch vs registry: re-fetch mint, update cache
+Pool fee changes mid-bundle: adjust MinOut with safety margin
+Want me to scaffold the account_registry.rs + metrics hooks next? Just say so. GitHub Copilot
+
+pub const REQUIRED_ACCOUNT_KEYS: &[&str] = &[\"solend.USDC.reserve\",\"raydium_clmm.POOL123.vault_a\", ...];
+pub fn report_missing_accounts(registry: &RegistryLoaded) {
+    let missing: Vec<&str> = REQUIRED_ACCOUNT_KEYS.iter().copied()
+       .filter(|k| !registry.has(k))
+       .collect();
+    if !missing.is_empty() {
+        log::warn!(\"account_registry_missing count={} list={:?}\", missing.len(), missing);
+        METRICS.account_sets_missing.set(missing.len() as i64);
+    }
+}
+
+{
+  \"version\": 1,
+  \"updated_at\": 1725100000,
+  \"flash_loans\": {
+    \"solend\": {
+      \"market\": \"...\", \"authority\": \"...\", \"reserves\": {
+        \"USDC\": {\"reserve\":\"...\",\"liquidity_supply\":\"...\",\"fee_receiver\":\"...\",\"oracle\":\"...\",\"decimals\":6}
+      }
+    }
+  },
+  \"dex_pools\": {
+    \"raydium_clmm\": {
+      \"<POOL_ID>\": {\"token_a_mint\":\"...\",\"token_b_mint\":\"...\",\"vault_a\":\"...\",\"vault_b\":\"...\",\"sqrt_price\":\"<cached>\",\"tick_spacing\":64}
+    }
+  },
+  \"oracles\": {\"USDC\":\"<pyth_acct>\",\"SOL\":\"<pyth_acct>\"},
+  \"jito\": {\"tip_account\":\"...\"}
+}

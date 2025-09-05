@@ -57,3 +57,16 @@ scrape_configs:
     metrics_path: '/metrics'
     scrape_interval: 1s  # High frequency for performance monitoring
     scrape_timeout: 1s 
+
+  # =============================================================================
+  # ARB ENGINE (HOST) - scrape directly from host process (cargo run) via Docker -> host bridge
+  # NOTE: On macOS Docker Desktop, 'host.docker.internal' resolves to the host.
+  # If you later containerize arb-engine, replace with 'arb-engine:8080'.
+  # =============================================================================
+  - job_name: 'arb-engine'
+    static_configs:
+      - targets:
+        - 'host.docker.internal:8180'
+    metrics_path: '/metrics'
+    scrape_interval: 5s
+    scrape_timeout: 3s

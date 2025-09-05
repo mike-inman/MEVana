@@ -257,14 +257,26 @@ pub fn analyze_transaction_for_discovery(
     }
 }
 
-fn build_request(program_ids: Vec<String>) -> SubscribeRequest {
+fn build_request(program_ids: Vec<String>, wide_open: bool) -> SubscribeRequest {
     let mut transactions: TxnFilterMap = std::collections::HashMap::new();
+    // In wide_open mode we include EVERYTHING (all transactions, including votes & failed)
+    // by leaving vote/failed None and account_include empty.
+    let (vote, failed, account_include) = if wide_open {
+        (None, None, Vec::new())
+    } else {
+        (Some(false), Some(false), program_ids)
+    };
+
+    if wide_open {
+        info!("⚠️ Wide-open subscription: including vote + failed + all accounts (no account_include filter)");
+    }
+
     transactions.insert(
         "client".to_owned(),
         SubscribeRequestFilterTransactions {
-            vote: Some(false),
-            failed: Some(false),
-            account_include: program_ids,
+            vote,
+            failed,
+            account_include,
             account_exclude: vec![],
             account_required: vec![],
             signature: None,
@@ -953,7 +965,8 @@ async fn main() -> Result<()> {
                     .await
                     .map_err(|e| anyhow::anyhow!(e))?;
 
-                let request = build_request(config.program_ids.clone());
+                let wide_open = config.dex_filtering == "OFF";
+                let request = build_request(config.program_ids.clone(), wide_open);
                 let (mut subscribe_tx, mut stream) =
                     client.subscribe_with_request(Some(request)).await?;
                 info!("✅ Geyser stream connected - processing live data");
@@ -987,9 +1000,35 @@ async fn main() -> Result<()> {
                                 let _ = producer
                                     .send(
                                         FutureRecord::<(), _>::to(&config.topic).payload(&buf),
-                                        Duration::from_secs(10),
+                                    Duration::from_secs(10),
                                     )
                                     .await;
+
+                                    // Console output: structured human-readable transaction snapshot
+                                    if let Some(txinfo) = update.transaction.as_ref() {
+                                        let signature_b58 = bs58::encode(&txinfo.signature).into_string();
+                                        let mut program_ids: Vec<String> = Vec::new();
+                                        if let Some(inner_tx) = txinfo.transaction.as_ref() {
+                                            if let Some(message) = inner_tx.message.as_ref() {
+                                                for ix in &message.instructions {
+                                                    if let Some(key) = message.account_keys.get(ix.program_id_index as usize) {
+                                                        program_ids.push(bs58::encode(key).into_string());
+                                                    }
+                                                }
+                                            }
+                                        }
+                                        let raw_b58 = bs58::encode(&buf).into_string();
+                                        println!(
+                                            "TX slot={} sig={} programs=[{}] raw_b58={}", 
+                                            update.slot,
+                                            signature_b58,
+                                            program_ids.join(","),
+                                            raw_b58
+                                        );
+                                    } else {
+                                        println!("TX slot={} (no transaction info)", update.slot);
+                                    }
+
 
                                 // Log raw transaction to PostgreSQL - EVERY TRANSACTION
                                 if let Err(e) = log_every_transaction_to_db(&db_pool, &update).await

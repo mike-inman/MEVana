@@ -61,8 +61,26 @@ impl ExecutorConfig {
                 .unwrap_or_else(|_| "executor-service".to_string()),
 
             // Shyft.to configuration
-            shyft_api_key: env::var("SHYFT_API_KEY")
-                .expect("SHYFT_API_KEY environment variable required"),
+            shyft_api_key: {
+                match env::var("SHYFT_API_KEY") {
+                    Ok(v) => v,
+                    Err(_) => {
+                        // Allow empty API key when explicitly enabled (geyser-only / local dev mode)
+                        if env::var("ALLOW_EMPTY_SHYFT_API")
+                            .ok()
+                            .map(|v| v == "1" || v.eq_ignore_ascii_case("true"))
+                            .unwrap_or(false)
+                        {
+                            log::warn!(
+                                "shyft_api_key_missing proceeding_with_empty ALLOW_EMPTY_SHYFT_API=1"
+                            );
+                            String::new()
+                        } else {
+                            panic!("SHYFT_API_KEY environment variable required (set ALLOW_EMPTY_SHYFT_API=1 to bypass for geyser-only)");
+                        }
+                    }
+                }
+            },
             shyft_rpc_url: env::var("SHYFT_RPC_URL")
                 .unwrap_or_else(|_| "https://rpc.shyft.to".to_string()),
             shyft_geyser_url: env::var("SHYFT_GEYSER_URL")
@@ -141,8 +159,13 @@ impl ExecutorConfig {
 
     pub fn validate(&self) -> Result<()> {
         // Validate critical configuration
-        if self.shyft_api_key.is_empty() {
-            anyhow::bail!("SHYFT_API_KEY is required");
+        if self.shyft_api_key.is_empty()
+            && !env::var("ALLOW_EMPTY_SHYFT_API")
+                .ok()
+                .map(|v| v == "1" || v.eq_ignore_ascii_case("true"))
+                .unwrap_or(false)
+        {
+            anyhow::bail!("SHYFT_API_KEY is required (or set ALLOW_EMPTY_SHYFT_API=1 to bypass)");
         }
 
         if self.max_position_size_sol <= 0.0 {

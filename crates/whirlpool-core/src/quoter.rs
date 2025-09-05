@@ -1,9 +1,9 @@
 use crate::math::{
-    apply_input_fee, dx_raw_within_tick_ab, dy_raw_within_tick_ba, q64_to_f64,
-    tick_to_sqrt_price_x64_approx, Q64_ONE,
+    apply_input_fee, dx_raw_within_tick_ab, dy_raw_within_tick_ba, tick_to_sqrt_price_x64_approx,
+    Q64_ONE,
 };
-use crate::tick_window::{find_nearest_initialized_ticks, TickArrayView, TickWindow};
-use crate::types::Tick;
+use crate::tick_window::find_nearest_initialized_ticks;
+use crate::tick_window::TickWindow;
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum Direction {
@@ -66,7 +66,7 @@ impl<'a> ClmmQuoter<'a> {
         let mut remaining_dx = dx_in;
         let mut current_tick = self.tick_current;
         let mut current_sqrt_price = self.sqrt_price_x64;
-        let mut current_liquidity = self.liquidity;
+        let current_liquidity = self.liquidity;
 
         for _ in 0..max_ticks {
             if remaining_dx == 0 {
@@ -133,7 +133,7 @@ impl<'a> ClmmQuoter<'a> {
         &self,
         dir: Direction,
         dx_in: u128,
-        current_tick: i32,
+        _current_tick: i32,
         current_sqrt_price: u128,
         current_liquidity: u128,
     ) -> QuoteResult {
@@ -142,7 +142,7 @@ impl<'a> ClmmQuoter<'a> {
         }
         let fee_denom = 10_000u64;
         let fee_num = (fee_denom - self.total_fee_bps as u64) as u128;
-        let mut dx_eff = (dx_in as u128) * fee_num / (fee_denom as u128);
+        // effective post-fee input (currently only used in clipped forms below)
 
         let sp = current_sqrt_price;
         let (lower_opt, upper_opt) =

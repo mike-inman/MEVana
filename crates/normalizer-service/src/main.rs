@@ -5,7 +5,7 @@ mod orca_map; // orca whirlpool parsers
 mod raydium_map; // raydium parsers // <- see notes at bottom for kafka.rs
 
 // use anyhow::Result;
-use crate::kafka::{make_producer, publish_json_ff};
+use crate::kafka::publish_json_ff;
 //use clap::Parser;
 use lazy_static::lazy_static;
 //use normalizer_generated::registry as gen;
@@ -13,11 +13,9 @@ use lazy_static::lazy_static;
 use normalizer_runtime::layouts::LayoutRegistry;
 use normalizer_runtime::models::SwapEvent;
 use serde::Deserialize;
-use std::env::args;
 use std::{fs, path::PathBuf};
 // use kafka::{make_producer, publish_json};
 use anyhow::{Context, Result};
-use normalizer_runtime::adapters::to_swap_event;
 
 use clap::{Parser, Subcommand};
 use normalizer_generated::registry as gen;
@@ -27,10 +25,7 @@ use rdkafka::{ClientConfig, Message as _};
 use yellowstone_grpc_proto::prelude as ypp;
 use yellowstone_grpc_proto::prost::Message as _;
 
-use rdkafka::producer::Producer; // trait import
-
-use lru::LruCache;
-use std::sync::{Arc, Mutex, Once};
+// Removed unused imports
 // type SlotTimeCache = Arc<Mutex<LruCache<u64, i64>>>;
 
 // static WARN_MISSING_BLOCKTIME: Once = Once::new();
@@ -517,7 +512,7 @@ fn run_fixture(path: PathBuf) -> Result<()> {
     }
 
     // ensure delivery before exit
-    producer.flush(std::time::Duration::from_secs(2));
+    let _ = producer.flush(std::time::Duration::from_secs(2));
 
     if hits == 0 {
         println!("ℹ️ No extractor matched or discriminator didn’t match payload.");

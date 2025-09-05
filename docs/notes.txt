@@ -1,0 +1,10 @@
+
+
+X_TOKEN = efff2d23-97ae-4c5f-8b8b-9a6265001189
+
+shyft API Key = fWrVh_mDygK358FC
+
+RPC = https://rpc.shyft.to?api_key=fWrVh_mDygK358FC
+
+GraphQL = https://programs.shyft.to/v0/graphql/?api_key=fWrVh_mDygK358FC&network=mainnet-beta
+

@@ -1,0 +1,344 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [ main ]
+
+jobs:
+  rust-ci:
+    name: "Build / Lint / Test (feature: ${{ matrix.feature }})"
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      issues: write
+    strategy:
+      fail-fast: false
+      matrix:
+        feature: ["", "strict-accounts"]
+    env:
+      CARGO_TERM_COLOR: always
+      RUSTC_WRAPPER: sccache
+      SCCACHE_CACHE_SIZE: 2G
+      SCCACHE_DIR: /home/runner/.cache/sccache
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy, rustfmt, llvm-tools-preview
+
+      - name: Install cargo tools (deny, llvm-cov)
+        run: |
+          cargo install cargo-deny --locked || true
+          cargo install cargo-llvm-cov --locked || true
+
+      - name: Setup sccache
+        uses: mozilla-actions/sccache-action@v0.0.4
+        with:
+          version: 'latest'
+
+      - name: Cache sccache
+        uses: actions/cache@v4
+        with:
+          path: ${{ env.SCCACHE_DIR }}
+          key: ${{ runner.os }}-sccache-${{ hashFiles('**/Cargo.lock') }}-${{ matrix.feature }}
+          restore-keys: ${{ runner.os }}-sccache-
+
+      - name: Cache cargo registry + build
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}-${{ matrix.feature }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-
+
+      - name: Format check
+        run: cargo fmt --all -- --check
+
+      - name: Clippy
+        run: |
+          if [ -n "${{ matrix.feature }}" ]; then
+            cargo clippy --all-targets --all-features -p executor-service --features ${{ matrix.feature }} -- -D warnings
+          else
+            cargo clippy --all-targets --workspace -- -D warnings
+          fi
+
+      - name: cargo-deny (advisories + bans + sources)
+        run: |
+          cargo deny check --config deny.toml || (echo 'cargo-deny found issues' && exit 1)
+
+      - name: Build
+        run: |
+          if [ -n "${{ matrix.feature }}" ]; then
+            cargo build --workspace --features ${{ matrix.feature }}
+          else
+            cargo build --workspace
+          fi
+
+      - name: Tests
+        run: |
+          if [ -n "${{ matrix.feature }}" ]; then
+            cargo test --workspace --features ${{ matrix.feature }} -- --nocapture
+          else
+            cargo test --workspace -- --nocapture
+          fi
+
+      - name: Coverage (llvm-cov)
+        run: |
+          if [ -n "${{ matrix.feature }}" ]; then
+            cargo llvm-cov --workspace --features ${{ matrix.feature }} --lcov --output-path lcov.info
+          else
+            cargo llvm-cov --workspace --lcov --output-path lcov.info
+          fi
+          echo "Generated coverage report" >> $GITHUB_STEP_SUMMARY
+          echo "Coverage artifact size: $(wc -c < lcov.info) bytes" >> $GITHUB_STEP_SUMMARY
+          # Simple coverage threshold (line coverage) extraction
+          LINE_PCT=$(awk -F'[,:]' '/^DA:/{ total++; if ($3 > 0) covered++; } END { if (total>0) printf "%.2f", (covered/total)*100; else print "0.00" }' lcov.info)
+          echo "Line coverage: ${LINE_PCT}%" >> $GITHUB_STEP_SUMMARY
+          THRESH=60.0
+          awk -v l=$LINE_PCT -v t=$THRESH 'BEGIN{ if (l+0 < t) { exit 1 } }' || { echo "Coverage ${LINE_PCT}% below threshold ${THRESH}%"; exit 1; }
+          # Generate coverage badge SVG (only for base feature build)
+          if [ -z "${{ matrix.feature }}" ]; then
+            COLOR=red
+            PCT_INT=${LINE_PCT%.*}
+            if [ $PCT_INT -ge 80 ]; then COLOR=green; elif [ $PCT_INT -ge 60 ]; then COLOR=yellow; fi
+            BADGE_CONTENT="<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"140\" height=\"20\"><linearGradient id=\"b\" x2=\"0\" y2=\"100%\"><stop offset=\"0\" stop-color=\"#bbb\" stop-opacity=\".1\"/><stop offset=\"1\" stop-opacity=\".1\"/></linearGradient><mask id=\"a\"><rect width=\"140\" height=\"20\" rx=\"3\" fill=\"#fff\"/></mask><g mask=\"url(#a)\"><rect width=\"70\" height=\"20\" fill=\"#555\"/><rect x=\"70\" width=\"70\" height=\"20\" fill=\"${COLOR}\"/><rect width=\"140\" height=\"20\" fill=\"url(#b)\"/></g><g fill=\"#fff\" text-anchor=\"middle\" font-family=\"DejaVu Sans,Verdana,Geneva,sans-serif\" font-size=\"11\"><text x=\"35\" y=\"15\">coverage</text><text x=\"105\" y=\"15\">${LINE_PCT}%</text></g></svg>"
+            echo "$BADGE_CONTENT" > coverage-badge.svg
+          fi
+
+      - name: Upload coverage artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-${{ matrix.feature || 'default' }}
+          path: lcov.info
+
+      - name: Publish coverage badge (main branch)
+        if: github.ref == 'refs/heads/main' && matrix.feature == ''
+        run: |
+          git config user.name "github-actions"
+          git config user.email "actions@github.com"
+          mkdir -p docs/badges
+          mv coverage-badge.svg docs/badges/coverage.svg
+          if git diff --quiet -- docs/badges/coverage.svg 2>/dev/null; then
+            echo "Coverage badge unchanged"
+          else
+            git add docs/badges/coverage.svg
+            git commit -m "chore(ci): update coverage badge [skip ci]" || true
+            git push || true
+          fi
+
+      - name: Account registry diff (if multiple files)
+        run: |
+          set -e
+          ls profiles || true
+          REG_FILES=$(ls -1 profiles/account_registry*.json 2>/dev/null || true)
+          # Exclude the example baseline from strict validation/diff
+          REG_FILES=$(echo "$REG_FILES" | tr ' ' '\n' | grep -v 'account_registry.example.json' || true)
+          COUNT=$(echo "$REG_FILES" | wc -w || true)
+          VALIDATOR_EXIT=0
+          if [ "$COUNT" -ge 2 ]; then
+            echo "Running multi-version registry diff (COUNT=$COUNT)"
+            ALLOWFILE=profiles/decimal_decrease_allowlist.txt
+            VALIDATOR_ARGS="--diff --patch-json diff.json --allowlist-file $ALLOWFILE"
+            set +e
+            if [ -n "${{ matrix.feature }}" ]; then
+              cargo run -p executor-service --bin account-registry-validate -- $VALIDATOR_ARGS $REG_FILES --features ${{ matrix.feature }}
+            else
+              cargo run -p executor-service --bin account-registry-validate -- $VALIDATOR_ARGS $REG_FILES
+            fi
+            VALIDATOR_EXIT=$?
+            set -e
+            echo "VALIDATOR_EXIT=$VALIDATOR_EXIT" >> $GITHUB_ENV
+            if [ -f diff.json ]; then
+              echo '### Account Registry Diff' >> "$GITHUB_STEP_SUMMARY"
+              echo '\n\n' >> "$GITHUB_STEP_SUMMARY"
+              echo '```json' >> "$GITHUB_STEP_SUMMARY"
+              cat diff.json >> "$GITHUB_STEP_SUMMARY"
+              echo '```' >> "$GITHUB_STEP_SUMMARY"
+              mkdir -p artifacts
+              cp diff.json artifacts/
+            fi
+          else
+            echo "Skipping diff: need >=2 registry files (found $COUNT)"
+            echo 'No registry diff (only one file present).' >> "$GITHUB_STEP_SUMMARY"
+          fi
+          echo "Account registry validator exit code: $VALIDATOR_EXIT"
+
+      - name: Upload diff artifact
+        if: success() && hashFiles('artifacts/diff.json') != ''
+        uses: actions/upload-artifact@v4
+        with:
+          name: account-registry-diff
+          path: artifacts/diff.json
+
+      - name: PR comment with account registry diff
+        if: github.event_name == 'pull_request' && matrix.feature == '' && hashFiles('diff.json') != ''
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const marker = '<!-- registry-diff-comment -->';
+            let diffPath = 'diff.json';
+            if (!fs.existsSync(diffPath) && fs.existsSync('artifacts/diff.json')) diffPath = 'artifacts/diff.json';
+            if (!fs.existsSync(diffPath)) {
+              core.info('No diff file found, skipping comment');
+              return;
+            }
+            let raw = fs.readFileSync(diffPath, 'utf8');
+            const json = JSON.parse(raw);
+            let addedTotal = 0, removedTotal = 0, decChanges = 0, decDecreases = 0;
+            for (const e of json) {
+              addedTotal += (e.added_keys||[]).length;
+              removedTotal += (e.removed_keys||[]).length;
+              decChanges += (e.decimal_changes||[]).length;
+              for (const ch of (e.decimal_changes||[])) if (ch.to < ch.from) decDecreases++;
+            }
+            const MAX = 28000; // display truncation size
+            let truncated = false;
+            if (raw.length > MAX) { raw = raw.slice(0, MAX) + '\n...TRUNCATED'; truncated = true; }
+            const validatorExit = process.env.VALIDATOR_EXIT || '0';
+            const actor = process.env.GITHUB_ACTOR || 'unknown';
+            const sha = process.env.GITHUB_SHA || 'unknown';
+            const ts = new Date().toISOString();
+            const footer = `Provenance: actor=${actor} sha=${sha} time=${ts} validator_exit=${validatorExit} added=${addedTotal} removed=${removedTotal} decimal_changes=${decChanges} decimal_decreases=${decDecreases}`;
+            const body = `${marker}\n### Account Registry Diff\n<details><summary>JSON Patch (${truncated ? 'truncated ' : ''}length ${raw.length})</summary>\n\n\`\`\`json\n${raw}\n\`\`\`\n</details>\n\n_${footer}_`;
+            const prNumber = context.issue.number;
+            const { data: comments } = await github.rest.issues.listComments({ ...context.repo, issue_number: prNumber });
+            const existing = comments.find(c => c.body && c.body.includes(marker));
+            if (existing) {
+              await github.rest.issues.updateComment({ ...context.repo, comment_id: existing.id, body });
+              core.info('Updated existing registry diff comment');
+            } else {
+              await github.rest.issues.createComment({ ...context.repo, issue_number: prNumber, body });
+              core.info('Created new registry diff comment');
+            }
+
+      - name: Sync labels for decimal decreases
+        if: github.event_name == 'pull_request' && matrix.feature == '' && hashFiles('diff.json') != ''
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const prNumber = context.issue.number;
+            let diffPath = 'diff.json';
+            if (!fs.existsSync(diffPath) && fs.existsSync('artifacts/diff.json')) diffPath = 'artifacts/diff.json';
+            if (!fs.existsSync(diffPath)) { core.info('No diff file, skipping label sync'); return; }
+            const json = JSON.parse(fs.readFileSync(diffPath,'utf8'));
+            let hasDecrease = false;
+            let violation = false;
+            const validatorExit = process.env.VALIDATOR_EXIT || '0';
+            for (const entry of json) {
+              for (const ch of (entry.decimal_changes||[])) {
+                if (ch.to < ch.from) { hasDecrease = true; if (validatorExit !== '0') violation = true; }
+              }
+            }
+            const baseLabel = 'registry-decimal-decrease';
+            const violationLabel = 'registry-decimal-decrease-violation';
+            const { data: existingLabels } = await github.rest.issues.listLabelsOnIssue({ ...context.repo, issue_number: prNumber });
+            const existing = new Set(existingLabels.map(l => l.name));
+            async function ensureLabel(name, color, description) {
+              try { await github.rest.issues.getLabel({ ...context.repo, name }); }
+              catch { await github.rest.issues.createLabel({ ...context.repo, name, color, description }); }
+            }
+            await ensureLabel(baseLabel, 'd73a4a', 'One or more decimal decreases present in account registry diff');
+            await ensureLabel(violationLabel, 'b60205', 'Decimal decrease policy violation (not allowlisted)');
+            const desired = new Set();
+            if (hasDecrease) desired.add(baseLabel);
+            if (violation) desired.add(violationLabel);
+            for (const name of desired) {
+              if (!existing.has(name)) {
+                await github.rest.issues.addLabels({ ...context.repo, issue_number: prNumber, labels: [name] });
+                core.info('Added label ' + name);
+              }
+            }
+            for (const name of [baseLabel, violationLabel]) {
+              if (existing.has(name) && !desired.has(name)) {
+                await github.rest.issues.removeLabel({ ...context.repo, issue_number: prNumber, name });
+                core.info('Removed obsolete label ' + name);
+              }
+            }
+
+      - name: Enforce account registry validation result
+        run: |
+          V=${VALIDATOR_EXIT:-0}
+          if [ "$V" -ne 0 ]; then
+            echo "Failing job due to validator exit code $V" >&2
+            exit 2
+          else
+            echo "Validator exit code $V (no failure)"
+          fi
+
+  summary:
+    name: CI Summary
+    runs-on: ubuntu-latest
+    needs: [rust-ci]
+    if: always()
+    steps:
+      - name: Summarize
+        run: |
+          echo "Build matrix concluded with status: ${{ needs.rust-ci.result }}" >> $GITHUB_STEP_SUMMARY
+
+  docker:
+    name: Docker Build & Push
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main'
+    needs: [rust-ci]
+    permissions:
+      contents: read
+      packages: write
+      id-token: write
+    env:
+      IMAGE_NAME: executor-service
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+      - name: Login to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Build and push image
+        run: |
+          TAG=ghcr.io/${{ github.repository_owner }}/${{ env.IMAGE_NAME }}:sha-${{ github.sha }}
+          docker build -f executor-service.Dockerfile -t $TAG .
+          docker push $TAG
+          echo "Pushed $TAG" >> $GITHUB_STEP_SUMMARY
+          echo "IMAGE_TAG=$TAG" >> $GITHUB_ENV
+
+      - name: Generate SBOM (CycloneDX JSON)
+        run: |
+          curl -sSfL https://raw.githubusercontent.com/anchore/syft/main/install.sh | sh -s -- -b /usr/local/bin
+          syft $IMAGE_TAG -o cyclonedx-json=sbom.cdx.json
+          echo "Generated SBOM for $IMAGE_TAG" >> $GITHUB_STEP_SUMMARY
+
+      - name: Upload SBOM artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: sbom-${{ env.IMAGE_NAME }}-${{ github.sha }}
+          path: sbom.cdx.json
+
+      - name: Install Cosign
+        uses: sigstore/cosign-installer@v3.5.0
+
+      - name: Sign Image (Cosign Keyless)
+        env:
+          COSIGN_EXPERIMENTAL: 1
+        run: |
+          cosign sign --yes $IMAGE_TAG
+          echo "Signed image $IMAGE_TAG" >> $GITHUB_STEP_SUMMARY
+
+      - name: Attach SBOM Attestation
+        env:
+          COSIGN_EXPERIMENTAL: 1
+        run: |
+          cosign attest --yes --predicate sbom.cdx.json --type cyclonedx $IMAGE_TAG
+          echo "Attached SBOM attestation" >> $GITHUB_STEP_SUMMARY

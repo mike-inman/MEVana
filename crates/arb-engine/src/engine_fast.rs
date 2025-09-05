@@ -13,6 +13,7 @@ use edge_assembler::edge::EdgeDelta;
 use metrics::counter;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::{SystemTime, UNIX_EPOCH};
+use std::sync::Arc;
 
 static QUOTE_ARB_ID: AtomicU64 = AtomicU64::new(1);
 
@@ -22,7 +23,7 @@ pub struct FastEngine {
     out: SignalTx,
 
     // NEW: Edge-based arbitrage detector for real-time signals
-    edge_detector: EdgeArbitrageDetector,
+    edge_detector: Arc<EdgeArbitrageDetector>,
 }
 
 impl FastEngine {
@@ -30,9 +31,8 @@ impl FastEngine {
         Self {
             quotes: DashMap::new(),
             out: out.clone(),
-
             // NEW: Initialize edge detector with its own SignalTx
-            edge_detector: EdgeArbitrageDetector::new(out),
+            edge_detector: Arc::new(EdgeArbitrageDetector::new(out)),
         }
     }
 
@@ -126,23 +126,24 @@ impl FastEngine {
     /// This is the HOT PATH - called for every pool state change
     #[inline]
     pub fn process_edge_update(&self, edge: EdgeDelta) -> anyhow::Result<()> {
-        self.edge_detector.process_edge_update(edge)
+    self.edge_detector.process_edge_update(edge)
     }
 
     #[cfg(feature = "diagnostics")]
     pub fn refresh_structural_gauges(&self) {
-        self.edge_detector.refresh_structural_gauges();
+    self.edge_detector.refresh_structural_gauges();
     }
 
-    /// NEW: Update edge detector configuration (for AI agent tuning)
-    pub fn update_edge_config(&mut self, min_profit_bps: u32, max_slippage_bps: u32) {
-        self.edge_detector
-            .update_config(min_profit_bps, max_slippage_bps);
-    }
+    // (update_edge_config removed; thresholds are global atomics now)
 
     /// Test helper to lower thresholds
     #[cfg(test)]
     pub fn _edge_detector_mut(&mut self) -> &mut EdgeArbitrageDetector {
-        &mut self.edge_detector
+    Arc::get_mut(&mut self.edge_detector).expect("only borrowed mut in tests")
+    }
+
+    /// Internal accessor (read-only) to edge detector for registration (non-mutable)
+    pub fn _edge_detector_ref(&self) -> Option<Arc<EdgeArbitrageDetector>> {
+    Some(self.edge_detector.clone())
     }
 }

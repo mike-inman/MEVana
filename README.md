@@ -3,6 +3,7 @@
 [![Rust](https://img.shields.io/badge/rust-1.70+-blue.svg)](https://www.rust-lang.org/)
 [![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 [![Documentation](https://img.shields.io/badge/docs-latest-blue.svg)](docs/)
+![Coverage](docs/badges/coverage.svg)
 
 **MEVana** is a comprehensive Solana AI trading platform designed to capture MEV (Maximal Extractable Value) opportunities through real-time blockchain data streaming, intelligent transaction analysis, and automated arbitrage execution.
 
@@ -116,6 +117,56 @@ cargo fmt --all
 - **Throughput**: 10,000+ transactions/second
 - **Latency**: <100ms end-to-end processing
 - **Availability**: 99.9% uptime target
+
+## 📈 Executor Metrics Overview
+
+Prometheus metrics (executor-service) – selected signals:
+
+| Category | Metric | Description |
+|----------|--------|-------------|
+| Profit | mevana_realized_profit_lamports_total | Sum of realized profits (lamports) |
+| Profit | mevana_profit_overestimation_lamports_total | Overestimated portion (est > realized) |
+| Profit | mevana_profit_underestimation_lamports_total | Underestimated portion (realized > est) |
+| Profit | mevana_profit_slippage_lamports_total | Aggregated absolute slippage (direction split above) |
+| Bundles | mevana_bundle_submissions_total | Jito bundle submissions |
+| Bundles | mevana_bundle_confirmations_total | Landed bundles |
+| Bundles | mevana_bundle_unlanded_total | Submitted but not landed in window |
+| Bundles | mevana_bundle_failed_submit_total | Failed pre-polling |
+| Accounts | mevana_account_sets_missing | Dynamic missing account sets (computed) |
+| Accounts | mevana_account_sets_required_missing | Hard-coded required keys missing (MISSING_REQUIRED) |
+| Token Meta | /token/{mint} (HTTP) | Lightweight JSON metadata endpoint (port TOKEN_REGISTRY_PORT, default 9898) |
+
+Set `TOKEN_REGISTRY_PORT` to expose the token metadata endpoint (default 9898). Scrape `/metrics` for all counters/gauges.
+
+
+### Account Registry Versioning & Validation
+
+Versioned registry manifests live in `profiles/` (e.g. `account_registry.v1.json`). The placeholder `account_registry.example.json` is **excluded** from CI diff / strict gating. Always diff between real `vN` files.
+
+Validate one or more files strictly:
+```
+cargo run -p executor-service --bin account-registry-validate -- --strict profiles/account_registry.v1.json profiles/account_registry.v2.json
+```
+
+Generate a structured diff + JSON Patch between two versions (produces `diff.json`):
+```
+cargo run -p executor-service --bin account-registry-validate -- \
+	--diff --patch-json diff.json profiles/account_registry.v1.json profiles/account_registry.v2.json
+```
+
+Key behaviors:
+- Independent validation per file (`VALID` / `INVALID` lines)
+- Non-zero exit (code 2) on validation errors or unauthorized decimal decreases
+- JSON Patch + human diff (added/removed entries, decimal changes) when `--diff`
+- Optional decimal decrease allowlist via file (`profiles/decimal_decrease_allowlist.txt`) + env (`DECIMAL_DECREASE_ALLOWLIST`)
+
+Schema: `executor-service/account_registry.schema.json` (Draft-07). Optionally run an external linter before invoking the built-in validator.
+
+Backlog / Planned Enhancements:
+- Provenance metadata & cryptographic signature for promoted versions
+- AI-assisted suggested patch when unknown mints appear at runtime
+
+See `profiles/README.md` for full promotion workflow & policy details.
 
 ## 🤝 Contributing
 

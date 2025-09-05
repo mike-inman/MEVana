@@ -1,0 +1,34 @@
+[package]
+name = "token-registry-service"
+version = "0.1.0"
+edition = "2021"
+
+[features]
+redis = ["dep:redis"]
+external-sources = []
+
+[dependencies]
+anyhow = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+log = { workspace = true }
+env_logger = { workspace = true }
+tokio = { workspace = true, features = ["rt-multi-thread","macros","time"] }
+warp = "0.3"
+chrono = { version = "0.4", features = ["serde"] }
+parking_lot = "0.12"
+redis = { version = "0.25", optional = true, features = ["aio","tokio-comp"] }
+blake3 = "1.5"
+thiserror = "1"
+prometheus = "0.13"
+sqlx = { version = "0.8", default-features = false, features = ["runtime-tokio", "macros", "postgres", "chrono", "json"] }
+base64 = { workspace = true }
+bs58 = { workspace = true }
+lazy_static = { workspace = true }
+async-trait = "0.1"
+reqwest = { version = "0.11", default-features = false, features = ["json","rustls-tls"] }
+futures = "0.3"
+
+[dev-dependencies]
+reqwest = { version = "0.11", features = ["json"] }
+

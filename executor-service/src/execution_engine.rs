@@ -48,6 +48,7 @@ pub struct ExecutionResult {
     pub transaction_signatures: Vec<String>,
     pub estimated_profit_lamports: u64,
     pub actual_profit_lamports: Option<i64>,
+    pub reconciled_profit_lamports: Option<i64>, // on-chain reconciliation (post balance delta)
     pub execution_time_ms: u64,
     pub gas_used: u32,
     pub error_message: Option<String>,
@@ -72,7 +73,8 @@ pub enum ExecutionStatus {
     Simulated,
     Submitted,
     LandedPendingProfit,
-    Confirmed,
+    Confirmed, // initial landing confirmation
+    Finalized, // upgraded after additional confirmations (deep finality)
     Failed,
     Rejected,
     Unlanded,
@@ -103,6 +105,8 @@ pub struct ExecutionEngine {
     circuit_open: std::sync::atomic::AtomicBool,
     // Dedupe cache: recent opportunity hashes with insertion times
     dedupe_cache: parking_lot::Mutex<OpportunityDedupe>,
+    // Reconciliation snapshots (pre-submit) exec_id -> (sol_balance_lamports, token_balances_json, captured_at_ms)
+    pre_submit_snapshots: dashmap::DashMap<Uuid, (i64, serde_json::Value, u64)>,
 }
 
 // Lightweight dedupe entry set
@@ -331,6 +335,7 @@ impl ExecutionEngine {
             circuit_consec_unlanded: std::sync::atomic::AtomicU64::new(0),
             circuit_open: std::sync::atomic::AtomicBool::new(false),
             dedupe_cache: parking_lot::Mutex::new(OpportunityDedupe::new()),
+            pre_submit_snapshots: dashmap::DashMap::new(),
         })
     }
 
@@ -648,7 +653,7 @@ impl ExecutionEngine {
         }
     }
 
-    async fn process_opportunity(&self, message: &BorrowedMessage<'_>) -> Result<()> {
+    async fn process_opportunity(self: &Arc<Self>, message: &BorrowedMessage<'_>) -> Result<()> {
         let payload = match message.payload() {
             Some(p) => p,
             None => return Ok(()),
@@ -728,6 +733,7 @@ impl ExecutionEngine {
             estimated_profit_lamports: (opportunity.max_size_in as u64 * opportunity.profit_bps)
                 / 10_000,
             actual_profit_lamports: None,
+            reconciled_profit_lamports: None,
             execution_time_ms: 0,
             gas_used: opportunity.total_cu_estimate,
             error_message: None,
@@ -792,7 +798,9 @@ impl ExecutionEngine {
                         execution_result.status = ExecutionStatus::Rejected;
                         execution_result.error_message =
                             Some("Not profitable after flash loan fees".to_string());
-                        self.publish_execution_result(execution_result).await?;
+                        Arc::clone(self)
+                            .publish_execution_result(execution_result)
+                            .await?;
                         return Ok(());
                     }
                 }
@@ -800,7 +808,9 @@ impl ExecutionEngine {
             Err(e) => {
                 execution_result.status = ExecutionStatus::Failed;
                 execution_result.error_message = Some(format!("Flash loan quote error: {}", e));
-                self.publish_execution_result(execution_result).await?;
+                Arc::clone(self)
+                    .publish_execution_result(execution_result)
+                    .await?;
                 return Ok(());
             }
         }
@@ -826,7 +836,9 @@ impl ExecutionEngine {
             Err(e) => {
                 execution_result.status = ExecutionStatus::Failed;
                 execution_result.error_message = Some(format!("Bundle building error: {}", e));
-                self.publish_execution_result(execution_result).await?;
+                Arc::clone(self)
+                    .publish_execution_result(execution_result)
+                    .await?;
                 return Ok(());
             }
         }
@@ -1051,6 +1063,14 @@ impl ExecutionEngine {
                 execution_result.status = ExecutionStatus::Submitted;
                 execution_result.bundle_id = Some(resp.bundle_id.clone());
                 self.metrics.record_bundle_submission();
+                // Capture pre-submit SOL balance snapshot for reconciliation (best-effort)
+                let sol_pre = self.wallet_service.get_sol_balance_lamports();
+                let token_balances_snapshot =
+                    serde_json::to_value(self.wallet_service.get_token_balances_snapshot())
+                        .unwrap_or(serde_json::json!({}));
+                let ts_ms = chrono::Utc::now().timestamp_millis() as u64;
+                self.pre_submit_snapshots
+                    .insert(execution_id, (sol_pre, token_balances_snapshot, ts_ms));
                 // Configurable polling parameters
                 let max_attempts = std::env::var("BUNDLE_STATUS_MAX_ATTEMPTS")
                     .ok()
@@ -1156,14 +1176,15 @@ impl ExecutionEngine {
             .unwrap_or_else(|| chrono::Utc::now());
         if let Err(e) = sqlx::query(r#"INSERT INTO execution_results (
                 id, opportunity_id, status, bundle_id, transaction_signatures,
-                estimated_profit_lamports, actual_profit_lamports, execution_time_ms, gas_used,
+                estimated_profit_lamports, actual_profit_lamports, reconciled_profit_lamports, execution_time_ms, gas_used,
                 error_message, executed_at, flash_loan_provider, flash_loan_fee_lamports,
                 estimated_bundle_fees_lamports, estimated_priority_fee_lamports, estimated_cu_cost_lamports,
                 min_profit_threshold_lamports, simulated_token_deltas, config_hash, token_registry_hash
-            ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20)
+            ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21)
             ON CONFLICT (id) DO UPDATE SET
                 status = EXCLUDED.status,
                 actual_profit_lamports = EXCLUDED.actual_profit_lamports,
+                reconciled_profit_lamports = COALESCE(EXCLUDED.reconciled_profit_lamports, execution_results.reconciled_profit_lamports),
                 execution_time_ms = EXCLUDED.execution_time_ms,
                 error_message = EXCLUDED.error_message,
                 config_hash = COALESCE(EXCLUDED.config_hash, execution_results.config_hash),
@@ -1175,6 +1196,7 @@ impl ExecutionEngine {
             .bind(&result.transaction_signatures as &Vec<String>)
             .bind(result.estimated_profit_lamports as i64)
             .bind(result.actual_profit_lamports)
+            .bind(result.reconciled_profit_lamports)
             .bind(result.execution_time_ms as i64)
             .bind(result.gas_used as i32)
             .bind(result.error_message.clone())
@@ -1212,10 +1234,202 @@ impl ExecutionEngine {
             result.execution_id, result.status, result.estimated_profit_lamports
         );
 
-        // Circuit breaker update (non-blocking logic) - run after logging but before returning
         self.update_circuit_breaker_status(&result.status);
 
-        // Replace file-based hash-chain with in-memory global logger
+        // Reconciliation: if status Confirmed and we have pre snapshot spawn task
+        if matches!(result.status, ExecutionStatus::Confirmed) {
+            let exec_id = result.execution_id;
+            let est = result
+                .actual_profit_lamports
+                .unwrap_or(result.estimated_profit_lamports as i64);
+            let db = self.db.clone();
+            let shyft = Arc::clone(&self.shyft_client);
+            let wallet = self.wallet_service.get_active_wallet();
+            let pre_opt = self
+                .pre_submit_snapshots
+                .get(&exec_id)
+                .map(|e| e.value().clone());
+            let metrics = Arc::clone(&self.metrics);
+            let account_registry = Arc::clone(&self.account_registry);
+            let divergence_alert_bps = std::env::var("PNL_DIVERGENCE_ALERT_BPS")
+                .ok()
+                .and_then(|v| v.parse::<u64>().ok())
+                .unwrap_or(5_000); // default 5000 = 50%
+            let use_reconciled_for_loss_guard = std::env::var("USE_RECONCILED_PNL_FOR_LOSS_GUARD")
+                .ok()
+                .map(|v| v == "1" || v.eq_ignore_ascii_case("true"))
+                .unwrap_or(false);
+            tokio::spawn(async move {
+                metrics.reconciliation_started();
+                if pre_opt.is_none() {
+                    metrics.reconciliation_failure();
+                    return;
+                }
+                if let Some((pre_sol, pre_tokens_json, _ts)) = pre_opt {
+                    // Fetch fresh balance
+                    if let Ok(bals) = shyft.get_wallet_balances(&wallet).await {
+                        let post_sol = bals.sol_balance as i64;
+                        let sol_delta = post_sol - pre_sol;
+                        // Compute token balance deltas vs pre snapshot
+                        let mut token_deltas_map: std::collections::HashMap<String, i64> =
+                            std::collections::HashMap::new();
+                        if let Some(pre_obj) = pre_tokens_json.as_object() {
+                            for (mint, pre_val) in pre_obj.iter() {
+                                if let Some(&post_bal) = bals.token_balances.get(mint) {
+                                    let pre_bal_u64 = pre_val.as_u64().unwrap_or(0);
+                                    let delta_i64 = post_bal as i64 - pre_bal_u64 as i64;
+                                    if delta_i64 != 0 {
+                                        token_deltas_map.insert(mint.clone(), delta_i64);
+                                    }
+                                }
+                            }
+                            // Also check for new mints not present before (positive deltas)
+                            for (mint, post_bal) in bals.token_balances.iter() {
+                                if !pre_obj.contains_key(mint) && *post_bal > 0 {
+                                    token_deltas_map.insert(mint.clone(), *post_bal as i64);
+                                }
+                            }
+                        }
+                        let token_deltas_json = if token_deltas_map.is_empty() {
+                            None
+                        } else {
+                            Some(
+                                serde_json::to_value(&token_deltas_map)
+                                    .unwrap_or(serde_json::Value::Null),
+                            )
+                        };
+                        // Value token deltas using registry oracles + mint decimals to lamports (best effort)
+                        let token_delta_lamports: i64 = if token_deltas_map.is_empty() {
+                            0
+                        } else {
+                            crate::account_registry::convert_token_deltas_to_lamports_generic(
+                                &token_deltas_map,
+                                &account_registry.data.oracles,
+                                &account_registry.mint_decimals,
+                            )
+                        };
+                        let total_reconciled = sol_delta.saturating_add(token_delta_lamports);
+                        let divergence = est - total_reconciled;
+                        let ratio = if est != 0 {
+                            Some(total_reconciled as f64 / est as f64)
+                        } else {
+                            None
+                        };
+                        let _ = sqlx::query("INSERT INTO execution_reconciliation (execution_id, wallet_address, pre_sol_lamports, post_sol_lamports, sol_delta_lamports, token_deltas, token_delta_lamports, total_reconciled_lamports, slot, finalized, divergence_lamports, divergence_ratio) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,NULL,false,$9,$10) ON CONFLICT (execution_id) DO UPDATE SET post_sol_lamports=EXCLUDED.post_sol_lamports, sol_delta_lamports=EXCLUDED.sol_delta_lamports, token_delta_lamports=EXCLUDED.token_delta_lamports, total_reconciled_lamports=EXCLUDED.total_reconciled_lamports, divergence_lamports=EXCLUDED.divergence_lamports, divergence_ratio=EXCLUDED.divergence_ratio, token_deltas=COALESCE(EXCLUDED.token_deltas, execution_reconciliation.token_deltas)")
+                            .bind(exec_id)
+                            .bind(&wallet)
+                            .bind(pre_sol)
+                            .bind(post_sol)
+                            .bind(sol_delta)
+                            .bind(token_deltas_json)
+                            .bind(token_delta_lamports)
+                            .bind(total_reconciled)
+                            .bind(divergence)
+                            .bind(ratio)
+                            .execute(&db).await;
+                        // If divergence large by configured threshold, emit audit log
+                        if est != 0 {
+                            let divergence_bps = ((divergence.abs() as i128 * 10_000)
+                                / est.abs().max(1) as i128)
+                                as u64;
+                            metrics.reconciliation_observe_divergence(divergence_bps as i64);
+                            if divergence_bps >= divergence_alert_bps {
+                                crate::audit_log::log_event(
+                                    "pnl_reconciliation_divergence",
+                                    None,
+                                    None,
+                                    true,
+                                    true,
+                                    Some(
+                                        &serde_json::json!({"execution_id": exec_id, "est": est, "reconciled_total": total_reconciled, "sol_delta": sol_delta, "token_delta_lamports": token_delta_lamports, "divergence": divergence, "divergence_bps": divergence_bps, "ratio": ratio }),
+                                    ),
+                                );
+                            }
+                        }
+                        // Update execution_results.reconciled_profit_lamports with total if not set (or only SOL previously)
+                        let _ = sqlx::query("UPDATE execution_results SET reconciled_profit_lamports = $1 WHERE id=$2 AND (reconciled_profit_lamports IS NULL OR reconciled_profit_lamports = $3)")
+                            .bind(total_reconciled)
+                            .bind(exec_id)
+                            .bind(sol_delta) // upgrade from sol-only to total
+                            .execute(&db).await;
+                        // Adjust daily PnL if enabled and not yet applied
+                        if use_reconciled_for_loss_guard {
+                            if let Ok(row) = sqlx::query_as::<_, (Option<i64>, Option<i64>, bool)>(
+                                "SELECT actual_profit_lamports, reconciled_profit_lamports, reconciled_pnl_applied FROM execution_results WHERE id=$1"
+                            )
+                            .bind(exec_id)
+                            .fetch_one(&db)
+                            .await
+                            {
+                                let (actual_opt, reconciled_opt, applied) = row;
+                                if !applied {
+                                    if let (Some(actual), Some(reconciled)) = (actual_opt, reconciled_opt) {
+                                        if actual != reconciled {
+                                            let diff = reconciled - actual; // positive => we under-counted earlier
+                                            // atomic & metrics adjustment
+                                            metrics.reconciliation_adjustment(diff);
+                                            // Apply to daily pnl table best-effort
+                                            let db_adj = db.clone();
+                                            tokio::spawn(async move {
+                                                let day = chrono::Utc::now().date_naive();
+                                                if let Err(e) = sqlx::query("SELECT upsert_daily_pnl($1,$2)")
+                                                    .bind(day)
+                                                    .bind(diff)
+                                                    .execute(&db_adj)
+                                                    .await
+                                                { warn!("daily_pnl_reconciliation_adjust_failed exec_id={} err={}", exec_id, e); }
+                                            });
+                                            // Mark applied (idempotency)
+                                            let _ = sqlx::query("UPDATE execution_results SET reconciled_pnl_applied=true WHERE id=$1 AND reconciled_pnl_applied=false")
+                                                .bind(exec_id)
+                                                .execute(&db)
+                                                .await;
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                        if total_reconciled > 0 {
+                            metrics
+                                .realized_profit_lamports
+                                .inc_by(total_reconciled as f64);
+                        }
+                        if use_reconciled_for_loss_guard && total_reconciled != est {
+                            // TODO: adjust daily_realized_pnl_lamports after exposing atomic through Arc
+                        }
+                        metrics.reconciliation_success();
+                        // Schedule finalization recheck
+                        let finalize_delay_ms = std::env::var("RECON_FINALIZE_DELAY_MS")
+                            .ok()
+                            .and_then(|v| v.parse::<u64>().ok())
+                            .unwrap_or(6_000); // default 6s
+                        let finalize_exec_id = exec_id;
+                        let finalize_wallet = wallet.clone();
+                        let shyft_final = Arc::clone(&shyft);
+                        let db_final = db.clone();
+                        tokio::spawn(async move {
+                            tokio::time::sleep(Duration::from_millis(finalize_delay_ms)).await;
+                            if let Ok(bals2) =
+                                shyft_final.get_wallet_balances(&finalize_wallet).await
+                            {
+                                let post2 = bals2.sol_balance as i64;
+                                if let Err(e) = sqlx::query("UPDATE execution_reconciliation SET finalized=true WHERE execution_id=$1 AND post_sol_lamports=$2")
+                                    .bind(finalize_exec_id)
+                                    .bind(post2)
+                                    .execute(&db_final).await { warn!("reconciliation_finalize_update_failed exec_id={} err={}", finalize_exec_id, e); }
+                                // Propagate Finalized status to execution_results (best-effort)
+                                let _ = sqlx::query("UPDATE execution_results SET status='Finalized', finalized=true, finalized_at=NOW() WHERE id=$1 AND status='Confirmed'")
+                                    .bind(finalize_exec_id)
+                                    .execute(&db_final).await;
+                            }
+                        });
+                    } else {
+                        metrics.reconciliation_failure();
+                    }
+                }
+            });
+        }
+
         {
             use crate::hash_chain_logger::global_logger;
             let line = format!(
@@ -1495,6 +1709,7 @@ impl ExecutionEngine {
             estimated_profit_lamports: (opportunity.max_size_in as u64 * opportunity.profit_bps)
                 / 10_000,
             actual_profit_lamports: None,
+            reconciled_profit_lamports: None,
             execution_time_ms: 0,
             gas_used: opportunity.total_cu_estimate,
             error_message: None,

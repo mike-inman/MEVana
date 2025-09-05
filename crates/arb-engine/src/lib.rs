@@ -5,12 +5,16 @@ pub mod engine_fast;
 pub mod ai_hooks;
 pub mod circuit;
 pub mod edge_integration;
+pub mod edge_verifier; // newly added verifier module
+pub mod executor_integration; // Jupiter integration bridge
 pub mod hotpath;
+pub mod jupiter_arbitrage; // Jupiter multi-hop arbitrage scanner
 pub mod metrics_http;
 pub mod models;
 pub mod quoting;
 pub mod sizing;
 pub mod stats;
+pub mod token_meta;
 // pub mod whirlpool_adapter; // Temporarily disabled due to compilation errors
 
 // Compile-time feature validation
@@ -52,7 +56,9 @@ pub use engine_fast::FastEngine;
 // };
 #[cfg(test)]
 pub use edge_integration::EdgeArbitrageDetector;
+pub use executor_integration::{MultiHopOpportunity, HopStep, JupiterMetrics, COMMON_TOKENS, EXTENDED_TOKENS};
 pub use hotpath::SignalQueue;
+pub use jupiter_arbitrage::{JupiterArbitrageScanner, JupiterArbConfig};
 pub use models::{ArbSignal, Pair, Quote};
 // pub use plugin::DexPlugin; // Temporarily disabled due to compilation errors
 // pub use whirlpool_adapter::WhirlpoolAdapter; // Temporarily disabled due to compilation errors

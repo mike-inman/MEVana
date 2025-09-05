@@ -1,0 +1,181 @@
+================================================
+ICMP Ping:
+round-trip min/avg/max/stddev = 21.470/44.285/143.785/33.570 ms
+TCP Connection Test:
+TCP Connect Times:
+---
+API Response Times for Solana RPC API:
+     time_namelookup:  0.055800
+        time_connect:  0.095583
+     time_appconnect:  0.131712
+    time_pretransfer:  0.131811
+       time_redirect:  0.000000
+  time_starttransfer:  0.169447
+                     ----------
+          time_total:  0.169550
+     time_namelookup:  0.001404
+        time_connect:  0.036104
+     time_appconnect:  0.109434
+    time_pretransfer:  0.109535
+       time_redirect:  0.000000
+  time_starttransfer:  0.148180
+                     ----------
+          time_total:  0.148280
+     time_namelookup:  0.006486
+        time_connect:  0.041293
+     time_appconnect:  0.093756
+    time_pretransfer:  0.093877
+       time_redirect:  0.000000
+  time_starttransfer:  0.128046
+                     ----------
+          time_total:  0.128144
+     time_namelookup:  0.001357
+        time_connect:  0.034148
+     time_appconnect:  0.078549
+    time_pretransfer:  0.078648
+       time_redirect:  0.000000
+  time_starttransfer:  0.115413
+                     ----------
+          time_total:  0.115518
+     time_namelookup:  0.001502
+        time_connect:  0.089235
+     time_appconnect:  0.136323
+    time_pretransfer:  0.136419
+       time_redirect:  0.000000
+  time_starttransfer:  0.165104
+                     ----------
+          time_total:  0.165212
+     time_namelookup:  0.001537
+        time_connect:  0.030471
+     time_appconnect:  0.076859
+    time_pretransfer:  0.076961
+       time_redirect:  0.000000
+  time_starttransfer:  0.110623
+                     ----------
+          time_total:  0.110731
+     time_namelookup:  0.001357
+        time_connect:  0.055528
+     time_appconnect:  0.139862
+    time_pretransfer:  0.139960
+       time_redirect:  0.000000
+  time_starttransfer:  0.182972
+                     ----------
+          time_total:  0.183082
+     time_namelookup:  0.001454
+        time_connect:  0.031978
+     time_appconnect:  0.070173
+    time_pretransfer:  0.070286
+       time_redirect:  0.000000
+  time_starttransfer:  0.118748
+                     ----------
+          time_total:  0.118850
+     time_namelookup:  0.001540
+        time_connect:  0.038764
+     time_appconnect:  0.086477
+    time_pretransfer:  0.086576
+       time_redirect:  0.000000
+  time_starttransfer:  0.207758
+                     ----------
+          time_total:  0.207861
+     time_namelookup:  0.001498
+        time_connect:  0.026677
+     time_appconnect:  0.062927
+    time_pretransfer:  0.063025
+       time_redirect:  0.000000
+  time_starttransfer:  0.099863
+                     ----------
+          time_total:  0.099967
+---
+ICMP Ping:
+round-trip min/avg/max/stddev = 54.107/64.212/102.273/9.875 ms
+TCP Connection Test:
+TCP Connect Times:
+---
+API Response Times for Shyft.to API:
+     time_namelookup:  0.001515
+        time_connect:  0.066635
+     time_appconnect:  0.160453
+    time_pretransfer:  0.160572
+       time_redirect:  0.000000
+  time_starttransfer:  0.232574
+                     ----------
+          time_total:  0.232692
+     time_namelookup:  0.001577
+        time_connect:  0.069135
+     time_appconnect:  0.146302
+    time_pretransfer:  0.146399
+       time_redirect:  0.000000
+  time_starttransfer:  0.215661
+                     ----------
+          time_total:  0.215783
+     time_namelookup:  0.001609
+        time_connect:  0.059352
+     time_appconnect:  0.130943
+    time_pretransfer:  0.131040
+       time_redirect:  0.000000
+  time_starttransfer:  0.219117
+                     ----------
+          time_total:  0.219202
+     time_namelookup:  0.001446
+        time_connect:  0.069309
+     time_appconnect:  0.145454
+    time_pretransfer:  0.145566
+       time_redirect:  0.000000
+  time_starttransfer:  0.211358
+                     ----------
+          time_total:  0.211468
+     time_namelookup:  0.001502
+        time_connect:  0.067276
+     time_appconnect:  0.157041
+    time_pretransfer:  0.157139
+       time_redirect:  0.000000
+  time_starttransfer:  0.237310
+                     ----------
+          time_total:  0.237453
+     time_namelookup:  0.001354
+        time_connect:  0.068343
+     time_appconnect:  0.146966
+    time_pretransfer:  0.147062
+       time_redirect:  0.000000
+  time_starttransfer:  0.214490
+                     ----------
+          time_total:  0.214608
+     time_namelookup:  0.001528
+        time_connect:  0.114771
+     time_appconnect:  0.186491
+    time_pretransfer:  0.186591
+       time_redirect:  0.000000
+  time_starttransfer:  0.261088
+                     ----------
+          time_total:  0.261195
+     time_namelookup:  0.001368
+        time_connect:  0.073100
+     time_appconnect:  0.145945
+    time_pretransfer:  0.146049
+       time_redirect:  0.000000
+  time_starttransfer:  0.209995
+                     ----------
+          time_total:  0.210093
+     time_namelookup:  0.001481
+        time_connect:  0.070150
+     time_appconnect:  0.178698
+    time_pretransfer:  0.178793
+       time_redirect:  0.000000
+  time_starttransfer:  0.250909
+                     ----------
+          time_total:  0.251031
+     time_namelookup:  0.001392
+        time_connect:  0.067979
+     time_appconnect:  0.150489
+    time_pretransfer:  0.150584
+       time_redirect:  0.000000
+  time_starttransfer:  0.227530
+                     ----------
+          time_total:  0.227644
+---
+ICMP Ping:
+round-trip min/avg/max/stddev = 62.599/73.095/84.491/6.179 ms
+TCP Connection Test:
+TCP Connect Times:
+---
+ICMP Ping:

@@ -47,5 +47,26 @@ This backlog captures deferred "nice-to-have" enhancements. Core fundamentals ar
 - Inline docs for environment variables (README section)
 - Add `--feature diagnostics` usage examples
 
+## Infrastructure / DevOps (New)
+- Datacenter / hosting optimization research (latency to Solana RPC, Jito relays, major DEX program clusters) (NEW)
+- CI/CD pipeline design (staging env, canary deploy, feature flags) (NEW)
+- CI/CD pipeline test suite & smoke deployment validation (NEW)
+- Multi-version account registry pre-validation & promotion workflow (NEW)
+- Account registry JSON schema + automated lint (NEW)
+- AI-assisted account discovery feedback loop (ingest unknowns -> propose registry patch) (NEW)
+ - Security hardening plan (threat model, secrets storage, principle of least privilege) (NEW)
+ - Hardened baseline OS image selection & CIS benchmarking (NEW)
+ - Hardware sizing & network topology recommendations (colo NY) (NEW)
+ - Key management (HSM or offline signer flow) (NEW)
+ - Encrypted at-rest storage for sensitive tables / column-level encryption (NEW)
+ - Runtime secrets rotation procedure (NEW)
+ - Immutable build provenance & signed container images (NEW)
+ - Audit logging & tamper-evident log pipeline (NEW)
+ - Incident response & rollback runbooks (NEW)
+
+## Data Integrity
+- Multi-version token & account registry diffing (decimals / vault changes) (NEW)
+- Registry snapshot signing / provenance metadata (NEW)
+
 ---
 Generated: 2025-08-31 (updated)

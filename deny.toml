@@ -1,0 +1,27 @@
+# cargo-deny configuration
+[advisories]
+denies = ["unmaintained", "yanked", "unsound"]
+ignore = []
+
+[bans]
+multiple-versions = "deny"
+# allow certain duplicate versions if needed
+skip = []
+
+[sources]
+unknown-registry = "deny"
+unknown-git = "deny"
+allow-git = []
+
+[licenses]
+# Accept both MIT and Apache-2.0 typical Rust ecosystem
+allow = ["Apache-2.0", "MIT", "BSD-3-Clause", "ISC", "Zlib", "Unicode-DFS-2016"]
+denies = []
+allow-osi-fsf-free = "either"
+
+[[licenses.clarify]]
+# Example clarification if needed later
+name = "ring"
+version = "*"
+expression = "ISC AND MIT AND OpenSSL"
+license-files = ["LICENSE", "LICENSE.txt"]

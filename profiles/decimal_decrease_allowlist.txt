@@ -1,0 +1,4 @@
+# List of mint addresses allowed to decrease decimals between registry versions.
+# One mint per line. Lines starting with # are comments.
+# Example:
+# So11111111111111111111111111111111111111112
