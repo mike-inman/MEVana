@@ -6,7 +6,8 @@ use tokio::time::interval;
 use tracing::{debug, error, info, warn};
 
 use crate::hotpath::SignalTx;
-use crate::models::{ArbSignal, Pair};
+use crate::models::Pair;
+use shared_protocol::ArbSignal;
 use crate::stats::record_profit;
 
 // Re-export from executor-service
@@ -288,8 +289,8 @@ impl JupiterArbitrageScanner {
         let signal = ArbSignal::Jupiter(jupiter_signal);
 
         // Send signal to hotpath for execution
-        if let Err(e) = signal_tx.try_send(signal) {
-            warn!("Failed to send Jupiter arbitrage signal: {}", e);
+        if !signal_tx.try_send(signal) {
+            warn!("Failed to send Jupiter arbitrage signal: queue full or closed");
         } else {
             info!(
                 "🎯 Sent Jupiter arbitrage signal: {}bps profit via {} hops",
