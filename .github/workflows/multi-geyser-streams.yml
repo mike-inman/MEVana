@@ -1,0 +1,184 @@
+name: Multi-Geyser Streams Deploy
+
+on:
+  push:
+    paths: 
+      - 'crates/multi-geyser-streams/**'
+      - '.github/workflows/multi-geyser-streams.yml'
+    branches: [main]
+  
+  # Allow manual trigger
+  workflow_dispatch:
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  build-and-test:
+    name: Build and Test
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Install Rust
+      uses: dtolnay/rust-toolchain@stable
+      with:
+        components: clippy, rustfmt
+
+    - name: Cache Cargo dependencies
+      uses: actions/cache@v4
+      with:
+        path: |
+          ~/.cargo/registry
+          ~/.cargo/git
+          target
+        key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+        restore-keys: |
+          ${{ runner.os }}-cargo-
+
+    - name: Check formatting
+      run: cargo fmt -p multi-geyser-streams -- --check
+
+    - name: Run Clippy
+      run: cargo clippy -p multi-geyser-streams -- -D warnings
+
+    - name: Run tests
+      run: cargo test -p multi-geyser-streams
+
+    - name: Build release
+      run: cargo build --release -p multi-geyser-streams
+
+    - name: Upload binary artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: multi-geyser-streams-binary
+        path: target/release/multi-geyser-streams
+        retention-days: 7
+
+  deploy:
+    name: Deploy to Production
+    needs: build-and-test
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main'
+    
+    steps:
+    - name: Download binary artifact
+      uses: actions/download-artifact@v4
+      with:
+        name: multi-geyser-streams-binary
+        path: ./
+
+    - name: Make binary executable
+      run: chmod +x multi-geyser-streams
+
+    - name: Setup SSH key
+      uses: webfactory/ssh-agent@v0.9.0
+      with:
+        ssh-private-key: ${{ secrets.DEPLOY_SSH_KEY }}
+
+    - name: Add server to known hosts
+      run: |
+        mkdir -p ~/.ssh
+        ssh-keyscan -H ${{ secrets.PRODUCTION_SERVER }} >> ~/.ssh/known_hosts
+
+    - name: Deploy to production server
+      run: |
+        # Copy binary to server
+        scp multi-geyser-streams ${{ secrets.DEPLOY_USER }}@${{ secrets.PRODUCTION_SERVER }}:/opt/mevana/bin/
+
+        # Deploy with systemd
+        ssh ${{ secrets.DEPLOY_USER }}@${{ secrets.PRODUCTION_SERVER }} << 'EOF'
+          # Stop existing service if running
+          sudo systemctl stop multi-geyser-streams || true
+          
+          # Make binary executable
+          sudo chmod +x /opt/mevana/bin/multi-geyser-streams
+          
+          # Create systemd service file if it doesn't exist
+          if [ ! -f /etc/systemd/system/multi-geyser-streams.service ]; then
+            sudo tee /etc/systemd/system/multi-geyser-streams.service > /dev/null << 'UNIT'
+        [Unit]
+        Description=Multi-Geyser Streams Service
+        After=network.target
+        Wants=network.target
+
+        [Service]
+        Type=simple
+        User=mevana
+        Group=mevana
+        WorkingDirectory=/opt/mevana
+        ExecStart=/opt/mevana/bin/multi-geyser-streams
+        Environment=GEYSER_ENDPOINT=https://grpc.ny.shyft.to
+        Environment=X_TOKEN=efff2d23-97ae-4c5f-8b8b-9a6265001189
+        Environment=METRICS_PORT=8086
+        Environment=RUST_LOG=info
+        Restart=always
+        RestartSec=5
+        StandardOutput=journal
+        StandardError=journal
+
+        [Install]
+        WantedBy=multi-user.target
+        UNIT
+          fi
+          
+          # Reload systemd and start service
+          sudo systemctl daemon-reload
+          sudo systemctl enable multi-geyser-streams
+          sudo systemctl start multi-geyser-streams
+          
+          # Wait for service to start
+          sleep 10
+          
+          # Check service status
+          sudo systemctl status multi-geyser-streams
+          
+          # Verify metrics endpoint is responding
+          curl -f http://localhost:8086/metrics || (echo "Service health check failed" && exit 1)
+        EOF
+
+    - name: Verify deployment
+      run: |
+        sleep 30
+        
+        # Check service health
+        ssh ${{ secrets.DEPLOY_USER }}@${{ secrets.PRODUCTION_SERVER }} << 'EOF'
+          # Check if service is running
+          if ! sudo systemctl is-active --quiet multi-geyser-streams; then
+            echo "❌ Service is not running"
+            sudo systemctl status multi-geyser-streams
+            exit 1
+          fi
+          
+          # Test metrics endpoint
+          if ! curl -f http://localhost:8086/metrics > /dev/null 2>&1; then
+            echo "❌ Metrics endpoint not responding"
+            exit 1
+          fi
+          
+          echo "✅ Multi-Geyser Streams service deployed successfully"
+          echo "📊 Metrics available at: http://$(hostname):8086/metrics"
+        EOF
+
+  notify:
+    name: Notify Deployment Status
+    needs: [build-and-test, deploy]
+    runs-on: ubuntu-latest
+    if: always()
+    
+    steps:
+    - name: Notify success
+      if: needs.deploy.result == 'success'
+      run: |
+        echo "✅ Multi-Geyser Streams deployed successfully!"
+        echo "📊 Service is now collecting metrics from 3 parallel Geyser streams"
+        echo "🔗 Metrics endpoint: http://${{ secrets.PRODUCTION_SERVER }}:8086/metrics"
+    
+    - name: Notify failure
+      if: needs.deploy.result == 'failure' || needs.build-and-test.result == 'failure'
+      run: |
+        echo "❌ Deployment failed!"
+        echo "Check the logs for details."
+        exit 1

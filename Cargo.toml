@@ -14,6 +14,7 @@ members = [
   "crates/whirlpool-core",
   "crates/shared-core",
   "crates/dex-stream-integrated",
+  "crates/multi-geyser-streams",
   "crates/dex-registry",
   "crates/discovery-service",
   "crates/token-registry-service",
