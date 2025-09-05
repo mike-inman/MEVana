@@ -1,5 +1,5 @@
 use serde::{Deserialize, Serialize};
-pub use shared_protocol::{ArbSignal, ArbSignalV1, Pair};
+pub use shared_protocol::{ArbSignalV1 as ArbSignal, Pair};
 
 // Re-export your shared types for consistency
 pub use normalizer_runtime as rt;

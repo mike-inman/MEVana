@@ -28,7 +28,7 @@ pub struct MultiHopOpportunity {
     pub expires_at_ns: u64,  // Use u64 instead of Instant for serialization
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct HopStep {
     pub from_token: String,
     pub to_token: String,

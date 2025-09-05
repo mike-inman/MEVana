@@ -1,4 +1,4 @@
-use anyhow::{Context, Result};
+use anyhow::Result;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 use tokio::sync::RwLock;
@@ -6,8 +6,7 @@ use tokio::time::interval;
 use tracing::{debug, error, info, warn};
 
 use crate::hotpath::SignalTx;
-use crate::models::Pair;
-use shared_protocol::ArbSignal;
+use crate::models::{ArbSignal, Pair};
 use crate::stats::record_profit;
 
 // Re-export from executor-service
@@ -245,48 +244,60 @@ impl JupiterArbitrageScanner {
         signal_tx: &SignalTx,
         opportunity: MultiHopOpportunity,
     ) -> Result<()> {
-        use shared_protocol::{JupiterArbSignalV1, RouteHop, RouteType, ArbSignal, EnhancedArbSignal, ArbSignalType};
+        // Convert MultiHopOpportunity to ArbSignalV1 format for compatibility
+        let current_time_ns = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_nanos() as u64;
 
-        // Convert MultiHopOpportunity to Jupiter signal format
-        let route_hops: Vec<RouteHop> = opportunity.route.iter().map(|hop| RouteHop {
-            from_token: hop.from_token.clone(),
-            to_token: hop.to_token.clone(),
-            venue: hop.venue.clone(),
-            amount_in: hop.amount_in,
-            amount_out: hop.amount_out,
-            fee_amount: hop.fee_amount,
-            price_impact: hop.price_impact,
-        }).collect();
+        // Extract pair from the first and last tokens in the route
+        let first_token = opportunity.route.first()
+            .map(|hop| hop.from_token.clone())
+            .unwrap_or_default();
+        let last_token = opportunity.route.last()
+            .map(|hop| hop.to_token.clone())
+            .unwrap_or_default();
 
-        let route_type = match opportunity.route_complexity {
-            2 => RouteType::TwoHopArbitrage,
-            3 => RouteType::ThreeHopArbitrage,
-            4 => RouteType::FourHopArbitrage,
-            _ => RouteType::CrossDexArbitrage,
+        let pair = Pair {
+            a: first_token,
+            b: last_token,
         };
 
-        let jupiter_signal = JupiterArbSignalV1 {
-            opportunity_id: opportunity.opportunity_id.clone(),
-            route_type,
-            input_token: opportunity.input_token.clone(),
-            output_token: opportunity.output_token.clone(),
-            amount_in: opportunity.input_amount as u128,
-            expected_amount_out: opportunity.expected_output as u128,
-            minimum_amount_out: opportunity.minimum_output as u128,
+        // Create ArbSignalV1 from Jupiter opportunity  
+        let signal = ArbSignal {
+            id: opportunity.opportunity_id.parse().unwrap_or(0),
+            pair,
+            dex_sell: opportunity.route.first()
+                .map(|hop| hop.venue.clone())
+                .unwrap_or_default(),
+            dex_mid: if opportunity.route_complexity > 2 {
+                Some(format!("jupiter_multi_hop_{}", opportunity.route_complexity))
+            } else {
+                None
+            },
+            dex_buy: opportunity.route.last()
+                .map(|hop| hop.venue.clone())
+                .unwrap_or_default(),
+            amount_in: opportunity.route.first()
+                .map(|hop| hop.amount_in as u128)
+                .unwrap_or(0),
+            expected_profit_out: (opportunity.route.first().unwrap_or(&HopStep::default()).amount_in as f64 
+                * opportunity.profit_bps as f64 / 10000.0) as i128,
+            slot: 0, // Jupiter doesn't provide slot info
+            sell_pool_id: opportunity.route.first()
+                .map(|_| format!("jupiter_{}hop", opportunity.route_complexity))
+                .unwrap_or_default(),
+            mid_pool_id: if opportunity.route_complexity > 2 {
+                Some(format!("jupiter_multi_hop_{}", opportunity.route_complexity))
+            } else {
+                None
+            },
+            buy_pool_id: opportunity.route.last()
+                .map(|_| format!("jupiter_{}hop", opportunity.route_complexity))
+                .unwrap_or_default(),
             profit_bps: opportunity.profit_bps,
-            route_hops,
-            total_price_impact: opportunity.price_impact_pct,
-            estimated_fees: opportunity.total_fees,
-            max_slippage_bps: 200, // Conservative for multi-hop
-            deadline_slot: 0, // Will be set by executor
-            flash_loan_required: opportunity.input_amount > 50_000_000_000, // >50 SOL
-            priority_fee_lamports: 50_000, // Higher priority for multi-hop
-            jupiter_route_plan: "{}".to_string(), // Placeholder for actual Jupiter route plan
-            emitted_at_ns: opportunity.detected_at_ns,
-            expires_at_ns: opportunity.expires_at_ns,
+            emitted_at_ns: current_time_ns,
         };
-
-        let signal = ArbSignal::Jupiter(jupiter_signal);
 
         // Send signal to hotpath for execution
         if !signal_tx.try_send(signal) {
