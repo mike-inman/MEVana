@@ -88,7 +88,6 @@ fn create_stream_configs(endpoint: &str, token: &str) -> Vec<StreamConfig> {
             id: 1,
             name: "Jupiter Stream".to_string(),
             program_ids: vec![
-                "JUP6LkbZbjS1jKKwapdHNy74zcZ3tLUZoi5QNyVTaV4".to_string(), // Jupiter V6 Main
                 "JUP4Fb2cqiRUcaTHdrPC8h2gNsA2ETXiPDD33WcGuJB".to_string(), // Jupiter V4
                 "JUP6LkbZbafMNUBhDSDueet2ApgUKPKodDhqWFLVvZpg".to_string(), // Jupiter Swap
                 "jupoNjAxXgZ4rjzxzPMP4oxduvQsQtZzyknqvzYNrNu".to_string(), // Jupiter Limit Order
@@ -98,25 +97,18 @@ fn create_stream_configs(endpoint: &str, token: &str) -> Vec<StreamConfig> {
         },
         StreamConfig {
             id: 2,
-            name: "Orca+Whirlpool Stream".to_string(),
+            name: "Whirlpool Stream".to_string(),
             program_ids: vec![
                 "whirLbMiicVdio4qvUfM5KAg6Ct8VwpYzGff3uctyCc".to_string(), // Whirlpool (Orca CLMM)
-                "DjVE6JNiYqPL2QXyCUUh8rNjHrbz9hXHNYt99MQ59qw1".to_string(), // Orca Legacy AMM
             ],
             endpoint: endpoint.to_string(),
             token: token.to_string(),
         },
         StreamConfig {
             id: 3,
-            name: "Other DEXs Stream".to_string(),
+            name: "Raydium Stream".to_string(),
             program_ids: vec![
                 "675kPX9MHTjS2zt1qfr1NYHuzeLXfQM9H24wFSUt1Mp8".to_string(), // Raydium AMM
-                "CAMMCzo5YL8w4VFF8KVHrK22GGUsp5VTaW7grrKgrWqGnT".to_string(), // Raydium CLMM
-                "LBUZKhRxPF3XUpBCjp4YzTKgLccjZhTSDM9YuVaPwxo".to_string(),  // Meteora DLMM
-                "PhoeNiXZ8ByJGLkxNfZRnkUfjvmuYqLR89jjFHGqdXY".to_string(),  // Phoenix
-                "srmqPvymJeFKQ4zGQed1GFppgkRHL9kaELCbyksJtPX".to_string(),  // OpenBook
-                "6EF8rrecthR5Dkzon8Nwu78hRvfCKubJ14M5uBEwF6P".to_string(),  // Pump.fun
-                "2wT8Yq49kHgDzXuPxZSaeLaH1qbmGXtEyPy64bL7aD3c".to_string(), // Mystery DEX
             ],
             endpoint: endpoint.to_string(),
             token: token.to_string(),
@@ -126,19 +118,11 @@ fn create_stream_configs(endpoint: &str, token: &str) -> Vec<StreamConfig> {
 
 fn get_dex_name_from_program_id(program_id: &str) -> String {
     match program_id {
-        "JUP6LkbZbjS1jKKwapdHNy74zcZ3tLUZoi5QNyVTaV4" => "jupiter-v6".to_string(),
         "JUP4Fb2cqiRUcaTHdrPC8h2gNsA2ETXiPDD33WcGuJB" => "jupiter-v4".to_string(),
         "JUP6LkbZbafMNUBhDSDueet2ApgUKPKodDhqWFLVvZpg" => "jupiter-swap".to_string(),
         "jupoNjAxXgZ4rjzxzPMP4oxduvQsQtZzyknqvzYNrNu" => "jupiter-limit".to_string(),
         "whirLbMiicVdio4qvUfM5KAg6Ct8VwpYzGff3uctyCc" => "whirlpool".to_string(),
-        "DjVE6JNiYqPL2QXyCUUh8rNjHrbz9hXHNYt99MQ59qw1" => "orca-legacy".to_string(),
         "675kPX9MHTjS2zt1qfr1NYHuzeLXfQM9H24wFSUt1Mp8" => "raydium-amm".to_string(),
-        "CAMMCzo5YL8w4VFF8KVHrK22GGUsp5VTaW7grrKgrWqGnT" => "raydium-clmm".to_string(),
-        "LBUZKhRxPF3XUpBCjp4YzTKgLccjZhTSDM9YuVaPwxo" => "meteora".to_string(),
-        "PhoeNiXZ8ByJGLkxNfZRnkUfjvmuYqLR89jjFHGqdXY" => "phoenix".to_string(),
-        "srmqPvymJeFKQ4zGQed1GFppgkRHL9kaELCbyksJtPX" => "openbook".to_string(),
-        "6EF8rrecthR5Dkzon8Nwu78hRvfCKubJ14M5uBEwF6P" => "pump-fun".to_string(),
-        "2wT8Yq49kHgDzXuPxZSaeLaH1qbmGXtEyPy64bL7aD3c" => "mystery-dex".to_string(),
         _ => "unknown".to_string(),
     }
 }
