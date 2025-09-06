@@ -417,7 +417,8 @@ mod tests {
 
     #[tokio::test]
     async fn test_jupiter_scanner_creation() {
-        let (tx, _rx) = mpsc::unbounded_channel();
+        let signal_queue = crate::hotpath::SignalQueue::new(1000);
+        let tx = signal_queue.sender();
         let scanner = JupiterArbitrageScanner::new(tx, None);
 
         assert!(!scanner.running.load(std::sync::atomic::Ordering::SeqCst));
@@ -426,7 +427,8 @@ mod tests {
 
     #[tokio::test]
     async fn test_paper_trading_mode() {
-        let (tx, _rx) = mpsc::unbounded_channel();
+        let signal_queue = crate::hotpath::SignalQueue::new(1000);
+        let tx = signal_queue.sender();
         let mut config = JupiterArbConfig::default();
         config.enable_paper_trading = true;
 
