@@ -2,6 +2,40 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+## 🔄 Current Session Context
+<!-- Update this section at the start/end of each work session -->
+
+**Last Updated:** 2025-01-06
+**Current Focus:** CI/CD deployment fixes (clippy warnings)
+**Active Branch:** main
+
+### Recent Achievements
+- ✅ Implemented fringe token trading with ultra-high-frequency arbitrage
+- ✅ Fixed CI formatting issues (cargo fmt)
+- ✅ Fixed clippy warnings in whirlpool-core, edge-assembler, normalizer-runtime
+- ✅ Added protobuf compiler to CI workflow
+
+### Active Issues/Blockers
+- ⚠️ CI pipeline needs to pass for server deployment
+- 🔄 Monitoring additional clippy warnings
+
+### Next Priorities
+1. Get services running on server with real performance metrics
+2. Build web dashboard for remote monitoring
+3. Implement secure wallet management system
+
+### Performance Baseline
+- HotPath detection latency: ~400-600μs
+- Target arbitrage opportunities: >100/min
+- Min profit threshold: 25 bps
+
+### Key Decisions/Notes
+- Using `cargo clippy -- -D warnings` locally to match CI
+- Web interface planned: React + WebSockets + PostgreSQL encrypted vault
+- Wallet tiers: Hot (trading) → Warm (reserve) → Cold (storage)
+
+---
+
 ## Project Overview
 
 MEVana is a comprehensive Solana AI trading platform designed to capture MEV (Maximal Extractable Value) opportunities through real-time blockchain data streaming, intelligent transaction analysis, and automated arbitrage execution.
