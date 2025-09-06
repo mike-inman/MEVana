@@ -85,8 +85,8 @@ pub enum RouteType {
 // Enhanced arbitrage signal with both traditional and Jupiter support
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct EnhancedArbSignal {
-    pub traditional: Option<ArbSignalV1>,
-    pub jupiter: Option<JupiterArbSignalV1>,
+    pub traditional: Option<Box<ArbSignalV1>>,
+    pub jupiter: Option<Box<JupiterArbSignalV1>>,
     pub signal_type: ArbSignalType,
     pub confidence_score: f64, // 0.0-1.0 confidence in opportunity
     pub paper_trading: bool,
@@ -103,8 +103,8 @@ pub enum ArbSignalType {
 #[serde(tag = "v", content = "data")]
 pub enum ArbSignal {
     V1(ArbSignalV1),
-    Jupiter(JupiterArbSignalV1),
-    Enhanced(EnhancedArbSignal),
+    Jupiter(Box<JupiterArbSignalV1>),
+    Enhanced(Box<EnhancedArbSignal>),
 }
 
 impl ArbSignal {
@@ -113,11 +113,11 @@ impl ArbSignal {
     }
 
     pub fn jupiter(s: JupiterArbSignalV1) -> Self {
-        Self::Jupiter(s)
+        Self::Jupiter(Box::new(s))
     }
 
     pub fn enhanced(s: EnhancedArbSignal) -> Self {
-        Self::Enhanced(s)
+        Self::Enhanced(Box::new(s))
     }
 
     pub fn get_profit_bps(&self) -> i32 {
