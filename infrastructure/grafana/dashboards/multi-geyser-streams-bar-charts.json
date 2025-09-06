@@ -9,7 +9,7 @@
     {
       "type": "bargauge",
       "title": "Jupiter Stream: Messages per Minute",
-      "datasource": { "type": "prometheus", "uid": "PBFA97CFB590B2093" },
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
       "fieldConfig": {
         "defaults": {
           "unit": "msgs/min",
@@ -50,7 +50,7 @@
     {
       "type": "bargauge",
       "title": "Whirlpool Stream: Messages per Minute",
-      "datasource": { "type": "prometheus", "uid": "PBFA97CFB590B2093" },
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
       "fieldConfig": {
         "defaults": {
           "unit": "msgs/min",
@@ -91,7 +91,7 @@
     {
       "type": "bargauge",
       "title": "Raydium Stream: Messages per Minute",
-      "datasource": { "type": "prometheus", "uid": "PBFA97CFB590B2093" },
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
       "fieldConfig": {
         "defaults": {
           "unit": "msgs/min",

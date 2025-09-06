@@ -81,3 +81,16 @@ scrape_configs:
     metrics_path: '/metrics'
     scrape_interval: 5s
     scrape_timeout: 3s
+
+  # =============================================================================
+  # PIPELINE SERVICES (HOST) - full MEVana data processing pipeline
+  # =============================================================================
+  - job_name: 'pipeline-services'
+    static_configs:
+      - targets:
+        - 'host.docker.internal:8087'  # normalizer-service
+        - 'host.docker.internal:8088'  # edge-assembler
+        - 'host.docker.internal:8089'  # executor-service
+    metrics_path: '/metrics'
+    scrape_interval: 5s
+    scrape_timeout: 3s

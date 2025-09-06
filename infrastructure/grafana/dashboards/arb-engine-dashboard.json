@@ -12,7 +12,7 @@
       "id": 1,
       "title": "Adaptive Multiplier",
       "type": "timeseries",
-      "datasource": null,
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
       "targets": [ { "expr": "arb_adaptive_multiplier" } ],
       "fieldConfig": { "defaults": { "unit": "none", "color": {"mode": "palette-classic"} } },
       "gridPos": {"h": 7, "w": 8, "x": 0, "y": 0}
