@@ -96,7 +96,6 @@ pub struct TxContext<'a> {
 }
 
 /// ---------- The trait our generated extractors will implement ----------
-
 pub trait SwapExtractor: Send + Sync + 'static {
     fn program_id(&self) -> &str;
 
