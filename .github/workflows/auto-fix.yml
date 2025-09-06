@@ -1,0 +1,63 @@
+name: Auto-fix Formatting
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  auto-fix:
+    name: Auto-fix formatting issues
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' || github.event.pull_request.draft == false
+    permissions:
+      contents: write
+      pull-requests: write
+    
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          ref: ${{ github.head_ref || github.ref }}
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt
+
+      - name: Auto-fix formatting
+        run: |
+          echo "🔧 Auto-fixing code formatting..."
+          cargo fmt --all
+          
+      - name: Check for changes
+        id: verify-changed-files
+        run: |
+          if [ -n "$(git status --porcelain)" ]; then
+            echo "changed=true" >> $GITHUB_OUTPUT
+            echo "✅ Formatting changes detected"
+          else
+            echo "changed=false" >> $GITHUB_OUTPUT
+            echo "✅ No formatting changes needed"
+          fi
+
+      - name: Commit formatting fixes
+        if: steps.verify-changed-files.outputs.changed == 'true'
+        run: |
+          git config user.name "MEVana Bot"
+          git config user.email "bot@mevana.ai"
+          git add -A
+          git commit -m "style: auto-fix formatting [skip ci]
+          
+          🤖 Automatically formatted code to match CI requirements
+          
+          Co-Authored-By: Claude <noreply@anthropic.com>"
+          git push
+
+      - name: Success notification
+        if: steps.verify-changed-files.outputs.changed == 'true'
+        run: |
+          echo "🎉 Code formatting auto-fixed and committed!"
+          echo "Your code is now ready for CI checks."
