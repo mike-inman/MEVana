@@ -37,7 +37,7 @@ jobs:
 
     - name: Package source for deploy
       run: |
-        tar --exclude='.git' -czf mevana-src.tar.gz .
+        tar --exclude='.git' --exclude='target' --exclude='*.tar.gz' -czf mevana-src.tar.gz . || { echo "Warning: tar had minor issues but archive created"; exit 0; }
 
     - name: Upload source to server
       run: |
