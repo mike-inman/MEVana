@@ -38,7 +38,7 @@ jobs:
       - name: Setup sccache
         uses: mozilla-actions/sccache-action@v0.0.6
         with:
-          version: 'latest'
+          version: 'v0.8.2'
 
       - name: Cache sccache
         uses: actions/cache@v4
