@@ -7,6 +7,12 @@ use async_trait::async_trait;
 
 pub struct WhirlpoolPlugin;
 
+impl Default for WhirlpoolPlugin {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl WhirlpoolPlugin {
     pub fn new() -> Self {
         Self

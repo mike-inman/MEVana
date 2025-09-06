@@ -5,6 +5,7 @@ use anyhow::Result;
 use chrono::Utc;
 use std::{sync::Arc, time::Duration};
 
+#[allow(dead_code)]
 pub struct EnrichmentConfig {
     pub ttl_secs: u64,
     pub concurrency: usize,

@@ -312,8 +312,10 @@ mod tests {
 
     #[tokio::test]
     async fn test_evacuation_trigger() {
-        let mut config = WalletSafetyConfig::default();
-        config.evacuation_threshold = 0.5; // 50% success rate
+        let config = WalletSafetyConfig {
+            evacuation_threshold: 0.5, // 50% success rate
+            ..Default::default()
+        };
 
         let manager = WalletSafetyManager::new(config);
 

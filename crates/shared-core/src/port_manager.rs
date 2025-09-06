@@ -29,6 +29,12 @@ pub struct PortManager {
     allocation_file: String,
 }
 
+impl Default for PortManager {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl PortManager {
     pub fn new() -> Self {
         let mut port_ranges = HashMap::new();
@@ -75,22 +81,20 @@ impl PortManager {
         let preferred = preferred_port.unwrap_or(min_port);
 
         // Try preferred port first
-        if preferred >= min_port && preferred <= max_port {
-            if self.is_port_available(preferred) {
-                let allocation = PortAllocation {
-                    service_name: service_name.to_string(),
-                    requested_port: preferred,
-                    allocated_port: preferred,
-                    status: PortStatus::Success,
-                    timestamp,
-                    message: format!("✅ {} allocated preferred port {}", service_name, preferred),
-                };
+        if preferred >= min_port && preferred <= max_port && self.is_port_available(preferred) {
+            let allocation = PortAllocation {
+                service_name: service_name.to_string(),
+                requested_port: preferred,
+                allocated_port: preferred,
+                status: PortStatus::Success,
+                timestamp,
+                message: format!("✅ {} allocated preferred port {}", service_name, preferred),
+            };
 
-                self.allocations
-                    .insert(service_name.to_string(), allocation.clone());
-                self.save_allocations();
-                return allocation;
-            }
+            self.allocations
+                .insert(service_name.to_string(), allocation.clone());
+            self.save_allocations();
+            return allocation;
         }
 
         // Preferred port not available, find next free port in range
@@ -144,10 +148,7 @@ impl PortManager {
         }
 
         // Try to bind to the port
-        match TcpListener::bind(SocketAddr::from(([0, 0, 0, 0], port))) {
-            Ok(_) => true,
-            Err(_) => false,
-        }
+        TcpListener::bind(SocketAddr::from(([0, 0, 0, 0], port))).is_ok()
     }
 
     /// Free a port when service stops

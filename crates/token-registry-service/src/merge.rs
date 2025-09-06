@@ -10,7 +10,7 @@ pub struct MergeResult {
 
 pub fn merge(mut base: Option<TokenRecord>, parts: Vec<PartialToken>) -> MergeResult {
     let mut record = base.take().unwrap_or_else(|| {
-        TokenRecord::minimal(parts.get(0).map(|p| p.mint.as_str()).unwrap_or(""))
+        TokenRecord::minimal(parts.first().map(|p| p.mint.as_str()).unwrap_or(""))
     });
     let before_hash = record.token_hash.clone();
     let mut conflicts = Vec::new();
