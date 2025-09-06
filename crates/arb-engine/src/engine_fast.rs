@@ -25,7 +25,7 @@ pub struct FastEngine {
 
     // NEW: Edge-based arbitrage detector for real-time signals
     edge_detector: Arc<EdgeArbitrageDetector>,
-    
+
     // NEW: Fringe risk management for expanded token trading
     risk_manager: Arc<FringeRiskManager>,
 }
@@ -125,34 +125,45 @@ impl FastEngine {
             let risk_manager = Arc::clone(&self.risk_manager);
             let signal_clone = sig.clone();
             let out_clone = self.out.clone();
-            
+
             // Async risk check (non-blocking for hot path)
             tokio::spawn(async move {
                 if let Ok(approval) = risk_manager
-                    .approve_trade(&signal_clone.pair.a, &signal_clone.pair.b, amount_sol, signal_clone.profit_bps)
+                    .approve_trade(
+                        &signal_clone.pair.a,
+                        &signal_clone.pair.b,
+                        amount_sol,
+                        signal_clone.profit_bps,
+                    )
                     .await
                 {
                     match approval {
-                        crate::fringe_risk_manager::TradeApproval::Approved { 
-                            adjusted_amount_sol, 
-                            risk_score, 
-                            .. 
+                        crate::fringe_risk_manager::TradeApproval::Approved {
+                            adjusted_amount_sol,
+                            risk_score,
+                            ..
                         } => {
                             // Adjust signal amount if needed
                             let mut adjusted_signal = signal_clone;
                             if adjusted_amount_sol < amount_sol {
                                 let scaling_factor = adjusted_amount_sol / amount_sol;
-                                adjusted_signal.amount_in = ((adjusted_signal.amount_in as f64) * scaling_factor) as u128;
-                                adjusted_signal.expected_profit_out = ((adjusted_signal.expected_profit_out as f64) * scaling_factor) as i128;
+                                adjusted_signal.amount_in =
+                                    ((adjusted_signal.amount_in as f64) * scaling_factor) as u128;
+                                adjusted_signal.expected_profit_out =
+                                    ((adjusted_signal.expected_profit_out as f64) * scaling_factor)
+                                        as i128;
                             }
-                            
+
                             if out_clone.try_send(adjusted_signal.clone()) {
                                 record_recent_signal(adjusted_signal.clone());
                                 counter!("arb_signals_total", "path" => "quotes_risk_approved");
                                 record_profit(adjusted_signal.profit_bps);
-                                
+
                                 // Update position tracking
-                                if let Err(e) = risk_manager.update_position(&adjusted_signal.pair.a, adjusted_amount_sol).await {
+                                if let Err(e) = risk_manager
+                                    .update_position(&adjusted_signal.pair.a, adjusted_amount_sol)
+                                    .await
+                                {
                                     tracing::warn!("Failed to update position tracking: {}", e);
                                 }
                             }
@@ -198,7 +209,7 @@ impl FastEngine {
     pub fn _edge_detector_ref(&self) -> Option<Arc<EdgeArbitrageDetector>> {
         Some(self.edge_detector.clone())
     }
-    
+
     /// Internal accessor for fringe risk manager
     pub fn risk_manager(&self) -> Arc<FringeRiskManager> {
         self.risk_manager.clone()

@@ -11,7 +11,8 @@ use crate::stats::record_profit;
 
 // Re-export from executor-service
 pub use crate::executor_integration::{
-    HopStep, JupiterIntegration, MultiHopOpportunity, COMMON_TOKENS, EXTENDED_TOKENS, FRINGE_TOKENS, ALL_ARBITRAGE_TOKENS,
+    HopStep, JupiterIntegration, MultiHopOpportunity, ALL_ARBITRAGE_TOKENS, COMMON_TOKENS,
+    EXTENDED_TOKENS, FRINGE_TOKENS,
 };
 
 #[derive(Debug, Clone)]
@@ -28,10 +29,10 @@ pub struct JupiterArbConfig {
 impl Default for JupiterArbConfig {
     fn default() -> Self {
         Self {
-            min_profit_bps: 15,     // Lower threshold for high-frequency trading 
-            max_price_impact: 1.5,  // 1.5% max price impact for tighter spreads
-            max_slippage_bps: 75,   // 0.75% max slippage for higher success rate
-            scan_interval_ms: 500,  // Scan every 500ms for higher frequency
+            min_profit_bps: 15,    // Lower threshold for high-frequency trading
+            max_price_impact: 1.5, // 1.5% max price impact for tighter spreads
+            max_slippage_bps: 75,  // 0.75% max slippage for higher success rate
+            scan_interval_ms: 500, // Scan every 500ms for higher frequency
             base_amounts: vec![
                 500_000_000,    // 0.5 SOL - smaller size for higher frequency
                 1_000_000_000,  // 1 SOL
@@ -40,7 +41,7 @@ impl Default for JupiterArbConfig {
                 7_500_000_000,  // 7.5 SOL
                 10_000_000_000, // 10 SOL
             ],
-            max_hops: 4, // Allow more hops for better opportunities
+            max_hops: 4,                // Allow more hops for better opportunities
             enable_paper_trading: true, // Start in paper trading mode
         }
     }
@@ -80,9 +81,9 @@ impl JupiterArbitrageScanner {
         // Use expanded token list based on configuration
         let token_set = match std::env::var("FRINGE_TRADING_MODE").ok().as_deref() {
             Some("aggressive") => ALL_ARBITRAGE_TOKENS, // Core + high-volume + fringe
-            Some("extended") => EXTENDED_TOKENS,         // Core + high-volume tokens
+            Some("extended") => EXTENDED_TOKENS,        // Core + high-volume tokens
             Some("fringe_only") => FRINGE_TOKENS,       // Only fringe tokens
-            _ => COMMON_TOKENS,                          // Conservative default
+            _ => COMMON_TOKENS,                         // Conservative default
         };
         let tokens = token_set.iter().map(|s| s.to_string()).collect();
 

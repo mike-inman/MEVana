@@ -94,7 +94,9 @@ async fn fetch_server_cert_cn(
         let cc = rustls::ClientConfig::builder()
             .with_root_certificates(root_store)
             .with_client_auth_cert(
-                vec![rustls::pki_types::CertificateDer::from(client_cert.to_vec())],
+                vec![rustls::pki_types::CertificateDer::from(
+                    client_cert.to_vec(),
+                )],
                 rustls::pki_types::PrivateKeyDer::Pkcs8(client_key.to_vec().into()),
             )
             .unwrap();

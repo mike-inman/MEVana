@@ -23,14 +23,14 @@ pub struct TokenRiskProfile {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum TokenCategory {
-    Core,        // SOL, USDC, USDT
-    HighVolume,  // BONK, mSOL, ETH
-    Meme,        // WIF, CAT, GOAT
-    Gaming,      // ATLAS, POLIS  
-    DePIN,       // HNT, IOT, MOBILE
+    Core,           // SOL, USDC, USDT
+    HighVolume,     // BONK, mSOL, ETH
+    Meme,           // WIF, CAT, GOAT
+    Gaming,         // ATLAS, POLIS
+    DePIN,          // HNT, IOT, MOBILE
     Infrastructure, // jitoSOL, LIDO
-    Bridge,      // axlUSDC, mUSD
-    Experimental, // New/unknown tokens
+    Bridge,         // axlUSDC, mUSD
+    Experimental,   // New/unknown tokens
 }
 
 #[derive(Debug, Clone)]
@@ -185,9 +185,9 @@ impl FringeRiskManager {
         let mut positions = self.position_tracker.write().await;
         let current = positions.get(mint).unwrap_or(&0.0);
         let new_position = (current + amount_change_sol).max(0.0);
-        
+
         positions.insert(mint.to_string(), new_position);
-        
+
         debug!("📊 Position updated for {}: {:.3} SOL", mint, new_position);
         Ok(())
     }
@@ -209,12 +209,12 @@ impl FringeRiskManager {
 
         // Create or refresh profile
         let profile = self.create_risk_profile(mint).await?;
-        
+
         {
             let mut profiles = self.token_profiles.write().await;
             profiles.insert(mint.to_string(), profile.clone());
         }
-        
+
         Ok(profile)
     }
 
@@ -226,7 +226,7 @@ impl FringeRiskManager {
         // - Token metadata for symbol and category
 
         let (symbol, category, base_risk) = self.classify_token(mint);
-        
+
         // Mock data for now - in production this would be real API calls
         let profile = TokenRiskProfile {
             mint: mint.to_string(),
@@ -262,24 +262,42 @@ impl FringeRiskManager {
     fn classify_token(&self, mint: &str) -> (String, TokenCategory, f64) {
         match mint {
             // Core tokens (lowest risk)
-            "So11111111111111111111111111111111111111112" => ("SOL".to_string(), TokenCategory::Core, 0.1),
-            "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v" => ("USDC".to_string(), TokenCategory::Core, 0.05),
-            "Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB" => ("USDT".to_string(), TokenCategory::Core, 0.05),
-            
+            "So11111111111111111111111111111111111111112" => {
+                ("SOL".to_string(), TokenCategory::Core, 0.1)
+            }
+            "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v" => {
+                ("USDC".to_string(), TokenCategory::Core, 0.05)
+            }
+            "Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB" => {
+                ("USDT".to_string(), TokenCategory::Core, 0.05)
+            }
+
             // High volume tokens (low-medium risk)
-            "DezXAZ8z7PnrnRJjz3wXBoRgixCa6xjnB7YaB1pPB263" => ("BONK".to_string(), TokenCategory::HighVolume, 0.3),
-            "mSoLzYCxHdYgdzU16g5QSh3i5K3z3KZK7ytfqcJm7So" => ("mSOL".to_string(), TokenCategory::HighVolume, 0.15),
-            
+            "DezXAZ8z7PnrnRJjz3wXBoRgixCa6xjnB7YaB1pPB263" => {
+                ("BONK".to_string(), TokenCategory::HighVolume, 0.3)
+            }
+            "mSoLzYCxHdYgdzU16g5QSh3i5K3z3KZK7ytfqcJm7So" => {
+                ("mSOL".to_string(), TokenCategory::HighVolume, 0.15)
+            }
+
             // Meme tokens (high risk)
-            "HZ1JovNiVvGrGNiiYvEozEVgZ58xaU3npgxnCJcmCPFG" => ("CAT".to_string(), TokenCategory::Meme, 0.7),
-            "3NZ9JMVBmGAqocybic2c7LQCJScmgsAZ6vQqTDzcqmJh" => ("WIF".to_string(), TokenCategory::Meme, 0.8),
-            
+            "HZ1JovNiVvGrGNiiYvEozEVgZ58xaU3npgxnCJcmCPFG" => {
+                ("CAT".to_string(), TokenCategory::Meme, 0.7)
+            }
+            "3NZ9JMVBmGAqocybic2c7LQCJScmgsAZ6vQqTDzcqmJh" => {
+                ("WIF".to_string(), TokenCategory::Meme, 0.8)
+            }
+
             // Gaming tokens (medium-high risk)
-            "ATLASXmbPQxBUYbxPsV97usA3fPQYEqzQBUHgiFCUsXx" => ("ATLAS".to_string(), TokenCategory::Gaming, 0.5),
-            
+            "ATLASXmbPQxBUYbxPsV97usA3fPQYEqzQBUHgiFCUsXx" => {
+                ("ATLAS".to_string(), TokenCategory::Gaming, 0.5)
+            }
+
             // DePIN tokens (medium risk)
-            "HeLp6NuQkmYB4pYWo2zYs22mESHXPQYzXbB8n4V98jwC" => ("HNT".to_string(), TokenCategory::DePIN, 0.4),
-            
+            "HeLp6NuQkmYB4pYWo2zYs22mESHXPQYzXbB8n4V98jwC" => {
+                ("HNT".to_string(), TokenCategory::DePIN, 0.4)
+            }
+
             // Default: experimental (highest risk)
             _ => ("UNKNOWN".to_string(), TokenCategory::Experimental, 0.9),
         }
@@ -294,7 +312,8 @@ impl FringeRiskManager {
             total_tokens_tracked: profiles.len(),
             total_position_value_sol: positions.values().sum(),
             high_risk_tokens: profiles.values().filter(|p| p.risk_score > 0.6).count(),
-            avg_risk_score: profiles.values().map(|p| p.risk_score).sum::<f64>() / profiles.len() as f64,
+            avg_risk_score: profiles.values().map(|p| p.risk_score).sum::<f64>()
+                / profiles.len() as f64,
         }
     }
 }
@@ -330,7 +349,7 @@ mod tests {
         // Test core token (should be approved)
         let approval = risk_manager
             .approve_trade(
-                "So11111111111111111111111111111111111111112", // SOL
+                "So11111111111111111111111111111111111111112",  // SOL
                 "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v", // USDC
                 1.0,
                 10,
@@ -340,13 +359,15 @@ mod tests {
 
         match approval {
             TradeApproval::Approved { .. } => (),
-            TradeApproval::Rejected { reasons } => panic!("Core token trade rejected: {:?}", reasons),
+            TradeApproval::Rejected { reasons } => {
+                panic!("Core token trade rejected: {:?}", reasons)
+            }
         }
 
         // Test experimental token with low profit (should be rejected)
         let approval = risk_manager
             .approve_trade(
-                "UnknownTokenMint123456789", // Unknown token
+                "UnknownTokenMint123456789",                    // Unknown token
                 "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v", // USDC
                 1.0,
                 5, // Low profit for high risk
