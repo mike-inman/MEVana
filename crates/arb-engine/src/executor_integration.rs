@@ -130,6 +130,65 @@ pub const EXTENDED_TOKENS: &[&str] = &[
     "nosXBVoaCTtYdLvKY6Csb4AC8JCdQKKAaWYtx2ZMoo7", // NOS (Nosana)
 ];
 
+// High-volatility fringe tokens for enhanced arbitrage opportunities
+// These tokens often have significant price discrepancies across venues
+pub const FRINGE_TOKENS: &[&str] = &[
+    // Newer meme tokens with high arbitrage potential
+    "HZ1JovNiVvGrGNiiYvEozEVgZ58xaU3npgxnCJcmCPFG", // CAT
+    "EKpQGSJtjMFqKZ9KQanSqYXRcF8fBopzLHYxdM65zcjm", // WIF (newer)
+    "2qEHjDLDLbuBgRYvsxhc5D6uDWAivNFZGan56P1tpump", // GOAT
+    "4k3Dyjzvzp8eMZWUXbBCjEvwSkkk59S5iCNLY3QrkX6R", // RAY
+    "EdVCmQ9FSPcVe5YySXDPCRmc8aDQLKJ9xvYBMZPie1Vw", // GraphQL
+    "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA", // Token Program
+    
+    // Gaming tokens
+    "ATLASXmbPQxBUYbxPsV97usA3fPQYEqzQBUHgiFCUsXx", // ATLAS (Star Atlas)
+    "PoLisxXTjDHgTbKQFUKNyD7MmCG2Qq7Lfh3uWAynYxo", // POLIS (Star Atlas)
+    "FURYmfj7h2ky1wTEq6RKFRvmEQrNJxQVqvM1iRw1FWEM", // FURY 
+    
+    // DePIN tokens  
+    "HeLp6NuQkmYB4pYWo2zYs22mESHXPQYzXbB8n4V98jwC", // HNT (Helium)
+    "iouQcQBAiEXe6cKLS85zmZxUqaCqBdeHFpqKoSz615u", // IOT
+    "mb1eu7TzEc71KxDpsmsKoucSSuuoGLv1drys1oP2jh6", // MOBILE
+    
+    // Infrastructure tokens
+    "J1toso1uCk3RLmjorhTtrVwY9HJ7X8V9yYac6Y7kGCPn", // jitoSOL (alternative)
+    "LnTRntk2kTfWEY6cVB8K9649pgJbt6dJLS1Ns1GZCWg",  // LIDO
+    "FHfba3ov5P3RjaiLVgh8FTv4oirxQDoVXuoUUDvHuXax", // HADES
+    
+    // Cross-chain bridge tokens (often have arbitrage opportunities)
+    "EjmyN6qEC1Tf1JxiCxHtUJBjR59Cv6C5d6PddYvjSGPj", // mUSD
+    "3K6rftdAaQYMPunrtNRHgnK2UAtjm2JwyT2oCiTDouYE", // axlUSDC
+    "8qJSyQprMC57TWKaYEmetUR3UUiTP2M3hXdcvFhkZdmv", // axlWETH
+    
+    // Yield farming tokens
+    "Dp3iqiJwBfWYrYJw2gXk5BUKDKRWKb1QW1RXWnrLERe", // SLND (Solend)
+    "TuLuDHazWdtojFvTZgDd6PHyWadL1mLrCcEfuYW5Wjg", // TULIP
+    "MangoCzJ36AjZyKwVj3VnYU4GTonjfVEnJmvvWaxLac", // MNGO (Mango)
+    
+    // Experimental/New tokens (highest volatility)
+    "4k3Dyjzvzp8eMZWUXbBCjEvwSkkk59S5iCNLY3QrkX6R", // New experimental token
+    "EKpQGSJtjMFqKZ9KQanSqYXRcF8fBopzLHYxdM65zcjm", // High volatility token
+];
+
+// Combined list for maximum opportunity coverage  
+pub const ALL_ARBITRAGE_TOKENS: &[&str] = &[
+    // Core stable tokens (low risk, consistent volume)
+    "So11111111111111111111111111111111111111112", // SOL
+    "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v", // USDC
+    "Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB", // USDT
+    
+    // High-volume tokens (medium risk, good liquidity)
+    "DezXAZ8z7PnrnRJjz3wXBoRgixCa6xjnB7YaB1pPB263", // BONK
+    "mSoLzYCxHdYgdzU16g5QSh3i5K3z3KZK7ytfqcJm7So", // mSOL
+    "7vfCXTUXx5WJV5JADk17DUJ4ksgau7utNKj4b963voxs", // ETH
+    
+    // Fringe opportunities (higher risk, higher reward potential)
+    "HZ1JovNiVvGrGNiiYvEozEVgZ58xaU3npgxnCJcmCPFG", // CAT (meme)
+    "ATLASXmbPQxBUYbxPsV97usA3fPQYEqzQBUHgiFCUsXx", // ATLAS (gaming)
+    "HeLp6NuQkmYB4pYWo2zYs22mESHXPQYzXbB8n4V98jwC", // HNT (DePIN)
+];
+
 // Mock function to simulate Jupiter API call - this will be replaced with real HTTP client
 pub async fn call_jupiter_api(
     input_mint: &str,

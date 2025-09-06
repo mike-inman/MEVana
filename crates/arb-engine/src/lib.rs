@@ -7,6 +7,7 @@ pub mod circuit;
 pub mod edge_integration;
 pub mod edge_verifier; // newly added verifier module
 pub mod executor_integration; // Jupiter integration bridge
+pub mod fringe_risk_manager; // Risk management for fringe tokens
 pub mod hotpath;
 pub mod jupiter_arbitrage; // Jupiter multi-hop arbitrage scanner
 pub mod metrics_http;

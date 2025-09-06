@@ -6,6 +6,7 @@ use dashmap::DashMap;
 use crate::ai_hooks::record_recent_signal;
 use crate::config::get_knobs;
 use crate::edge_integration::EdgeArbitrageDetector;
+use crate::fringe_risk_manager::FringeRiskManager;
 use crate::hotpath::SignalTx;
 use crate::models::{ArbSignal, Pair, Quote};
 use crate::stats::record_profit;
@@ -24,6 +25,9 @@ pub struct FastEngine {
 
     // NEW: Edge-based arbitrage detector for real-time signals
     edge_detector: Arc<EdgeArbitrageDetector>,
+    
+    // NEW: Fringe risk management for expanded token trading
+    risk_manager: Arc<FringeRiskManager>,
 }
 
 impl FastEngine {
@@ -33,6 +37,8 @@ impl FastEngine {
             out: out.clone(),
             // NEW: Initialize edge detector with its own SignalTx
             edge_detector: Arc::new(EdgeArbitrageDetector::new(out)),
+            // NEW: Initialize fringe risk manager for expanded trading
+            risk_manager: Arc::new(FringeRiskManager::new()),
         }
     }
 
@@ -114,11 +120,57 @@ impl FastEngine {
             }
         }
         if let Some(sig) = best {
-            if self.out.try_send(sig.clone()) {
-                record_recent_signal(sig.clone());
-                counter!("arb_signals_total", "path" => "quotes");
-                record_profit(sig.profit_bps);
-            }
+            // NEW: Apply fringe risk management before sending signal
+            let amount_sol = (amount_in as f64) / 1_000_000_000.0; // Convert lamports to SOL
+            let risk_manager = Arc::clone(&self.risk_manager);
+            let signal_clone = sig.clone();
+            let out_clone = self.out.clone();
+            
+            // Async risk check (non-blocking for hot path)
+            tokio::spawn(async move {
+                if let Ok(approval) = risk_manager
+                    .approve_trade(&signal_clone.pair.a, &signal_clone.pair.b, amount_sol, signal_clone.profit_bps)
+                    .await
+                {
+                    match approval {
+                        crate::fringe_risk_manager::TradeApproval::Approved { 
+                            adjusted_amount_sol, 
+                            risk_score, 
+                            .. 
+                        } => {
+                            // Adjust signal amount if needed
+                            let mut adjusted_signal = signal_clone;
+                            if adjusted_amount_sol < amount_sol {
+                                let scaling_factor = adjusted_amount_sol / amount_sol;
+                                adjusted_signal.amount_in = ((adjusted_signal.amount_in as f64) * scaling_factor) as u128;
+                                adjusted_signal.expected_profit_out = ((adjusted_signal.expected_profit_out as f64) * scaling_factor) as i128;
+                            }
+                            
+                            if out_clone.try_send(adjusted_signal.clone()) {
+                                record_recent_signal(adjusted_signal.clone());
+                                counter!("arb_signals_total", "path" => "quotes_risk_approved");
+                                record_profit(adjusted_signal.profit_bps);
+                                
+                                // Update position tracking
+                                if let Err(e) = risk_manager.update_position(&adjusted_signal.pair.a, adjusted_amount_sol).await {
+                                    tracing::warn!("Failed to update position tracking: {}", e);
+                                }
+                            }
+                        }
+                        crate::fringe_risk_manager::TradeApproval::Rejected { reasons } => {
+                            counter!("arb_signals_rejected_total", "reason" => "fringe_risk");
+                            tracing::debug!("🛡️ Trade rejected by risk manager: {:?}", reasons);
+                        }
+                    }
+                } else {
+                    // Fallback: send original signal if risk check fails
+                    if out_clone.try_send(signal_clone.clone()) {
+                        record_recent_signal(signal_clone.clone());
+                        counter!("arb_signals_total", "path" => "quotes_fallback");
+                        record_profit(signal_clone.profit_bps);
+                    }
+                }
+            });
         }
     }
 
@@ -145,5 +197,10 @@ impl FastEngine {
     /// Internal accessor (read-only) to edge detector for registration (non-mutable)
     pub fn _edge_detector_ref(&self) -> Option<Arc<EdgeArbitrageDetector>> {
         Some(self.edge_detector.clone())
+    }
+    
+    /// Internal accessor for fringe risk manager
+    pub fn risk_manager(&self) -> Arc<FringeRiskManager> {
+        self.risk_manager.clone()
     }
 }

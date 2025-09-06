@@ -5,7 +5,7 @@ on:
     branches: [ main ]
     paths:
       - 'crates/hotpath_arb_engine/**'
-      - 'infrastructure/grafana/dashboards/multi-geyser-streams-*.json'
+      - 'infrastructure/grafana/dashboards/hotpath-arb-engine-*.json'
       - '.github/workflows/deploy-multi-geyser.yml'
   workflow_dispatch: {}
 
@@ -39,8 +39,8 @@ jobs:
       - name: Upload updated binary and dashboard
         run: |
           scp target/release/hotpath_arb_engine $SERVER_USER@$SERVER_HOST:$DEPLOYMENT_PATH/target/release/hotpath_arb_engine
-          if [ -f infrastructure/grafana/dashboards/multi-geyser-streams-bar-charts.json ]; then
-            scp infrastructure/grafana/dashboards/multi-geyser-streams-bar-charts.json $SERVER_USER@$SERVER_HOST:$DEPLOYMENT_PATH/infrastructure/grafana/dashboards/
+          if [ -f infrastructure/grafana/dashboards/hotpath-arb-engine-bar-charts.json ]; then
+            scp infrastructure/grafana/dashboards/hotpath-arb-engine-bar-charts.json $SERVER_USER@$SERVER_HOST:$DEPLOYMENT_PATH/infrastructure/grafana/dashboards/
           fi
 
       - name: Restart hotpath_arb_engine and verify
