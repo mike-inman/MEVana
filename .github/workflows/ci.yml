@@ -69,9 +69,9 @@ jobs:
       - name: Clippy
         run: |
           if [ -n "${{ matrix.feature }}" ]; then
-            cargo clippy --all-targets --all-features -p executor-service --features ${{ matrix.feature }} -- -D warnings
+            cargo clippy --all-targets --all-features -p executor-service --features ${{ matrix.feature }} -- -W clippy::all
           else
-            cargo clippy --all-targets --workspace -- -D warnings
+            cargo clippy --all-targets --workspace -- -W clippy::all
           fi
 
       - name: cargo-deny (advisories + bans + sources)

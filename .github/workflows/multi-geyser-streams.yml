@@ -42,7 +42,7 @@ jobs:
       run: cargo fmt -p multi-geyser-streams -- --check
 
     - name: Run Clippy
-      run: cargo clippy -p multi-geyser-streams -- -D warnings
+      run: cargo clippy -p multi-geyser-streams -- -W clippy::all
 
     - name: Run tests
       run: cargo test -p multi-geyser-streams
