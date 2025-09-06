@@ -88,7 +88,14 @@ jobs:
           cd infrastructure
           
           # Check if Docker services are running, start if needed
-          docker network create mevana_net || true
+          echo "Checking Docker network..."
+          if ! docker network ls | grep -q mevana_net; then
+            echo "Creating Docker network..."
+            docker network create mevana_net
+          else
+            echo "Docker network mevana_net already exists"
+          fi
+          
           if ! docker ps | grep -q kafka; then
             echo "Starting infrastructure services..."
             docker compose up -d
