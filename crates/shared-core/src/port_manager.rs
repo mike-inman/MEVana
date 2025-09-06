@@ -15,7 +15,7 @@ pub struct PortAllocation {
     pub message: String,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub enum PortStatus {
     Success,     // Got requested port
     Reallocated, // Had to use different port
