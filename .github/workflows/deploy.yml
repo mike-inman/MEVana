@@ -45,7 +45,7 @@ jobs:
         
     - name: Deploy to server
       run: |
-        ssh $SERVER_USER@$SERVER_HOST << 'ENDSSH'
+        ssh -T $SERVER_USER@$SERVER_HOST << 'ENDSSH'
           set -e
           
           echo "🚀 Starting MEVana deployment..."
@@ -217,7 +217,7 @@ jobs:
         
     - name: Start hotpath_arb_engine
       run: |
-        ssh $SERVER_USER@$SERVER_HOST << 'ENDSSH'
+        ssh -T $SERVER_USER@$SERVER_HOST << 'ENDSSH'
           set -e
           cd /opt/MEVana
           echo "📊 Starting hotpath_arb_engine..."
@@ -239,7 +239,7 @@ jobs:
         sleep 30
         
         # Check if processes are running first
-        ssh -o StrictHostKeyChecking=no $SERVER_USER@$SERVER_HOST << 'DIAGNOSTIC'
+        ssh -T -o StrictHostKeyChecking=no $SERVER_USER@$SERVER_HOST << 'DIAGNOSTIC'
           echo "=== Process Check ==="
           pgrep -f "arb-engine" && echo "✅ arb-engine process running" || echo "❌ arb-engine process not found"
           
