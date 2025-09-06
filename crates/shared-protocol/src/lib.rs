@@ -85,8 +85,8 @@ pub enum RouteType {
 // Enhanced arbitrage signal with both traditional and Jupiter support
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct EnhancedArbSignal {
-    pub traditional: Option<Box<ArbSignalV1>>,
-    pub jupiter: Option<Box<JupiterArbSignalV1>>,
+    pub traditional: Option<ArbSignalV1>,
+    pub jupiter: Option<JupiterArbSignalV1>,
     pub signal_type: ArbSignalType,
     pub confidence_score: f64, // 0.0-1.0 confidence in opportunity
     pub paper_trading: bool,
@@ -99,12 +99,15 @@ pub enum ArbSignalType {
     Hybrid, // Uses both traditional and Jupiter routing
 }
 
+// Keep enum variants stack-allocated for hotpath performance
+// Allow large enum variant for ultra-low-latency trading
+#[allow(clippy::large_enum_variant)]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "v", content = "data")]
 pub enum ArbSignal {
     V1(ArbSignalV1),
-    Jupiter(Box<JupiterArbSignalV1>),
-    Enhanced(Box<EnhancedArbSignal>),
+    Jupiter(JupiterArbSignalV1),
+    Enhanced(EnhancedArbSignal),
 }
 
 impl ArbSignal {
@@ -113,11 +116,11 @@ impl ArbSignal {
     }
 
     pub fn jupiter(s: JupiterArbSignalV1) -> Self {
-        Self::Jupiter(Box::new(s))
+        Self::Jupiter(s)
     }
 
     pub fn enhanced(s: EnhancedArbSignal) -> Self {
-        Self::Enhanced(Box::new(s))
+        Self::Enhanced(s)
     }
 
     pub fn get_profit_bps(&self) -> i32 {
