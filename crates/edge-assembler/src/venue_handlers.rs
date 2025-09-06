@@ -65,7 +65,7 @@ impl VenueHandler for OrcaWhirlpoolHandler {
         write_version: u64,
     ) -> anyhow::Result<Vec<crate::edge::EdgeDelta>> {
         use borsh::BorshDeserialize;
-        use whirlpool_core::types::{tick_is_initialized, WhirlpoolMinimal};
+        use whirlpool_core::types::WhirlpoolMinimal;
 
         let mut edges = Vec::new();
 
@@ -75,7 +75,7 @@ impl VenueHandler for OrcaWhirlpoolHandler {
             const WHIRLPOOL_DISCRIMINATOR: [u8; 8] =
                 [0x63, 0x14, 0x93, 0x54, 0x85, 0x35, 0x11, 0x4a];
 
-            if discriminator == &WHIRLPOOL_DISCRIMINATOR {
+            if discriminator == WHIRLPOOL_DISCRIMINATOR {
                 if let Ok(pool) = WhirlpoolMinimal::try_from_slice(&account_data[8..]) {
                     // Generate EdgeDelta for both directions
                     edges.push(self.create_whirlpool_edge(&pool, slot, write_version, 0)?); // A->B
@@ -125,7 +125,7 @@ impl OrcaWhirlpoolHandler {
         };
 
         Ok(EdgeDelta {
-            edge_id: self.generate_edge_id(&pool, direction),
+            edge_id: self.generate_edge_id(pool, direction),
             venue_id: self.venue_id() as u32,
             pool_pubkey: b"placeholder".to_vec(), // TODO: Get actual pool pubkey
             token_in,
@@ -181,7 +181,7 @@ impl VenueHandler for RaydiumCpmmHandler {
             const RAYDIUM_AMM_POOL_DISCRIMINATOR: [u8; 8] =
                 [0x5a, 0x7a, 0xc6, 0x3a, 0xdf, 0x8a, 0xf8, 0x1b];
 
-            if discriminator == &RAYDIUM_AMM_POOL_DISCRIMINATOR {
+            if discriminator == RAYDIUM_AMM_POOL_DISCRIMINATOR {
                 if let Ok(pool) = self.parse_raydium_pool(account_data) {
                     // Generate EdgeDelta for both directions
                     edges.push(self.create_raydium_edge(&pool, slot, write_version, 0)?); // A->B
@@ -320,7 +320,7 @@ impl VenueHandler for MeteoraDlmmHandler {
             const METEORA_DLMM_PAIR_DISCRIMINATOR: [u8; 8] =
                 [0x5a, 0x64, 0x6d, 0x93, 0x1a, 0x25, 0x5b, 0x8c];
 
-            if discriminator == &METEORA_DLMM_PAIR_DISCRIMINATOR {
+            if discriminator == METEORA_DLMM_PAIR_DISCRIMINATOR {
                 if let Ok(pool) = self.parse_meteora_pool(account_data) {
                     // Generate EdgeDelta for both directions
                     edges.push(self.create_meteora_edge(&pool, slot, write_version, 0)?); // A->B
@@ -466,7 +466,7 @@ impl VenueHandler for PhoenixHandler {
             const PHOENIX_MARKET_DISCRIMINATOR: [u8; 8] =
                 [0x8b, 0x8f, 0x4e, 0x58, 0x42, 0x01, 0xa9, 0x2c];
 
-            if discriminator == &PHOENIX_MARKET_DISCRIMINATOR {
+            if discriminator == PHOENIX_MARKET_DISCRIMINATOR {
                 if let Ok(market) = self.parse_phoenix_market(account_data) {
                     // Generate EdgeDelta for both directions
                     edges.push(self.create_phoenix_edge(&market, slot, write_version, 0)?); // Base->Quote
