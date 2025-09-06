@@ -149,13 +149,11 @@ pub fn infer_amounts_from_meta(
 
     for (mint, delta) in by_mint {
         if delta < 0 {
-            if min_neg.map_or(true, |(_, v)| delta < v) {
+            if min_neg.is_none_or(|(_, v)| delta < v) {
                 min_neg = Some((mint, delta));
             }
-        } else if delta > 0 {
-            if max_pos.map_or(true, |(_, v)| delta > v) {
-                max_pos = Some((mint, delta));
-            }
+        } else if delta > 0 && max_pos.is_none_or(|(_, v)| delta > v) {
+            max_pos = Some((mint, delta));
         }
     }
 
