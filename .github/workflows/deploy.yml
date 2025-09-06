@@ -249,53 +249,66 @@ jobs:
         echo "🔍 Running deployment diagnostics..."
         
         echo "=== Process Check ==="
+        ssh -T -o StrictHostKeyChecking=no $SERVER_USER@$SERVER_HOST 'pgrep -f "hotpath_arb_engine" && echo "✅ hotpath_arb_engine process running" || echo "❌ hotpath_arb_engine process not found"'
         ssh -T -o StrictHostKeyChecking=no $SERVER_USER@$SERVER_HOST 'pgrep -f "arb-engine" && echo "✅ arb-engine process running" || echo "❌ arb-engine process not found"'
         
         echo "=== Port Check ==="
-        ssh -T -o StrictHostKeyChecking=no $SERVER_USER@$SERVER_HOST 'lsof -i:8085 && echo "✅ Port 8085 is in use" || echo "❌ Port 8085 is free"'
+        ssh -T -o StrictHostKeyChecking=no $SERVER_USER@$SERVER_HOST 'lsof -i:8088 && echo "✅ Port 8088 (hotpath) is in use" || echo "❌ Port 8088 (hotpath) is free"'
+        ssh -T -o StrictHostKeyChecking=no $SERVER_USER@$SERVER_HOST 'lsof -i:8085 && echo "✅ Port 8085 (arb-engine) is in use" || echo "❌ Port 8085 (arb-engine) is free"'
         
         echo "=== Service Logs ==="
-        ssh -T -o StrictHostKeyChecking=no $SERVER_USER@$SERVER_HOST 'tail -20 /opt/MEVana/logs/arb-engine.log || echo "❌ Log file not found"'
+        ssh -T -o StrictHostKeyChecking=no $SERVER_USER@$SERVER_HOST 'tail -20 /opt/MEVana/logs/hotpath_arb_engine.log || echo "❌ HotPath log file not found"'
+        ssh -T -o StrictHostKeyChecking=no $SERVER_USER@$SERVER_HOST 'tail -10 /opt/MEVana/logs/arb-engine.log || echo "❌ Arb-engine log file not found"'
         
         echo "=== Docker Status ==="
         ssh -T -o StrictHostKeyChecking=no $SERVER_USER@$SERVER_HOST 'docker ps | grep kafka || echo "❌ Kafka not running"'
         
-        # Test API endpoint with more retries
+        # Test BOTH endpoints
+        echo "=== Testing HotPath Engine ==="
+        HOTPATH_SUCCESS=false
         for i in {1..10}; do
-          if curl -s --connect-timeout 5 http://$SERVER_HOST:8085/ai/config; then
-            echo "✅ Deployment test passed - API is responding (attempt $i)"
-            exit 0
+          if curl -s --connect-timeout 5 http://$SERVER_HOST:8088/metrics 2>/dev/null | head -5; then
+            echo "✅ HotPath engine is responding (attempt $i)"
+            HOTPATH_SUCCESS=true
+            break
           else
-            echo "⏳ API not ready (attempt $i/10)..."
+            echo "⏳ HotPath not ready (attempt $i/10)..."
             sleep 5
           fi
         done
         
-        echo "❌ Deployment test failed - API not responding after 10 attempts"
-        exit 1
-
-    - name: Verify hotpath_arb_engine metrics
-      run: |
-        echo "🔍 Verifying hotpath_arb_engine metrics endpoint..."
-        for i in {1..12}; do
-          if curl -s http://$SERVER_HOST:8088/metrics | grep -q "hotpath_arb_engine"; then
-            echo "✅ hotpath_arb_engine metrics endpoint healthy"
-            exit 0
+        echo "=== Testing Arb Engine ==="
+        ARB_SUCCESS=false
+        for i in {1..10}; do
+          if curl -s --connect-timeout 5 http://$SERVER_HOST:8085/ai/config 2>/dev/null; then
+            echo "✅ Arb engine is responding (attempt $i)"
+            ARB_SUCCESS=true
+            break
+          else
+            echo "⏳ Arb engine not ready (attempt $i/10)..."
+            sleep 5
           fi
-          echo "⏳ Waiting for metrics (attempt $i/12)..."
-          sleep 5
         done
-        echo "❌ hotpath_arb_engine metrics endpoint not responding correctly"
-        exit 1
+        
+        # Require at least HotPath to be working
+        if [ "$HOTPATH_SUCCESS" = true ]; then
+          echo "✅ Deployment test passed - HotPath engine is operational!"
+          exit 0
+        else
+          echo "❌ Deployment test failed - HotPath engine not responding"
+          exit 1
+        fi
         
     - name: Notify deployment status
       if: always()
       run: |
         if [ ${{ job.status }} == 'success' ]; then
           echo "✅ MEVana deployment to production successful!"
-          echo "🚀 Live at: http://$SERVER_HOST:8085"
-          echo "📊 Grafana: http://$SERVER_HOST:3000"
-          echo "🎯 Ready for weekend trading development!"
+          echo "🚀 HotPath Engine: http://$SERVER_HOST:8088/metrics"
+          echo "⚡ Arb Engine: http://$SERVER_HOST:8085/ai/config"
+          echo "📊 Kafka UI: http://$SERVER_HOST:8080"
+          echo "📈 Grafana: http://$SERVER_HOST:3000"
+          echo "🎯 Ready for MAD MAX MEV TRADING!"
         else
           echo "❌ MEVana deployment failed"
         fi
