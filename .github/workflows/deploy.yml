@@ -235,16 +235,37 @@ jobs:
       run: |
         echo "🔍 Testing deployment..."
         
-        # Wait a bit for services to fully start
-        sleep 10
+        # Wait longer for services to fully start
+        sleep 30
         
-        # Test API endpoint
-        if curl -s http://$SERVER_HOST:8085/ai/config; then
-          echo "✅ Deployment test passed - API is responding"
-        else
-          echo "❌ Deployment test failed - API not responding"
-          exit 1
-        fi
+        # Check if processes are running first
+        ssh -o StrictHostKeyChecking=no $SERVER_USER@$SERVER_HOST << 'DIAGNOSTIC'
+          echo "=== Process Check ==="
+          pgrep -f "arb-engine" && echo "✅ arb-engine process running" || echo "❌ arb-engine process not found"
+          
+          echo "=== Port Check ==="
+          lsof -i:8085 && echo "✅ Port 8085 is in use" || echo "❌ Port 8085 is free"
+          
+          echo "=== Service Logs ==="
+          tail -20 /opt/MEVana/logs/arb-engine.log || echo "❌ Log file not found"
+          
+          echo "=== Docker Status ==="
+          docker ps | grep kafka || echo "❌ Kafka not running"
+        DIAGNOSTIC
+        
+        # Test API endpoint with more retries
+        for i in {1..10}; do
+          if curl -s --connect-timeout 5 http://$SERVER_HOST:8085/ai/config; then
+            echo "✅ Deployment test passed - API is responding (attempt $i)"
+            exit 0
+          else
+            echo "⏳ API not ready (attempt $i/10)..."
+            sleep 5
+          fi
+        done
+        
+        echo "❌ Deployment test failed - API not responding after 10 attempts"
+        exit 1
 
     - name: Verify hotpath_arb_engine metrics
       run: |
