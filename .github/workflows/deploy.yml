@@ -54,6 +54,7 @@ jobs:
           echo "🛑 Stopping existing services..."
           pkill -f "arb-engine" || true
           pkill -f "whirlpool-live-stream" || true
+          pkill -f "multi-geyser-streams" || true
           sleep 5
           
           # Build latest version
@@ -78,6 +79,7 @@ jobs:
           cd infrastructure
           
           # Check if Docker services are running, start if needed
+          docker network create mevana_net || true
           if ! docker ps | grep -q kafka; then
             echo "Starting infrastructure services..."
             docker compose up -d
@@ -147,6 +149,7 @@ jobs:
           
           ARB_PID=$!
           echo "Arbitrage engine started (PID: $ARB_PID)"
+          # multi-geyser-streams will be started in a separate step
           
           # Wait for services to initialize
           sleep 15
@@ -183,6 +186,7 @@ jobs:
             echo "❌ Discovery stream process failed to start"
             exit 1
           fi
+
           
           echo "🎉 Deployment completed successfully!"
           echo ""
@@ -202,6 +206,22 @@ jobs:
           echo "   • Minimum profit: 5 BPS"
         ENDSSH
         
+    - name: Start multi-geyser-streams
+      run: |
+        ssh $SERVER_USER@$SERVER_HOST << 'ENDSSH'
+          set -e
+          cd /opt/MEVana
+          echo "📊 Starting multi-geyser-streams..."
+          mkdir -p logs
+          nohup bash -c '
+              export GEYSER_ENDPOINT="${GEYSER_ENDPOINT:-https://grpc.ny.shyft.to}"
+              export X_TOKEN="${X_TOKEN:-efff2d23-97ae-4c5f-8b8b-9a6265001189}"
+              export METRICS_PORT=8086
+              ./target/release/multi-geyser-streams --verbose
+          ' > logs/multi-geyser-streams.log 2>&1 &
+          echo "Started multi-geyser-streams; tail logs/multi-geyser-streams.log"
+        ENDSSH
+
     - name: Test deployment
       run: |
         echo "🔍 Testing deployment..."
@@ -216,6 +236,36 @@ jobs:
           echo "❌ Deployment test failed - API not responding"
           exit 1
         fi
+
+    - name: Verify multi-geyser-streams metrics
+      run: |
+        echo "🔍 Verifying multi-geyser-streams metrics endpoint..."
+        for i in {1..12}; do
+          if curl -s http://$SERVER_HOST:8086/metrics | grep -q "multi_geyser_stream_messages_per_minute"; then
+            echo "✅ multi-geyser-streams metrics endpoint healthy"
+            exit 0
+          fi
+          echo "⏳ Waiting for metrics (attempt $i/12)..."
+          sleep 5
+        done
+        echo "❌ multi-geyser-streams metrics endpoint not responding correctly"
+        exit 1
+
+    - name: Start multi-geyser-streams
+      run: |
+        ssh $SERVER_USER@$SERVER_HOST << 'ENDSSH'
+          set -e
+          cd /opt/MEVana
+          echo "📊 Starting multi-geyser-streams..."
+          mkdir -p logs
+          nohup bash -c '
+              export GEYSER_ENDPOINT="${GEYSER_ENDPOINT:-https://grpc.ny.shyft.to}"
+              export X_TOKEN="${X_TOKEN:-efff2d23-97ae-4c5f-8b8b-9a6265001189}"
+              export METRICS_PORT=8086
+              ./target/release/multi-geyser-streams --verbose
+          ' > logs/multi-geyser-streams.log 2>&1 &
+          echo "Started multi-geyser-streams; tail logs/multi-geyser-streams.log"
+        ENDSSH
         
     - name: Notify deployment status
       if: always()
