@@ -11,7 +11,7 @@ pub enum ParseErr {
     UnknownType(String),
 }
 
-fn need<'a>(data: &'a [u8], at: usize, need: usize) -> Result<&'a [u8], ParseErr> {
+fn need(data: &[u8], at: usize, need: usize) -> Result<&[u8], ParseErr> {
     if at + need <= data.len() {
         Ok(&data[at..at + need])
     } else {

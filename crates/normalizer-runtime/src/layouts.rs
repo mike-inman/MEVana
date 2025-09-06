@@ -62,3 +62,9 @@ impl LayoutRegistry {
         Ok(())
     }
 }
+
+impl Default for LayoutRegistry {
+    fn default() -> Self {
+        Self::new()
+    }
+}

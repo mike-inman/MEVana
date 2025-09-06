@@ -109,7 +109,6 @@ pub trait SwapExtractor: Send + Sync + 'static {
 /// Robust, DEX-agnostic: infer token_in/token_out and raw amounts from balance deltas.
 /// If `owner_hint` is provided, we first look at deltas for that authority; otherwise we
 /// aggregate across all owners seen in the tx (aggregators/CPIs may scatter accounts).
-
 pub struct InferredAmounts {
     pub token_in_mint: String,
     pub token_out_mint: String,
