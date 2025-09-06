@@ -245,20 +245,20 @@ jobs:
         # Wait longer for services to fully start
         sleep 30
         
-        # Check if processes are running first
-        ssh -T -o StrictHostKeyChecking=no $SERVER_USER@$SERVER_HOST << 'DIAGNOSTIC'
-          echo "=== Process Check ==="
-          pgrep -f "arb-engine" && echo "✅ arb-engine process running" || echo "❌ arb-engine process not found"
-          
-          echo "=== Port Check ==="
-          lsof -i:8085 && echo "✅ Port 8085 is in use" || echo "❌ Port 8085 is free"
-          
-          echo "=== Service Logs ==="
-          tail -20 /opt/MEVana/logs/arb-engine.log || echo "❌ Log file not found"
-          
-          echo "=== Docker Status ==="
-          docker ps | grep kafka || echo "❌ Kafka not running"
-        DIAGNOSTIC
+        # Run diagnostic checks
+        echo "🔍 Running deployment diagnostics..."
+        
+        echo "=== Process Check ==="
+        ssh -T -o StrictHostKeyChecking=no $SERVER_USER@$SERVER_HOST 'pgrep -f "arb-engine" && echo "✅ arb-engine process running" || echo "❌ arb-engine process not found"'
+        
+        echo "=== Port Check ==="
+        ssh -T -o StrictHostKeyChecking=no $SERVER_USER@$SERVER_HOST 'lsof -i:8085 && echo "✅ Port 8085 is in use" || echo "❌ Port 8085 is free"'
+        
+        echo "=== Service Logs ==="
+        ssh -T -o StrictHostKeyChecking=no $SERVER_USER@$SERVER_HOST 'tail -20 /opt/MEVana/logs/arb-engine.log || echo "❌ Log file not found"'
+        
+        echo "=== Docker Status ==="
+        ssh -T -o StrictHostKeyChecking=no $SERVER_USER@$SERVER_HOST 'docker ps | grep kafka || echo "❌ Kafka not running"'
         
         # Test API endpoint with more retries
         for i in {1..10}; do
