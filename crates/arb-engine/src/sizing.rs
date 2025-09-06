@@ -72,7 +72,7 @@ impl AdaptiveSizerInner {
             threshold_bps: std::env::var("ARB_MIN_PROFIT_BPS")
                 .ok()
                 .and_then(|v| v.parse().ok())
-                .unwrap_or(50) as i32,
+                .unwrap_or(50),
         };
         if let Some(path) = ADAPT_STATE_PATH.as_ref() {
             if let Some(loaded) = Self::load_from(path) {

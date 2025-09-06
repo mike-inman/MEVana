@@ -23,8 +23,8 @@ struct CacheEntry {
     fetched: Instant,
 }
 
-static CACHE: Lazy<DashMap<String, CacheEntry>> = Lazy::new(|| DashMap::new());
-static CLIENT: Lazy<reqwest::Client> = Lazy::new(|| reqwest::Client::new());
+static CACHE: Lazy<DashMap<String, CacheEntry>> = Lazy::new(DashMap::new);
+static CLIENT: Lazy<reqwest::Client> = Lazy::new(reqwest::Client::new);
 
 fn base_url() -> String {
     std::env::var("TOKEN_REGISTRY_BASE").unwrap_or_else(|_| "http://127.0.0.1:8085".into())
@@ -216,8 +216,8 @@ pub fn enrich_signal_json(mut v: serde_json::Value) -> serde_json::Value {
     let pair_sym = if let Some(obj) = v.get("pair") {
         let a = obj.get("a").and_then(|x| x.as_str()).unwrap_or("");
         let b = obj.get("b").and_then(|x| x.as_str()).unwrap_or("");
-        let ta = CACHE.get(a).map(|c| c.rec.symbol.clone()).flatten();
-        let tb = CACHE.get(b).map(|c| c.rec.symbol.clone()).flatten();
+        let ta = CACHE.get(a).and_then(|c| c.rec.symbol.clone());
+        let tb = CACHE.get(b).and_then(|c| c.rec.symbol.clone());
         match (ta, tb) {
             (Some(sa), Some(sb)) => Some(format!("{}/{}", sa, sb)),
             _ => None,
