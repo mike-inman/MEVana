@@ -62,7 +62,8 @@ jobs:
           echo "🛑 Stopping existing services..."
           pkill -f "arb-engine" || true
           pkill -f "whirlpool-live-stream" || true
-          pkill -f "multi-geyser-streams" || true
+          pkill -f "hotpath_arb_engine" || true
+          pkill -f "hotpath_arb_engine" || true
           sleep 5
           
           # Build latest version
@@ -157,7 +158,7 @@ jobs:
           
           ARB_PID=$!
           echo "Arbitrage engine started (PID: $ARB_PID)"
-          # multi-geyser-streams will be started in a separate step
+          # hotpath_arb_engine will be started in a separate step
           
           # Wait for services to initialize
           sleep 15
@@ -214,20 +215,20 @@ jobs:
           echo "   • Minimum profit: 5 BPS"
         ENDSSH
         
-    - name: Start multi-geyser-streams
+    - name: Start hotpath_arb_engine
       run: |
         ssh $SERVER_USER@$SERVER_HOST << 'ENDSSH'
           set -e
           cd /opt/MEVana
-          echo "📊 Starting multi-geyser-streams..."
+          echo "📊 Starting hotpath_arb_engine..."
           mkdir -p logs
           nohup bash -c '
               export GEYSER_ENDPOINT="${GEYSER_ENDPOINT:-https://grpc.ny.shyft.to}"
               export X_TOKEN="${X_TOKEN:-efff2d23-97ae-4c5f-8b8b-9a6265001189}"
-              export METRICS_PORT=8086
-              ./target/release/multi-geyser-streams --verbose
-          ' > logs/multi-geyser-streams.log 2>&1 &
-          echo "Started multi-geyser-streams; tail logs/multi-geyser-streams.log"
+              export METRICS_PORT=8088
+              ./target/release/hotpath_arb_engine --verbose
+          ' > logs/hotpath_arb_engine.log 2>&1 &
+          echo "Started hotpath_arb_engine; tail logs/hotpath_arb_engine.log"
         ENDSSH
 
     - name: Test deployment
@@ -245,35 +246,19 @@ jobs:
           exit 1
         fi
 
-    - name: Verify multi-geyser-streams metrics
+    - name: Verify hotpath_arb_engine metrics
       run: |
-        echo "🔍 Verifying multi-geyser-streams metrics endpoint..."
+        echo "🔍 Verifying hotpath_arb_engine metrics endpoint..."
         for i in {1..12}; do
-          if curl -s http://$SERVER_HOST:8086/metrics | grep -q "multi_geyser_stream_messages_per_minute"; then
-            echo "✅ multi-geyser-streams metrics endpoint healthy"
+          if curl -s http://$SERVER_HOST:8088/metrics | grep -q "hotpath_arb_engine"; then
+            echo "✅ hotpath_arb_engine metrics endpoint healthy"
             exit 0
           fi
           echo "⏳ Waiting for metrics (attempt $i/12)..."
           sleep 5
         done
-        echo "❌ multi-geyser-streams metrics endpoint not responding correctly"
+        echo "❌ hotpath_arb_engine metrics endpoint not responding correctly"
         exit 1
-
-    - name: Start multi-geyser-streams
-      run: |
-        ssh $SERVER_USER@$SERVER_HOST << 'ENDSSH'
-          set -e
-          cd /opt/MEVana
-          echo "📊 Starting multi-geyser-streams..."
-          mkdir -p logs
-          nohup bash -c '
-              export GEYSER_ENDPOINT="${GEYSER_ENDPOINT:-https://grpc.ny.shyft.to}"
-              export X_TOKEN="${X_TOKEN:-efff2d23-97ae-4c5f-8b8b-9a6265001189}"
-              export METRICS_PORT=8086
-              ./target/release/multi-geyser-streams --verbose
-          ' > logs/multi-geyser-streams.log 2>&1 &
-          echo "Started multi-geyser-streams; tail logs/multi-geyser-streams.log"
-        ENDSSH
         
     - name: Notify deployment status
       if: always()
