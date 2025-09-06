@@ -2776,6 +2776,48 @@ dependencies = [
 ]
 
 [[package]]
+name = "hotpath_arb_engine"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "arb-engine",
+ "axum",
+ "borsh 1.5.7",
+ "bs58",
+ "chrono",
+ "clap",
+ "crossbeam",
+ "dashmap 5.5.3",
+ "dotenv",
+ "edge-assembler",
+ "env_logger 0.11.8",
+ "executor-service",
+ "fastrand",
+ "futures",
+ "lazy_static",
+ "log",
+ "metrics 0.22.4",
+ "metrics-exporter-prometheus 0.15.3",
+ "normalizer-runtime",
+ "prost 0.12.6",
+ "rustls 0.23.31",
+ "serde",
+ "serde_json",
+ "shared-protocol",
+ "solana-client",
+ "solana-sdk 2.1.21",
+ "solana-transaction-status",
+ "sqlx",
+ "tokio",
+ "tokio-stream",
+ "tonic",
+ "uuid",
+ "whirlpool-core",
+ "yellowstone-grpc-client",
+ "yellowstone-grpc-proto",
+]
+
+[[package]]
 name = "http"
 version = "0.2.12"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3817,36 +3859,6 @@ dependencies = [
  "mime",
  "spin",
  "version_check",
-]
-
-[[package]]
-name = "multi-geyser-streams"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "axum",
- "bs58",
- "chrono",
- "clap",
- "crossbeam",
- "dashmap 5.5.3",
- "dotenv",
- "env_logger 0.11.8",
- "futures",
- "lazy_static",
- "log",
- "metrics 0.22.4",
- "metrics-exporter-prometheus 0.15.3",
- "prost 0.12.6",
- "rustls 0.23.31",
- "serde",
- "serde_json",
- "tokio",
- "tokio-stream",
- "tonic",
- "uuid",
- "yellowstone-grpc-client",
- "yellowstone-grpc-proto",
 ]
 
 [[package]]

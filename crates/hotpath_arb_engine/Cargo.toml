@@ -1,5 +1,5 @@
 [package]
-name = "multi-geyser-streams"
+name = "hotpath_arb_engine"
 version = "0.1.0"
 edition = "2021"
 
@@ -35,6 +35,24 @@ chrono = { version = "0.4", features = ["serde"] }
 uuid = { version = "1.0", features = ["serde", "v4"] }
 dotenv = "0.15"
 
+# HOT PATH ARBITRAGE - Direct integration for zero-latency MEV detection
+arb-engine = { path = "../arb-engine" }
+edge-assembler = { path = "../edge-assembler" }
+normalizer-runtime = { path = "../normalizer-runtime" }
+shared-protocol = { path = "../shared-protocol" }
+whirlpool-core = { path = "../whirlpool-core" }
+
+# LETHAL EXECUTION SYSTEM - Direct executor integration for instant trade execution
+executor-service = { path = "../../executor-service" }
+sqlx = { version = "0.8", default-features = false, features = ["runtime-tokio", "postgres", "chrono", "uuid"] }
+
+# Transaction execution dependencies
+solana-sdk = "2.1.21"
+solana-client = "2.1.21"
+solana-transaction-status = "2.1.21"
+borsh = "1"
+fastrand = "2"
+
 [[bin]]
-name = "multi-geyser-streams"
+name = "hotpath_arb_engine"
 path = "src/main.rs"
