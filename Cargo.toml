@@ -3,41 +3,51 @@
 resolver = "2"
 
 members = [
-  "crates/arb-engine",
-  "crates/mevana-engine",
+  # PRODUCTION HOTPATH SYSTEM
+  "crates/hotpath_arb_engine",          # Zero-latency MEV detection
+  "executor-service",                    # Trade execution engine
+  
+  # CORE SERVICES  
+  "crates/arb-engine",                   # Arbitrage detection engine
+  "crates/normalizer-service",           # Transaction parsing
+  "crates/edge-assembler",               # Real-time transaction processing
+  
+  # SUPPORTING SERVICES
+  "crates/dex-registry",                 # DEX metadata registry
+  "crates/discovery-service",            # Service discovery
+  "crates/token-registry-service",       # Token metadata
+  
+  # SHARED LIBRARIES
+  "crates/shared-core",                  # Common utilities
+  "crates/shared-protocol",              # Protocol definitions
+  "crates/whirlpool-core",              # Orca integration
+  
+  # CODE GENERATION
   "crates/normalizer-runtime",
-  "crates/normalizer-codegen",
+  "crates/normalizer-codegen", 
   "crates/normalizer-generated",
-  "crates/normalizer-service",
-  "crates/edge-assembler",
-  # "crates/geyser-streamer",
-  "crates/whirlpool-core",
-  "crates/shared-core",
-  "crates/dex-stream-integrated",
-  "crates/hotpath_arb_engine",
-  "crates/dex-registry",
-  "crates/discovery-service",
-  "crates/token-registry-service",
-  "executor-service",
-  "crates/shared-protocol",
-  # "crates/arb-engine",  
+  "crates/mevana-engine",
 ]
 
 # Only build these on plain `cargo build` / `cargo test`
 default-members = [
+  # PRODUCTION HOTPATH SYSTEM - The main event! 🚀
+  "crates/hotpath_arb_engine",
+  "executor-service",
+  
+  # CORE PIPELINE
   "crates/normalizer-generated",
-  "crates/normalizer-service",
+  "crates/normalizer-service", 
   "crates/edge-assembler",
 ]
 
 # Put EXCLUDE **inside** [workspace]
 exclude = [
   "crates/_archive/*",
+  "_archive/*",                        # All archived components
   "crates/whirlpool-state-streamer",
-  "crates/shyft-pool-depth",
+  "crates/shyft-pool-depth", 
   "crates/geyser-streamer",
-  "crates/dex-stream-universal",
-  "crates/dex-stream-orca",
   "crates/raydium-clmm-stream",
   "crates/raydium-normalizer",
   "crates/raydium-quote-service",
