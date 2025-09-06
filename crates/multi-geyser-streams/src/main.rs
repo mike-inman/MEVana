@@ -78,10 +78,13 @@ impl RateCounter {
     }
 
     fn increment(&self) {
-        let now = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_secs();
+        let now = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_secs();
         let mut timestamps = self.timestamps.lock().unwrap();
         timestamps.push_back(now);
-        
+
         // Remove old entries outside the time window
         let cutoff = now - self.window_seconds;
         while let Some(&front) = timestamps.front() {
@@ -95,8 +98,11 @@ impl RateCounter {
 
     fn rate_per_minute(&self) -> f64 {
         let mut timestamps = self.timestamps.lock().unwrap();
-        let now = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_secs();
-        
+        let now = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_secs();
+
         // Clean old entries
         let cutoff = now - self.window_seconds;
         while let Some(&front) = timestamps.front() {
@@ -106,7 +112,7 @@ impl RateCounter {
                 break;
             }
         }
-        
+
         let count = timestamps.len() as f64;
         let window_minutes = self.window_seconds as f64 / 60.0;
         count / window_minutes
@@ -121,6 +127,8 @@ lazy_static::lazy_static! {
     // Rate counters for messages per minute tracking
     static ref STREAM_RATE_COUNTERS: DashMap<u8, Arc<RateCounter>> = DashMap::new();
     static ref DEX_RATE_COUNTERS: DashMap<String, Arc<RateCounter>> = DashMap::new();
+    // New: Rate counters for parsed messages per minute
+    static ref STREAM_PARSED_RATE_COUNTERS: DashMap<u8, Arc<RateCounter>> = DashMap::new();
 }
 
 impl Default for StreamConfig {
@@ -248,6 +256,7 @@ async fn process_geyser_stream(config: StreamConfig) -> Result<()> {
     STREAM_COUNTERS.insert(stream_id, AtomicU64::new(0));
     STREAM_HEALTH.insert(stream_id, Arc::new(AtomicU64::new(0)));
     STREAM_RATE_COUNTERS.insert(stream_id, Arc::new(RateCounter::new(60))); // 1-minute window
+    STREAM_PARSED_RATE_COUNTERS.insert(stream_id, Arc::new(RateCounter::new(60))); // 1-minute window for parsed
 
     loop {
         match run_stream_with_retry(&config).await {
@@ -287,7 +296,10 @@ async fn run_stream_with_retry(config: &StreamConfig) -> Result<()> {
                 println!("📥 Stream {} received message", stream_id);
                 if let Some(UpdateOneof::Transaction(transaction_update)) = update_msg.update_oneof
                 {
-                    println!("💰 Stream {} processing transaction at slot {}", stream_id, transaction_update.slot);
+                    println!(
+                        "💰 Stream {} processing transaction at slot {}",
+                        stream_id, transaction_update.slot
+                    );
                     let processing_result =
                         process_transaction_update(config, transaction_update).await;
                     let processing_time_us = start_time.elapsed().as_micros() as u64;
@@ -300,7 +312,7 @@ async fn run_stream_with_retry(config: &StreamConfig) -> Result<()> {
                     if let Some(counter) = STREAM_COUNTERS.get(&stream_id) {
                         counter.fetch_add(1, Ordering::Relaxed);
                     }
-                    
+
                     // Increment rate counter
                     if let Some(rate_counter) = STREAM_RATE_COUNTERS.get(&stream_id) {
                         rate_counter.increment();
@@ -314,19 +326,31 @@ async fn run_stream_with_retry(config: &StreamConfig) -> Result<()> {
                     match processing_result {
                         Ok(Some(metrics)) => {
                             counter!("geyser_transactions_successful_total").increment(1);
-                            println!("✅ Stream {} SUCCESS: {} tx {} ({}μs)", stream_id, metrics.dex_name, &metrics.signature[0..8], processing_time_us);
+                            println!(
+                                "✅ Stream {} SUCCESS: {} tx {} ({}μs)",
+                                stream_id,
+                                metrics.dex_name,
+                                &metrics.signature[0..8],
+                                processing_time_us
+                            );
 
                             // Update DEX counters
                             DEX_COUNTERS
                                 .entry(metrics.dex_name.clone())
                                 .or_insert_with(|| AtomicU64::new(0))
                                 .fetch_add(1, Ordering::Relaxed);
-                                
                             // Update DEX rate counters
                             DEX_RATE_COUNTERS
                                 .entry(metrics.dex_name.clone())
                                 .or_insert_with(|| Arc::new(RateCounter::new(60)))
                                 .increment();
+
+                            // New: increment parsed rate counter
+                            if let Some(parsed_rate_counter) =
+                                STREAM_PARSED_RATE_COUNTERS.get(&stream_id)
+                            {
+                                parsed_rate_counter.increment();
+                            }
                         }
                         Ok(None) => {
                             counter!("geyser_transactions_filtered_total").increment(1);
@@ -421,20 +445,26 @@ fn extract_program_ids(
 // Update metrics continuously in background
 async fn update_metrics_task() {
     let mut interval = tokio::time::interval(std::time::Duration::from_secs(5));
-    
+
     loop {
         interval.tick().await;
-        
+
         // Update stream counters as gauges
         for entry in STREAM_COUNTERS.iter() {
             let stream_id = entry.key();
             let count = entry.value().load(Ordering::Relaxed) as f64;
             metrics::gauge!("multi_geyser_stream_transactions_total", "stream_id" => stream_id.to_string()).set(count);
-            
+
             // Update rate counter metrics
             if let Some(rate_counter) = STREAM_RATE_COUNTERS.get(stream_id) {
                 let rate = rate_counter.rate_per_minute();
                 metrics::gauge!("multi_geyser_stream_messages_per_minute", "stream_id" => stream_id.to_string()).set(rate);
+            }
+
+            // New: Update parsed rate counter metrics
+            if let Some(parsed_rate_counter) = STREAM_PARSED_RATE_COUNTERS.get(stream_id) {
+                let parsed_rate = parsed_rate_counter.rate_per_minute();
+                metrics::gauge!("multi_geyser_stream_messages_parsed_per_minute", "stream_id" => stream_id.to_string()).set(parsed_rate);
             }
         }
 
@@ -442,12 +472,14 @@ async fn update_metrics_task() {
         for entry in DEX_COUNTERS.iter() {
             let dex_name = entry.key();
             let count = entry.value().load(Ordering::Relaxed) as f64;
-            metrics::gauge!("multi_geyser_dex_transactions_total", "dex" => dex_name.clone()).set(count);
-            
+            metrics::gauge!("multi_geyser_dex_transactions_total", "dex" => dex_name.clone())
+                .set(count);
+
             // Update DEX rate counter metrics
             if let Some(rate_counter) = DEX_RATE_COUNTERS.get(dex_name) {
                 let rate = rate_counter.rate_per_minute();
-                metrics::gauge!("multi_geyser_dex_messages_per_minute", "dex" => dex_name.clone()).set(rate);
+                metrics::gauge!("multi_geyser_dex_messages_per_minute", "dex" => dex_name.clone())
+                    .set(rate);
             }
         }
 
@@ -458,78 +490,120 @@ async fn update_metrics_task() {
             let last_seen = entry.value().load(Ordering::Relaxed);
             let seconds_since_last = now.saturating_sub(last_seen) as f64;
             let healthy = if seconds_since_last < 30.0 { 1.0 } else { 0.0 };
-            
+
             metrics::gauge!("multi_geyser_stream_seconds_since_last_message", "stream_id" => stream_id.to_string()).set(seconds_since_last);
-            metrics::gauge!("multi_geyser_stream_healthy", "stream_id" => stream_id.to_string()).set(healthy);
+            metrics::gauge!("multi_geyser_stream_healthy", "stream_id" => stream_id.to_string())
+                .set(healthy);
         }
     }
 }
 
 async fn start_simple_metrics_server(port: u16) {
     use axum::{routing::get, Router};
-    
+
     let bind_addr = format!("0.0.0.0:{}", port);
     info!("🔧 Starting simple metrics server on {}", bind_addr);
-    
-    let app = Router::new()
-        .route("/metrics", get(serve_prometheus_metrics));
-    
+
+    let app = Router::new().route("/metrics", get(serve_prometheus_metrics));
+
     let listener = tokio::net::TcpListener::bind(&bind_addr).await.unwrap();
     axum::serve(listener, app).await.unwrap();
 }
 
 async fn serve_prometheus_metrics() -> String {
     let mut output = String::new();
-    
+
     // Stream counters and rates
     for entry in STREAM_COUNTERS.iter() {
         let stream_id = entry.key();
         let count = entry.value().load(Ordering::Relaxed);
-        
+
         // Total messages
-        output.push_str(&format!("# TYPE multi_geyser_stream_messages_total counter\n"));
-        output.push_str(&format!("multi_geyser_stream_messages_total{{stream_id=\"{}\"}} {}\n", stream_id, count));
-        
+        output.push_str(&format!(
+            "# TYPE multi_geyser_stream_messages_total counter\n"
+        ));
+        output.push_str(&format!(
+            "multi_geyser_stream_messages_total{{stream_id=\"{}\"}} {}\n",
+            stream_id, count
+        ));
+
         // Messages per minute rate
         if let Some(rate_counter) = STREAM_RATE_COUNTERS.get(stream_id) {
             let rate = rate_counter.rate_per_minute();
-            output.push_str(&format!("# TYPE multi_geyser_stream_messages_per_minute gauge\n"));
-            output.push_str(&format!("multi_geyser_stream_messages_per_minute{{stream_id=\"{}\"}} {:.2}\n", stream_id, rate));
+            output.push_str(&format!(
+                "# TYPE multi_geyser_stream_messages_per_minute gauge\n"
+            ));
+            output.push_str(&format!(
+                "multi_geyser_stream_messages_per_minute{{stream_id=\"{}\"}} {:.2}\n",
+                stream_id, rate
+            ));
+        }
+
+        // New: Parsed messages per minute rate
+        if let Some(parsed_rate_counter) = STREAM_PARSED_RATE_COUNTERS.get(stream_id) {
+            let parsed_rate = parsed_rate_counter.rate_per_minute();
+            output.push_str(&format!(
+                "# TYPE multi_geyser_stream_messages_parsed_per_minute gauge\n"
+            ));
+            output.push_str(&format!(
+                "multi_geyser_stream_messages_parsed_per_minute{{stream_id=\"{}\"}} {:.2}\n",
+                stream_id, parsed_rate
+            ));
         }
     }
-    
+
     // DEX counters and rates
     for entry in DEX_COUNTERS.iter() {
         let dex_name = entry.key();
         let count = entry.value().load(Ordering::Relaxed);
-        
+
         // Total DEX messages
         output.push_str(&format!("# TYPE multi_geyser_dex_messages_total counter\n"));
-        output.push_str(&format!("multi_geyser_dex_messages_total{{dex=\"{}\"}} {}\n", dex_name, count));
-        
+        output.push_str(&format!(
+            "multi_geyser_dex_messages_total{{dex=\"{}\"}} {}\n",
+            dex_name, count
+        ));
+
         // DEX messages per minute rate
         if let Some(rate_counter) = DEX_RATE_COUNTERS.get(dex_name) {
             let rate = rate_counter.rate_per_minute();
-            output.push_str(&format!("# TYPE multi_geyser_dex_messages_per_minute gauge\n"));
-            output.push_str(&format!("multi_geyser_dex_messages_per_minute{{dex=\"{}\"}} {:.2}\n", dex_name, rate));
+            output.push_str(&format!(
+                "# TYPE multi_geyser_dex_messages_per_minute gauge\n"
+            ));
+            output.push_str(&format!(
+                "multi_geyser_dex_messages_per_minute{{dex=\"{}\"}} {:.2}\n",
+                dex_name, rate
+            ));
         }
     }
-    
+
     // Stream health
     for entry in STREAM_HEALTH.iter() {
         let stream_id = entry.key();
         let last_seen = entry.value().load(Ordering::Relaxed);
         let now = chrono::Utc::now().timestamp() as u64;
-        let seconds_since_last = if last_seen > 0 { now - last_seen } else { u64::MAX };
+        let seconds_since_last = if last_seen > 0 {
+            now - last_seen
+        } else {
+            u64::MAX
+        };
         let healthy = if seconds_since_last < 30 { 1.0 } else { 0.0 };
-        
+
         output.push_str(&format!("# TYPE multi_geyser_stream_healthy gauge\n"));
-        output.push_str(&format!("multi_geyser_stream_healthy{{stream_id=\"{}\"}} {}\n", stream_id, healthy));
-        
-        output.push_str(&format!("# TYPE multi_geyser_stream_seconds_since_last_message gauge\n"));
-        output.push_str(&format!("multi_geyser_stream_seconds_since_last_message{{stream_id=\"{}\"}} {}\n", stream_id, seconds_since_last));
+        output.push_str(&format!(
+            "multi_geyser_stream_healthy{{stream_id=\"{}\"}} {}\n",
+            stream_id, healthy
+        ));
+
+        output.push_str(&format!(
+            "# TYPE multi_geyser_stream_seconds_since_last_message gauge\n"
+        ));
+        output.push_str(&format!(
+            "multi_geyser_stream_seconds_since_last_message{{stream_id=\"{}\"}} {}\n",
+            stream_id, seconds_since_last
+        ));
     }
-    
+
     output
 }
 
@@ -537,12 +611,12 @@ async fn serve_prometheus_metrics() -> String {
 async fn main() -> Result<()> {
     // Load .env file
     dotenv::dotenv().ok();
-    
+
     // Initialize rustls crypto provider
     let _ = rustls::crypto::ring::default_provider().install_default();
-    
+
     let mut args = Args::parse();
-    
+
     // Override with environment variables if they exist
     if let Ok(endpoint) = std::env::var("GEYSER_ENDPOINT") {
         args.geyser_endpoint = endpoint;
@@ -565,15 +639,21 @@ async fn main() -> Result<()> {
         .init();
 
     // Initialize metrics FIRST, before everything else
-    info!("🔧 Initializing metrics server on port {}", args.metrics_port);
-    
+    info!(
+        "🔧 Initializing metrics server on port {}",
+        args.metrics_port
+    );
+
     // Start simple custom metrics server instead of broken PrometheusBuilder
     let metrics_port = args.metrics_port;
     tokio::spawn(async move {
         start_simple_metrics_server(metrics_port).await;
     });
-    
-    info!("✅ Metrics server initialized and running on port {}", args.metrics_port);
+
+    info!(
+        "✅ Metrics server initialized and running on port {}",
+        args.metrics_port
+    );
 
     info!("🚀 Starting Multi-Geyser Streams Service");
     info!("📡 Endpoint: {}", args.geyser_endpoint);
