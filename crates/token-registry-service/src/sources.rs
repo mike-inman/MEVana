@@ -10,11 +10,11 @@ pub trait TokenSource: Send + Sync {
     fn as_any(&self) -> &dyn std::any::Any;
 }
 
+type TokenTuple = (Option<String>, Option<String>, Option<u8>, Option<String>);
+
+#[allow(clippy::type_complexity)]
 pub struct StaticOverrideSource {
-    pub map: std::collections::HashMap<
-        String,
-        (Option<String>, Option<String>, Option<u8>, Option<String>),
-    >, // mint -> (symbol,name,decimals,logo_url)
+    pub map: std::collections::HashMap<String, TokenTuple>, // mint -> (symbol,name,decimals,logo_url)
 }
 
 impl TokenSource for StaticOverrideSource {

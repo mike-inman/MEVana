@@ -341,7 +341,7 @@ impl DiscoveryService {
             let programs = self.database.list_dex_programs(true).await?;
 
             for program in programs {
-                if let Ok(idl_content) = self.fetch_idl(&program.program_id).await {
+                if let Ok(_idl_content) = self.fetch_idl(&program.program_id).await {
                     // TODO: Update IDL cache
                     debug!("Fetched IDL for: {}", program.program_id);
                 }

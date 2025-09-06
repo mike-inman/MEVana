@@ -1,12 +1,13 @@
 use anyhow::{Context, Result};
 use solana_client::rpc_client::RpcClient;
 use solana_sdk::pubkey::Pubkey;
+use std::str::FromStr;
 
 use whirlpool_core::{
     decode::{decode_tick_array, decode_whirlpool},
     math::q64_to_f64,
     pda::{actual_tick_index, derive_tick_array_address, three_tick_arrays_around},
-    tick_window::{find_nearest_initialized_ticks, TickArrayView, TickWindow},
+    tick_window::{find_nearest_initialized_ticks, TickArrayView},
 };
 
 fn main() -> Result<()> {

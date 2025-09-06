@@ -27,6 +27,7 @@ struct IxProfile {
 }
 
 #[derive(Debug)]
+#[allow(dead_code)]
 struct Idl {
     name: String,
     instructions: Vec<IdlIx>,
@@ -323,33 +324,52 @@ use normalizer_runtime::{
         }
 
         // decoder body
-        src.push_str(&format!(
+        let has_positions = pg.ixs.iter().any(|ix| !ix.positions.is_empty());
+        let accs_param = if has_positions { "accs: &[u8]" } else { "_accs: &[u8]" };
+        let keys_param = if has_positions { "keys: &[String]" } else { "_keys: &[String]" };
+        
+        if pg.ixs.is_empty() {
+            src.push_str(&format!(
 r#"
-fn decode_{dex}(data: &[u8], accs: &[u8], keys: &[String]) -> Option<(String, HashMap<String,String>)> {{
+fn decode_{dex}(_data: &[u8], _accs: &[u8], _keys: &[String]) -> Option<(String, HashMap<String,String>)> {{
+    None
+}}"#,
+                dex = to_snake(&pg.dex_name),
+            ));
+        } else {
+            src.push_str(&format!(
+r#"
+fn decode_{dex}(data: &[u8], {accs_param}, {keys_param}) -> Option<(String, HashMap<String,String>)> {{
     if data.len() < 8 {{ return None; }}
     let disc: [u8;8] = data[0..8].try_into().ok()?;
     match disc {{"#,
-            dex = to_snake(&pg.dex_name),
-        ));
-
-        for ix in &pg.ixs {
-            src.push_str(&format!(
-                "\n        {} => {{\n            let mut roles = HashMap::new();\n",
-                format!("DISC_{}_{}", to_const(&pg.dex_name), to_const(&ix.ix_name))
+                dex = to_snake(&pg.dex_name),
+                accs_param = accs_param,
+                keys_param = keys_param,
             ));
-            for (alias, pos) in &ix.positions {
+
+            for ix in &pg.ixs {
+                let disc_name = format!("DISC_{}_{}", to_const(&pg.dex_name), to_const(&ix.ix_name));
+                let mut_modifier = if ix.positions.is_empty() { "" } else { "mut " };
                 src.push_str(&format!(
-                    "            if let Some(ai) = accs.get({}) {{ if let Some(pk) = keys.get(*ai as usize) {{ roles.insert(\"{}\".to_string(), pk.clone()); }} }}\n",
-                    pos, alias
+                    "\n        {} => {{\n            let {}roles = HashMap::new();\n",
+                    disc_name, mut_modifier
+                ));
+                for (alias, pos) in &ix.positions {
+                    let accessor = if *pos == 0 { "first()" } else { &format!("get({})", pos) };
+                    src.push_str(&format!(
+                        "            if let Some(ai) = accs.{} {{ if let Some(pk) = keys.get(*ai as usize) {{ roles.insert(\"{}\".to_string(), pk.clone()); }} }}\n",
+                        accessor, alias
+                    ));
+                }
+                src.push_str(&format!(
+                    "            Some((\"{}\".to_string(), roles))\n        }},\n",
+                    ix.ix_name
                 ));
             }
-            src.push_str(&format!(
-                "            Some((\"{}\".to_string(), roles))\n        }},\n",
-                ix.ix_name
-            ));
-        }
 
-        src.push_str("        _ => None,\n    }\n}\n");
+            src.push_str("        _ => None,\n    }\n}\n");
+        }
     }
 
     // ---- one SwapExtractor per program ----
@@ -380,10 +400,7 @@ impl SwapExtractor for {ty} {{
             pool_id,
             // We could dispatch by decoded_name to pick CLMM/CPMM/… exactly per-ix. For now, prefer CLMM if any ix kind is CLMM.
             swap_kind: {{
-                match ctx.decoded_name.as_deref() {{
-                    {kind_match_arms}
-                    _ => SwapKind::Other,
-                }}
+                {swap_kind_assignment}
             }},
             token_in_mint: ia.token_in_mint,
             token_out_mint: ia.token_out_mint,
@@ -406,7 +423,11 @@ impl SwapExtractor for {ty} {{
             ty = ty,
             pid = pg.program_id,
             dex_tag = to_snake(&pg.dex_name),
-            kind_match_arms = kind_match(&pg.kind_by_ix),
+            swap_kind_assignment = if pg.kind_by_ix.is_empty() {
+                "SwapKind::Other".to_string()
+            } else {
+                format!("match ctx.decoded_name.as_deref() {{\n                    {}\n                    _ => SwapKind::Other,\n                }}", kind_match(&pg.kind_by_ix))
+            },
         ));
     }
 

@@ -320,9 +320,9 @@ fn build_from_anchor_repo(
     expected_names: &[String],
 ) -> io::Result<()> {
     if which::which("git").is_err() || which::which("anchor").is_err() {
-        return Err(io::Error::new(io::ErrorKind::Other, "git/anchor missing"));
+        return Err(io::Error::other("git/anchor missing"));
     }
-    let repo_name = repo_url.split('/').last().unwrap_or("repo");
+    let repo_name = repo_url.split('/').next_back().unwrap_or("repo");
     let repo_dir = Path::new("target").join(format!("idl-src-{}", repo_name));
 
     if !repo_dir.exists() {
@@ -330,7 +330,7 @@ fn build_from_anchor_repo(
             .args(["clone", "--depth=1", repo_url, repo_dir.to_str().unwrap()])
             .status()?;
         if !st.success() {
-            return Err(io::Error::new(io::ErrorKind::Other, "git clone failed"));
+            return Err(io::Error::other("git clone failed"));
         }
     }
 
@@ -339,7 +339,7 @@ fn build_from_anchor_repo(
         .arg("build")
         .status()?;
     if !st.success() {
-        return Err(io::Error::new(io::ErrorKind::Other, "anchor build failed"));
+        return Err(io::Error::other("anchor build failed"));
     }
 
     // Try known names first
@@ -371,16 +371,16 @@ fn build_from_anchor_repo(
 
 fn copy_from_idl_repo(repo_url: &str, rel_path: &str, dst: &Path) -> io::Result<()> {
     if which::which("git").is_err() {
-        return Err(io::Error::new(io::ErrorKind::Other, "git missing"));
+        return Err(io::Error::other("git missing"));
     }
-    let repo_name = repo_url.split('/').last().unwrap_or("repo");
+    let repo_name = repo_url.split('/').next_back().unwrap_or("repo");
     let repo_dir = Path::new("target").join(format!("idl-fallback-{}", repo_name));
     if !repo_dir.exists() {
         let st = Command::new("git")
             .args(["clone", "--depth=1", repo_url, repo_dir.to_str().unwrap()])
             .status()?;
         if !st.success() {
-            return Err(io::Error::new(io::ErrorKind::Other, "git clone failed"));
+            return Err(io::Error::other("git clone failed"));
         }
     }
     let src = repo_dir.join(rel_path);

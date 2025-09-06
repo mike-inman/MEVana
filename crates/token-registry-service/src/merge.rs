@@ -50,7 +50,7 @@ pub fn merge(mut base: Option<TokenRecord>, parts: Vec<PartialToken>) -> MergeRe
     merge_field!(logo_url);
 
     // Boolean-ish or vector fields
-    if record.is_stable == false {
+    if !record.is_stable {
         // only upgrade to true
         for p in &parts {
             if p.is_stable == Some(true) {
@@ -99,7 +99,7 @@ pub fn merge(mut base: Option<TokenRecord>, parts: Vec<PartialToken>) -> MergeRe
         record.sources.push(SourceAttribution {
             source_id: p.source_id.clone(),
             fetched_at: p.fetched_at,
-            fields: collected_fields(&p),
+            fields: collected_fields(p),
         });
     }
     if record.sources.len() > 20 {

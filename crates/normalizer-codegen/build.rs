@@ -59,7 +59,7 @@ fn generate_extractors(
             continue;
         }
 
-        let mod_src = generate_program_module(&profile)?;
+        let mod_src = generate_program_module(profile)?;
         let mod_name = format!("program_{}", profile.program_name.replace('-', "_"));
         let mod_path = out_dir.join(format!("{mod_name}.rs"));
         fs::write(&mod_path, mod_src)?;

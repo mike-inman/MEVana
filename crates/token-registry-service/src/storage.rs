@@ -6,6 +6,7 @@ use std::{collections::HashMap, sync::Arc};
 
 pub struct HotStore {
     inner: RwLock<HashMap<String, TokenRecord>>,
+    #[allow(dead_code)]
     pub registry_hash: RwLock<String>,
 }
 impl HotStore {

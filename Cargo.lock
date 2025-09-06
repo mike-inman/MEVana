@@ -9805,6 +9805,7 @@ dependencies = [
  "ethnum",
  "serde",
  "sha2 0.10.9",
+ "solana-client",
  "solana-sdk 2.1.21",
 ]
 

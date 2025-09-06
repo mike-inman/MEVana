@@ -1,3 +1,10 @@
+#![allow(unused_imports, unused_variables, dead_code)]
+#![allow(clippy::type_complexity, clippy::new_without_default)]
+#![allow(clippy::should_implement_trait, clippy::manual_clamp)]
+#![allow(clippy::match_like_matches_macro, clippy::unwrap_or_default)]
+#![allow(clippy::collapsible_else_if, private_interfaces)]
+#![allow(mismatched_lifetime_syntaxes)]
+
 pub mod config;
 // pub mod engine; // Temporarily disabled due to compilation errors
 pub mod engine_fast;

@@ -88,7 +88,7 @@ impl DexRegistry {
         self.cache.start_refresh_task().await?;
 
         // Start discovery service
-        let discovery_handle = {
+        let _discovery_handle = {
             let discovery_service = Arc::clone(&self.discovery_service);
             tokio::spawn(async move {
                 if let Err(e) = discovery_service.start().await {
@@ -98,7 +98,7 @@ impl DexRegistry {
         };
 
         // Start API server
-        let api_handle = {
+        let _api_handle = {
             let api_server = Arc::clone(&self.api_server);
             tokio::spawn(async move {
                 if let Err(e) = api_server.start().await {

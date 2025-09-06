@@ -289,7 +289,7 @@ impl DexPlugin for OrcaWhirlpoolPlugin {
         }
     }
 
-    fn parse_idl(&self, idl_content: &str) -> Result<ParsedIdl> {
+    fn parse_idl(&self, _idl_content: &str) -> Result<ParsedIdl> {
         // TODO: Implement actual IDL parsing
         debug!("Parsing Orca Whirlpool IDL");
 

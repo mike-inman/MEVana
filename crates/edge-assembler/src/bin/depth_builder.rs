@@ -1,8 +1,9 @@
+#![allow(unused_imports, unused_mut)]
+
 use anyhow::{Context, Result};
 use dotenv::dotenv;
-use env_logger;
 use log::{info, warn};
-use redis::{AsyncCommands, Value};
+use redis::Value;
 use serde_json::json;
 use std::collections::HashMap;
 
