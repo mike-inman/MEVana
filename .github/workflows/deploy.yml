@@ -1,8 +1,9 @@
 name: Deploy to Production Server
 
 on:
-  push:
-    branches: [ main ]
+  # Disabled for direct SSH deployment
+  # push:
+  #   branches: [ main ]
   workflow_dispatch:
     inputs:
       force_deploy:
