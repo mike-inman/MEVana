@@ -1,8 +1,8 @@
-use std::sync::Arc;
-use tokio::sync::RwLock;
-use solana_sdk::pubkey::Pubkey;
 use serde::{Deserialize, Serialize};
+use solana_sdk::pubkey::Pubkey;
+use std::sync::Arc;
 use std::time::{Duration, Instant};
+use tokio::sync::RwLock;
 
 /// Wallet states for safe transitions
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -43,7 +43,7 @@ impl Default for WalletSafetyConfig {
         Self {
             max_transaction_amount: 1_000_000_000, // 1 SOL
             max_daily_volume: 100_000_000_000,     // 100 SOL
-            evacuation_threshold: 0.6,              // 60% success rate
+            evacuation_threshold: 0.6,             // 60% success rate
             cold_wallet: Pubkey::default(),
             warm_wallet: Pubkey::default(),
             transfer_chunks: 10,
@@ -144,13 +144,17 @@ impl WalletSafetyManager {
         // Check limits
         let metrics = self.metrics.read().await;
         if amount > self.config.max_transaction_amount {
-            return Err(format!("Amount exceeds max transaction limit: {} > {}", 
-                amount, self.config.max_transaction_amount));
+            return Err(format!(
+                "Amount exceeds max transaction limit: {} > {}",
+                amount, self.config.max_transaction_amount
+            ));
         }
-        
+
         if metrics.daily_volume + amount > self.config.max_daily_volume {
-            return Err(format!("Would exceed daily volume limit: {} + {} > {}", 
-                metrics.daily_volume, amount, self.config.max_daily_volume));
+            return Err(format!(
+                "Would exceed daily volume limit: {} + {} > {}",
+                metrics.daily_volume, amount, self.config.max_daily_volume
+            ));
         }
         drop(metrics);
 
@@ -198,18 +202,18 @@ impl WalletSafetyManager {
     /// Initiate safe wallet transition
     pub async fn initiate_transition(&self) -> Result<(), String> {
         let mut state = self.state.write().await;
-        
+
         match *state {
             WalletState::Active => {
                 *state = WalletState::Transitioning;
                 drop(state);
-                
+
                 // Wait for pending trades
                 self.await_pending_trades().await;
-                
+
                 Ok(())
             }
-            _ => Err(format!("Cannot transition from state: {:?}", *state))
+            _ => Err(format!("Cannot transition from state: {:?}", *state)),
         }
     }
 
@@ -220,7 +224,7 @@ impl WalletSafetyManager {
         drop(state);
 
         log::error!("EMERGENCY EVACUATION INITIATED - Moving funds to cold storage");
-        
+
         // In production, this would:
         // 1. Stop all new trades immediately
         // 2. Cancel pending orders
@@ -232,7 +236,7 @@ impl WalletSafetyManager {
     pub async fn enter_lifeboat_mode(&self) {
         let mut state = self.state.write().await;
         *state = WalletState::Lifeboat;
-        
+
         log::warn!("Entering LIFEBOAT MODE - Trading with reduced capacity");
     }
 
@@ -240,15 +244,15 @@ impl WalletSafetyManager {
     pub async fn resume_normal_operations(&self) -> Result<(), String> {
         let mut state = self.state.write().await;
         let mut metrics = self.metrics.write().await;
-        
+
         // Only resume if metrics are healthy
         if metrics.success_rate() < 0.8 {
             return Err("Success rate too low to resume normal operations".to_string());
         }
-        
+
         *state = WalletState::Active;
         metrics.consecutive_failures = 0;
-        
+
         log::info!("Resumed normal trading operations");
         Ok(())
     }
@@ -258,7 +262,7 @@ impl WalletSafetyManager {
         let state = self.state.read().await;
         let metrics = self.metrics.read().await;
         let pending = self.pending_trades.read().await;
-        
+
         SafetyStatus {
             state: *state,
             success_rate: metrics.success_rate(),
@@ -289,16 +293,19 @@ mod tests {
     async fn test_wallet_state_transitions() {
         let config = WalletSafetyConfig::default();
         let manager = WalletSafetyManager::new(config);
-        
+
         // Should start active
         assert!(manager.can_trade().await);
-        
+
         // Register a trade
-        manager.register_trade("test1".to_string(), 1000).await.unwrap();
-        
+        manager
+            .register_trade("test1".to_string(), 1000)
+            .await
+            .unwrap();
+
         // Initiate transition
         manager.initiate_transition().await.unwrap();
-        
+
         // Should not allow new trades during transition
         assert!(!manager.can_trade().await);
     }
@@ -307,16 +314,16 @@ mod tests {
     async fn test_evacuation_trigger() {
         let mut config = WalletSafetyConfig::default();
         config.evacuation_threshold = 0.5; // 50% success rate
-        
+
         let manager = WalletSafetyManager::new(config);
-        
+
         // Record failures to trigger evacuation
         for i in 0..10 {
             let trade_id = format!("trade_{}", i);
             manager.register_trade(trade_id.clone(), 100).await.unwrap();
             manager.complete_trade(&trade_id, i < 3, 100).await; // Only 30% success
         }
-        
+
         // Should be evacuating
         let state = manager.state.read().await;
         assert_eq!(*state, WalletState::Evacuating);
