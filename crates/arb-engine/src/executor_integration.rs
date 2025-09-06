@@ -3,10 +3,10 @@
 // These would normally be imported from executor-service, but since we're in arb-engine,
 // we'll create lightweight versions that can interface with the full implementation
 
+use anyhow::Result;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::time::{Duration, Instant};
-use anyhow::Result;
 
 // Lightweight versions for arb-engine to use
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -24,8 +24,8 @@ pub struct MultiHopOpportunity {
     pub route_complexity: u8,
     pub venues_used: Vec<String>,
     pub execution_time_estimate_ms: u64, // Use u64 instead of Duration for serialization
-    pub detected_at_ns: u64, // Use u64 instead of Instant for serialization
-    pub expires_at_ns: u64,  // Use u64 instead of Instant for serialization
+    pub detected_at_ns: u64,             // Use u64 instead of Instant for serialization
+    pub expires_at_ns: u64,              // Use u64 instead of Instant for serialization
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
@@ -60,11 +60,7 @@ pub struct JupiterIntegration {
 }
 
 impl JupiterIntegration {
-    pub fn with_config(
-        max_slippage_bps: u16,
-        max_price_impact: f64,
-        min_profit_bps: i32,
-    ) -> Self {
+    pub fn with_config(max_slippage_bps: u16, max_price_impact: f64, min_profit_bps: i32) -> Self {
         Self {
             max_slippage_bps,
             max_price_impact,
@@ -80,7 +76,7 @@ impl JupiterIntegration {
     ) -> Result<Vec<MultiHopOpportunity>> {
         // This is a placeholder - the real implementation will call executor-service
         // via HTTP API or direct integration
-        
+
         // For now, return empty results until we wire up the full integration
         Ok(vec![])
     }
@@ -105,7 +101,7 @@ pub const COMMON_TOKENS: &[&str] = &[
     "7vfCXTUXx5WJV5JADk17DUJ4ksgau7utNKj4b963voxs", // ETH (Wormhole)
     "9n4nbM75f5Ui33ZbPYXn59EwSgE8CGsHtAeTH5YFeJ9E", // BTC (Wormhole)
     "SRMuApVNdxXokk5GT7XD5cUUgXMBCoAz2LHeuAoKWRt", // SRM (Serum)
-    "RLBxxFkseAZ4RgJH3Sqn8jXxhmGoz9jWxDNJMh8pL7a",  // RLB (Rollbit)
+    "RLBxxFkseAZ4RgJH3Sqn8jXxhmGoz9jWxDNJMh8pL7a", // RLB (Rollbit)
 ];
 
 // Enhanced token list for better opportunities
@@ -114,23 +110,19 @@ pub const EXTENDED_TOKENS: &[&str] = &[
     "So11111111111111111111111111111111111111112", // SOL
     "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v", // USDC
     "Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB", // USDT
-    
     // LSTs (Liquid Staking Tokens) - often good arbitrage targets
     "mSoLzYCxHdYgdzU16g5QSh3i5K3z3KZK7ytfqcJm7So", // mSOL
     "bSo13r4TkiE4KumL71LsHTPpL2euBYLFx6h9HP3piy1", // bSOL
     "7Q2afV64in6N6SeZsAAB81TJzwDoD6zpqmHkzi9Dcavn", // jitoSOL
     "J1toso1uCk3RLmjorhTtrVwY9HJ7X8V9yYac6Y7kGCPn", // JitoSOL
-    
     // Bridge tokens
     "7vfCXTUXx5WJV5JADk17DUJ4ksgau7utNKj4b963voxs", // ETH (Wormhole)
     "9n4nbM75f5Ui33ZbPYXn59EwSgE8CGsHtAeTH5YFeJ9E", // BTC (Wormhole)
     "A9mUU4qviSctJVPJdBJWkb28deg915LYJKrzQ19ji3FM", // USTv2
-    
     // Meme/Community tokens (higher volatility = more arb opportunities)
     "DezXAZ8z7PnrnRJjz3wXBoRgixCa6xjnB7YaB1pPB263", // BONK
     "3NZ9JMVBmGAqocybic2c7LQCJScmgsAZ6vQqTDzcqmJh", // WIF
-    "ukHH6c7mMyiWCf1b9pnWe25TSpkDDt3H5pQZgZ74J82", // BOME
-    
+    "ukHH6c7mMyiWCf1b9pnWe25TSpkDDt3H5pQZgZ74J82",  // BOME
     // DeFi tokens
     "SRMuApVNdxXokk5GT7XD5cUUgXMBCoAz2LHeuAoKWRt", // SRM
     "RLBxxFkseAZ4RgJH3Sqn8jXxhmGoz9jWxDNJMh8pL7a", // RLB
@@ -152,27 +144,39 @@ pub async fn call_jupiter_api(
 // Helper to categorize tokens by type for targeted arbitrage
 pub fn categorize_tokens() -> HashMap<String, Vec<&'static str>> {
     let mut categories = HashMap::new();
-    
-    categories.insert("stablecoins".to_string(), vec![
-        "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v", // USDC
-        "Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB", // USDT
-    ]);
-    
-    categories.insert("liquid_staking".to_string(), vec![
-        "mSoLzYCxHdYgdzU16g5QSh3i5K3z3KZK7ytfqcJm7So", // mSOL
-        "bSo13r4TkiE4KumL71LsHTPpL2euBYLFx6h9HP3piy1", // bSOL
-        "J1toso1uCk3RLmjorhTtrVwY9HJ7X8V9yYac6Y7kGCPn", // JitoSOL
-    ]);
-    
-    categories.insert("meme_tokens".to_string(), vec![
-        "DezXAZ8z7PnrnRJjz3wXBoRgixCa6xjnB7YaB1pPB263", // BONK
-        "3NZ9JMVBmGAqocybic2c7LQCJScmgsAZ6vQqTDzcqmJh", // WIF
-    ]);
-    
-    categories.insert("bridge_tokens".to_string(), vec![
-        "7vfCXTUXx5WJV5JADk17DUJ4ksgau7utNKj4b963voxs", // ETH
-        "9n4nbM75f5Ui33ZbPYXn59EwSgE8CGsHtAeTH5YFeJ9E", // BTC
-    ]);
-    
+
+    categories.insert(
+        "stablecoins".to_string(),
+        vec![
+            "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v", // USDC
+            "Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB", // USDT
+        ],
+    );
+
+    categories.insert(
+        "liquid_staking".to_string(),
+        vec![
+            "mSoLzYCxHdYgdzU16g5QSh3i5K3z3KZK7ytfqcJm7So",  // mSOL
+            "bSo13r4TkiE4KumL71LsHTPpL2euBYLFx6h9HP3piy1",  // bSOL
+            "J1toso1uCk3RLmjorhTtrVwY9HJ7X8V9yYac6Y7kGCPn", // JitoSOL
+        ],
+    );
+
+    categories.insert(
+        "meme_tokens".to_string(),
+        vec![
+            "DezXAZ8z7PnrnRJjz3wXBoRgixCa6xjnB7YaB1pPB263", // BONK
+            "3NZ9JMVBmGAqocybic2c7LQCJScmgsAZ6vQqTDzcqmJh", // WIF
+        ],
+    );
+
+    categories.insert(
+        "bridge_tokens".to_string(),
+        vec![
+            "7vfCXTUXx5WJV5JADk17DUJ4ksgau7utNKj4b963voxs", // ETH
+            "9n4nbM75f5Ui33ZbPYXn59EwSgE8CGsHtAeTH5YFeJ9E", // BTC
+        ],
+    );
+
     categories
 }

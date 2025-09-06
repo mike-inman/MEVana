@@ -10,7 +10,9 @@ static HANDLE: OnceCell<metrics_exporter_prometheus::PrometheusHandle> = OnceCel
 #[tokio::test]
 #[serial_test::serial]
 async fn log_rotation_triggers_on_size() {
-    if std::env::var("SKIP_SLOW_TESTS").is_ok() { return; }
+    if std::env::var("SKIP_SLOW_TESTS").is_ok() {
+        return;
+    }
     // Unique temp dir
     let tmp_dir = std::env::temp_dir().join(format!(
         "mevana_log_test_{}",
@@ -61,8 +63,12 @@ async fn log_rotation_triggers_on_size() {
     // Poll briefly for rotated file instead of fixed sleep to minimize test time.
     let rotated = tmp_dir.join("advice.jsonl.1");
     let mut found = false;
-    for _ in 0..20 { // up to ~100ms worst-case
-        if rotated.exists() { found = true; break; }
+    for _ in 0..20 {
+        // up to ~100ms worst-case
+        if rotated.exists() {
+            found = true;
+            break;
+        }
         tokio::time::sleep(std::time::Duration::from_millis(5)).await;
     }
     assert!(found, "expected rotated log file {:?} to exist", rotated);

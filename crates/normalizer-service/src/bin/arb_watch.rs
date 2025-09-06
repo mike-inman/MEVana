@@ -50,7 +50,9 @@ fn parse_decimal(s: &str) -> Option<f64> {
 fn price_from_swap(se: &SwapEvent) -> Option<f64> {
     let ain = parse_decimal(&se.amount_in)?;
     let aout = parse_decimal(&se.amount_out)?;
-    if ain <= 0.0 { return None; }
+    if ain <= 0.0 {
+        return None;
+    }
     Some(aout / ain)
 }
 
@@ -69,25 +71,39 @@ async fn main() -> Result<()> {
     let mut best_by_pair: HashMap<String, HashMap<String, Quote>> = HashMap::new();
     let ttl = Duration::from_secs(args.ttl_seconds);
 
-    eprintln!("arb_watch: broker={} topic={} threshold_pct={}%",
-        args.broker, args.topic, args.threshold_pct);
+    eprintln!(
+        "arb_watch: broker={} topic={} threshold_pct={}%",
+        args.broker, args.topic, args.threshold_pct
+    );
 
     loop {
         let m = match consumer.recv().await {
             Ok(m) => m,
-            Err(e) => { eprintln!("kafka recv error: {e}"); continue; }
+            Err(e) => {
+                eprintln!("kafka recv error: {e}");
+                continue;
+            }
         };
-        let Some(payload) = m.payload() else { continue; };
+        let Some(payload) = m.payload() else {
+            continue;
+        };
 
         let se: SwapEvent = match serde_json::from_slice(payload) {
             Ok(x) => x,
             Err(_) => continue,
         };
-        let Some(p) = price_from_swap(&se) else { continue; };
+        let Some(p) = price_from_swap(&se) else {
+            continue;
+        };
 
         let pair = format!("{}/{}", se.in_mint, se.out_mint);
         let now = Instant::now();
-        let q = Quote { price_out_per_in: p, pool_id: se.pool_id.clone(), dex: se.dex.clone(), ts: now };
+        let q = Quote {
+            price_out_per_in: p,
+            pool_id: se.pool_id.clone(),
+            dex: se.dex.clone(),
+            ts: now,
+        };
 
         // upsert
         let book = best_by_pair.entry(pair.clone()).or_default();
@@ -97,7 +113,9 @@ async fn main() -> Result<()> {
         book.retain(|_, q| now.duration_since(q.ts) <= ttl);
 
         // need at least 2 venues
-        if book.len() < 2 { continue; }
+        if book.len() < 2 {
+            continue;
+        }
 
         // find best buy (max out per 1 in) and worst
         let mut quotes: Vec<_> = book.values().cloned().collect();
@@ -112,8 +130,12 @@ async fn main() -> Result<()> {
                 "🚨 ARB CANDIDATE pair={} edge={:.3}% buy@{}:{}({}) sell@{}:{}({})",
                 pair,
                 gross_edge,
-                best.dex, best.pool_id, best.price_out_per_in,
-                worst.dex, worst.pool_id, worst.price_out_per_in
+                best.dex,
+                best.pool_id,
+                best.price_out_per_in,
+                worst.dex,
+                worst.pool_id,
+                worst.price_out_per_in
             );
             // TODO: publish candidate JSON to "arb-candidates.v1" if you want another stage to consume.
         }

@@ -79,24 +79,22 @@ impl ApiServer {
     }
 
     async fn start_metrics_server(&self) -> Result<()> {
-        let metrics_route = warp::path("metrics")
-            .and(warp::get())
-            .map(|| {
-                let encoder = TextEncoder::new();
-                let metric_families = prometheus::gather();
-                let mut buffer = Vec::new();
-                
-                match encoder.encode(&metric_families, &mut buffer) {
-                    Ok(_) => warp::reply::with_status(
-                        String::from_utf8_lossy(&buffer).to_string(),
-                        warp::http::StatusCode::OK,
-                    ),
-                    Err(e) => warp::reply::with_status(
-                        format!("Failed to encode metrics: {}", e),
-                        warp::http::StatusCode::INTERNAL_SERVER_ERROR,
-                    ),
-                }
-            });
+        let metrics_route = warp::path("metrics").and(warp::get()).map(|| {
+            let encoder = TextEncoder::new();
+            let metric_families = prometheus::gather();
+            let mut buffer = Vec::new();
+
+            match encoder.encode(&metric_families, &mut buffer) {
+                Ok(_) => warp::reply::with_status(
+                    String::from_utf8_lossy(&buffer).to_string(),
+                    warp::http::StatusCode::OK,
+                ),
+                Err(e) => warp::reply::with_status(
+                    format!("Failed to encode metrics: {}", e),
+                    warp::http::StatusCode::INTERNAL_SERVER_ERROR,
+                ),
+            }
+        });
 
         let health_route = warp::path("health")
             .and(warp::get())
@@ -162,7 +160,12 @@ impl ApiServer {
             .or(list_dexs)
             .or(list_tokens)
             .or(list_plugins)
-            .with(warp::cors().allow_any_origin().allow_headers(vec!["content-type"]).allow_methods(vec!["GET", "POST"]));
+            .with(
+                warp::cors()
+                    .allow_any_origin()
+                    .allow_headers(vec!["content-type"])
+                    .allow_methods(vec!["GET", "POST"]),
+            );
 
         let addr: SocketAddr = format!("0.0.0.0:{}", self.http_port).parse()?;
 
@@ -298,17 +301,19 @@ async fn handle_status(
     cache: Arc<RegistryCache>,
     plugin_manager: Arc<PluginManager>,
 ) -> Result<impl Reply, Rejection> {
-    let database_stats = database.get_registry_stats().await.unwrap_or_else(|_| {
-        crate::database::RegistryStats {
-            total_dex_programs: 0,
-            active_dex_programs: 0,
-            total_tokens: 0,
-            verified_tokens: 0,
-            cached_idls: 0,
-            pending_discoveries: 0,
-            last_updated: chrono::Utc::now(),
-        }
-    });
+    let database_stats =
+        database
+            .get_registry_stats()
+            .await
+            .unwrap_or_else(|_| crate::database::RegistryStats {
+                total_dex_programs: 0,
+                active_dex_programs: 0,
+                total_tokens: 0,
+                verified_tokens: 0,
+                cached_idls: 0,
+                pending_discoveries: 0,
+                last_updated: chrono::Utc::now(),
+            });
 
     let response = RegistryStatusResponse {
         status: "operational".to_string(),

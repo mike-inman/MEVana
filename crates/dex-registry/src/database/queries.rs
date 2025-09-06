@@ -2,7 +2,7 @@ use anyhow::Result;
 use chrono::Utc;
 use sqlx::SqlitePool;
 
-use super::{DexProgram, Token, IdlCache, DiscoveryQueue, RegistryStats};
+use super::{DexProgram, DiscoveryQueue, IdlCache, RegistryStats, Token};
 
 // DEX Program queries
 pub async fn insert_dex_program(pool: &SqlitePool, program: &DexProgram) -> Result<()> {
@@ -33,12 +33,11 @@ pub async fn insert_dex_program(pool: &SqlitePool, program: &DexProgram) -> Resu
 }
 
 pub async fn get_dex_program(pool: &SqlitePool, program_id: &str) -> Result<Option<DexProgram>> {
-    let program = sqlx::query_as::<_, DexProgram>(
-        "SELECT * FROM dex_programs WHERE program_id = ?"
-    )
-    .bind(program_id)
-    .fetch_optional(pool)
-    .await?;
+    let program =
+        sqlx::query_as::<_, DexProgram>("SELECT * FROM dex_programs WHERE program_id = ?")
+            .bind(program_id)
+            .fetch_optional(pool)
+            .await?;
 
     Ok(program)
 }
@@ -58,13 +57,11 @@ pub async fn list_dex_programs(pool: &SqlitePool, active_only: bool) -> Result<V
 }
 
 pub async fn update_dex_program_activity(pool: &SqlitePool, program_id: &str) -> Result<()> {
-    sqlx::query(
-        "UPDATE dex_programs SET last_seen = ? WHERE program_id = ?"
-    )
-    .bind(Utc::now())
-    .bind(program_id)
-    .execute(pool)
-    .await?;
+    sqlx::query("UPDATE dex_programs SET last_seen = ? WHERE program_id = ?")
+        .bind(Utc::now())
+        .bind(program_id)
+        .execute(pool)
+        .await?;
 
     Ok(())
 }
@@ -100,12 +97,10 @@ pub async fn insert_token(pool: &SqlitePool, token: &Token) -> Result<()> {
 }
 
 pub async fn get_token(pool: &SqlitePool, mint_address: &str) -> Result<Option<Token>> {
-    let token = sqlx::query_as::<_, Token>(
-        "SELECT * FROM tokens WHERE mint_address = ?"
-    )
-    .bind(mint_address)
-    .fetch_optional(pool)
-    .await?;
+    let token = sqlx::query_as::<_, Token>("SELECT * FROM tokens WHERE mint_address = ?")
+        .bind(mint_address)
+        .fetch_optional(pool)
+        .await?;
 
     Ok(token)
 }
@@ -117,21 +112,21 @@ pub async fn list_tokens(pool: &SqlitePool, verified_only: bool) -> Result<Vec<T
         "SELECT * FROM tokens ORDER BY symbol"
     };
 
-    let tokens = sqlx::query_as::<_, Token>(query)
-        .fetch_all(pool)
-        .await?;
+    let tokens = sqlx::query_as::<_, Token>(query).fetch_all(pool).await?;
 
     Ok(tokens)
 }
 
-pub async fn update_token_metadata(pool: &SqlitePool, mint_address: &str, metadata: &str) -> Result<()> {
-    sqlx::query(
-        "UPDATE tokens SET metadata = ? WHERE mint_address = ?"
-    )
-    .bind(metadata)
-    .bind(mint_address)
-    .execute(pool)
-    .await?;
+pub async fn update_token_metadata(
+    pool: &SqlitePool,
+    mint_address: &str,
+    metadata: &str,
+) -> Result<()> {
+    sqlx::query("UPDATE tokens SET metadata = ? WHERE mint_address = ?")
+        .bind(metadata)
+        .bind(mint_address)
+        .execute(pool)
+        .await?;
 
     Ok(())
 }
@@ -160,7 +155,7 @@ pub async fn insert_idl_cache(pool: &SqlitePool, idl_entry: &IdlCache) -> Result
 
 pub async fn get_idl_cache(pool: &SqlitePool, program_id: &str) -> Result<Option<IdlCache>> {
     let idl_entry = sqlx::query_as::<_, IdlCache>(
-        "SELECT * FROM idl_cache WHERE program_id = ? AND is_valid = true"
+        "SELECT * FROM idl_cache WHERE program_id = ? AND is_valid = true",
     )
     .bind(program_id)
     .fetch_optional(pool)
@@ -171,7 +166,7 @@ pub async fn get_idl_cache(pool: &SqlitePool, program_id: &str) -> Result<Option
 
 pub async fn list_cached_idls(pool: &SqlitePool) -> Result<Vec<IdlCache>> {
     let idl_entries = sqlx::query_as::<_, IdlCache>(
-        "SELECT * FROM idl_cache WHERE is_valid = true ORDER BY fetched_at DESC"
+        "SELECT * FROM idl_cache WHERE is_valid = true ORDER BY fetched_at DESC",
     )
     .fetch_all(pool)
     .await?;
@@ -203,7 +198,10 @@ pub async fn enqueue_discovery(pool: &SqlitePool, discovery: &DiscoveryQueue) ->
     Ok(())
 }
 
-pub async fn dequeue_discovery(pool: &SqlitePool, batch_size: usize) -> Result<Vec<DiscoveryQueue>> {
+pub async fn dequeue_discovery(
+    pool: &SqlitePool,
+    batch_size: usize,
+) -> Result<Vec<DiscoveryQueue>> {
     // First, mark items as processing
     sqlx::query(
         r#"
@@ -239,54 +237,44 @@ pub async fn dequeue_discovery(pool: &SqlitePool, batch_size: usize) -> Result<V
 }
 
 pub async fn complete_discovery(pool: &SqlitePool, id: &str, status: &str) -> Result<()> {
-    sqlx::query(
-        "UPDATE discovery_queue SET status = ?, attempts = attempts + 1 WHERE id = ?"
-    )
-    .bind(status)
-    .bind(id)
-    .execute(pool)
-    .await?;
+    sqlx::query("UPDATE discovery_queue SET status = ?, attempts = attempts + 1 WHERE id = ?")
+        .bind(status)
+        .bind(id)
+        .execute(pool)
+        .await?;
 
     Ok(())
 }
 
 // Analytics queries
 pub async fn get_registry_stats(pool: &SqlitePool) -> Result<RegistryStats> {
-    let total_dex_programs: (i64,) = sqlx::query_as(
-        "SELECT COUNT(*) FROM dex_programs"
-    )
-    .fetch_one(pool)
-    .await?;
+    let total_dex_programs: (i64,) = sqlx::query_as("SELECT COUNT(*) FROM dex_programs")
+        .fetch_one(pool)
+        .await?;
 
-    let active_dex_programs: (i64,) = sqlx::query_as(
-        "SELECT COUNT(*) FROM dex_programs WHERE is_active = true"
-    )
-    .fetch_one(pool)
-    .await?;
+    let active_dex_programs: (i64,) =
+        sqlx::query_as("SELECT COUNT(*) FROM dex_programs WHERE is_active = true")
+            .fetch_one(pool)
+            .await?;
 
-    let total_tokens: (i64,) = sqlx::query_as(
-        "SELECT COUNT(*) FROM tokens"
-    )
-    .fetch_one(pool)
-    .await?;
+    let total_tokens: (i64,) = sqlx::query_as("SELECT COUNT(*) FROM tokens")
+        .fetch_one(pool)
+        .await?;
 
-    let verified_tokens: (i64,) = sqlx::query_as(
-        "SELECT COUNT(*) FROM tokens WHERE verified = true"
-    )
-    .fetch_one(pool)
-    .await?;
+    let verified_tokens: (i64,) =
+        sqlx::query_as("SELECT COUNT(*) FROM tokens WHERE verified = true")
+            .fetch_one(pool)
+            .await?;
 
-    let cached_idls: (i64,) = sqlx::query_as(
-        "SELECT COUNT(*) FROM idl_cache WHERE is_valid = true"
-    )
-    .fetch_one(pool)
-    .await?;
+    let cached_idls: (i64,) =
+        sqlx::query_as("SELECT COUNT(*) FROM idl_cache WHERE is_valid = true")
+            .fetch_one(pool)
+            .await?;
 
-    let pending_discoveries: (i64,) = sqlx::query_as(
-        "SELECT COUNT(*) FROM discovery_queue WHERE status = 'pending'"
-    )
-    .fetch_one(pool)
-    .await?;
+    let pending_discoveries: (i64,) =
+        sqlx::query_as("SELECT COUNT(*) FROM discovery_queue WHERE status = 'pending'")
+            .fetch_one(pool)
+            .await?;
 
     Ok(RegistryStats {
         total_dex_programs: total_dex_programs.0,

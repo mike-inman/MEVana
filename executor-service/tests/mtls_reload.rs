@@ -11,7 +11,8 @@ use x509_parser::prelude::*;
 fn gen_ca() -> (Certificate, KeyPair) {
     let mut p = CertificateParams::default();
     p.is_ca = IsCa::Ca(BasicConstraints::Unconstrained);
-    p.distinguished_name.push(DnType::CommonName, "Reload Test CA");
+    p.distinguished_name
+        .push(DnType::CommonName, "Reload Test CA");
     let kp = KeyPair::generate().unwrap();
     let cert = p.self_signed(&kp).unwrap();
     (cert, kp)
@@ -21,7 +22,9 @@ fn gen_server_cert(cn: &str, ca: &Certificate, cakp: &KeyPair) -> (Vec<u8>, Vec<
     let mut p = CertificateParams::default();
     p.distinguished_name.push(DnType::CommonName, cn);
     // SAN for hostname validation
-    p.subject_alt_names.push(rcgen::SanType::DnsName(rcgen::Ia5String::try_from("server.test").unwrap()));
+    p.subject_alt_names.push(rcgen::SanType::DnsName(
+        rcgen::Ia5String::try_from("server.test").unwrap(),
+    ));
     let kp = KeyPair::generate().unwrap();
     let cert = p.signed_by(&kp, ca, cakp).unwrap();
     (cert.der().to_vec(), kp.serialize_der())
@@ -57,7 +60,10 @@ async fn start_reloadable_server(
     let addr = listener.local_addr().unwrap();
     let handle = tokio::spawn(async move {
         loop {
-            let (tcp, _peer) = match listener.accept().await { Ok(v)=>v, Err(_)=> break };
+            let (tcp, _peer) = match listener.accept().await {
+                Ok(v) => v,
+                Err(_) => break,
+            };
             let mut cfg_rx_clone = cfg_rx.clone();
             let cfg_current = cfg_rx_clone.borrow().clone();
             let acceptor = TlsAcceptor::from(cfg_current);
@@ -75,7 +81,12 @@ async fn start_reloadable_server(
     (addr, handle)
 }
 
-async fn fetch_server_cert_cn(addr: std::net::SocketAddr, client_cert: &[u8], client_key: &[u8], ca_der: &[u8]) -> String {
+async fn fetch_server_cert_cn(
+    addr: std::net::SocketAddr,
+    client_cert: &[u8],
+    client_key: &[u8],
+    ca_der: &[u8],
+) -> String {
     // Build client config
     let mut root_store = RootCertStore::empty();
     let _ = root_store.add(rustls::pki_types::CertificateDer::from(ca_der.to_vec()));
@@ -83,7 +94,9 @@ async fn fetch_server_cert_cn(addr: std::net::SocketAddr, client_cert: &[u8], cl
         let cc = rustls::ClientConfig::builder()
             .with_root_certificates(root_store)
             .with_client_auth_cert(
-                vec![rustls::pki_types::CertificateDer::from(client_cert.to_vec())],
+                vec![rustls::pki_types::CertificateDer::from(
+                    client_cert.to_vec(),
+                )],
                 rustls::pki_types::PrivateKeyDer::Pkcs8(client_key.to_vec().into()),
             )
             .unwrap();

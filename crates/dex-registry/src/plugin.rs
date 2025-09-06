@@ -16,19 +16,19 @@ pub struct PluginManager {
 pub trait DexPlugin: Send + Sync {
     /// Get plugin metadata
     fn metadata(&self) -> PluginMetadata;
-    
+
     /// Parse IDL and generate instruction builders
     fn parse_idl(&self, idl_content: &str) -> Result<ParsedIdl>;
-    
+
     /// Build swap instruction for this DEX
     fn build_swap_instruction(&self, params: SwapParams) -> Result<SwapInstruction>;
-    
+
     /// Get supported instruction types
     fn supported_instructions(&self) -> Vec<String>;
-    
+
     /// Validate if a program ID belongs to this DEX
     fn is_program_supported(&self, program_id: &str) -> bool;
-    
+
     /// Get DEX-specific quirks and optimizations
     fn get_quirks(&self) -> Vec<String>;
 }
@@ -134,7 +134,7 @@ impl PluginManager {
 
     pub async fn initialize(&mut self) -> Result<()> {
         info!("Initializing plugin manager");
-        
+
         // Create plugin directory if it doesn't exist
         if !self.plugin_dir.exists() {
             tokio::fs::create_dir_all(&self.plugin_dir).await?;
@@ -149,7 +149,10 @@ impl PluginManager {
             self.load_external_plugins().await?;
         }
 
-        info!("Plugin manager initialized with {} plugins", self.plugins.len());
+        info!(
+            "Plugin manager initialized with {} plugins",
+            self.plugins.len()
+        );
         Ok(())
     }
 
@@ -182,7 +185,7 @@ impl PluginManager {
         // Scan for plugin files (.so, .dll, .dylib)
         let mut plugin_files = Vec::new();
         let mut entries = tokio::fs::read_dir(&self.plugin_dir).await?;
-        
+
         while let Some(entry) = entries.next_entry().await? {
             let path = entry.path();
             if let Some(extension) = path.extension() {
@@ -206,10 +209,12 @@ impl PluginManager {
     pub fn register_plugin(&mut self, plugin: Arc<dyn DexPlugin>) -> Result<()> {
         let metadata = plugin.metadata();
         let plugin_key = format!("{}_{}", metadata.dex_name.to_lowercase(), metadata.version);
-        
-        info!("Registering plugin: {} v{} for {}", 
-              metadata.name, metadata.version, metadata.dex_name);
-        
+
+        info!(
+            "Registering plugin: {} v{} for {}",
+            metadata.name, metadata.version, metadata.dex_name
+        );
+
         self.plugins.insert(plugin_key, plugin);
         Ok(())
     }
@@ -278,9 +283,7 @@ impl DexPlugin for OrcaWhirlpoolPlugin {
             version: "1.0.0".to_string(),
             dex_name: "Orca".to_string(),
             protocol_type: "CLMM".to_string(),
-            supported_program_ids: vec![
-                "whirLbMi2vNtMeJ6z18WZb98sPNT1L4GzWk2vuyZgq2U".to_string()
-            ],
+            supported_program_ids: vec!["whirLbMi2vNtMeJ6z18WZb98sPNT1L4GzWk2vuyZgq2U".to_string()],
             author: "MEVana".to_string(),
             description: "Parser for Orca Whirlpool concentrated liquidity pools".to_string(),
         }
@@ -289,7 +292,7 @@ impl DexPlugin for OrcaWhirlpoolPlugin {
     fn parse_idl(&self, idl_content: &str) -> Result<ParsedIdl> {
         // TODO: Implement actual IDL parsing
         debug!("Parsing Orca Whirlpool IDL");
-        
+
         // For now, return a basic parsed structure
         Ok(ParsedIdl {
             program_id: "whirLbMi2vNtMeJ6z18WZb98sPNT1L4GzWk2vuyZgq2U".to_string(),
@@ -302,7 +305,7 @@ impl DexPlugin for OrcaWhirlpoolPlugin {
 
     fn build_swap_instruction(&self, params: SwapParams) -> Result<SwapInstruction> {
         debug!("Building Orca Whirlpool swap instruction");
-        
+
         // TODO: Implement actual instruction building
         Ok(SwapInstruction {
             program_id: params.program_id,
@@ -338,7 +341,9 @@ impl DexPlugin for OrcaWhirlpoolPlugin {
 // Similar implementations for other DEX plugins...
 
 impl RaydiumPlugin {
-    pub fn new() -> Self { Self }
+    pub fn new() -> Self {
+        Self
+    }
 }
 
 impl DexPlugin for RaydiumPlugin {
@@ -378,13 +383,18 @@ impl DexPlugin for RaydiumPlugin {
     }
 
     fn supported_instructions(&self) -> Vec<String> {
-        vec!["swap".to_string(), "swapBaseIn".to_string(), "swapBaseOut".to_string()]
+        vec![
+            "swap".to_string(),
+            "swapBaseIn".to_string(),
+            "swapBaseOut".to_string(),
+        ]
     }
 
     fn is_program_supported(&self, program_id: &str) -> bool {
-        matches!(program_id, 
-            "675kPX9MWYgmL7z3vNL1SWqjc9p3t7g8a8PNg4K8d5m" | 
-            "CAMMCzo5YL8w4VFF8KVHrK22GGUsp5VTaW7grrKgrWqK"
+        matches!(
+            program_id,
+            "675kPX9MWYgmL7z3vNL1SWqjc9p3t7g8a8PNg4K8d5m"
+                | "CAMMCzo5YL8w4VFF8KVHrK22GGUsp5VTaW7grrKgrWqK"
         )
     }
 
@@ -394,7 +404,9 @@ impl DexPlugin for RaydiumPlugin {
 }
 
 impl PhoenixPlugin {
-    pub fn new() -> Self { Self }
+    pub fn new() -> Self {
+        Self
+    }
 }
 
 impl DexPlugin for PhoenixPlugin {
@@ -404,9 +416,7 @@ impl DexPlugin for PhoenixPlugin {
             version: "1.0.0".to_string(),
             dex_name: "Phoenix".to_string(),
             protocol_type: "CLOB".to_string(),
-            supported_program_ids: vec![
-                "PhoeNiX7JJR8KLjc9JTvnR7K5s1E8K8o5C8m4D9w3pN".to_string()
-            ],
+            supported_program_ids: vec!["PhoeNiX7JJR8KLjc9JTvnR7K5s1E8K8o5C8m4D9w3pN".to_string()],
             author: "MEVana".to_string(),
             description: "Parser for Phoenix central limit order book".to_string(),
         }
@@ -432,7 +442,11 @@ impl DexPlugin for PhoenixPlugin {
     }
 
     fn supported_instructions(&self) -> Vec<String> {
-        vec!["placeOrder".to_string(), "cancelOrder".to_string(), "swap".to_string()]
+        vec![
+            "placeOrder".to_string(),
+            "cancelOrder".to_string(),
+            "swap".to_string(),
+        ]
     }
 
     fn is_program_supported(&self, program_id: &str) -> bool {
@@ -445,7 +459,9 @@ impl DexPlugin for PhoenixPlugin {
 }
 
 impl MeteoraPlugin {
-    pub fn new() -> Self { Self }
+    pub fn new() -> Self {
+        Self
+    }
 }
 
 impl DexPlugin for MeteoraPlugin {
@@ -455,9 +471,7 @@ impl DexPlugin for MeteoraPlugin {
             version: "1.0.0".to_string(),
             dex_name: "Meteora".to_string(),
             protocol_type: "DLMM".to_string(),
-            supported_program_ids: vec![
-                "METALmNJxYdxiMExY7hhE6RTfQ3QqpTDUxqrnWBH8dG".to_string()
-            ],
+            supported_program_ids: vec!["METALmNJxYdxiMExY7hhE6RTfQ3QqpTDUxqrnWBH8dG".to_string()],
             author: "MEVana".to_string(),
             description: "Parser for Meteora Dynamic Liquidity Market Maker".to_string(),
         }
@@ -483,7 +497,11 @@ impl DexPlugin for MeteoraPlugin {
     }
 
     fn supported_instructions(&self) -> Vec<String> {
-        vec!["swap".to_string(), "addLiquidity".to_string(), "removeLiquidity".to_string()]
+        vec![
+            "swap".to_string(),
+            "addLiquidity".to_string(),
+            "removeLiquidity".to_string(),
+        ]
     }
 
     fn is_program_supported(&self, program_id: &str) -> bool {

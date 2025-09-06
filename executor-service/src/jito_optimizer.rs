@@ -2,15 +2,15 @@
 //! Enterprise-grade Jito bundling optimization for MEV execution
 
 use anyhow::Result;
-use log::{debug, info, warn, error};
+use log::{debug, error, info, warn};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 use tokio::time::sleep;
 
-use crate::config::ExecutorConfig;
 use crate::bundle_builder::{ArbitrageBundle, BundleBuilder};
+use crate::config::ExecutorConfig;
 use crate::execution_engine::ArbitrageOpportunity;
 use crate::flash_loan::{FlashLoanProvider, FlashLoanQuote};
 use crate::metrics::MetricsServer;
@@ -80,7 +80,7 @@ pub struct JitoOptimizer {
     optimization_params: JitoOptimizationParams,
     // Advanced optimization state
     recent_bundle_performance: HashMap<String, f64>, // venue -> success_rate
-    tip_escalation_history: HashMap<String, u64>,   // bundle_id -> final_tip
+    tip_escalation_history: HashMap<String, u64>,    // bundle_id -> final_tip
 }
 
 impl JitoOptimizer {
@@ -115,7 +115,7 @@ impl JitoOptimizer {
     ) -> Result<JitoBundleResult> {
         let start_time = Instant::now();
         let bundle_id = format!("bundle_{}", uuid::Uuid::new_v4());
-        
+
         info!(
             "🚀 Starting optimized Jito execution: bundle={} opportunity={} test_mode={}",
             bundle_id, opportunity.opportunity_id, test_mode
@@ -137,12 +137,18 @@ impl JitoOptimizer {
         };
 
         // Step 2: Build bundle with enhanced optimization
-        match self.build_enhanced_bundle(opportunity, flash_loan_provider, &mut result).await {
+        match self
+            .build_enhanced_bundle(opportunity, flash_loan_provider, &mut result)
+            .await
+        {
             Ok(bundle) => {
                 result.transaction_count = bundle.transaction_ids.len();
                 result.estimated_profit_lamports = bundle.estimated_fees_lamports;
                 result.status = JitoBundleStatus::ReadyToSubmit;
-                info!("✅ Bundle built successfully: {} transactions", result.transaction_count);
+                info!(
+                    "✅ Bundle built successfully: {} transactions",
+                    result.transaction_count
+                );
             }
             Err(e) => {
                 result.status = JitoBundleStatus::Failed;
@@ -182,7 +188,9 @@ impl JitoOptimizer {
 
         info!(
             "📦 Enhanced bundle created: id={} tx_count={} estimated_fees={}",
-            bundle.bundle_id, bundle.transaction_ids.len(), bundle.estimated_fees_lamports
+            bundle.bundle_id,
+            bundle.transaction_ids.len(),
+            bundle.estimated_fees_lamports
         );
 
         Ok(bundle)
@@ -196,10 +204,10 @@ impl JitoOptimizer {
         // 1. Optimal tip calculation based on opportunity profit
         let profit_ratio = opportunity.profit_bps as f64 / 10000.0;
         let dynamic_tip = (profit_ratio * 50_000.0) as u64; // Scale tip with profit
-        
+
         // 2. Priority fee optimization
         let priority_fee = self.calculate_dynamic_priority_fee(opportunity);
-        
+
         // 3. Compute unit optimization
         let cu_limit = self.optimize_compute_units(bundle, opportunity);
 
@@ -217,23 +225,26 @@ impl JitoOptimizer {
         opportunity: &ArbitrageOpportunity,
     ) -> Result<JitoBundleResult> {
         info!("🧪 TEST MODE: Simulating bundle execution without real transactions");
-        
+
         let mut test_result = result.clone();
-        
+
         // Simulate bundle processing time
         sleep(Duration::from_millis(100 + fastrand::u64(50..150))).await;
-        
+
         // Simulate success/failure based on opportunity quality
-        let success_probability = if opportunity.profit_bps > 50 { 0.95 } else { 0.8 };
+        let success_probability = if opportunity.profit_bps > 50 {
+            0.95
+        } else {
+            0.8
+        };
         let simulated_success = fastrand::f64() < success_probability;
-        
+
         if simulated_success {
             test_result.status = JitoBundleStatus::Landed;
             test_result.landed_slot = Some(364_500_000 + fastrand::u64(0..1000));
             test_result.confirmation_time_ms = Some(fastrand::u64(200..800));
-            test_result.actual_profit_lamports = Some(
-                (opportunity.profit_bps as i64 * 1000) - (test_result.tip_lamports as i64)
-            );
+            test_result.actual_profit_lamports =
+                Some((opportunity.profit_bps as i64 * 1000) - (test_result.tip_lamports as i64));
             info!(
                 "✅ TEST SUCCESS: Bundle {} landed at slot {} with profit {} lamports",
                 test_result.bundle_id,
@@ -243,7 +254,10 @@ impl JitoOptimizer {
         } else {
             test_result.status = JitoBundleStatus::Failed;
             test_result.error_message = Some("Simulated failure for testing".to_string());
-            warn!("❌ TEST FAILURE: Bundle {} failed simulation", test_result.bundle_id);
+            warn!(
+                "❌ TEST FAILURE: Bundle {} failed simulation",
+                test_result.bundle_id
+            );
         }
 
         // Record test metrics
@@ -258,28 +272,35 @@ impl JitoOptimizer {
         opportunity: &ArbitrageOpportunity,
     ) -> Result<JitoBundleResult> {
         info!("🔥 LIVE MODE: Executing real Jito bundle submission");
-        
+
         let mut live_result = result.clone();
         live_result.status = JitoBundleStatus::Submitted;
-        
+
         // Implement advanced Jito submission with retries and tip escalation
         for attempt in 1..=self.optimization_params.max_retry_attempts {
             live_result.submission_attempts = attempt;
-            
+
             // Calculate escalated tip for retries
             let escalated_tip = if attempt > 1 && self.optimization_params.enable_tip_escalation {
-                (live_result.tip_lamports as f64 * self.optimization_params.tip_boost_factor.powi((attempt - 1) as i32)) as u64
+                (live_result.tip_lamports as f64
+                    * self
+                        .optimization_params
+                        .tip_boost_factor
+                        .powi((attempt - 1) as i32)) as u64
             } else {
                 live_result.tip_lamports
             };
-            
+
             info!(
                 "📤 Submitting bundle attempt {}/{}: tip={} lamports",
                 attempt, self.optimization_params.max_retry_attempts, escalated_tip
             );
-            
+
             // Submit to Jito via Shyft client
-            match self.submit_bundle_to_jito(&live_result, escalated_tip).await {
+            match self
+                .submit_bundle_to_jito(&live_result, escalated_tip)
+                .await
+            {
                 Ok(submission_result) => {
                     live_result = submission_result;
                     if matches!(live_result.status, JitoBundleStatus::Landed) {
@@ -294,7 +315,7 @@ impl JitoOptimizer {
                     }
                 }
             }
-            
+
             // Wait before retry
             if attempt < self.optimization_params.max_retry_attempts {
                 sleep(Duration::from_millis(100 * attempt as u64)).await;
@@ -315,16 +336,16 @@ impl JitoOptimizer {
             .shyft_client
             .submit_jito_bundle(vec![result.bundle_uuid.clone()], Some(tip_lamports))
             .await?;
-        
+
         let mut updated_result = result.clone();
         updated_result.tip_lamports = tip_lamports;
-        
+
         // Parse Jito response and update status based on existing ShyftClient response structure
         if submission_response.status == "success" {
             updated_result.status = JitoBundleStatus::Landed;
             updated_result.landed_slot = submission_response.landed_slot;
             updated_result.confirmation_time_ms = Some(fastrand::u64(200..800)); // Simulate timing
-            
+
             info!(
                 "🎉 Bundle landed successfully! Slot: {:?}, Time: {}ms",
                 updated_result.landed_slot,
@@ -332,19 +353,22 @@ impl JitoOptimizer {
             );
         } else {
             updated_result.status = JitoBundleStatus::Failed;
-            updated_result.error_message = Some(format!("Bundle submission failed: {}", submission_response.status));
+            updated_result.error_message = Some(format!(
+                "Bundle submission failed: {}",
+                submission_response.status
+            ));
         }
-        
+
         Ok(updated_result)
     }
 
     fn calculate_optimal_tip(&self, opportunity: &ArbitrageOpportunity) -> u64 {
         let base_tip = self.optimization_params.base_tip_lamports;
-        
+
         // Scale tip based on opportunity profit
         let profit_multiplier = (opportunity.profit_bps as f64 / 10000.0).min(1.0);
         let dynamic_tip = (base_tip as f64 * (1.0 + profit_multiplier * 3.0)) as u64;
-        
+
         // Cap at maximum
         dynamic_tip.min(self.optimization_params.max_tip_lamports)
     }
@@ -352,7 +376,7 @@ impl JitoOptimizer {
     fn calculate_dynamic_priority_fee(&self, opportunity: &ArbitrageOpportunity) -> u64 {
         // Base priority fee
         let base_fee = self.optimization_params.priority_fee_micro_lamports;
-        
+
         // Increase for high-profit opportunities
         if opportunity.profit_bps > 100 {
             base_fee * 2
@@ -361,11 +385,15 @@ impl JitoOptimizer {
         }
     }
 
-    fn optimize_compute_units(&self, bundle: &ArbitrageBundle, _opportunity: &ArbitrageOpportunity) -> u32 {
+    fn optimize_compute_units(
+        &self,
+        bundle: &ArbitrageBundle,
+        _opportunity: &ArbitrageOpportunity,
+    ) -> u32 {
         // Start with estimated CU and add safety margin
         let estimated_cu = bundle.estimated_cu;
         let safety_margin = (estimated_cu as f64 * 0.2) as u32; // 20% safety margin
-        
+
         (estimated_cu + safety_margin).min(self.optimization_params.compute_unit_limit)
     }
 
@@ -377,17 +405,17 @@ impl JitoOptimizer {
             result.tip_lamports,
             execution_time.as_millis() as u64,
         );
-        
+
         if let Some(profit) = result.actual_profit_lamports {
             self.metrics.record_profit_realization(profit);
         }
-        
+
         // Update performance tracking
         if matches!(result.status, JitoBundleStatus::Landed) {
             self.tip_escalation_history
                 .insert(result.bundle_id.clone(), result.tip_lamports);
         }
-        
+
         debug!(
             "📊 Execution metrics recorded: status={:?} time={}ms profit={:?}",
             result.status,

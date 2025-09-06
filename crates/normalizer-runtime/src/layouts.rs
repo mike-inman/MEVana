@@ -21,9 +21,17 @@ pub struct ArrayDef {
 #[serde(untagged)]
 pub enum LayoutJson {
     // Simple struct layout
-    Fields { name: String, version: String, fields: Vec<FieldDef> },
+    Fields {
+        name: String,
+        version: String,
+        fields: Vec<FieldDef>,
+    },
     // Array-of-structs layout (tick arrays / bins)
-    Array { name: String, version: String, array: ArrayDef },
+    Array {
+        name: String,
+        version: String,
+        array: ArrayDef,
+    },
 }
 
 #[derive(Debug, Clone)]
@@ -34,7 +42,9 @@ pub struct LayoutRegistry {
 
 impl LayoutRegistry {
     pub fn new() -> Self {
-        Self { map: Default::default() }
+        Self {
+            map: Default::default(),
+        }
     }
 
     pub fn insert(&mut self, key: impl Into<String>, lj: LayoutJson) {

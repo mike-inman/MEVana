@@ -1,7 +1,11 @@
 use anyhow::{Context, Result};
 use serde::Deserialize;
 use sha2::{Digest, Sha256};
-use std::{collections::BTreeMap, fs, path::{Path, PathBuf}};
+use std::{
+    collections::BTreeMap,
+    fs,
+    path::{Path, PathBuf},
+};
 
 #[derive(Debug, Deserialize)]
 struct Profile {
@@ -17,7 +21,7 @@ struct IxProfile {
     kind: String, // "CLMM" | "CPMM" | "AGGREGATOR" | ...
     pool_account_roles: Option<Vec<String>>,
     user_authority_roles: Option<Vec<String>>,
-    token_accounts_roles_in:  Option<Vec<String>>,
+    token_accounts_roles_in: Option<Vec<String>>,
     token_accounts_roles_out: Option<Vec<String>>,
     clmm_state_account: Option<String>,
 }
@@ -34,14 +38,21 @@ struct IdlIx {
 }
 
 fn load_idl(path: &Path) -> Result<Idl> {
-    let raw = fs::read_to_string(path)
-        .with_context(|| format!("read idl {}", path.display()))?;
+    let raw = fs::read_to_string(path).with_context(|| format!("read idl {}", path.display()))?;
     let v: serde_json::Value = serde_json::from_str(&raw)?;
-    let name = v.get("name").and_then(|x| x.as_str()).unwrap_or("unknown").to_string();
+    let name = v
+        .get("name")
+        .and_then(|x| x.as_str())
+        .unwrap_or("unknown")
+        .to_string();
     let mut out = Vec::new();
     if let Some(ixs) = v.get("instructions").and_then(|x| x.as_array()) {
         for ix in ixs {
-            let ix_name = ix.get("name").and_then(|x| x.as_str()).unwrap_or("").to_string();
+            let ix_name = ix
+                .get("name")
+                .and_then(|x| x.as_str())
+                .unwrap_or("")
+                .to_string();
             let mut accs = Vec::new();
             if let Some(arr) = ix.get("accounts").and_then(|x| x.as_array()) {
                 for a in arr {
@@ -50,10 +61,16 @@ fn load_idl(path: &Path) -> Result<Idl> {
                     }
                 }
             }
-            out.push(IdlIx { name: ix_name, accounts: accs });
+            out.push(IdlIx {
+                name: ix_name,
+                accounts: accs,
+            });
         }
     }
-    Ok(Idl { name, instructions: out })
+    Ok(Idl {
+        name,
+        instructions: out,
+    })
 }
 
 fn anchor_disc(ix_name: &str) -> [u8; 8] {
@@ -65,7 +82,6 @@ fn anchor_disc(ix_name: &str) -> [u8; 8] {
     out.copy_from_slice(&d[..8]);
     out
 }
-
 
 //use std::path::{Path, PathBuf};
 
@@ -106,12 +122,10 @@ fn anchor_disc(ix_name: &str) -> [u8; 8] {
 //     p1
 // }
 
-
-
 fn resolve_idl_path(profiles_dir: &Path, idl_file: &str) -> PathBuf {
     // profiles_dir = <workspace>/crates/normalizer-codegen/profiles (absolute)
     let workspace_root = profiles_dir
-        .parent()  // normalizer-codegen
+        .parent() // normalizer-codegen
         .and_then(|p| p.parent()) // crates
         .and_then(|p| p.parent()) // workspace root
         .unwrap_or_else(|| Path::new("/"))
@@ -143,8 +157,6 @@ fn resolve_idl_path(profiles_dir: &Path, idl_file: &str) -> PathBuf {
     p1
 }
 
-
-
 fn kind_to_enum(s: &str) -> &'static str {
     match s.to_ascii_lowercase().as_str() {
         "clmm" => "SwapKind::Clmm",
@@ -154,7 +166,10 @@ fn kind_to_enum(s: &str) -> &'static str {
     }
 }
 
-pub fn generate_extractors(profiles_dir_in: &std::path::Path, _out_dir: &std::path::Path) -> Result<String> {
+pub fn generate_extractors(
+    profiles_dir_in: &std::path::Path,
+    _out_dir: &std::path::Path,
+) -> Result<String> {
     // Make sure we work with an absolute path
     let profiles_dir = profiles_dir_in
         .canonicalize()
@@ -168,23 +183,25 @@ pub fn generate_extractors(profiles_dir_in: &std::path::Path, _out_dir: &std::pa
         .with_context(|| format!("read_dir {}", profiles_dir.display()))?
     {
         let p = entry?.path();
-        if p.extension().and_then(|s| s.to_str()) != Some("yaml") { continue; }
+        if p.extension().and_then(|s| s.to_str()) != Some("yaml") {
+            continue;
+        }
         let txt = std::fs::read_to_string(&p)?;
-        let prof: Profile = serde_yaml::from_str(&txt)
-            .with_context(|| format!("parse profile {}", p.display()))?;
+        let prof: Profile =
+            serde_yaml::from_str(&txt).with_context(|| format!("parse profile {}", p.display()))?;
         profiles.push(prof);
     }
 
     // 2) Load IDLs + precompute discriminator + role index mapping
     struct IxGen {
         ix_name: String,
-        disc: [u8;8],
+        disc: [u8; 8],
         // role_key -> list of (alias_name, index_in_accs). We’ll keep the alias_name as the map key in roles.
         positions: Vec<(String, usize)>,
     }
     struct ProgramGen {
         program_id: String,
-        dex_name: String, // from program_name
+        dex_name: String,                     // from program_name
         kind_by_ix: BTreeMap<String, String>, // ix_name -> SwapKind::<..> as string
         ixs: Vec<IxGen>,
     }
@@ -194,8 +211,8 @@ pub fn generate_extractors(profiles_dir_in: &std::path::Path, _out_dir: &std::pa
     for prof in profiles {
         let idl_path = resolve_idl_path(&profiles_dir, &prof.idl_file);
 
-        let idl = load_idl(&idl_path)
-            .with_context(|| format!("load idl {}", idl_path.display()))?;
+        let idl =
+            load_idl(&idl_path).with_context(|| format!("load idl {}", idl_path.display()))?;
 
         // Build a quick lookup: ix_name -> IdlIx
         let mut idl_ix_by_name: BTreeMap<String, &IdlIx> = BTreeMap::new();
@@ -269,19 +286,27 @@ pub fn generate_extractors(profiles_dir_in: &std::path::Path, _out_dir: &std::pa
 
     // 3) Emit Rust source
     let mut src = String::new();
-    src.push_str(r#"
+    src.push_str(
+        r#"
 use std::collections::HashMap;
 use normalizer_runtime::{
     SwapExtractor, TxContext, NormalizedSwapV1, SwapKind,
     infer_amounts_from_meta, compute_raw_price, QualityFlags,
 };
-"#);
+"#,
+    );
 
     // ---- decoder_for switch ----
     src.push_str("pub type DecFn = fn(data: &[u8], account_indices: &[u8], account_keys: &[String]) -> Option<(String, HashMap<String, String>)>;\n");
-    src.push_str("pub fn decoder_for(program_id: &str) -> Option<DecFn> {\n    match program_id {\n");
+    src.push_str(
+        "pub fn decoder_for(program_id: &str) -> Option<DecFn> {\n    match program_id {\n",
+    );
     for pg in &progs {
-        src.push_str(&format!("        \"{}\" => Some(decode_{}),\n", pg.program_id, to_snake(&pg.dex_name)));
+        src.push_str(&format!(
+            "        \"{}\" => Some(decode_{}),\n",
+            pg.program_id,
+            to_snake(&pg.dex_name)
+        ));
     }
     src.push_str("        _ => None,\n    }\n}\n");
 
@@ -291,7 +316,9 @@ use normalizer_runtime::{
         for ix in &pg.ixs {
             src.push_str(&format!(
                 "const DISC_{}_{}: [u8;8] = {:?};\n",
-                to_const(&pg.dex_name), to_const(&ix.ix_name), ix.disc
+                to_const(&pg.dex_name),
+                to_const(&ix.ix_name),
+                ix.disc
             ));
         }
 
@@ -306,7 +333,8 @@ fn decode_{dex}(data: &[u8], accs: &[u8], keys: &[String]) -> Option<(String, Ha
         ));
 
         for ix in &pg.ixs {
-            src.push_str(&format!("\n        {} => {{\n            let mut roles = HashMap::new();\n",
+            src.push_str(&format!(
+                "\n        {} => {{\n            let mut roles = HashMap::new();\n",
                 format!("DISC_{}_{}", to_const(&pg.dex_name), to_const(&ix.ix_name))
             ));
             for (alias, pos) in &ix.positions {
@@ -315,7 +343,10 @@ fn decode_{dex}(data: &[u8], accs: &[u8], keys: &[String]) -> Option<(String, Ha
                     pos, alias
                 ));
             }
-            src.push_str(&format!("            Some((\"{}\".to_string(), roles))\n        }},\n", ix.ix_name));
+            src.push_str(&format!(
+                "            Some((\"{}\".to_string(), roles))\n        }},\n",
+                ix.ix_name
+            ));
         }
 
         src.push_str("        _ => None,\n    }\n}\n");
@@ -382,7 +413,10 @@ impl SwapExtractor for {ty} {{
     // ---- registry() ----
     src.push_str("pub fn registry() -> Vec<Box<dyn SwapExtractor>> { vec![\n");
     for pg in &progs {
-        src.push_str(&format!("    Box::new({}SwapExtractor),\n", to_camel(&pg.dex_name)));
+        src.push_str(&format!(
+            "    Box::new({}SwapExtractor),\n",
+            to_camel(&pg.dex_name)
+        ));
     }
     src.push_str("]}\n");
 
@@ -393,8 +427,16 @@ fn to_camel(s: &str) -> String {
     let mut out = String::new();
     let mut cap = true;
     for ch in s.chars() {
-        if !ch.is_alphanumeric() { cap = true; continue; }
-        if cap { out.push(ch.to_ascii_uppercase()); cap = false; } else { out.push(ch); }
+        if !ch.is_alphanumeric() {
+            cap = true;
+            continue;
+        }
+        if cap {
+            out.push(ch.to_ascii_uppercase());
+            cap = false;
+        } else {
+            out.push(ch);
+        }
     }
     out
 }
@@ -402,7 +444,9 @@ fn to_snake(s: &str) -> String {
     let mut out = String::new();
     for (i, ch) in s.chars().enumerate() {
         if ch.is_ascii_uppercase() {
-            if i != 0 { out.push('_'); }
+            if i != 0 {
+                out.push('_');
+            }
             out.push(ch.to_ascii_lowercase());
         } else if ch.is_alphanumeric() {
             out.push(ch);
@@ -427,7 +471,10 @@ fn kind_match(map: &BTreeMap<String, String>) -> String {
     // emits arms like:  "swap" => SwapKind::Clmm, "swapV2" => SwapKind::Clmm, ...
     let mut s = String::new();
     for (ix, kind) in map {
-        s.push_str(&format!("Some(\"{}\") => {},\n                    ", ix, kind));
+        s.push_str(&format!(
+            "Some(\"{}\") => {},\n                    ",
+            ix, kind
+        ));
     }
     s
 }

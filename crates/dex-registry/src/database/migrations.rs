@@ -112,9 +112,11 @@ pub async fn run_migrations(pool: &SqlitePool) -> Result<()> {
         .execute(pool)
         .await?;
 
-    sqlx::query("CREATE INDEX IF NOT EXISTS idx_discovery_queue_priority ON discovery_queue(priority DESC)")
-        .execute(pool)
-        .await?;
+    sqlx::query(
+        "CREATE INDEX IF NOT EXISTS idx_discovery_queue_priority ON discovery_queue(priority DESC)",
+    )
+    .execute(pool)
+    .await?;
 
     // Insert initial DEX program data
     insert_initial_dex_programs(pool).await?;
@@ -125,16 +127,66 @@ pub async fn run_migrations(pool: &SqlitePool) -> Result<()> {
 
 async fn insert_initial_dex_programs(pool: &SqlitePool) -> Result<()> {
     let initial_dexs = vec![
-        ("whirLbMi2vNtMeJ6z18WZb98sPNT1L4GzWk2vuyZgq2U", "Orca", "CLMM", "constant_product_concentrated"),
-        ("675kPX9MWYgmL7z3vNL1SWqjc9p3t7g8a8PNg4K8d5m", "Raydium", "AMM", "constant_product"),
-        ("CAMMCzo5YL8w4VFF8KVHrK22GGUsp5VTaW7grrKgrWqK", "Raydium", "CLMM", "constant_product_concentrated"),
-        ("PhoeNiX7JJR8KLjc9JTvnR7K5s1E8K8o5C8m4D9w3pN", "Phoenix", "CLOB", "order_book"),
-        ("METALmNJxYdxiMExY7hhE6RTfQ3QqpTDUxqrnWBH8dG", "Meteora", "DLMM", "dynamic_liquidity"),
-        ("EewxydAPCCVuNEyrVN68PuSYdQ7wKn27V9Gjeoi8dy3S", "Lifinity", "AMM", "proactive_market_maker"),
-        ("srmqPiTfBJqh2DTFqzjLKV4y8bF9BYdj4tB9qzq3u7K", "OpenBook", "CLOB", "order_book"),
-        ("invPNzJKHEKXZnTjvhF6E8DCT5LQ4bMkP3h8Kd6F9xL", "Invariant", "CLMM", "constant_product_concentrated"),
-        ("FLUXfqQ5J8k3vNjF6X2mTKs8q7e9L3d4RYp6z5w8VcD", "Fluxbeam", "AMM", "cross_chain"),
-        ("GFXsq4j9yNMd3z8vA5q7f3E6kW8L7x2BNc5T9e4RyHP", "GooseFX", "AMM", "full_stack_defi"),
+        (
+            "whirLbMi2vNtMeJ6z18WZb98sPNT1L4GzWk2vuyZgq2U",
+            "Orca",
+            "CLMM",
+            "constant_product_concentrated",
+        ),
+        (
+            "675kPX9MWYgmL7z3vNL1SWqjc9p3t7g8a8PNg4K8d5m",
+            "Raydium",
+            "AMM",
+            "constant_product",
+        ),
+        (
+            "CAMMCzo5YL8w4VFF8KVHrK22GGUsp5VTaW7grrKgrWqK",
+            "Raydium",
+            "CLMM",
+            "constant_product_concentrated",
+        ),
+        (
+            "PhoeNiX7JJR8KLjc9JTvnR7K5s1E8K8o5C8m4D9w3pN",
+            "Phoenix",
+            "CLOB",
+            "order_book",
+        ),
+        (
+            "METALmNJxYdxiMExY7hhE6RTfQ3QqpTDUxqrnWBH8dG",
+            "Meteora",
+            "DLMM",
+            "dynamic_liquidity",
+        ),
+        (
+            "EewxydAPCCVuNEyrVN68PuSYdQ7wKn27V9Gjeoi8dy3S",
+            "Lifinity",
+            "AMM",
+            "proactive_market_maker",
+        ),
+        (
+            "srmqPiTfBJqh2DTFqzjLKV4y8bF9BYdj4tB9qzq3u7K",
+            "OpenBook",
+            "CLOB",
+            "order_book",
+        ),
+        (
+            "invPNzJKHEKXZnTjvhF6E8DCT5LQ4bMkP3h8Kd6F9xL",
+            "Invariant",
+            "CLMM",
+            "constant_product_concentrated",
+        ),
+        (
+            "FLUXfqQ5J8k3vNjF6X2mTKs8q7e9L3d4RYp6z5w8VcD",
+            "Fluxbeam",
+            "AMM",
+            "cross_chain",
+        ),
+        (
+            "GFXsq4j9yNMd3z8vA5q7f3E6kW8L7x2BNc5T9e4RyHP",
+            "GooseFX",
+            "AMM",
+            "full_stack_defi",
+        ),
     ];
 
     for (program_id, dex_name, protocol_type, liquidity_model) in initial_dexs {
@@ -178,12 +230,48 @@ async fn insert_initial_dex_programs(pool: &SqlitePool) -> Result<()> {
 
     // Insert common tokens
     let initial_tokens = vec![
-        ("So11111111111111111111111111111111111111112", "SOL", "Solana", 9, false),
-        ("EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v", "USDC", "USD Coin", 6, true),
-        ("Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB", "USDT", "Tether USD", 6, true),
-        ("7i5KKsX2weiTkry7jA4ZwSuXGhs5eJBEjY8vVxR4pfRx", "GMT", "STEPN", 9, false),
-        ("mSoLzYCxHdYgdzU16g5QSh3i5K3z3KZK7ytfqcJm7So", "mSOL", "Marinade SOL", 9, false),
-        ("7dHbWXmci3dT8UFYWYZweBLXgycu7Y3iL6trKn1Y7ARj", "stSOL", "Lido Staked SOL", 9, false),
+        (
+            "So11111111111111111111111111111111111111112",
+            "SOL",
+            "Solana",
+            9,
+            false,
+        ),
+        (
+            "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v",
+            "USDC",
+            "USD Coin",
+            6,
+            true,
+        ),
+        (
+            "Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB",
+            "USDT",
+            "Tether USD",
+            6,
+            true,
+        ),
+        (
+            "7i5KKsX2weiTkry7jA4ZwSuXGhs5eJBEjY8vVxR4pfRx",
+            "GMT",
+            "STEPN",
+            9,
+            false,
+        ),
+        (
+            "mSoLzYCxHdYgdzU16g5QSh3i5K3z3KZK7ytfqcJm7So",
+            "mSOL",
+            "Marinade SOL",
+            9,
+            false,
+        ),
+        (
+            "7dHbWXmci3dT8UFYWYZweBLXgycu7Y3iL6trKn1Y7ARj",
+            "stSOL",
+            "Lido Staked SOL",
+            9,
+            false,
+        ),
     ];
 
     for (mint_address, symbol, name, decimals, is_stable) in initial_tokens {

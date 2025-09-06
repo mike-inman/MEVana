@@ -44,7 +44,7 @@ pub struct JupiterArbSignalV1 {
     pub opportunity_id: String,
     pub route_type: RouteType,
     pub input_token: String,
-    pub output_token: String, 
+    pub output_token: String,
     pub amount_in: u128,
     pub expected_amount_out: u128,
     pub minimum_amount_out: u128,
@@ -76,7 +76,7 @@ pub struct RouteHop {
 pub enum RouteType {
     DirectArbitrage,     // Traditional A->B->A
     TwoHopArbitrage,     // A->B->A via Jupiter
-    ThreeHopArbitrage,   // A->B->C->A via Jupiter  
+    ThreeHopArbitrage,   // A->B->C->A via Jupiter
     FourHopArbitrage,    // A->B->C->D->A via Jupiter
     CrossDexArbitrage,   // Multiple DEX arbitrage
     TriangularArbitrage, // A->B->C->A on same DEX
@@ -124,17 +124,18 @@ impl ArbSignal {
         match self {
             ArbSignal::V1(s) => s.profit_bps,
             ArbSignal::Jupiter(s) => s.profit_bps,
-            ArbSignal::Enhanced(s) => {
-                s.jupiter.as_ref().map(|j| j.profit_bps)
-                    .or_else(|| s.traditional.as_ref().map(|t| t.profit_bps))
-                    .unwrap_or(0)
-            }
+            ArbSignal::Enhanced(s) => s
+                .jupiter
+                .as_ref()
+                .map(|j| j.profit_bps)
+                .or_else(|| s.traditional.as_ref().map(|t| t.profit_bps))
+                .unwrap_or(0),
         }
     }
 
     pub fn is_paper_trading(&self) -> bool {
         match self {
-            ArbSignal::V1(_) => false, // Traditional signals are live by default
+            ArbSignal::V1(_) => false,      // Traditional signals are live by default
             ArbSignal::Jupiter(_) => false, // Jupiter signals are live by default
             ArbSignal::Enhanced(s) => s.paper_trading,
         }
@@ -144,11 +145,12 @@ impl ArbSignal {
         match self {
             ArbSignal::V1(s) => s.amount_in,
             ArbSignal::Jupiter(s) => s.amount_in,
-            ArbSignal::Enhanced(s) => {
-                s.jupiter.as_ref().map(|j| j.amount_in)
-                    .or_else(|| s.traditional.as_ref().map(|t| t.amount_in))
-                    .unwrap_or(0)
-            }
+            ArbSignal::Enhanced(s) => s
+                .jupiter
+                .as_ref()
+                .map(|j| j.amount_in)
+                .or_else(|| s.traditional.as_ref().map(|t| t.amount_in))
+                .unwrap_or(0),
         }
     }
 }

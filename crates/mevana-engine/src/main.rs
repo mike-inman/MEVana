@@ -2,14 +2,16 @@ use std::sync::Arc;
 use tokio::sync::mpsc;
 use tracing_subscriber::EnvFilter;
 
-use mevana_engine::{engine::{run_engine, Engine, StreamEvent}, whirlpool::WhirlpoolPlugin};
 use mevana_engine::plugin::DexPlugin;
+use mevana_engine::{
+    engine::{run_engine, Engine, StreamEvent},
+    whirlpool::WhirlpoolPlugin,
+};
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
     tracing_subscriber::fmt()
-        .with_env_filter(EnvFilter::from_default_env()
-            .add_directive("mevana_engine=info".parse()?))
+        .with_env_filter(EnvFilter::from_default_env().add_directive("mevana_engine=info".parse()?))
         .init();
 
     // Register plugins. Add Raydium/Meteora/Jupiter implementations next to WhirlpoolPlugin.
@@ -34,7 +36,9 @@ async fn main() -> anyhow::Result<()> {
         "tick_spacing": 64,
         "fee_bps_total": 30
     });
-    tx.send(StreamEvent::RawUpdate(example_pool_json)).await.ok();
+    tx.send(StreamEvent::RawUpdate(example_pool_json))
+        .await
+        .ok();
 
     tokio::spawn(run_engine(rx, engine.clone()));
 

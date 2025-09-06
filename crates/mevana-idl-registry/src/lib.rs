@@ -415,4 +415,3 @@ fn copy_layouts_into(registry_dir: &Path) {
         }
     }
 }
-

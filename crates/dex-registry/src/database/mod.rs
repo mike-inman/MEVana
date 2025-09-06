@@ -63,7 +63,7 @@ pub struct DiscoveryQueue {
     pub last_attempt: Option<DateTime<Utc>>,
     pub created_at: DateTime<Utc>,
     pub metadata: Option<String>, // JSON
-    pub status: String, // 'pending', 'processing', 'completed', 'failed'
+    pub status: String,           // 'pending', 'processing', 'completed', 'failed'
 }
 
 pub struct Database {

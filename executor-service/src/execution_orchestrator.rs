@@ -2,19 +2,19 @@
 //! Enterprise-grade execution orchestrator combining all optimization components
 
 use anyhow::Result;
-use log::{debug, info, warn, error};
+use log::{debug, error, info, warn};
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 use tokio::sync::RwLock;
 use uuid::Uuid;
 
+use crate::bundle_builder::BundleBuilder;
 use crate::config::ExecutorConfig;
 use crate::execution_engine::{ArbitrageOpportunity, ExecutionResult, ExecutionStatus};
-use crate::flash_loan::{FlashLoanProvider, FlashLoanAggregator};
+use crate::flash_loan::{FlashLoanAggregator, FlashLoanProvider};
 use crate::flash_loan_optimizer::{FlashLoanOptimizer, OptimizedFlashLoanQuote};
-use crate::jito_optimizer::{JitoOptimizer, JitoBundleResult, JitoOptimizationParams};
-use crate::bundle_builder::BundleBuilder;
+use crate::jito_optimizer::{JitoBundleResult, JitoOptimizationParams, JitoOptimizer};
 use crate::metrics::MetricsServer;
 use crate::shyft_client::ShyftClient;
 use crate::wallet_service::WalletService;
@@ -182,7 +182,7 @@ impl ExecutionOrchestrator {
     ) -> Result<ComprehensiveExecutionResult> {
         let execution_id = Uuid::new_v4();
         let start_time = Instant::now();
-        
+
         info!(
             "🎯 Starting comprehensive execution: id={} opportunity={} mode={:?}",
             execution_id, opportunity.opportunity_id, execution_mode
@@ -190,18 +190,25 @@ impl ExecutionOrchestrator {
 
         // Phase 1: Create execution plan
         let planning_start = Instant::now();
-        let execution_plan = self.create_execution_plan(&opportunity, execution_mode).await?;
+        let execution_plan = self
+            .create_execution_plan(&opportunity, execution_mode)
+            .await?;
         let planning_time_ms = planning_start.elapsed().as_millis() as u64;
 
         // Phase 2: Risk assessment and circuit breaker check
         if !self.assess_execution_risk(&execution_plan).await? {
-            return self.create_rejected_result(execution_id, execution_plan, "Risk assessment failed").await;
+            return self
+                .create_rejected_result(execution_id, execution_plan, "Risk assessment failed")
+                .await;
         }
 
         // Phase 3: Flash loan optimization (if needed)
         let flash_loan_start = Instant::now();
         let flash_loan_result = if self.requires_flash_loan(&opportunity) {
-            Some(self.optimize_and_execute_flash_loan(&opportunity, &execution_plan).await?)
+            Some(
+                self.optimize_and_execute_flash_loan(&opportunity, &execution_plan)
+                    .await?,
+            )
         } else {
             None
         };
@@ -209,33 +216,37 @@ impl ExecutionOrchestrator {
 
         // Phase 4: Jito bundle optimization and execution
         let bundle_start = Instant::now();
-        let jito_result = self.optimize_and_execute_jito_bundle(
-            &opportunity,
-            &execution_plan,
-            flash_loan_result.as_ref(),
-        ).await?;
+        let jito_result = self
+            .optimize_and_execute_jito_bundle(
+                &opportunity,
+                &execution_plan,
+                flash_loan_result.as_ref(),
+            )
+            .await?;
         let bundle_time_ms = bundle_start.elapsed().as_millis() as u64;
 
         // Phase 5: Create comprehensive result
         let total_execution_time = start_time.elapsed().as_millis() as u64;
-        let result = self.create_comprehensive_result(
-            execution_id,
-            opportunity,
-            execution_plan,
-            flash_loan_result,
-            jito_result,
-            ExecutionMetrics {
-                planning_time_ms,
-                flash_loan_selection_time_ms: flash_loan_time_ms,
-                bundle_building_time_ms: bundle_time_ms,
-                submission_time_ms: 0, // Updated from jito result
-                confirmation_time_ms: 0, // Updated from jito result
-                slippage_bps: None, // TODO: Calculate actual slippage
-                gas_efficiency_score: 0.9, // TODO: Calculate based on actual gas usage
-                timing_efficiency_score: self.calculate_timing_efficiency(total_execution_time),
-            },
-            total_execution_time,
-        ).await?;
+        let result = self
+            .create_comprehensive_result(
+                execution_id,
+                opportunity,
+                execution_plan,
+                flash_loan_result,
+                jito_result,
+                ExecutionMetrics {
+                    planning_time_ms,
+                    flash_loan_selection_time_ms: flash_loan_time_ms,
+                    bundle_building_time_ms: bundle_time_ms,
+                    submission_time_ms: 0,     // Updated from jito result
+                    confirmation_time_ms: 0,   // Updated from jito result
+                    slippage_bps: None,        // TODO: Calculate actual slippage
+                    gas_efficiency_score: 0.9, // TODO: Calculate based on actual gas usage
+                    timing_efficiency_score: self.calculate_timing_efficiency(total_execution_time),
+                },
+                total_execution_time,
+            )
+            .await?;
 
         // Phase 6: Update tracking and metrics
         self.update_execution_tracking(&result).await;
@@ -255,25 +266,29 @@ impl ExecutionOrchestrator {
     ) -> Result<ExecutionPlan> {
         // Determine if flash loan is needed
         let requires_flash_loan = self.requires_flash_loan(opportunity);
-        
+
         // Get optimal flash loan strategy if needed
         let flash_loan_strategy = if requires_flash_loan {
             let flash_loan_optimizer = self.flash_loan_optimizer.read().await;
-            Some(flash_loan_optimizer.find_optimal_flash_loan(
-                opportunity,
-                opportunity.max_size_in as u64,
-                "So11111111111111111111111111111111111111112", // SOL mint
-            ).await?)
+            Some(
+                flash_loan_optimizer
+                    .find_optimal_flash_loan(
+                        opportunity,
+                        opportunity.max_size_in as u64,
+                        "So11111111111111111111111111111111111111112", // SOL mint
+                    )
+                    .await?,
+            )
         } else {
             None
         };
 
         // Create Jito optimization parameters based on opportunity
         let jito_strategy = self.create_jito_strategy(opportunity, &execution_mode);
-        
+
         // Create risk parameters
         let risk_parameters = self.create_risk_parameters(opportunity, &execution_mode);
-        
+
         let execution_plan = ExecutionPlan {
             opportunity_id: opportunity.opportunity_id,
             execution_mode,
@@ -285,8 +300,10 @@ impl ExecutionOrchestrator {
             priority_level: self.determine_priority(opportunity),
         };
 
-        debug!("📋 Execution plan created: profit_estimate={} priority={:?}", 
-               execution_plan.estimated_profit_lamports, execution_plan.priority_level);
+        debug!(
+            "📋 Execution plan created: profit_estimate={} priority={:?}",
+            execution_plan.estimated_profit_lamports, execution_plan.priority_level
+        );
 
         Ok(execution_plan)
     }
@@ -297,33 +314,38 @@ impl ExecutionOrchestrator {
         execution_plan: &ExecutionPlan,
     ) -> Result<FlashLoanExecutionResult> {
         if let Some(flash_loan_strategy) = &execution_plan.flash_loan_strategy {
-            info!("⚡ Executing optimized flash loan: provider={:?} amount={}", 
-                  flash_loan_strategy.provider, flash_loan_strategy.amount_requested);
-            
+            info!(
+                "⚡ Executing optimized flash loan: provider={:?} amount={}",
+                flash_loan_strategy.provider, flash_loan_strategy.amount_requested
+            );
+
             let start_time = Instant::now();
-            
+
             // Execute flash loan based on execution mode
             let success = match &execution_plan.execution_mode {
-                ExecutionMode::Test { simulate_success_rate, .. } => {
-                    fastrand::f64() < *simulate_success_rate
-                }
+                ExecutionMode::Test {
+                    simulate_success_rate,
+                    ..
+                } => fastrand::f64() < *simulate_success_rate,
                 ExecutionMode::Live { .. } => {
                     // TODO: Implement actual flash loan execution
                     true // Placeholder
                 }
             };
-            
+
             let execution_time = start_time.elapsed().as_millis() as u64;
-            
+
             // Update provider performance tracking
             let mut optimizer = self.flash_loan_optimizer.write().await;
-            optimizer.record_execution_result(
-                flash_loan_strategy.provider,
-                success,
-                execution_time,
-                flash_loan_strategy.amount_requested,
-            ).await;
-            
+            optimizer
+                .record_execution_result(
+                    flash_loan_strategy.provider,
+                    success,
+                    execution_time,
+                    flash_loan_strategy.amount_requested,
+                )
+                .await;
+
             Ok(FlashLoanExecutionResult {
                 provider_used: flash_loan_strategy.provider,
                 amount_borrowed: flash_loan_strategy.amount_requested,
@@ -343,16 +365,18 @@ impl ExecutionOrchestrator {
         flash_loan_result: Option<&FlashLoanExecutionResult>,
     ) -> Result<JitoBundleResult> {
         info!("🚀 Executing optimized Jito bundle");
-        
+
         let mut jito_optimizer = self.jito_optimizer.write().await;
-        
+
         let test_mode = matches!(execution_plan.execution_mode, ExecutionMode::Test { .. });
-        
-        let bundle_result = jito_optimizer.execute_optimized_arbitrage(
-            opportunity,
-            flash_loan_result.map(|r| r.provider_used),
-            test_mode,
-        ).await?;
+
+        let bundle_result = jito_optimizer
+            .execute_optimized_arbitrage(
+                opportunity,
+                flash_loan_result.map(|r| r.provider_used),
+                test_mode,
+            )
+            .await?;
 
         Ok(bundle_result)
     }
@@ -360,13 +384,20 @@ impl ExecutionOrchestrator {
     async fn assess_execution_risk(&self, execution_plan: &ExecutionPlan) -> Result<bool> {
         // Check daily PnL limits
         let daily_tracker = self.daily_pnl_tracker.read().await;
-        if daily_tracker.total_profit_lamports < -(execution_plan.risk_parameters.daily_loss_limit_lamports as i64) {
-            warn!("🛑 Daily loss limit exceeded: {} lamports", daily_tracker.total_profit_lamports);
+        if daily_tracker.total_profit_lamports
+            < -(execution_plan.risk_parameters.daily_loss_limit_lamports as i64)
+        {
+            warn!(
+                "🛑 Daily loss limit exceeded: {} lamports",
+                daily_tracker.total_profit_lamports
+            );
             return Ok(false);
         }
 
         // Check position size limits
-        if execution_plan.estimated_profit_lamports > execution_plan.risk_parameters.max_position_size_lamports {
+        if execution_plan.estimated_profit_lamports
+            > execution_plan.risk_parameters.max_position_size_lamports
+        {
             warn!("🛑 Position size limit exceeded");
             return Ok(false);
         }
@@ -380,15 +411,26 @@ impl ExecutionOrchestrator {
         opportunity.max_size_in > 1_000_000_000 // 1 SOL
     }
 
-    fn create_jito_strategy(&self, opportunity: &ArbitrageOpportunity, mode: &ExecutionMode) -> JitoOptimizationParams {
+    fn create_jito_strategy(
+        &self,
+        opportunity: &ArbitrageOpportunity,
+        mode: &ExecutionMode,
+    ) -> JitoOptimizationParams {
         match mode {
             ExecutionMode::Test { .. } => JitoOptimizationParams {
                 base_tip_lamports: 1000,
                 enable_aggressive_timing: false,
                 ..Default::default()
             },
-            ExecutionMode::Live { enable_aggressive_optimization, .. } => JitoOptimizationParams {
-                base_tip_lamports: if opportunity.profit_bps > 100 { 20_000 } else { 10_000 },
+            ExecutionMode::Live {
+                enable_aggressive_optimization,
+                ..
+            } => JitoOptimizationParams {
+                base_tip_lamports: if opportunity.profit_bps > 100 {
+                    20_000
+                } else {
+                    10_000
+                },
                 enable_aggressive_timing: *enable_aggressive_optimization,
                 enable_tip_escalation: *enable_aggressive_optimization,
                 ..Default::default()
@@ -396,7 +438,11 @@ impl ExecutionOrchestrator {
         }
     }
 
-    fn create_risk_parameters(&self, opportunity: &ArbitrageOpportunity, mode: &ExecutionMode) -> RiskParameters {
+    fn create_risk_parameters(
+        &self,
+        opportunity: &ArbitrageOpportunity,
+        mode: &ExecutionMode,
+    ) -> RiskParameters {
         match mode {
             ExecutionMode::Test { .. } => RiskParameters {
                 max_position_size_lamports: 10_000_000_000, // 10 SOL for testing
@@ -406,7 +452,11 @@ impl ExecutionOrchestrator {
                 enable_circuit_breaker: false,
                 daily_loss_limit_lamports: 100_000_000_000, // 100 SOL for testing
             },
-            ExecutionMode::Live { max_slippage_bps, force_profit_threshold_lamports, .. } => RiskParameters {
+            ExecutionMode::Live {
+                max_slippage_bps,
+                force_profit_threshold_lamports,
+                ..
+            } => RiskParameters {
                 max_position_size_lamports: 1_000_000_000, // 1 SOL for live trading
                 max_gas_fee_lamports: 50_000,
                 min_profit_threshold_lamports: force_profit_threshold_lamports.unwrap_or(10_000),
@@ -445,8 +495,11 @@ impl ExecutionOrchestrator {
             _ => ExecutionStatus::Submitted,
         };
 
-        let total_fees = flash_loan_result.as_ref().map(|r| r.fee_paid_lamports).unwrap_or(0) + 
-                        jito_result.tip_lamports;
+        let total_fees = flash_loan_result
+            .as_ref()
+            .map(|r| r.fee_paid_lamports)
+            .unwrap_or(0)
+            + jito_result.tip_lamports;
 
         let actual_profit = jito_result.actual_profit_lamports;
         let roi_bps = actual_profit.map(|profit| {
@@ -530,27 +583,32 @@ impl ExecutionOrchestrator {
         let timing_weight = 0.3;
         let gas_weight = 0.3;
         let success_weight = 0.4;
-        
+
         let timing_score = metrics.timing_efficiency_score;
         let gas_score = metrics.gas_efficiency_score;
         let success_score = 1.0; // Will be 0 if execution failed
-        
+
         timing_score * timing_weight + gas_score * gas_weight + success_score * success_weight
     }
 
     async fn update_execution_tracking(&self, result: &ComprehensiveExecutionResult) {
         // Update active executions
-        self.active_executions.write().await.insert(result.execution_id, result.clone());
-        
+        self.active_executions
+            .write()
+            .await
+            .insert(result.execution_id, result.clone());
+
         // Update daily PnL tracking
         let mut daily_tracker = self.daily_pnl_tracker.write().await;
         if let Some(profit) = result.actual_profit_lamports {
             daily_tracker.total_profit_lamports += profit;
         }
         daily_tracker.total_fees_paid_lamports += result.total_fees_paid_lamports;
-        
+
         match result.final_status {
-            ExecutionStatus::Confirmed | ExecutionStatus::Finalized => daily_tracker.successful_trades += 1,
+            ExecutionStatus::Confirmed | ExecutionStatus::Finalized => {
+                daily_tracker.successful_trades += 1
+            }
             ExecutionStatus::Failed | ExecutionStatus::Rejected => daily_tracker.failed_trades += 1,
             _ => {}
         }
@@ -570,7 +628,8 @@ impl ExecutionOrchestrator {
             loop {
                 interval.tick().await;
                 let mut tracker = daily_tracker.write().await;
-                if tracker.daily_reset_time.elapsed() > Duration::from_secs(86400) { // 24 hours
+                if tracker.daily_reset_time.elapsed() > Duration::from_secs(86400) {
+                    // 24 hours
                     *tracker = DailyPnLTracker {
                         total_profit_lamports: 0,
                         total_fees_paid_lamports: 0,
@@ -590,7 +649,7 @@ impl ExecutionOrchestrator {
     pub async fn get_performance_stats(&self) -> Result<PerformanceStats> {
         let daily_tracker = self.daily_pnl_tracker.read().await;
         let active_executions = self.active_executions.read().await;
-        
+
         Ok(PerformanceStats {
             daily_profit_lamports: daily_tracker.total_profit_lamports,
             daily_fees_lamports: daily_tracker.total_fees_paid_lamports as i64,
@@ -598,7 +657,8 @@ impl ExecutionOrchestrator {
             failed_trades_today: daily_tracker.failed_trades,
             active_executions_count: active_executions.len(),
             success_rate: if daily_tracker.successful_trades + daily_tracker.failed_trades > 0 {
-                daily_tracker.successful_trades as f64 / (daily_tracker.successful_trades + daily_tracker.failed_trades) as f64
+                daily_tracker.successful_trades as f64
+                    / (daily_tracker.successful_trades + daily_tracker.failed_trades) as f64
             } else {
                 0.0
             },

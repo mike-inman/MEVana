@@ -2,10 +2,10 @@
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
-pub mod models;
-pub mod layouts;
-pub mod layout_parser;
 pub mod adapters;
+pub mod layout_parser;
+pub mod layouts;
+pub mod models;
 
 /// ---------- Normalized universal swap shape ----------
 

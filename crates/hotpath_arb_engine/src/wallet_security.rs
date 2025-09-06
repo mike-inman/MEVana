@@ -1,26 +1,26 @@
 // crates/hotpath_arb_engine/src/wallet_security.rs
 //! Enterprise-grade wallet management and security architecture for MEV trading
-//! 
+//!
 //! Implements a multi-tiered wallet security model:
 //! - Hot wallets: For immediate trading execution (minimal funds)
 //! - Warm wallets: For operational reserves (medium security)  
 //! - Cold wallets: For long-term storage (maximum security)
 //! - Hardware Security Modules (HSM) integration for key management
 
-use anyhow::{Result, anyhow};
-use log::{info, warn, error, debug};
-use serde::{Serialize, Deserialize};
+use anyhow::{anyhow, Result};
+use chrono::Timelike;
+use log::{debug, error, info, warn};
+use serde::{Deserialize, Serialize};
 use solana_sdk::{
+    pubkey::Pubkey,
     signature::{Keypair, Signature},
     signer::Signer,
-    pubkey::Pubkey,
     transaction::Transaction,
 };
 use std::collections::HashMap;
 use std::sync::Arc;
-use tokio::sync::{RwLock, Mutex};
+use tokio::sync::{Mutex, RwLock};
 use tokio::time::{Duration, Instant};
-use chrono::Timelike;
 
 /// Multi-tiered wallet security levels
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Hash)]
@@ -28,7 +28,7 @@ pub enum WalletSecurityTier {
     /// Hot wallet: Immediate trading access, minimal funds, highest risk
     Hot,
     /// Warm wallet: Operational reserves, medium security, automated transfers
-    Warm, 
+    Warm,
     /// Cold wallet: Long-term storage, maximum security, manual approval
     Cold,
 }
@@ -62,9 +62,9 @@ pub struct SecurityPolicy {
 impl Default for SecurityPolicy {
     fn default() -> Self {
         Self {
-            max_hot_wallet_balance: 100_000_000, // 0.1 SOL
-            max_warm_wallet_balance: 10_000_000_000, // 10 SOL  
-            transaction_velocity_limit: 100, // 100 tx/min
+            max_hot_wallet_balance: 100_000_000,     // 0.1 SOL
+            max_warm_wallet_balance: 10_000_000_000, // 10 SOL
+            transaction_velocity_limit: 100,         // 100 tx/min
             suspicious_activity_threshold: 0.8,
             emergency_shutdown_enabled: true,
             require_2fa_for_cold_wallet: true,
@@ -102,13 +102,13 @@ pub struct WalletSecurityManager {
     wallets: Arc<RwLock<HashMap<Pubkey, WalletConfig>>>,
     keypairs: Arc<Mutex<HashMap<Pubkey, Arc<Keypair>>>>, // Encrypted in production
     activity_log: Arc<RwLock<Vec<WalletActivity>>>,
-    
+
     // Security monitoring
     transaction_counts: Arc<RwLock<HashMap<Pubkey, u32>>>, // per hour
     risk_scores: Arc<RwLock<HashMap<Pubkey, f64>>>,
     last_security_audit: Arc<RwLock<Instant>>,
     emergency_shutdown_active: Arc<RwLock<bool>>,
-    
+
     // Performance metrics
     successful_trades: std::sync::atomic::AtomicU64,
     failed_trades: std::sync::atomic::AtomicU64,
@@ -119,7 +119,7 @@ pub struct WalletSecurityManager {
 impl WalletSecurityManager {
     pub fn new(config: SecurityPolicy) -> Self {
         info!("🔐 Initializing enterprise wallet security manager");
-        
+
         Self {
             config: Arc::new(RwLock::new(config)),
             wallets: Arc::new(RwLock::new(HashMap::new())),
@@ -144,7 +144,7 @@ impl WalletSecurityManager {
         max_balance: u64,
     ) -> Result<Pubkey> {
         let pubkey = keypair.pubkey();
-        
+
         let wallet_config = WalletConfig {
             tier,
             pubkey,
@@ -153,7 +153,7 @@ impl WalletSecurityManager {
             auto_refill_amount_lamports: max_balance / 5,     // 20% refill
             transaction_limit_per_hour: match tier {
                 WalletSecurityTier::Hot => 1000,
-                WalletSecurityTier::Warm => 100, 
+                WalletSecurityTier::Warm => 100,
                 WalletSecurityTier::Cold => 10,
             },
             max_transaction_amount_lamports: match tier {
@@ -167,15 +167,18 @@ impl WalletSecurityManager {
         };
 
         // Store wallet configuration
-        self.wallets.write().await.insert(pubkey, wallet_config.clone());
-        
+        self.wallets
+            .write()
+            .await
+            .insert(pubkey, wallet_config.clone());
+
         // Store keypair (encrypted in production)
         self.keypairs.lock().await.insert(pubkey, Arc::new(keypair));
-        
+
         // Initialize security metrics
         self.transaction_counts.write().await.insert(pubkey, 0);
         self.risk_scores.write().await.insert(pubkey, 0.0);
-        
+
         info!(
             "✅ Registered {:?} wallet: {} (max_balance: {} lamports)",
             tier, pubkey, max_balance
@@ -192,19 +195,25 @@ impl WalletSecurityManager {
 
         let wallets = self.wallets.read().await;
         let risk_scores = self.risk_scores.read().await;
-        
+
         // Find hot wallets suitable for the trade amount
         let hot_wallets: Vec<_> = wallets
             .iter()
             .filter(|(_, config)| {
-                config.tier == WalletSecurityTier::Hot &&
-                config.max_transaction_amount_lamports >= amount_lamports &&
-                risk_scores.get(&config.pubkey).map(|&score| score < 0.5).unwrap_or(true)
+                config.tier == WalletSecurityTier::Hot
+                    && config.max_transaction_amount_lamports >= amount_lamports
+                    && risk_scores
+                        .get(&config.pubkey)
+                        .map(|&score| score < 0.5)
+                        .unwrap_or(true)
             })
             .collect();
 
         if hot_wallets.is_empty() {
-            return Err(anyhow!("No suitable hot wallets available for amount: {}", amount_lamports));
+            return Err(anyhow!(
+                "No suitable hot wallets available for amount: {}",
+                amount_lamports
+            ));
         }
 
         // Select wallet with lowest risk score
@@ -218,7 +227,10 @@ impl WalletSecurityManager {
             .map(|(pubkey, _)| **pubkey)
             .unwrap();
 
-        debug!("🎯 Selected trading wallet: {} for amount: {}", best_wallet, amount_lamports);
+        debug!(
+            "🎯 Selected trading wallet: {} for amount: {}",
+            best_wallet, amount_lamports
+        );
         Ok(best_wallet)
     }
 
@@ -230,12 +242,14 @@ impl WalletSecurityManager {
         amount_lamports: u64,
     ) -> Result<Signature> {
         // Pre-transaction security checks
-        self.validate_transaction_security(&wallet_pubkey, amount_lamports).await?;
-        
+        self.validate_transaction_security(&wallet_pubkey, amount_lamports)
+            .await?;
+
         // Get keypair for signing
         let keypair = {
             let keypairs = self.keypairs.lock().await;
-            keypairs.get(&wallet_pubkey)
+            keypairs
+                .get(&wallet_pubkey)
                 .ok_or_else(|| anyhow!("Keypair not found for wallet: {}", wallet_pubkey))?
                 .clone()
         };
@@ -253,14 +267,22 @@ impl WalletSecurityManager {
             activity_type: ActivityType::Trade,
             amount_lamports,
             success: true,
-            risk_score: self.calculate_transaction_risk(wallet_pubkey, amount_lamports).await,
-        }).await;
+            risk_score: self
+                .calculate_transaction_risk(wallet_pubkey, amount_lamports)
+                .await,
+        })
+        .await;
 
         // Update metrics
-        self.successful_trades.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-        self.total_volume_lamports.fetch_add(amount_lamports, std::sync::atomic::Ordering::Relaxed);
+        self.successful_trades
+            .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        self.total_volume_lamports
+            .fetch_add(amount_lamports, std::sync::atomic::Ordering::Relaxed);
 
-        info!("✅ Secure transaction executed: {} amount: {}", signature, amount_lamports);
+        info!(
+            "✅ Secure transaction executed: {} amount: {}",
+            signature, amount_lamports
+        );
         Ok(signature)
     }
 
@@ -271,7 +293,8 @@ impl WalletSecurityManager {
         amount_lamports: u64,
     ) -> Result<()> {
         let wallets = self.wallets.read().await;
-        let wallet_config = wallets.get(wallet_pubkey)
+        let wallet_config = wallets
+            .get(wallet_pubkey)
             .ok_or_else(|| anyhow!("Wallet configuration not found: {}", wallet_pubkey))?;
 
         // Check emergency shutdown
@@ -289,7 +312,12 @@ impl WalletSecurityManager {
         }
 
         // Check transaction velocity
-        let tx_count = *self.transaction_counts.read().await.get(wallet_pubkey).unwrap_or(&0);
+        let tx_count = *self
+            .transaction_counts
+            .read()
+            .await
+            .get(wallet_pubkey)
+            .unwrap_or(&0);
         if tx_count >= wallet_config.transaction_limit_per_hour {
             return Err(anyhow!(
                 "Transaction velocity limit exceeded: {} >= {}",
@@ -299,10 +327,19 @@ impl WalletSecurityManager {
         }
 
         // Check risk score
-        let risk_score = *self.risk_scores.read().await.get(wallet_pubkey).unwrap_or(&0.0);
+        let risk_score = *self
+            .risk_scores
+            .read()
+            .await
+            .get(wallet_pubkey)
+            .unwrap_or(&0.0);
         if risk_score > 0.8 {
-            warn!("⚠️ High risk transaction detected: wallet={} risk_score={}", wallet_pubkey, risk_score);
-            self.security_incidents.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+            warn!(
+                "⚠️ High risk transaction detected: wallet={} risk_score={}",
+                wallet_pubkey, risk_score
+            );
+            self.security_incidents
+                .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
         }
 
         Ok(())
@@ -314,32 +351,35 @@ impl WalletSecurityManager {
         let recent_activities: Vec<_> = activity_log
             .iter()
             .filter(|activity| {
-                activity.wallet_pubkey == wallet_pubkey &&
-                activity.timestamp > chrono::Utc::now().timestamp_millis() as u64 - 3600_000 // Last hour
+                activity.wallet_pubkey == wallet_pubkey
+                    && activity.timestamp > chrono::Utc::now().timestamp_millis() as u64 - 3600_000
+                // Last hour
             })
             .collect();
 
         // Base risk factors
         let mut risk_score = 0.0;
-        
+
         // Transaction velocity risk
         if recent_activities.len() > 50 {
             risk_score += 0.3;
         }
-        
+
         // Amount risk (higher amounts = higher risk)
-        if amount_lamports > 1_000_000_000 { // > 1 SOL
+        if amount_lamports > 1_000_000_000 {
+            // > 1 SOL
             risk_score += 0.2;
         }
-        
+
         // Failure rate risk
         let failures = recent_activities.iter().filter(|a| !a.success).count();
         let failure_rate = failures as f64 / recent_activities.len().max(1) as f64;
         risk_score += failure_rate * 0.3;
-        
+
         // Time-based risk (unusual hours)
         let hour = chrono::Utc::now().hour();
-        if hour < 6 || hour > 22 { // Outside business hours
+        if hour < 6 || hour > 22 {
+            // Outside business hours
             risk_score += 0.1;
         }
 
@@ -364,7 +404,7 @@ impl WalletSecurityManager {
         {
             let mut activity_log = self.activity_log.write().await;
             activity_log.push(activity.clone());
-            
+
             // Keep only recent activities (last 24 hours)
             let cutoff = chrono::Utc::now().timestamp_millis() as u64 - 86400_000;
             activity_log.retain(|a| a.timestamp > cutoff);
@@ -376,9 +416,9 @@ impl WalletSecurityManager {
     /// Emergency shutdown all trading activities
     pub async fn emergency_shutdown(&self, reason: &str) -> Result<()> {
         warn!("🚨 EMERGENCY SHUTDOWN ACTIVATED: {}", reason);
-        
+
         *self.emergency_shutdown_active.write().await = true;
-        
+
         // Record emergency shutdown activity for all wallets
         let wallets = self.wallets.read().await.clone();
         for (pubkey, _) in wallets {
@@ -390,12 +430,17 @@ impl WalletSecurityManager {
                 amount_lamports: 0,
                 success: true,
                 risk_score: 1.0,
-            }).await;
+            })
+            .await;
         }
-        
-        self.security_incidents.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-        error!("🛑 All trading activities have been halted due to: {}", reason);
-        
+
+        self.security_incidents
+            .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        error!(
+            "🛑 All trading activities have been halted due to: {}",
+            reason
+        );
+
         Ok(())
     }
 
@@ -409,53 +454,74 @@ impl WalletSecurityManager {
     /// Perform comprehensive security audit
     pub async fn perform_security_audit(&self) -> Result<SecurityAuditReport> {
         info!("🔍 Performing comprehensive security audit");
-        
+
         let wallets = self.wallets.read().await;
         let activity_log = self.activity_log.read().await;
         let risk_scores = self.risk_scores.read().await;
-        
+
         let mut audit_report = SecurityAuditReport {
             timestamp: chrono::Utc::now().timestamp_millis() as u64,
             total_wallets: wallets.len(),
-            hot_wallets: wallets.values().filter(|w| w.tier == WalletSecurityTier::Hot).count(),
-            warm_wallets: wallets.values().filter(|w| w.tier == WalletSecurityTier::Warm).count(),
-            cold_wallets: wallets.values().filter(|w| w.tier == WalletSecurityTier::Cold).count(),
+            hot_wallets: wallets
+                .values()
+                .filter(|w| w.tier == WalletSecurityTier::Hot)
+                .count(),
+            warm_wallets: wallets
+                .values()
+                .filter(|w| w.tier == WalletSecurityTier::Warm)
+                .count(),
+            cold_wallets: wallets
+                .values()
+                .filter(|w| w.tier == WalletSecurityTier::Cold)
+                .count(),
             high_risk_wallets: risk_scores.values().filter(|&&score| score > 0.8).count(),
             total_activities: activity_log.len(),
-            security_incidents: self.security_incidents.load(std::sync::atomic::Ordering::Relaxed),
-            successful_trades: self.successful_trades.load(std::sync::atomic::Ordering::Relaxed),
-            failed_trades: self.failed_trades.load(std::sync::atomic::Ordering::Relaxed),
-            total_volume_lamports: self.total_volume_lamports.load(std::sync::atomic::Ordering::Relaxed),
+            security_incidents: self
+                .security_incidents
+                .load(std::sync::atomic::Ordering::Relaxed),
+            successful_trades: self
+                .successful_trades
+                .load(std::sync::atomic::Ordering::Relaxed),
+            failed_trades: self
+                .failed_trades
+                .load(std::sync::atomic::Ordering::Relaxed),
+            total_volume_lamports: self
+                .total_volume_lamports
+                .load(std::sync::atomic::Ordering::Relaxed),
             recommendations: Vec::new(),
         };
 
         // Generate security recommendations
         if audit_report.high_risk_wallets > 0 {
-            audit_report.recommendations.push(
-                format!("Review {} high-risk wallets with risk scores > 0.8", audit_report.high_risk_wallets)
-            );
+            audit_report.recommendations.push(format!(
+                "Review {} high-risk wallets with risk scores > 0.8",
+                audit_report.high_risk_wallets
+            ));
         }
-        
+
         if audit_report.security_incidents > 10 {
             audit_report.recommendations.push(
                 "High number of security incidents detected - consider tightening security policies".to_string()
             );
         }
 
-        let failure_rate = audit_report.failed_trades as f64 / 
-            (audit_report.successful_trades + audit_report.failed_trades).max(1) as f64;
+        let failure_rate = audit_report.failed_trades as f64
+            / (audit_report.successful_trades + audit_report.failed_trades).max(1) as f64;
         if failure_rate > 0.1 {
-            audit_report.recommendations.push(
-                format!("High transaction failure rate: {:.2}% - investigate execution issues", failure_rate * 100.0)
-            );
+            audit_report.recommendations.push(format!(
+                "High transaction failure rate: {:.2}% - investigate execution issues",
+                failure_rate * 100.0
+            ));
         }
 
         // Update last audit timestamp
         *self.last_security_audit.write().await = Instant::now();
-        
-        info!("✅ Security audit completed: {} wallets, {} incidents", 
-              audit_report.total_wallets, audit_report.security_incidents);
-        
+
+        info!(
+            "✅ Security audit completed: {} wallets, {} incidents",
+            audit_report.total_wallets, audit_report.security_incidents
+        );
+
         Ok(audit_report)
     }
 
@@ -464,15 +530,23 @@ impl WalletSecurityManager {
         let wallets = self.wallets.read().await;
         let emergency_active = *self.emergency_shutdown_active.read().await;
         let last_audit = self.last_security_audit.read().await.elapsed().as_secs();
-        
+
         WalletSecurityStatus {
             total_wallets: wallets.len(),
             emergency_shutdown_active: emergency_active,
             last_security_audit: last_audit,
-            successful_trades: self.successful_trades.load(std::sync::atomic::Ordering::Relaxed),
-            failed_trades: self.failed_trades.load(std::sync::atomic::Ordering::Relaxed),
-            security_incidents: self.security_incidents.load(std::sync::atomic::Ordering::Relaxed),
-            total_volume_lamports: self.total_volume_lamports.load(std::sync::atomic::Ordering::Relaxed),
+            successful_trades: self
+                .successful_trades
+                .load(std::sync::atomic::Ordering::Relaxed),
+            failed_trades: self
+                .failed_trades
+                .load(std::sync::atomic::Ordering::Relaxed),
+            security_incidents: self
+                .security_incidents
+                .load(std::sync::atomic::Ordering::Relaxed),
+            total_volume_lamports: self
+                .total_volume_lamports
+                .load(std::sync::atomic::Ordering::Relaxed),
         }
     }
 }
@@ -524,10 +598,10 @@ impl HSMIntegration {
         if !self.enabled {
             return Err(anyhow!("HSM integration not enabled"));
         }
-        
+
         // Mock HSM signing - in production this would call actual HSM API
         tokio::time::sleep(Duration::from_millis(50)).await; // Simulate HSM latency
-        
+
         let mock_signature = Signature::default(); // Mock signature
         info!("🔐 Transaction signed using HSM");
         Ok(mock_signature)

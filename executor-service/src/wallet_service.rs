@@ -358,7 +358,7 @@ impl WalletService {
 
     fn load_wallet_address(keypair_path: &str) -> Result<String> {
         let expanded_path = shellexpand::tilde(keypair_path);
-        
+
         // Load the actual Solana keypair and extract public key
         match solana_sdk::signature::read_keypair_file(&*expanded_path) {
             Ok(keypair) => {

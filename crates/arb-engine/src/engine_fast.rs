@@ -12,8 +12,8 @@ use crate::stats::record_profit;
 use edge_assembler::edge::EdgeDelta;
 use metrics::counter;
 use std::sync::atomic::{AtomicU64, Ordering};
-use std::time::{SystemTime, UNIX_EPOCH};
 use std::sync::Arc;
+use std::time::{SystemTime, UNIX_EPOCH};
 
 static QUOTE_ARB_ID: AtomicU64 = AtomicU64::new(1);
 
@@ -126,12 +126,12 @@ impl FastEngine {
     /// This is the HOT PATH - called for every pool state change
     #[inline]
     pub fn process_edge_update(&self, edge: EdgeDelta) -> anyhow::Result<()> {
-    self.edge_detector.process_edge_update(edge)
+        self.edge_detector.process_edge_update(edge)
     }
 
     #[cfg(feature = "diagnostics")]
     pub fn refresh_structural_gauges(&self) {
-    self.edge_detector.refresh_structural_gauges();
+        self.edge_detector.refresh_structural_gauges();
     }
 
     // (update_edge_config removed; thresholds are global atomics now)
@@ -139,11 +139,11 @@ impl FastEngine {
     /// Test helper to lower thresholds
     #[cfg(test)]
     pub fn _edge_detector_mut(&mut self) -> &mut EdgeArbitrageDetector {
-    Arc::get_mut(&mut self.edge_detector).expect("only borrowed mut in tests")
+        Arc::get_mut(&mut self.edge_detector).expect("only borrowed mut in tests")
     }
 
     /// Internal accessor (read-only) to edge detector for registration (non-mutable)
     pub fn _edge_detector_ref(&self) -> Option<Arc<EdgeArbitrageDetector>> {
-    Some(self.edge_detector.clone())
+        Some(self.edge_detector.clone())
     }
 }

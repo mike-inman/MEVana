@@ -2,7 +2,7 @@ use arb_engine::circuit::circuit_on_message;
 use arb_engine::edge_integration::decode_and_validate_edge;
 use arb_engine::engine_fast::FastEngine;
 use arb_engine::hotpath::SignalQueue;
-use arb_engine::jupiter_arbitrage::{JupiterArbitrageScanner, JupiterArbConfig};
+use arb_engine::jupiter_arbitrage::{JupiterArbConfig, JupiterArbitrageScanner};
 use arb_engine::metrics_http::{register_edge_detector, start_http_control};
 use arb_engine::stats::{
     record_ingest_latency_ns, EDGE_DECODE_ERRORS, EDGE_PROCESS_ERRORS, EDGE_TOTAL,
@@ -76,8 +76,11 @@ async fn main() -> anyhow::Result<()> {
 
     // Initialize Jupiter scanner
     let jupiter_scanner = if enable_jupiter {
-        let scanner = Arc::new(JupiterArbitrageScanner::new(tx.clone(), Some(jupiter_config)));
-        
+        let scanner = Arc::new(JupiterArbitrageScanner::new(
+            tx.clone(),
+            Some(jupiter_config),
+        ));
+
         // Start Jupiter scanner in background
         let scanner_clone = Arc::clone(&scanner);
         tokio::spawn(async move {
@@ -85,7 +88,7 @@ async fn main() -> anyhow::Result<()> {
                 tracing::error!("Failed to start Jupiter scanner: {}", e);
             }
         });
-        
+
         Some(scanner)
     } else {
         tracing::info!("🪐 Jupiter integration disabled");

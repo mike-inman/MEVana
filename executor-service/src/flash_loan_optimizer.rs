@@ -2,7 +2,7 @@
 //! Advanced flash loan optimization and aggregation for MEV arbitrage
 
 use anyhow::Result;
-use log::{debug, info, warn, error};
+use log::{debug, error, info, warn};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -12,7 +12,7 @@ use tokio::time::sleep;
 
 use crate::config::ExecutorConfig;
 use crate::execution_engine::ArbitrageOpportunity;
-use crate::flash_loan::{FlashLoanProvider, FlashLoanQuote, FlashLoanAggregator};
+use crate::flash_loan::{FlashLoanAggregator, FlashLoanProvider, FlashLoanQuote};
 use crate::metrics::MetricsServer;
 use crate::shyft_client::ShyftClient;
 
@@ -34,9 +34,9 @@ pub struct OptimizedFlashLoanQuote {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum FlashLoanRiskLevel {
-    Low,     // Proven providers, high liquidity
-    Medium,  // Good providers, moderate liquidity
-    High,    // Newer providers, lower liquidity
+    Low,      // Proven providers, high liquidity
+    Medium,   // Good providers, moderate liquidity
+    High,     // Newer providers, lower liquidity
     Critical, // Risky providers or low liquidity
 }
 
@@ -55,7 +55,7 @@ pub struct FlashLoanOptimizationParams {
 impl Default for FlashLoanOptimizationParams {
     fn default() -> Self {
         Self {
-            max_fee_bps: 50, // 0.5% maximum fee
+            max_fee_bps: 50,                        // 0.5% maximum fee
             min_liquidity_threshold: 1_000_000_000, // 1 SOL minimum
             reliability_weight: 0.4,
             cost_weight: 0.35,
@@ -127,28 +127,37 @@ impl FlashLoanOptimizer {
         token_mint: &str,
     ) -> Result<OptimizedFlashLoanQuote> {
         let start_time = Instant::now();
-        
+
         info!(
             "🔍 Finding optimal flash loan: amount={} token={} profit_bps={}",
             required_amount, token_mint, opportunity.profit_bps
         );
 
         // Step 1: Get quotes from all available providers
-        let raw_quotes = self.gather_all_provider_quotes(required_amount, token_mint).await?;
-        
+        let raw_quotes = self
+            .gather_all_provider_quotes(required_amount, token_mint)
+            .await?;
+
         if raw_quotes.is_empty() {
-            return Err(anyhow::anyhow!("No flash loan providers available for token {}", token_mint));
+            return Err(anyhow::anyhow!(
+                "No flash loan providers available for token {}",
+                token_mint
+            ));
         }
 
         // Step 2: Enhance quotes with optimization data
-        let enhanced_quotes = self.enhance_quotes_with_optimization_data(&raw_quotes, opportunity).await?;
-        
+        let enhanced_quotes = self
+            .enhance_quotes_with_optimization_data(&raw_quotes, opportunity)
+            .await?;
+
         // Step 3: Rank and select optimal quote
-        let optimal_quote = self.select_optimal_quote(enhanced_quotes, opportunity).await?;
-        
+        let optimal_quote = self
+            .select_optimal_quote(enhanced_quotes, opportunity)
+            .await?;
+
         // Step 4: Record selection metrics
         self.record_selection_metrics(&optimal_quote, start_time.elapsed());
-        
+
         info!(
             "✅ Optimal flash loan selected: provider={:?} fee_bps={} cost={}",
             optimal_quote.provider, optimal_quote.fee_bps, optimal_quote.total_cost_lamports
@@ -163,7 +172,7 @@ impl FlashLoanOptimizer {
         token_mint: &str,
     ) -> Result<Vec<FlashLoanQuote>> {
         let mut all_quotes = Vec::new();
-        
+
         // Query all known providers in parallel
         let providers = [
             FlashLoanProvider::Solend,
@@ -175,11 +184,11 @@ impl FlashLoanOptimizer {
         ];
 
         let mut futures = Vec::new();
-        
+
         for provider in providers {
             let aggregator = Arc::clone(&self.base_aggregator);
             let token = token_mint.to_string();
-            
+
             let future = async move {
                 // Note: Using get_all_quotes for now as individual provider quotes not exposed
                 // This is a design limitation that should be addressed in future iterations
@@ -193,21 +202,24 @@ impl FlashLoanOptimizer {
                     }
                 }
             };
-            
+
             futures.push(future);
         }
-        
+
         // Execute all queries concurrently
         let results = futures_util::future::join_all(futures).await;
-        
+
         for result in results {
             if let Some(quote) = result {
                 all_quotes.push(quote);
             }
         }
-        
-        info!("📊 Gathered {} flash loan quotes from providers", all_quotes.len());
-        
+
+        info!(
+            "📊 Gathered {} flash loan quotes from providers",
+            all_quotes.len()
+        );
+
         Ok(all_quotes)
     }
 
@@ -218,10 +230,11 @@ impl FlashLoanOptimizer {
     ) -> Result<Vec<OptimizedFlashLoanQuote>> {
         let mut enhanced_quotes = Vec::new();
         let provider_stats = self.provider_performance_history.read().await;
-        
+
         for quote in raw_quotes {
             // Get provider performance history
-            let stats = provider_stats.get(&quote.provider)
+            let stats = provider_stats
+                .get(&quote.provider)
                 .cloned()
                 .unwrap_or_else(|| ProviderStats {
                     success_rate: 0.9, // Default assumption
@@ -233,12 +246,13 @@ impl FlashLoanOptimizer {
 
             // Calculate total cost including gas estimates
             let estimated_gas_cost = self.estimate_gas_cost_for_provider(quote.provider).await;
-            let fee_lamports = (quote.available_amount as u128 * quote.fee_bps as u128 / 10000) as u64;
+            let fee_lamports =
+                (quote.available_amount as u128 * quote.fee_bps as u128 / 10000) as u64;
             let total_cost = fee_lamports + estimated_gas_cost;
 
             // Determine risk level
             let risk_level = self.assess_risk_level(&quote, &stats);
-            
+
             // Calculate liquidity depth score
             let liquidity_score = self.calculate_liquidity_score(quote).await;
 
@@ -259,7 +273,7 @@ impl FlashLoanOptimizer {
 
             enhanced_quotes.push(enhanced_quote);
         }
-        
+
         Ok(enhanced_quotes)
     }
 
@@ -274,9 +288,9 @@ impl FlashLoanOptimizer {
 
         // Filter out quotes that exceed risk tolerance
         enhanced_quotes.retain(|quote| {
-            quote.fee_bps <= self.optimization_params.max_fee_bps &&
-            quote.amount_available >= self.optimization_params.min_liquidity_threshold &&
-            !matches!(quote.risk_level, FlashLoanRiskLevel::Critical)
+            quote.fee_bps <= self.optimization_params.max_fee_bps
+                && quote.amount_available >= self.optimization_params.min_liquidity_threshold
+                && !matches!(quote.risk_level, FlashLoanRiskLevel::Critical)
         });
 
         if enhanced_quotes.is_empty() {
@@ -287,12 +301,12 @@ impl FlashLoanOptimizer {
         for quote in &mut enhanced_quotes {
             let cost_score = 1.0 - (quote.total_cost_lamports as f64 / 1_000_000.0).min(1.0);
             let speed_score = 1.0 - (quote.execution_time_estimate_ms as f64 / 1000.0).min(1.0);
-            
-            let composite_score = 
-                quote.reliability_score * self.optimization_params.reliability_weight +
-                cost_score * self.optimization_params.cost_weight +
-                speed_score * self.optimization_params.speed_weight;
-                
+
+            let composite_score = quote.reliability_score
+                * self.optimization_params.reliability_weight
+                + cost_score * self.optimization_params.cost_weight
+                + speed_score * self.optimization_params.speed_weight;
+
             quote.optimization_rank = ((1.0 - composite_score) * 1000.0) as u32;
         }
 
@@ -300,7 +314,9 @@ impl FlashLoanOptimizer {
         enhanced_quotes.sort_by_key(|q| q.optimization_rank);
 
         // Apply additional business logic for final selection
-        let optimal_quote = self.apply_business_logic_selection(enhanced_quotes, opportunity).await?;
+        let optimal_quote = self
+            .apply_business_logic_selection(enhanced_quotes, opportunity)
+            .await?;
 
         Ok(optimal_quote)
     }
@@ -313,18 +329,22 @@ impl FlashLoanOptimizer {
         // For high-profit opportunities, prefer reliability over cost
         if opportunity.profit_bps > 100 {
             // Find the most reliable option
-            if let Some(reliable_quote) = ranked_quotes.iter()
+            if let Some(reliable_quote) = ranked_quotes
+                .iter()
                 .filter(|q| q.reliability_score > 0.95)
-                .next() {
+                .next()
+            {
                 return Ok(reliable_quote.clone());
             }
         }
-        
+
         // For time-sensitive opportunities, prefer speed
         if opportunity.max_edge_age_ms < 1000 {
-            if let Some(fast_quote) = ranked_quotes.iter()
+            if let Some(fast_quote) = ranked_quotes
+                .iter()
                 .filter(|q| q.execution_time_estimate_ms < 150)
-                .next() {
+                .next()
+            {
                 return Ok(fast_quote.clone());
             }
         }
@@ -336,7 +356,7 @@ impl FlashLoanOptimizer {
     async fn estimate_gas_cost_for_provider(&self, provider: FlashLoanProvider) -> u64 {
         // Estimate gas costs based on provider complexity
         match provider {
-            FlashLoanProvider::Solend => 15_000,    // lamports
+            FlashLoanProvider::Solend => 15_000, // lamports
             FlashLoanProvider::Marginfi => 18_000,
             FlashLoanProvider::Tulip => 20_000,
             FlashLoanProvider::Mango => 25_000,
@@ -345,7 +365,11 @@ impl FlashLoanOptimizer {
         }
     }
 
-    fn assess_risk_level(&self, quote: &FlashLoanQuote, stats: &ProviderStats) -> FlashLoanRiskLevel {
+    fn assess_risk_level(
+        &self,
+        quote: &FlashLoanQuote,
+        stats: &ProviderStats,
+    ) -> FlashLoanRiskLevel {
         if stats.reliability_score > 0.95 && quote.available_amount > 10_000_000_000 {
             FlashLoanRiskLevel::Low
         } else if stats.reliability_score > 0.9 && quote.available_amount > 5_000_000_000 {
@@ -370,7 +394,7 @@ impl FlashLoanOptimizer {
             quote.reliability_score,
             selection_time.as_millis() as u64,
         );
-        
+
         debug!(
             "📊 Flash loan selection metrics: provider={:?} cost={} reliability={:.2} time={}ms",
             quote.provider,
@@ -389,7 +413,7 @@ impl FlashLoanOptimizer {
         volume_lamports: u64,
     ) {
         let mut stats = self.provider_performance_history.write().await;
-        
+
         let provider_stats = stats.entry(provider).or_insert_with(|| ProviderStats {
             success_rate: 0.9,
             average_execution_time_ms: 200.0,
@@ -397,26 +421,29 @@ impl FlashLoanOptimizer {
             last_updated: Instant::now(),
             reliability_score: 0.8,
         });
-        
+
         // Update success rate with exponential moving average
         let alpha = 0.1; // Learning rate
-        provider_stats.success_rate = provider_stats.success_rate * (1.0 - alpha) + 
-                                    (if success { 1.0 } else { 0.0 }) * alpha;
-        
+        provider_stats.success_rate =
+            provider_stats.success_rate * (1.0 - alpha) + (if success { 1.0 } else { 0.0 }) * alpha;
+
         // Update average execution time
-        provider_stats.average_execution_time_ms = provider_stats.average_execution_time_ms * (1.0 - alpha) + 
-                                                  execution_time_ms as f64 * alpha;
-        
+        provider_stats.average_execution_time_ms = provider_stats.average_execution_time_ms
+            * (1.0 - alpha)
+            + execution_time_ms as f64 * alpha;
+
         // Update volume and reliability score
         provider_stats.total_volume_lamports += volume_lamports;
-        provider_stats.reliability_score = provider_stats.success_rate * 0.8 + 
-                                          (1.0 - (provider_stats.average_execution_time_ms / 1000.0).min(1.0)) * 0.2;
-        
+        provider_stats.reliability_score = provider_stats.success_rate * 0.8
+            + (1.0 - (provider_stats.average_execution_time_ms / 1000.0).min(1.0)) * 0.2;
+
         provider_stats.last_updated = Instant::now();
-        
+
         info!(
             "📈 Updated provider stats: {:?} success_rate={:.3} avg_time={:.1}ms reliability={:.3}",
-            provider, provider_stats.success_rate, provider_stats.average_execution_time_ms, 
+            provider,
+            provider_stats.success_rate,
+            provider_stats.average_execution_time_ms,
             provider_stats.reliability_score
         );
     }

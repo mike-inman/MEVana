@@ -1,9 +1,9 @@
-use normalizer_runtime::{
-    layouts::{LayoutJson, LayoutRegistry},
-    layout_parser::{parse_array_entries, read_scalar, ScalarValue},
-    models::{PoolSnapshot, SwapEvent, LiquidityEvent},
-};
 use bs58;
+use normalizer_runtime::{
+    layout_parser::{parse_array_entries, read_scalar, ScalarValue},
+    layouts::{LayoutJson, LayoutRegistry},
+    models::{LiquidityEvent, PoolSnapshot, SwapEvent},
+};
 
 #[derive(Default, Debug)]
 pub struct TickWindow {
@@ -14,18 +14,22 @@ pub struct TickWindow {
 pub fn decode_raydium_tick_array(reg: &LayoutRegistry, data: &[u8]) -> Option<TickWindow> {
     let key = "raydium_clmm/tickarray";
     let lj = reg.get(key)?;
-    let LayoutJson::Array { array, .. } = lj else { return None; };
+    let LayoutJson::Array { array, .. } = lj else {
+        return None;
+    };
     let entries = parse_array_entries(data, array).ok()?;
 
     let mut out = TickWindow::default();
     for row in entries {
-        let mut idx=0i32; let mut lg=0u128; let mut ln=0i128;
+        let mut idx = 0i32;
+        let mut lg = 0u128;
+        let mut ln = 0i128;
         for (name, v) in row {
             match (name.as_str(), v) {
-                ("tick_index",     ScalarValue::I32(n))   => idx = n,
-                ("liquidity_gross",ScalarValue::U128(n))  => lg  = n,
-                ("liquidity_net",  ScalarValue::I32(n))   => ln  = n as i128,
-                ("liquidity_net",  ScalarValue::I128(n))  => ln  = n,
+                ("tick_index", ScalarValue::I32(n)) => idx = n,
+                ("liquidity_gross", ScalarValue::U128(n)) => lg = n,
+                ("liquidity_net", ScalarValue::I32(n)) => ln = n as i128,
+                ("liquidity_net", ScalarValue::I128(n)) => ln = n,
                 _ => {}
             }
         }
@@ -43,25 +47,32 @@ pub fn decode_raydium_clmm_pool_snapshot(
 ) -> Option<PoolSnapshot> {
     let key = "raydium_clmm/pool";
     let lj = reg.get(key)?;
-    let LayoutJson::Fields { fields, .. } = lj else { return None; };
+    let LayoutJson::Fields { fields, .. } = lj else {
+        return None;
+    };
 
-    let mut token_a=[0u8;32]; let mut token_b=[0u8;32];
-    let mut dec_a=0u8; let mut dec_b=0u8;
-    let mut sqrt_price=0u128; let mut liq=0u128;
-    let mut tick_cur=0i32; let mut tick_spacing=0i32; let mut fee_bps=0u16;
+    let mut token_a = [0u8; 32];
+    let mut token_b = [0u8; 32];
+    let mut dec_a = 0u8;
+    let mut dec_b = 0u8;
+    let mut sqrt_price = 0u128;
+    let mut liq = 0u128;
+    let mut tick_cur = 0i32;
+    let mut tick_spacing = 0i32;
+    let mut fee_bps = 0u16;
 
     for f in fields {
         let v = read_scalar(data, f).ok()?;
         match (f.name.as_str(), v) {
-            ("token_mint_0",   ScalarValue::Pubkey(p)) => token_a = p,
-            ("token_mint_1",   ScalarValue::Pubkey(p)) => token_b = p,
-            ("decimals_0",     ScalarValue::U8(n))     => dec_a = n,
-            ("decimals_1",     ScalarValue::U8(n))     => dec_b = n,
-            ("sqrt_price_x64", ScalarValue::U128(n))   => sqrt_price = n,
-            ("liquidity",      ScalarValue::U128(n))   => liq = n,
-            ("tick_current",   ScalarValue::I32(n))    => tick_cur = n,
-            ("tick_spacing",   ScalarValue::I32(n))    => tick_spacing = n,
-            ("fee_bps",        ScalarValue::U16(n))    => fee_bps = n,
+            ("token_mint_0", ScalarValue::Pubkey(p)) => token_a = p,
+            ("token_mint_1", ScalarValue::Pubkey(p)) => token_b = p,
+            ("decimals_0", ScalarValue::U8(n)) => dec_a = n,
+            ("decimals_1", ScalarValue::U8(n)) => dec_b = n,
+            ("sqrt_price_x64", ScalarValue::U128(n)) => sqrt_price = n,
+            ("liquidity", ScalarValue::U128(n)) => liq = n,
+            ("tick_current", ScalarValue::I32(n)) => tick_cur = n,
+            ("tick_spacing", ScalarValue::I32(n)) => tick_spacing = n,
+            ("fee_bps", ScalarValue::U16(n)) => fee_bps = n,
             _ => {}
         }
     }
@@ -131,4 +142,3 @@ pub fn extract_raydium_clmm_liquidity_event(
     // For now, return None - needs proper implementation
     None
 }
-

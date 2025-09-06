@@ -2,7 +2,6 @@
 
 use normalizer_generated::registry as generated;
 
-
 use anyhow::{Context, Result};
 use bs58;
 use chrono::Utc;

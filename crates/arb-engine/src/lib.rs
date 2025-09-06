@@ -56,9 +56,11 @@ pub use engine_fast::FastEngine;
 // };
 #[cfg(test)]
 pub use edge_integration::EdgeArbitrageDetector;
-pub use executor_integration::{MultiHopOpportunity, HopStep, JupiterMetrics, COMMON_TOKENS, EXTENDED_TOKENS};
+pub use executor_integration::{
+    HopStep, JupiterMetrics, MultiHopOpportunity, COMMON_TOKENS, EXTENDED_TOKENS,
+};
 pub use hotpath::SignalQueue;
-pub use jupiter_arbitrage::{JupiterArbitrageScanner, JupiterArbConfig};
+pub use jupiter_arbitrage::{JupiterArbConfig, JupiterArbitrageScanner};
 pub use models::{ArbSignal, Pair, Quote};
 // pub use plugin::DexPlugin; // Temporarily disabled due to compilation errors
 // pub use whirlpool_adapter::WhirlpoolAdapter; // Temporarily disabled due to compilation errors

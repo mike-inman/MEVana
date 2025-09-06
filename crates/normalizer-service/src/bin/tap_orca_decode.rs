@@ -26,11 +26,9 @@ impl ServiceConfig {
         let broker = std::env::var("KAFKA_BROKER")
             .map_err(|_| anyhow::anyhow!("KAFKA_BROKER environment variable is required"))?;
 
-        let in_topic = std::env::var("IN_TOPIC")
-            .unwrap_or_else(|_| "orca-swaps".to_string());
+        let in_topic = std::env::var("IN_TOPIC").unwrap_or_else(|_| "orca-swaps".to_string());
 
-        let group_id = std::env::var("GROUP_ID")
-            .unwrap_or_else(|_| "tap-orca-decode".to_string());
+        let group_id = std::env::var("GROUP_ID").unwrap_or_else(|_| "tap-orca-decode".to_string());
 
         Ok(Self {
             broker,
@@ -54,9 +52,8 @@ async fn main() -> Result<()> {
     env_logger::init();
 
     // Load and validate configuration
-    let config = ServiceConfig::from_env()
-        .context("Failed to load service configuration")?;
-    
+    let config = ServiceConfig::from_env().context("Failed to load service configuration")?;
+
     config.log_config();
 
     info!("tap_orca_decode: Starting decode service");

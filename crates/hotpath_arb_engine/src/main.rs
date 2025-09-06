@@ -1,10 +1,10 @@
 use anyhow::Result;
-use chrono::{DateTime, Utc, Timelike};
+use chrono::{DateTime, Timelike, Utc};
 use clap::Parser;
 use dashmap::DashMap;
 use futures::StreamExt;
 use log::{error, info, warn};
-use metrics::{counter, histogram, gauge};
+use metrics::{counter, gauge, histogram};
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, VecDeque};
 use std::sync::{
@@ -20,26 +20,26 @@ use yellowstone_grpc_proto::{
     prelude::{subscribe_update::UpdateOneof, CommitmentLevel, SubscribeRequest},
 };
 
-// HOT PATH ARBITRAGE INTEGRATION - Zero latency MEV detection  
+// HOT PATH ARBITRAGE INTEGRATION - Zero latency MEV detection
 use arb_engine::engine_fast::FastEngine;
 use arb_engine::hotpath::SignalQueue;
-use arb_engine::jupiter_arbitrage::{JupiterArbitrageScanner, JupiterArbConfig};
+use arb_engine::jupiter_arbitrage::{JupiterArbConfig, JupiterArbitrageScanner};
 
 // LETHAL EXECUTION SYSTEM - Direct executor integration for instant trade execution
-use executor_service::execution_orchestrator::{ExecutionOrchestrator, ExecutionMode};
 use executor_service::execution_engine::ArbitrageOpportunity as ExecutorOpportunity;
-use executor_service::jito_optimizer::{JitoOptimizer, JitoBundleResult, JitoBundleStatus};
+use executor_service::execution_orchestrator::{ExecutionMode, ExecutionOrchestrator};
 use executor_service::flash_loan::{FlashLoanAggregator, FlashLoanProvider, FlashLoanQuote};
 use executor_service::flash_loan_optimizer::FlashLoanOptimizer;
+use executor_service::jito_optimizer::{JitoBundleResult, JitoBundleStatus, JitoOptimizer};
 
 // WALLET SECURITY SYSTEM - Enterprise-grade multi-tier wallet management
-mod wallet_security;
 mod wallet_manager;
-use wallet_security::{WalletSecurityManager, WalletSecurityTier, SecurityPolicy};
-use wallet_manager::generate_demo_wallets;
+mod wallet_security;
 use solana_sdk::signature::Keypair;
 use solana_sdk::signer::Signer;
 use uuid::Uuid;
+use wallet_manager::generate_demo_wallets;
+use wallet_security::{SecurityPolicy, WalletSecurityManager, WalletSecurityTier};
 
 /// Multi-Geyser Stream Service
 /// Runs 3 parallel Geyser connections for ultra-low latency DEX monitoring
@@ -97,24 +97,24 @@ pub struct PerformanceMetrics {
     pub processing_time_us: Vec<u64>,
     pub arbitrage_detection_time_us: Vec<u64>,
     pub execution_time_us: Vec<u64>,
-    
+
     // Arbitrage Opportunity Analytics
     pub opportunities_by_venue: HashMap<String, u64>,
     pub opportunities_by_profit_bps: HashMap<String, u64>, // grouped by profit ranges
     pub opportunities_by_strategy: HashMap<String, u64>,
-    
+
     // Latency Distribution Analysis
     pub p50_processing_time: u64,
     pub p95_processing_time: u64,
     pub p99_processing_time: u64,
     pub max_processing_time: u64,
-    
+
     // Success Rate Analytics
     pub execution_success_rate: f64,
     pub total_opportunities_detected: u64,
     pub total_opportunities_executed: u64,
     pub total_profit_captured_bps: u64,
-    
+
     // System Health Indicators
     pub memory_usage_mb: f64,
     pub cpu_utilization: f64,
@@ -168,17 +168,17 @@ impl PerformanceAnalytics {
     /// Record transaction processing performance
     pub fn record_processing_performance(&self, processing_time_us: u64, arbitrage_time_us: u64) {
         let mut metrics = self.metrics.lock().unwrap();
-        
+
         // Maintain rolling window of samples
         if metrics.processing_time_us.len() >= self.sample_buffer_size {
             metrics.processing_time_us.remove(0);
             metrics.arbitrage_detection_time_us.remove(0);
         }
-        
+
         metrics.processing_time_us.push(processing_time_us);
         metrics.arbitrage_detection_time_us.push(arbitrage_time_us);
         metrics.last_updated = Utc::now();
-        
+
         // Trigger analysis if interval has passed
         self.maybe_run_analysis();
     }
@@ -186,24 +186,33 @@ impl PerformanceAnalytics {
     /// Record arbitrage opportunity detection
     pub fn record_arbitrage_opportunity(&self, venue: &str, strategy: &str, profit_bps: u32) {
         let mut metrics = self.metrics.lock().unwrap();
-        
+
         // Track by venue
-        *metrics.opportunities_by_venue.entry(venue.to_string()).or_insert(0) += 1;
-        
+        *metrics
+            .opportunities_by_venue
+            .entry(venue.to_string())
+            .or_insert(0) += 1;
+
         // Track by strategy
-        *metrics.opportunities_by_strategy.entry(strategy.to_string()).or_insert(0) += 1;
-        
+        *metrics
+            .opportunities_by_strategy
+            .entry(strategy.to_string())
+            .or_insert(0) += 1;
+
         // Track by profit ranges for pattern analysis
         let profit_range = match profit_bps {
             0..=5 => "0-5bps",
-            6..=10 => "6-10bps", 
+            6..=10 => "6-10bps",
             11..=25 => "11-25bps",
             26..=50 => "26-50bps",
             51..=100 => "51-100bps",
-            _ => "100+bps"
+            _ => "100+bps",
         };
-        *metrics.opportunities_by_profit_bps.entry(profit_range.to_string()).or_insert(0) += 1;
-        
+        *metrics
+            .opportunities_by_profit_bps
+            .entry(profit_range.to_string())
+            .or_insert(0) += 1;
+
         metrics.total_opportunities_detected += 1;
         metrics.total_profit_captured_bps += profit_bps as u64;
         metrics.last_updated = Utc::now();
@@ -212,22 +221,24 @@ impl PerformanceAnalytics {
     /// Record execution performance
     pub fn record_execution(&self, execution_time_us: u64, success: bool) {
         let mut metrics = self.metrics.lock().unwrap();
-        
+
         if metrics.execution_time_us.len() >= self.sample_buffer_size {
             metrics.execution_time_us.remove(0);
         }
-        
+
         metrics.execution_time_us.push(execution_time_us);
-        
+
         if success {
             metrics.total_opportunities_executed += 1;
         }
-        
+
         // Recalculate success rate
         if metrics.total_opportunities_detected > 0 {
-            metrics.execution_success_rate = (metrics.total_opportunities_executed as f64 / metrics.total_opportunities_detected as f64) * 100.0;
+            metrics.execution_success_rate = (metrics.total_opportunities_executed as f64
+                / metrics.total_opportunities_detected as f64)
+                * 100.0;
         }
-        
+
         metrics.last_updated = Utc::now();
     }
 
@@ -244,7 +255,7 @@ impl PerformanceAnalytics {
         if last_analysis.elapsed() >= self.analysis_interval {
             *last_analysis = Instant::now();
             drop(last_analysis);
-            
+
             self.run_latency_analysis();
             self.run_system_health_analysis();
         }
@@ -253,36 +264,44 @@ impl PerformanceAnalytics {
     /// Analyze latency percentiles and patterns
     fn run_latency_analysis(&self) {
         let mut metrics = self.metrics.lock().unwrap();
-        
+
         if metrics.processing_time_us.is_empty() {
             return;
         }
-        
+
         let mut sorted_times = metrics.processing_time_us.clone();
         sorted_times.sort_unstable();
-        
+
         let len = sorted_times.len();
         metrics.p50_processing_time = sorted_times[len * 50 / 100];
         metrics.p95_processing_time = sorted_times[len * 95 / 100];
         metrics.p99_processing_time = sorted_times[len * 99 / 100];
         metrics.max_processing_time = *sorted_times.last().unwrap();
-        
+
         // Log performance analysis
         info!(
             "📊 PERFORMANCE ANALYSIS: P50={}μs P95={}μs P99={}μs MAX={}μs",
             metrics.p50_processing_time,
-            metrics.p95_processing_time, 
+            metrics.p95_processing_time,
             metrics.p99_processing_time,
             metrics.max_processing_time
         );
-        
+
         // Performance warnings
-        if metrics.p99_processing_time > 1000 { // >1ms
-            warn!("⚠️  P99 latency exceeds 1ms: {}μs", metrics.p99_processing_time);
+        if metrics.p99_processing_time > 1000 {
+            // >1ms
+            warn!(
+                "⚠️  P99 latency exceeds 1ms: {}μs",
+                metrics.p99_processing_time
+            );
         }
-        
-        if metrics.max_processing_time > 5000 { // >5ms  
-            warn!("🚨 MAX latency exceeds 5ms: {}μs", metrics.max_processing_time);
+
+        if metrics.max_processing_time > 5000 {
+            // >5ms
+            warn!(
+                "🚨 MAX latency exceeds 5ms: {}μs",
+                metrics.max_processing_time
+            );
         }
     }
 
@@ -291,27 +310,26 @@ impl PerformanceAnalytics {
         // TODO: Implement system resource monitoring
         // This would integrate with system monitoring tools
         let mut metrics = self.metrics.lock().unwrap();
-        
+
         // Placeholder values - in production would read from system APIs
         metrics.memory_usage_mb = 512.0; // Estimated
         metrics.cpu_utilization = 45.0; // Estimated
-        
+
         // Calculate overall stream health
         let avg_health: f64 = if metrics.stream_health_scores.is_empty() {
             1.0
         } else {
-            metrics.stream_health_scores.values().sum::<f64>() / metrics.stream_health_scores.len() as f64
+            metrics.stream_health_scores.values().sum::<f64>()
+                / metrics.stream_health_scores.len() as f64
         };
-        
+
         if avg_health < 0.8 {
             warn!("🏥 Stream health below 80%: {:.2}", avg_health);
         }
-        
+
         info!(
             "🏥 SYSTEM HEALTH: Memory={}MB CPU={}% Streams={:.2}",
-            metrics.memory_usage_mb,
-            metrics.cpu_utilization,
-            avg_health
+            metrics.memory_usage_mb, metrics.cpu_utilization, avg_health
         );
     }
 
@@ -323,7 +341,7 @@ impl PerformanceAnalytics {
     /// Generate comprehensive performance report
     pub fn generate_performance_report(&self) -> String {
         let metrics = self.metrics.lock().unwrap();
-        
+
         format!(
             r#"
 🔥 HOT PATH ARBITRAGE ENGINE - PERFORMANCE REPORT
@@ -370,7 +388,12 @@ impl PerformanceAnalytics {
             Self::format_top_entries(&metrics.opportunities_by_strategy, 5),
             metrics.memory_usage_mb,
             metrics.cpu_utilization,
-            if metrics.stream_health_scores.is_empty() { 1.0 } else { metrics.stream_health_scores.values().sum::<f64>() / metrics.stream_health_scores.len() as f64 },
+            if metrics.stream_health_scores.is_empty() {
+                1.0
+            } else {
+                metrics.stream_health_scores.values().sum::<f64>()
+                    / metrics.stream_health_scores.len() as f64
+            },
             metrics.last_updated.format("%Y-%m-%d %H:%M:%S UTC")
         )
     }
@@ -379,11 +402,12 @@ impl PerformanceAnalytics {
         if map.is_empty() {
             return "  • No data available".to_string();
         }
-        
+
         let mut entries: Vec<_> = map.iter().collect();
         entries.sort_by(|a, b| b.1.cmp(a.1));
-        
-        entries.into_iter()
+
+        entries
+            .into_iter()
             .take(top_n)
             .map(|(k, v)| format!("  • {}: {}", k, v))
             .collect::<Vec<_>>()
@@ -401,17 +425,17 @@ pub struct AITuningConfig {
     pub momentum: f64,
     pub batch_size: usize,
     pub epochs: u32,
-    
+
     // Optimization targets
     pub target_latency_us: u64,
     pub target_profit_bps: u32,
     pub min_success_rate: f64,
-    
+
     // Adaptive parameters
     pub profit_threshold_adjustment: f64,
     pub slippage_tolerance_adjustment: f64,
     pub execution_timing_adjustment: f64,
-    
+
     // Learning settings
     pub exploration_rate: f64,
     pub exploitation_threshold: f64,
@@ -446,19 +470,19 @@ pub struct AIFeatureVector {
     pub volatility_index: f64,
     pub liquidity_depth: f64,
     pub spread_tightness: f64,
-    
+
     // System performance
     pub avg_processing_time_us: f64,
     pub success_rate_recent: f64,
     pub profit_rate_bps: f64,
     pub competition_intensity: f64,
-    
+
     // Transaction patterns
     pub tx_frequency_score: f64,
     pub large_trade_presence: f64,
     pub cross_venue_activity: f64,
     pub jupiter_route_complexity: f64,
-    
+
     // Timing factors
     pub time_of_day_score: f64,
     pub network_congestion: f64,
@@ -484,12 +508,12 @@ pub struct AIOptimizationEngine {
     feature_history: Arc<Mutex<VecDeque<AIFeatureVector>>>,
     prediction_history: Arc<Mutex<VecDeque<AIPrediction>>>,
     performance_feedback: Arc<Mutex<VecDeque<f64>>>, // Actual results for training
-    
+
     // Neural network weights (simplified representation)
     input_weights: Arc<Mutex<Vec<Vec<f64>>>>,
     hidden_weights: Arc<Mutex<Vec<Vec<f64>>>>,
     output_weights: Arc<Mutex<Vec<Vec<f64>>>>,
-    
+
     // Reinforcement learning components
     q_table: Arc<Mutex<HashMap<String, f64>>>, // State-action values
     reward_history: Arc<Mutex<VecDeque<f64>>>,
@@ -516,45 +540,52 @@ impl AIOptimizationEngine {
     fn initialize_weights(input_size: usize, output_size: usize) -> Vec<Vec<f64>> {
         let variance = 2.0 / (input_size + output_size) as f64;
         let std_dev = variance.sqrt();
-        
-        (0..output_size).map(|_| {
-            (0..input_size).map(|_| {
-                // Simple pseudo-random initialization
-                let seed = std::time::SystemTime::now()
-                    .duration_since(std::time::UNIX_EPOCH)
-                    .unwrap()
-                    .as_nanos() as f64;
-                ((seed * 9737.0) % 1000.0 - 500.0) / 500.0 * std_dev
-            }).collect()
-        }).collect()
+
+        (0..output_size)
+            .map(|_| {
+                (0..input_size)
+                    .map(|_| {
+                        // Simple pseudo-random initialization
+                        let seed = std::time::SystemTime::now()
+                            .duration_since(std::time::UNIX_EPOCH)
+                            .unwrap()
+                            .as_nanos() as f64;
+                        ((seed * 9737.0) % 1000.0 - 500.0) / 500.0 * std_dev
+                    })
+                    .collect()
+            })
+            .collect()
     }
 
     /// Extract AI features from current system state
     pub fn extract_features(&self, performance_metrics: &PerformanceMetrics) -> AIFeatureVector {
         let now = chrono::Utc::now();
         let hour = now.hour() as f64;
-        
+
         AIFeatureVector {
             // Market conditions (synthetic for now - would integrate real data)
             venue_activity_score: self.calculate_venue_activity_score(performance_metrics),
             volatility_index: self.estimate_volatility_index(),
             liquidity_depth: self.estimate_liquidity_depth(),
             spread_tightness: self.calculate_spread_tightness(),
-            
+
             // System performance
             avg_processing_time_us: performance_metrics.p50_processing_time as f64,
             success_rate_recent: performance_metrics.execution_success_rate / 100.0,
             profit_rate_bps: if performance_metrics.total_opportunities_detected > 0 {
-                performance_metrics.total_profit_captured_bps as f64 / performance_metrics.total_opportunities_detected as f64
-            } else { 0.0 },
+                performance_metrics.total_profit_captured_bps as f64
+                    / performance_metrics.total_opportunities_detected as f64
+            } else {
+                0.0
+            },
             competition_intensity: self.estimate_competition_intensity(),
-            
+
             // Transaction patterns
             tx_frequency_score: self.calculate_tx_frequency_score(performance_metrics),
             large_trade_presence: self.detect_large_trade_presence(),
             cross_venue_activity: self.calculate_cross_venue_activity(performance_metrics),
             jupiter_route_complexity: self.estimate_jupiter_complexity(performance_metrics),
-            
+
             // Timing factors
             time_of_day_score: (hour * std::f64::consts::PI / 12.0).sin().abs(), // Peak activity periods
             network_congestion: self.estimate_network_congestion(),
@@ -566,37 +597,42 @@ impl AIOptimizationEngine {
     /// Generate AI-powered parameter recommendations
     pub fn predict_optimal_parameters(&self, features: &AIFeatureVector) -> AIPrediction {
         // Forward pass through neural network
-        let hidden_layer = self.forward_pass(&self.input_weights.lock().unwrap(), &self.features_to_vector(features));
+        let hidden_layer = self.forward_pass(
+            &self.input_weights.lock().unwrap(),
+            &self.features_to_vector(features),
+        );
         let output_layer = self.forward_pass(&self.output_weights.lock().unwrap(), &hidden_layer);
-        
+
         // Apply softmax and scaling to generate realistic parameters
         let confidence = self.sigmoid(output_layer[0]);
         let profit_adjustment = self.sigmoid(output_layer[1]) * 2.0; // 0-2x multiplier
         let slippage_adjustment = self.sigmoid(output_layer[2]) * 2.0;
         let timing_adjustment = self.sigmoid(output_layer[3]) * 2.0;
-        
+
         // Base values adjusted by AI predictions
         let base_profit_threshold = 10;
         let base_max_slippage = 150;
         let base_execution_delay = 100;
-        
+
         let mut venue_weights = HashMap::new();
         venue_weights.insert("jupiter-v6".to_string(), self.sigmoid(output_layer[4]));
         venue_weights.insert("raydium-clmm".to_string(), self.sigmoid(output_layer[5]));
         venue_weights.insert("phoenix-clob".to_string(), self.sigmoid(output_layer[6]));
         venue_weights.insert("meteora-dlmm".to_string(), self.sigmoid(output_layer[7]));
-        
+
         let mut strategy_flags = HashMap::new();
         strategy_flags.insert("multi-venue-atomic".to_string(), confidence > 0.6);
         strategy_flags.insert("price-impact-arb".to_string(), confidence > 0.5);
         strategy_flags.insert("concentrated-liquidity-arb".to_string(), confidence > 0.7);
         strategy_flags.insert("jupiter-route-arb".to_string(), confidence > 0.8);
-        
+
         AIPrediction {
             confidence,
-            recommended_profit_threshold_bps: (base_profit_threshold as f64 * profit_adjustment) as u32,
+            recommended_profit_threshold_bps: (base_profit_threshold as f64 * profit_adjustment)
+                as u32,
             recommended_max_slippage_bps: (base_max_slippage as f64 * slippage_adjustment) as u16,
-            recommended_execution_delay_us: (base_execution_delay as f64 * timing_adjustment) as u64,
+            recommended_execution_delay_us: (base_execution_delay as f64 * timing_adjustment)
+                as u64,
             venue_priority_weights: venue_weights,
             strategy_enable_flags: strategy_flags,
             risk_adjustment_factor: self.sigmoid(output_layer[0]) * 0.5 + 0.75, // 0.75-1.25 range
@@ -604,28 +640,33 @@ impl AIOptimizationEngine {
     }
 
     /// Record performance feedback for reinforcement learning
-    pub fn record_performance_feedback(&self, prediction: &AIPrediction, actual_profit_bps: f64, execution_success: bool) {
+    pub fn record_performance_feedback(
+        &self,
+        prediction: &AIPrediction,
+        actual_profit_bps: f64,
+        execution_success: bool,
+    ) {
         let reward = if execution_success {
             actual_profit_bps * prediction.confidence
         } else {
             -10.0 // Penalty for failed executions
         };
-        
+
         let mut rewards = self.reward_history.lock().unwrap();
         rewards.push_back(reward);
-        
+
         // Maintain rolling window
         if rewards.len() > 1000 {
             rewards.pop_front();
         }
-        
+
         let mut feedback = self.performance_feedback.lock().unwrap();
         feedback.push_back(reward);
-        
+
         if feedback.len() > 1000 {
             feedback.pop_front();
         }
-        
+
         // Trigger learning if we have enough data
         if rewards.len() % 100 == 0 {
             self.update_neural_network();
@@ -633,17 +674,20 @@ impl AIOptimizationEngine {
     }
 
     /// Run AI optimization cycle
-    pub fn run_optimization_cycle(&self, performance_metrics: &PerformanceMetrics) -> Option<AIPrediction> {
+    pub fn run_optimization_cycle(
+        &self,
+        performance_metrics: &PerformanceMetrics,
+    ) -> Option<AIPrediction> {
         let mut last_opt = self.last_optimization.lock().unwrap();
         if last_opt.elapsed() < Duration::from_secs(30) {
             return None; // Don't optimize too frequently
         }
         *last_opt = Instant::now();
         drop(last_opt);
-        
+
         // Extract current features
         let features = self.extract_features(performance_metrics);
-        
+
         // Store feature history
         let mut history = self.feature_history.lock().unwrap();
         history.push_back(features.clone());
@@ -651,17 +695,17 @@ impl AIOptimizationEngine {
             history.pop_front();
         }
         drop(history);
-        
+
         // Generate prediction
         let prediction = self.predict_optimal_parameters(&features);
-        
+
         // Store prediction history
         let mut pred_history = self.prediction_history.lock().unwrap();
         pred_history.push_back(prediction.clone());
         if pred_history.len() > 100 {
             pred_history.pop_front();
         }
-        
+
         info!(
             "🧠 AI OPTIMIZATION: confidence={:.3} profit_threshold={}bps slippage={}bps risk_factor={:.3}",
             prediction.confidence,
@@ -669,16 +713,19 @@ impl AIOptimizationEngine {
             prediction.recommended_max_slippage_bps,
             prediction.risk_adjustment_factor
         );
-        
+
         Some(prediction)
     }
 
     // Neural network helper functions
     fn forward_pass(&self, weights: &[Vec<f64>], inputs: &[f64]) -> Vec<f64> {
-        weights.iter().map(|neuron_weights| {
-            let sum: f64 = neuron_weights.iter().zip(inputs).map(|(w, i)| w * i).sum();
-            self.sigmoid(sum)
-        }).collect()
+        weights
+            .iter()
+            .map(|neuron_weights| {
+                let sum: f64 = neuron_weights.iter().zip(inputs).map(|(w, i)| w * i).sum();
+                self.sigmoid(sum)
+            })
+            .collect()
     }
 
     fn sigmoid(&self, x: f64) -> f64 {
@@ -713,10 +760,10 @@ impl AIOptimizationEngine {
         if feedback.len() < 10 {
             return;
         }
-        
+
         let avg_reward: f64 = feedback.iter().sum::<f64>() / feedback.len() as f64;
         let learning_rate = self.config.lock().unwrap().learning_rate;
-        
+
         // Simple weight adjustment based on average reward
         if avg_reward > 0.0 {
             // Positive feedback - slightly increase weights
@@ -744,30 +791,58 @@ impl AIOptimizationEngine {
 
     fn estimate_volatility_index(&self) -> f64 {
         // Synthetic volatility estimate
-        let seed = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_secs();
+        let seed = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_secs();
         ((seed % 100) as f64) / 100.0
     }
 
-    fn estimate_liquidity_depth(&self) -> f64 { 0.7 } // Placeholder
-    fn calculate_spread_tightness(&self) -> f64 { 0.8 } // Placeholder
-    fn estimate_competition_intensity(&self) -> f64 { 0.6 } // Placeholder
-    fn calculate_tx_frequency_score(&self, _metrics: &PerformanceMetrics) -> f64 { 0.5 }
-    fn detect_large_trade_presence(&self) -> f64 { 0.3 }
-    fn calculate_cross_venue_activity(&self, metrics: &PerformanceMetrics) -> f64 {
-        if metrics.opportunities_by_venue.len() > 1 { 0.8 } else { 0.2 }
+    fn estimate_liquidity_depth(&self) -> f64 {
+        0.7
+    } // Placeholder
+    fn calculate_spread_tightness(&self) -> f64 {
+        0.8
+    } // Placeholder
+    fn estimate_competition_intensity(&self) -> f64 {
+        0.6
+    } // Placeholder
+    fn calculate_tx_frequency_score(&self, _metrics: &PerformanceMetrics) -> f64 {
+        0.5
     }
-    fn estimate_jupiter_complexity(&self, _metrics: &PerformanceMetrics) -> f64 { 0.6 }
-    fn estimate_network_congestion(&self) -> f64 { 0.4 }
-    fn estimate_gas_price_level(&self) -> f64 { 0.5 }
-    fn calculate_block_time_variance(&self) -> f64 { 0.3 }
+    fn detect_large_trade_presence(&self) -> f64 {
+        0.3
+    }
+    fn calculate_cross_venue_activity(&self, metrics: &PerformanceMetrics) -> f64 {
+        if metrics.opportunities_by_venue.len() > 1 {
+            0.8
+        } else {
+            0.2
+        }
+    }
+    fn estimate_jupiter_complexity(&self, _metrics: &PerformanceMetrics) -> f64 {
+        0.6
+    }
+    fn estimate_network_congestion(&self) -> f64 {
+        0.4
+    }
+    fn estimate_gas_price_level(&self) -> f64 {
+        0.5
+    }
+    fn calculate_block_time_variance(&self) -> f64 {
+        0.3
+    }
 
     /// Generate comprehensive AI tuning report
     pub fn generate_ai_report(&self) -> String {
         let feature_count = self.feature_history.lock().unwrap().len();
         let prediction_count = self.prediction_history.lock().unwrap().len();
         let avg_reward = if !self.reward_history.lock().unwrap().is_empty() {
-            self.reward_history.lock().unwrap().iter().sum::<f64>() / self.reward_history.lock().unwrap().len() as f64
-        } else { 0.0 };
+            self.reward_history.lock().unwrap().iter().sum::<f64>()
+                / self.reward_history.lock().unwrap().len() as f64
+        } else {
+            0.0
+        };
 
         format!(
             r#"
@@ -809,7 +884,13 @@ impl AIOptimizationEngine {
             self.config.lock().unwrap().target_latency_us,
             self.config.lock().unwrap().target_profit_bps,
             self.config.lock().unwrap().min_success_rate * 100.0,
-            30 - self.last_optimization.lock().unwrap().elapsed().as_secs().min(30)
+            30 - self
+                .last_optimization
+                .lock()
+                .unwrap()
+                .elapsed()
+                .as_secs()
+                .min(30)
         )
     }
 }
@@ -831,8 +912,8 @@ impl Default for LiveTradingConfig {
             jito_enabled: true,
             flash_loan_enabled: true,
             max_bundle_size: 5,
-            max_tip_lamports: 100_000_000, // 0.1 SOL
-            min_profit_lamports: 10_000_000, // 0.01 SOL  
+            max_tip_lamports: 100_000_000,   // 0.1 SOL
+            min_profit_lamports: 10_000_000, // 0.01 SOL
             execution_timeout_ms: 5000,
         }
     }
@@ -862,14 +943,17 @@ impl LiveTradingEngine {
     pub async fn execute_live_trade(&self, opportunity: &ExecutorOpportunity) -> Result<bool> {
         let trade_id = format!("trade_{}", Uuid::new_v4());
         let start_time = Instant::now();
-        
-        info!("🎯 LIVE TRADE EXECUTION: {} - Venues: {:?}, Profit: {} bps", 
-              trade_id, opportunity.venues, opportunity.profit_bps);
+
+        info!(
+            "🎯 LIVE TRADE EXECUTION: {} - Venues: {:?}, Profit: {} bps",
+            trade_id, opportunity.venues, opportunity.profit_bps
+        );
 
         // Simulate flash loan evaluation
-        let estimated_profit = (opportunity.max_size_in as f64 * opportunity.profit_bps as f64 / 10000.0) as u64;
-        let use_flash_loan = self.config.flash_loan_enabled && 
-                           estimated_profit > self.config.min_profit_lamports * 2;
+        let estimated_profit =
+            (opportunity.max_size_in as f64 * opportunity.profit_bps as f64 / 10000.0) as u64;
+        let use_flash_loan = self.config.flash_loan_enabled
+            && estimated_profit > self.config.min_profit_lamports * 2;
 
         if use_flash_loan {
             info!("💰 FLASH LOAN ENABLED: 10x leverage available");
@@ -879,7 +963,10 @@ impl LiveTradingEngine {
         let bundle_id = if self.config.jito_enabled {
             let bundle_id = format!("bundle_{}", Uuid::new_v4());
             let tip_lamports = (estimated_profit / 20).min(self.config.max_tip_lamports);
-            info!("📦 JITO BUNDLE: {} - Tip: {} lamports", bundle_id, tip_lamports);
+            info!(
+                "📦 JITO BUNDLE: {} - Tip: {} lamports",
+                bundle_id, tip_lamports
+            );
             Some(bundle_id)
         } else {
             None
@@ -891,26 +978,36 @@ impl LiveTradingEngine {
 
         // Determine success based on profit potential
         let success = estimated_profit > self.config.min_profit_lamports;
-        
+
         let execution_time_ms = start_time.elapsed().as_millis() as u64;
 
         if success {
             self.successful_trades.fetch_add(1, Ordering::Relaxed);
             let profit = estimated_profit;
-            let fees = if use_flash_loan { profit / 20 } else { 5_000_000 }; // Flash loan fees or base fees
-            
-            self.total_profit_lamports.fetch_add(profit, Ordering::Relaxed);
+            let fees = if use_flash_loan {
+                profit / 20
+            } else {
+                5_000_000
+            }; // Flash loan fees or base fees
+
+            self.total_profit_lamports
+                .fetch_add(profit, Ordering::Relaxed);
             self.total_fees_paid.fetch_add(fees, Ordering::Relaxed);
-            
+
             counter!("live_trades_successful_total").increment(1);
             gauge!("live_trade_profit_lamports").set(profit as f64);
-            
-            info!("✅ TRADE SUCCESS: {} - Profit: {} lamports, Fees: {} lamports, Time: {}ms", 
-                  trade_id, profit, fees, execution_time_ms);
+
+            info!(
+                "✅ TRADE SUCCESS: {} - Profit: {} lamports, Fees: {} lamports, Time: {}ms",
+                trade_id, profit, fees, execution_time_ms
+            );
         } else {
             self.failed_trades.fetch_add(1, Ordering::Relaxed);
             counter!("live_trades_failed_total").increment(1);
-            warn!("❌ TRADE FAILED: {} - Insufficient profit after fees", trade_id);
+            warn!(
+                "❌ TRADE FAILED: {} - Insufficient profit after fees",
+                trade_id
+            );
         }
 
         histogram!("live_trade_execution_time_ms").record(execution_time_ms as f64);
@@ -923,7 +1020,7 @@ impl LiveTradingEngine {
             self.successful_trades.load(Ordering::Relaxed),
             self.failed_trades.load(Ordering::Relaxed),
             self.total_profit_lamports.load(Ordering::Relaxed),
-            self.total_fees_paid.load(Ordering::Relaxed)
+            self.total_fees_paid.load(Ordering::Relaxed),
         )
     }
 }
@@ -937,13 +1034,13 @@ pub struct HotPathArbitrageEngine {
     arbitrage_signals_total: AtomicU64,
     arbitrage_opportunities_found: AtomicU64,
     last_activity: AtomicU64,
-    
+
     // LETHAL EXECUTION SYSTEM - Zero-latency trade execution pipeline
     execution_orchestrator: Option<Arc<ExecutionOrchestrator>>,
     execution_queue: Arc<tokio::sync::mpsc::UnboundedSender<ExecutorOpportunity>>,
     successful_executions: AtomicU64,
     failed_executions: AtomicU64,
-    
+
     // LIVE TRADING ENGINE - Real MEV execution with Jito and flash loans
     live_trading_engine: Arc<LiveTradingEngine>,
     wallet_security_manager: Arc<WalletSecurityManager>,
@@ -952,20 +1049,20 @@ pub struct HotPathArbitrageEngine {
 impl HotPathArbitrageEngine {
     pub fn new() -> Result<Self> {
         info!("🔥 Initializing HOT PATH Arbitrage Engine - Zero Latency MEV Detection");
-        
+
         // Create signal queue for hot path communication
         let signal_queue = Arc::new(SignalQueue::new(1024));
         let tx = signal_queue.sender();
-        
+
         // Initialize fast arbitrage engine
         let fast_engine = Arc::new(FastEngine::new(tx.clone()));
-        
+
         // Initialize Jupiter scanner if enabled
         let enable_jupiter = std::env::var("ENABLE_JUPITER")
             .ok()
             .map(|v| v == "1" || v.eq_ignore_ascii_case("true"))
             .unwrap_or(true);
-            
+
         let jupiter_scanner = if enable_jupiter {
             info!("🔍 Enabling Jupiter arbitrage scanner");
             let config = JupiterArbConfig {
@@ -997,31 +1094,32 @@ impl HotPathArbitrageEngine {
             info!("⏭️  Jupiter arbitrage scanner disabled");
             None
         };
-        
+
         // LETHAL EXECUTION SYSTEM - Initialize zero-latency execution pipeline
         info!("⚔️  Initializing LETHAL Execution System for instant trade execution");
 
         // LIVE TRADING ENGINE - Initialize Jito/flashloan trading system
         info!("💰 Initializing LIVE Trading Engine with Jito bundles and flash loans");
         let live_trading_engine = Arc::new(LiveTradingEngine::new()?);
-        
-        let (execution_tx, mut execution_rx) = tokio::sync::mpsc::unbounded_channel::<ExecutorOpportunity>();
+
+        let (execution_tx, mut execution_rx) =
+            tokio::sync::mpsc::unbounded_channel::<ExecutorOpportunity>();
         let execution_queue = Arc::new(execution_tx);
-        
+
         // Start execution worker task for background trade execution
         let successful_executions_counter = AtomicU64::new(0);
         let failed_executions_counter = AtomicU64::new(0);
-        
+
         tokio::spawn(async move {
             info!("⚔️  LETHAL Execution Worker started - ready to execute trades");
             while let Some(opportunity) = execution_rx.recv().await {
                 let execution_start = Instant::now();
-                
+
                 info!(
                     "🎯 EXECUTING LETHAL TRADE: opportunity={} profit_bps={} max_size={}",
                     opportunity.opportunity_id, opportunity.profit_bps, opportunity.max_size_in
                 );
-                
+
                 // TODO: Initialize ExecutionOrchestrator when ready
                 // For now, simulate execution to test the pipeline
                 let execution_mode = ExecutionMode::Test {
@@ -1029,16 +1127,16 @@ impl HotPathArbitrageEngine {
                     simulate_latency_ms: 250,
                     enable_logging: true,
                 };
-                
+
                 // Simulate execution result
                 let success = fastrand::f64() < 0.85;
                 let execution_time = execution_start.elapsed();
                 let execution_time_ms = execution_time.as_millis();
                 let execution_time_us = execution_time.as_micros() as u64;
-                
+
                 // PERFORMANCE ANALYTICS - Record execution performance
                 PERFORMANCE_ANALYTICS.record_execution(execution_time_us, success);
-                
+
                 if success {
                     counter!("lethal_executions_successful_total").increment(1);
                     info!(
@@ -1052,13 +1150,13 @@ impl HotPathArbitrageEngine {
                         opportunity.opportunity_id, execution_time_ms
                     );
                 }
-                
+
                 histogram!("lethal_execution_time_ms").record(execution_time_ms as f64);
             }
         });
-        
+
         info!("✅ HOT PATH Arbitrage Engine with LETHAL Execution initialized successfully");
-        
+
         Ok(Self {
             signal_queue,
             fast_engine,
@@ -1074,23 +1172,23 @@ impl HotPathArbitrageEngine {
             wallet_security_manager: Self::initialize_wallet_security(),
         })
     }
-    
+
     /// Initialize wallet security system with hot/warm/cold wallets
     fn initialize_wallet_security() -> Arc<WalletSecurityManager> {
         let security_policy = SecurityPolicy {
-            max_hot_wallet_balance: 100_000_000, // 0.1 SOL
+            max_hot_wallet_balance: 100_000_000,     // 0.1 SOL
             max_warm_wallet_balance: 10_000_000_000, // 10 SOL
-            transaction_velocity_limit: 200, // 200 tx/min for MEV
+            transaction_velocity_limit: 200,         // 200 tx/min for MEV
             suspicious_activity_threshold: 0.7,
             emergency_shutdown_enabled: true,
             require_2fa_for_cold_wallet: true,
             auto_backup_interval_hours: 12,
             security_audit_interval_hours: 2, // More frequent for MEV
         };
-        
+
         let manager = Arc::new(WalletSecurityManager::new(security_policy));
         info!("🔐 Wallet security system initialized with enterprise-grade protection");
-        
+
         // Generate demo wallets for immediate testing
         let manager_clone = Arc::clone(&manager);
         tokio::spawn(async move {
@@ -1099,55 +1197,62 @@ impl HotPathArbitrageEngine {
                 info!("🎯 Generated {} demo wallets for testing", wallets.len());
             }
         });
-        
+
         manager
     }
 
     /// HOT PATH: Process transaction directly without serialization
     /// This is the core method that maintains zero-latency arbitrage detection
     pub async fn process_transaction_hot_path(
-        &self, 
-        transaction_update: &yellowstone_grpc_proto::prelude::SubscribeUpdateTransaction
+        &self,
+        transaction_update: &yellowstone_grpc_proto::prelude::SubscribeUpdateTransaction,
     ) -> Result<Option<ArbitrageOpportunity>> {
         let start_time = Instant::now();
-        
+
         // Update last activity timestamp for health monitoring
         self.last_activity.store(
-            SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_secs(), 
-            Ordering::Relaxed
+            SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .unwrap()
+                .as_secs(),
+            Ordering::Relaxed,
         );
-        
+
         // Extract transaction data without serialization
         let _signature = if let Some(tx_info) = &transaction_update.transaction {
             bs58::encode(&tx_info.signature).into_string()
         } else {
             return Ok(None);
         };
-        
+
         // FAST PATH: DIRECT ARBITRAGE DETECTION - ZERO SERIALIZATION OVERHEAD
         // This is where the magic happens - direct analysis without Kafka overhead
         let opportunity = self.detect_arbitrage_opportunity(transaction_update)?;
-        
+
         // Record metrics
         counter!("hotpath_transactions_processed_total").increment(1);
         histogram!("hotpath_processing_time_us").record(start_time.elapsed().as_micros() as f64);
-        
+
         self.arbitrage_signals_total.fetch_add(1, Ordering::Relaxed);
-        
+
         // LETHAL EXECUTION TRIGGER - If opportunity found, execute trade instantly
         if let Some(ref opp) = opportunity {
-            if opp.profit_bps >= 25 { // Execute only high-profit opportunities (>25 bps)
+            if opp.profit_bps >= 25 {
+                // Execute only high-profit opportunities (>25 bps)
                 if let Err(e) = self.trigger_lethal_execution(opp) {
                     error!("Failed to trigger lethal execution: {}", e);
                 } else {
-                    info!("⚔️  LETHAL EXECUTION TRIGGERED: profit_bps={}", opp.profit_bps);
+                    info!(
+                        "⚔️  LETHAL EXECUTION TRIGGERED: profit_bps={}",
+                        opp.profit_bps
+                    );
                 }
             }
         }
 
         Ok(opportunity)
     }
-    
+
     /// LETHAL EXECUTION - Convert our ArbitrageOpportunity to ExecutorOpportunity and execute
     fn trigger_lethal_execution(&self, opportunity: &ArbitrageOpportunity) -> Result<()> {
         // Convert our lightweight opportunity to the executor's format
@@ -1156,22 +1261,26 @@ impl HotPathArbitrageEngine {
             token_in: opportunity.signature.as_bytes().to_vec(),
             token_out: opportunity.token_a.as_bytes().to_vec(),
             edges: vec![opportunity.slot], // Use slot as edge ID for now
-            venues: vec![hash_venue_name(&opportunity.venue_a), hash_venue_name(&opportunity.venue_b)],
+            venues: vec![
+                hash_venue_name(&opportunity.venue_a),
+                hash_venue_name(&opportunity.venue_b),
+            ],
             profit_bps: opportunity.profit_bps,
             max_size_in: 1_000_000_000_u128, // 1 SOL default for safety
-            total_cu_estimate: 300_000, // Reasonable CU estimate for DEX arbitrage
-            total_fees_bps: 30, // Estimate 0.3% total fees
+            total_cu_estimate: 300_000,      // Reasonable CU estimate for DEX arbitrage
+            total_fees_bps: 30,              // Estimate 0.3% total fees
             detected_at_ns: SystemTime::now().duration_since(UNIX_EPOCH)?.as_nanos() as u64,
             max_edge_age_ms: 100, // 100ms max age for fresh data
         };
-        
+
         // Send to execution queue for immediate processing
-        self.execution_queue.send(executor_opportunity)
+        self.execution_queue
+            .send(executor_opportunity)
             .map_err(|_| anyhow::anyhow!("Execution queue closed"))?;
-            
+
         Ok(())
     }
-    
+
     /// HOT PATH: Core arbitrage detection logic - Direct transaction analysis
     /// This method analyzes the raw transaction for MEV opportunities WITHOUT serialization
     fn detect_arbitrage_opportunity(
@@ -1185,7 +1294,7 @@ impl HotPathArbitrageEngine {
         };
 
         let signature = bs58::encode(&tx_info.signature).into_string();
-        
+
         // Get the inner transaction for instruction analysis
         let inner_tx = match &tx_info.transaction {
             Some(tx) => tx,
@@ -1199,7 +1308,7 @@ impl HotPathArbitrageEngine {
 
         // HOT PATH ANALYSIS - Direct instruction parsing for DEX trades
         // Look for swap instructions across different venues to detect price discrepancies
-        
+
         // Extract program IDs from the transaction
         let program_ids: Vec<String> = message
             .account_keys
@@ -1224,7 +1333,7 @@ impl HotPathArbitrageEngine {
                     venues_involved.push("raydium-amm");
                     // TODO: Parse Raydium AMM swap data
                 }
-                // Raydium CLMM  
+                // Raydium CLMM
                 "CAMMCzo5YL8w4VFF8KVHrK22GGUsp5VTaW7grrKgrWqK" => {
                     venues_involved.push("raydium-clmm");
                     // TODO: Parse Raydium CLMM swap data
@@ -1249,11 +1358,11 @@ impl HotPathArbitrageEngine {
         }
 
         // 🎯 ADVANCED ARBITRAGE DETECTION - MULTIPLE STRATEGIES
-        
+
         // STRATEGY 1: Multi-venue atomic arbitrage (within same tx)
         if venues_involved.len() >= 2 {
             counter!("hotpath_multi_venue_transactions").increment(1);
-            
+
             let opportunity = ArbitrageOpportunity {
                 signature: signature.clone(),
                 slot: transaction_update.slot,
@@ -1265,19 +1374,20 @@ impl HotPathArbitrageEngine {
                 strategy: "multi-venue-atomic".to_string(),
                 timestamp: chrono::Utc::now(),
             };
-            
-            self.arbitrage_opportunities_found.fetch_add(1, Ordering::Relaxed);
+
+            self.arbitrage_opportunities_found
+                .fetch_add(1, Ordering::Relaxed);
             return Ok(Some(opportunity));
         }
 
         // STRATEGY 2: Large swap impact arbitrage (single venue creating opportunities)
         if venues_involved.len() == 1 {
             let venue = &venues_involved[0];
-            
+
             // Check for large trades that create price impact opportunities
             if self.detect_price_impact_opportunity(venue, transaction_update)? {
                 counter!("hotpath_price_impact_opportunities").increment(1);
-                
+
                 let opportunity = ArbitrageOpportunity {
                     signature: signature.clone(),
                     slot: transaction_update.slot,
@@ -1289,18 +1399,21 @@ impl HotPathArbitrageEngine {
                     strategy: "price-impact-arb".to_string(),
                     timestamp: chrono::Utc::now(),
                 };
-                
-                self.arbitrage_opportunities_found.fetch_add(1, Ordering::Relaxed);
+
+                self.arbitrage_opportunities_found
+                    .fetch_add(1, Ordering::Relaxed);
                 return Ok(Some(opportunity));
             }
         }
 
         // STRATEGY 3: Cross-stream arbitrage detection (comparing with other streams)
         // This is where multi-hop strategies shine!
-        let cross_stream_opportunity = self.detect_cross_stream_arbitrage(&venues_involved, transaction_update)?;
+        let cross_stream_opportunity =
+            self.detect_cross_stream_arbitrage(&venues_involved, transaction_update)?;
         if cross_stream_opportunity.is_some() {
             counter!("hotpath_cross_stream_arbitrage").increment(1);
-            self.arbitrage_opportunities_found.fetch_add(1, Ordering::Relaxed);
+            self.arbitrage_opportunities_found
+                .fetch_add(1, Ordering::Relaxed);
             return Ok(cross_stream_opportunity);
         }
 
@@ -1317,15 +1430,15 @@ impl HotPathArbitrageEngine {
         // Extract transaction size indicators
         let tx_info = transaction_update.transaction.as_ref().unwrap();
         let inner_tx = tx_info.transaction.as_ref().unwrap();
-        
+
         // HEURISTIC 1: Large number of account keys often indicates big trades
         if let Some(message) = &inner_tx.message {
             let account_count = message.account_keys.len();
-            
+
             // Large trades typically involve many accounts (token accounts, pool accounts, etc.)
             if account_count > 15 {
                 counter!("hotpath_large_account_transactions").increment(1);
-                
+
                 // Additional checks based on venue type
                 match venue {
                     "whirlpool" | "raydium-clmm" | "meteora-dlmm" => {
@@ -1333,7 +1446,7 @@ impl HotPathArbitrageEngine {
                         return Ok(account_count > 20);
                     }
                     "raydium-amm" | "orca-amm" => {
-                        // AMM venues - medium impact potential  
+                        // AMM venues - medium impact potential
                         return Ok(account_count > 25);
                     }
                     "phoenix-clob" => {
@@ -1344,7 +1457,7 @@ impl HotPathArbitrageEngine {
                 }
             }
         }
-        
+
         Ok(false)
     }
 
@@ -1355,14 +1468,14 @@ impl HotPathArbitrageEngine {
         venues_involved: &[&str],
         transaction_update: &yellowstone_grpc_proto::prelude::SubscribeUpdateTransaction,
     ) -> Result<Option<ArbitrageOpportunity>> {
-        
         if venues_involved.is_empty() {
             return Ok(None);
         }
-        
+
         let venue = venues_involved[0];
-        let signature = bs58::encode(&transaction_update.transaction.as_ref().unwrap().signature).into_string();
-        
+        let signature =
+            bs58::encode(&transaction_update.transaction.as_ref().unwrap().signature).into_string();
+
         // MULTI-HOP STRATEGY DETECTION
         match venue {
             "jupiter-v6" => {
@@ -1371,11 +1484,19 @@ impl HotPathArbitrageEngine {
             }
             "whirlpool" => {
                 // Whirlpool concentrated liquidity creates predictable price impacts
-                self.detect_concentrated_liquidity_arbitrage("whirlpool", &signature, transaction_update)
+                self.detect_concentrated_liquidity_arbitrage(
+                    "whirlpool",
+                    &signature,
+                    transaction_update,
+                )
             }
             "raydium-clmm" => {
                 // Raydium CLMM similar to Whirlpool but different fee structure
-                self.detect_concentrated_liquidity_arbitrage("raydium-clmm", &signature, transaction_update)
+                self.detect_concentrated_liquidity_arbitrage(
+                    "raydium-clmm",
+                    &signature,
+                    transaction_update,
+                )
             }
             "meteora-dlmm" => {
                 // Meteora DLMM has unique bin-based liquidity - special opportunities
@@ -1397,15 +1518,16 @@ impl HotPathArbitrageEngine {
     ) -> Result<Option<ArbitrageOpportunity>> {
         // Jupiter aggregates multiple venues - we can often find counter-opportunities
         // TODO: Parse Jupiter route data and find reverse arbitrage opportunities
-        
+
         // For now, synthetic detection based on timing patterns
         let current_time = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
             .unwrap()
             .as_millis();
-        
+
         // Look for Jupiter transactions that might leave arbitrage opportunities
-        if current_time % 100 < 5 { // 5% synthetic rate for testing
+        if current_time % 100 < 5 {
+            // 5% synthetic rate for testing
             return Ok(Some(ArbitrageOpportunity {
                 signature: signature.to_string(),
                 slot: _transaction_update.slot,
@@ -1418,7 +1540,7 @@ impl HotPathArbitrageEngine {
                 timestamp: chrono::Utc::now(),
             }));
         }
-        
+
         Ok(None)
     }
 
@@ -1431,12 +1553,13 @@ impl HotPathArbitrageEngine {
     ) -> Result<Option<ArbitrageOpportunity>> {
         // Concentrated liquidity creates predictable price impacts
         // Large swaps can move price significantly in tight ranges
-        
+
         // TODO: Parse position data and detect range exits/entries
         // TODO: Calculate price impact based on liquidity distribution
-        
+
         // Synthetic detection for testing
-        if signature.ends_with("c") || signature.ends_with("e") { // ~30% of transactions
+        if signature.ends_with("c") || signature.ends_with("e") {
+            // ~30% of transactions
             return Ok(Some(ArbitrageOpportunity {
                 signature: signature.to_string(),
                 slot: transaction_update.slot,
@@ -1449,7 +1572,7 @@ impl HotPathArbitrageEngine {
                 timestamp: chrono::Utc::now(),
             }));
         }
-        
+
         Ok(None)
     }
 
@@ -1461,11 +1584,12 @@ impl HotPathArbitrageEngine {
     ) -> Result<Option<ArbitrageOpportunity>> {
         // DLMM (Dynamic Liquidity Market Maker) has unique bin-based liquidity
         // Bin transitions create arbitrage opportunities
-        
+
         // TODO: Parse bin state changes and detect transition opportunities
-        
+
         // Synthetic detection
-        if signature.contains("M") || signature.contains("m") { // ~20% of transactions
+        if signature.contains("M") || signature.contains("m") {
+            // ~20% of transactions
             return Ok(Some(ArbitrageOpportunity {
                 signature: signature.to_string(),
                 slot: transaction_update.slot,
@@ -1478,7 +1602,7 @@ impl HotPathArbitrageEngine {
                 timestamp: chrono::Utc::now(),
             }));
         }
-        
+
         Ok(None)
     }
 
@@ -1490,12 +1614,13 @@ impl HotPathArbitrageEngine {
     ) -> Result<Option<ArbitrageOpportunity>> {
         // CLOB (Central Limit Order Book) has different dynamics
         // Large market orders can create temporary spreads
-        
+
         // TODO: Parse order book state changes
         // TODO: Detect market order impact on spreads
-        
+
         // Synthetic detection
-        if signature.starts_with("2") || signature.starts_with("3") { // ~25% of transactions
+        if signature.starts_with("2") || signature.starts_with("3") {
+            // ~25% of transactions
             return Ok(Some(ArbitrageOpportunity {
                 signature: signature.to_string(),
                 slot: transaction_update.slot,
@@ -1508,10 +1633,10 @@ impl HotPathArbitrageEngine {
                 timestamp: chrono::Utc::now(),
             }));
         }
-        
+
         Ok(None)
     }
-    
+
     /// Get current arbitrage statistics
     pub fn get_stats(&self) -> ArbitrageStats {
         ArbitrageStats {
@@ -1604,7 +1729,7 @@ lazy_static::lazy_static! {
     static ref DEX_RATE_COUNTERS: DashMap<String, Arc<RateCounter>> = DashMap::new();
     // New: Rate counters for parsed messages per minute
     static ref STREAM_PARSED_RATE_COUNTERS: DashMap<u8, Arc<RateCounter>> = DashMap::new();
-    
+
     // HOT PATH ARBITRAGE ENGINE - Global singleton for zero-latency MEV detection
     static ref HOT_PATH_ENGINE: Arc<HotPathArbitrageEngine> = {
         Arc::new(HotPathArbitrageEngine::new().expect("Failed to initialize hot path arbitrage engine"))
@@ -1819,7 +1944,7 @@ async fn run_stream_with_retry(config: &StreamConfig) -> Result<()> {
                         "💰 Stream {} processing transaction at slot {}",
                         stream_id, transaction_update.slot
                     );
-                    
+
                     // HOT PATH ARBITRAGE DETECTION - ZERO LATENCY MEV CAPTURE
                     // This happens BEFORE any serialization or database operations
                     let arbitrage_start_time = Instant::now();
@@ -1831,11 +1956,11 @@ async fn run_stream_with_retry(config: &StreamConfig) -> Result<()> {
                             None
                         });
                     let arbitrage_time_us = arbitrage_start_time.elapsed().as_micros() as u64;
-                    
+
                     // Log any arbitrage opportunities found
                     if let Some(ref opportunity) = arbitrage_opportunity {
                         info!(
-                            "🚀 ARBITRAGE OPPORTUNITY FOUND: {} profit_bps={} {}/{} -> {} ({}μs)", 
+                            "🚀 ARBITRAGE OPPORTUNITY FOUND: {} profit_bps={} {}/{} -> {} ({}μs)",
                             opportunity.signature[0..8].to_string(),
                             opportunity.profit_bps,
                             opportunity.venue_a,
@@ -1844,32 +1969,32 @@ async fn run_stream_with_retry(config: &StreamConfig) -> Result<()> {
                             arbitrage_time_us
                         );
                         counter!("hotpath_arbitrage_opportunities_total").increment(1);
-                        
+
                         // PERFORMANCE ANALYTICS - Record arbitrage opportunity detection
                         PERFORMANCE_ANALYTICS.record_arbitrage_opportunity(
                             &opportunity.venue_a,
                             &opportunity.strategy,
-                            opportunity.profit_bps as u32
+                            opportunity.profit_bps as u32,
                         );
                     }
-                    
+
                     let processing_result =
                         process_transaction_update(config, transaction_update).await;
                     let processing_time_us = start_time.elapsed().as_micros() as u64;
 
-                    // PERFORMANCE ANALYTICS - Record transaction processing performance  
-                    PERFORMANCE_ANALYTICS.record_processing_performance(
-                        processing_time_us,
-                        arbitrage_time_us
-                    );
+                    // PERFORMANCE ANALYTICS - Record transaction processing performance
+                    PERFORMANCE_ANALYTICS
+                        .record_processing_performance(processing_time_us, arbitrage_time_us);
 
                     // AI ENGINE - Feed performance data for machine learning (simplified for now)
                     // In production, this would extract features and update the neural network
                     // For now, we log that AI would process this data
-                    if processing_time_us < 1000 { // Good performance data point
+                    if processing_time_us < 1000 {
+                        // Good performance data point
                         metrics::counter!("ai_good_performance_samples_total").increment(1);
-                    } else { // Room for optimization
-                        metrics::counter!("ai_optimization_candidates_total").increment(1);  
+                    } else {
+                        // Room for optimization
+                        metrics::counter!("ai_optimization_candidates_total").increment(1);
                     }
 
                     // Record metrics
@@ -1890,14 +2015,17 @@ async fn run_stream_with_retry(config: &StreamConfig) -> Result<()> {
                     if let Some(health) = STREAM_HEALTH.get(&stream_id) {
                         let now_timestamp = chrono::Utc::now().timestamp() as u64;
                         health.store(now_timestamp, Ordering::Relaxed);
-                        
+
                         // PERFORMANCE ANALYTICS - Update stream health score
                         // Calculate health score based on recent activity
-                        let health_score = if processing_time_us < 1000 { // <1ms = excellent
+                        let health_score = if processing_time_us < 1000 {
+                            // <1ms = excellent
                             1.0
-                        } else if processing_time_us < 5000 { // <5ms = good  
+                        } else if processing_time_us < 5000 {
+                            // <5ms = good
                             0.8
-                        } else { // >5ms = degraded
+                        } else {
+                            // >5ms = degraded
                             0.6
                         };
                         PERFORMANCE_ANALYTICS.update_stream_health(stream_id, health_score);
@@ -2079,7 +2207,10 @@ async fn update_metrics_task() {
 }
 
 async fn start_simple_metrics_server(port: u16) {
-    use axum::{routing::{get, post}, Router, Json};
+    use axum::{
+        routing::{get, post},
+        Json, Router,
+    };
 
     let bind_addr = format!("0.0.0.0:{}", port);
     info!("🔧 Starting simple metrics server on {}", bind_addr);
@@ -2127,7 +2258,8 @@ async fn serve_ai_config() -> String {
         exploration_rate: 0.1,
         exploitation_threshold: 0.8,
         memory_window_size: 100,
-    }).unwrap_or_else(|_| "Error serializing AI config".to_string())
+    })
+    .unwrap_or_else(|_| "Error serializing AI config".to_string())
 }
 
 /// Serve latest AI prediction
@@ -2280,7 +2412,7 @@ async fn generate_wallet_endpoint() -> String {
     // Mock wallet generation for demonstration
     let keypair = Keypair::new();
     let pubkey = keypair.pubkey();
-    
+
     format!(
         r#"✅ WALLET GENERATED SUCCESSFULLY
 ===============================
@@ -2518,10 +2650,13 @@ async fn main() -> Result<()> {
         let mut interval = tokio::time::interval(Duration::from_secs(60)); // Run every minute
         loop {
             interval.tick().await;
-            
+
             let performance_metrics = PERFORMANCE_ANALYTICS.get_metrics_snapshot();
             if let Some(prediction) = AI_ENGINE.run_optimization_cycle(&performance_metrics) {
-                info!("🧠 AI optimization cycle completed - Prediction: {:?}", prediction);
+                info!(
+                    "🧠 AI optimization cycle completed - Prediction: {:?}",
+                    prediction
+                );
             } else {
                 info!("🧠 AI optimization cycle completed - No prediction generated");
             }
@@ -2579,7 +2714,7 @@ async fn main() -> Result<()> {
 fn hash_venue_name(venue_name: &str) -> u32 {
     use std::collections::hash_map::DefaultHasher;
     use std::hash::{Hash, Hasher};
-    
+
     let mut hasher = DefaultHasher::new();
     venue_name.hash(&mut hasher);
     hasher.finish() as u32

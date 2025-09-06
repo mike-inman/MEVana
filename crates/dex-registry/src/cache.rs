@@ -15,11 +15,11 @@ pub struct RegistryCache {
     // In-memory caches (nanosecond lookups)
     dex_programs: Arc<DashMap<String, CachedDexProgram>>,
     tokens: Arc<DashMap<String, CachedToken>>,
-    
+
     // Redis connection
     redis_client: Client,
     redis_conn: Option<ConnectionManager>,
-    
+
     // Cache configuration
     ttl_seconds: u64,
     refresh_interval: Duration,
@@ -56,7 +56,7 @@ static TOKEN_CACHE: Lazy<DashMap<String, CachedToken>> = Lazy::new(DashMap::new)
 impl RegistryCache {
     pub async fn new(redis_url: &str, ttl_seconds: u64) -> Result<Self> {
         let redis_client = Client::open(redis_url)?;
-        
+
         let cache = Self {
             dex_programs: Arc::new(DashMap::new()),
             tokens: Arc::new(DashMap::new()),
@@ -84,7 +84,9 @@ impl RegistryCache {
 
     /// Hot path: Get token info (nanosecond lookup)
     pub fn get_token_fast(mint_address: &str) -> Option<CachedToken> {
-        TOKEN_CACHE.get(mint_address).map(|entry| entry.value().clone())
+        TOKEN_CACHE
+            .get(mint_address)
+            .map(|entry| entry.value().clone())
     }
 
     /// Warm path: Get DEX program with Redis fallback
@@ -98,10 +100,15 @@ impl RegistryCache {
 
         // Try Redis
         if let Some(conn) = &self.redis_conn {
-            if let Ok(cached_json) = conn.clone().get::<String, String>(format!("dex:{}", program_id)).await {
+            if let Ok(cached_json) = conn
+                .clone()
+                .get::<String, String>(format!("dex:{}", program_id))
+                .await
+            {
                 if let Ok(cached_dex) = serde_json::from_str::<CachedDexProgram>(&cached_json) {
                     // Update in-memory cache
-                    self.dex_programs.insert(program_id.to_string(), cached_dex.clone());
+                    self.dex_programs
+                        .insert(program_id.to_string(), cached_dex.clone());
                     DEX_CACHE.insert(program_id.to_string(), cached_dex.clone());
                     return Ok(Some(cached_dex));
                 }
@@ -122,10 +129,15 @@ impl RegistryCache {
 
         // Try Redis
         if let Some(conn) = &self.redis_conn {
-            if let Ok(cached_json) = conn.clone().get::<String, String>(format!("token:{}", mint_address)).await {
+            if let Ok(cached_json) = conn
+                .clone()
+                .get::<String, String>(format!("token:{}", mint_address))
+                .await
+            {
                 if let Ok(cached_token) = serde_json::from_str::<CachedToken>(&cached_json) {
                     // Update in-memory cache
-                    self.tokens.insert(mint_address.to_string(), cached_token.clone());
+                    self.tokens
+                        .insert(mint_address.to_string(), cached_token.clone());
                     TOKEN_CACHE.insert(mint_address.to_string(), cached_token.clone());
                     return Ok(Some(cached_token));
                 }
@@ -149,20 +161,26 @@ impl RegistryCache {
         };
 
         // Update in-memory cache
-        self.dex_programs.insert(program.program_id.clone(), cached.clone());
+        self.dex_programs
+            .insert(program.program_id.clone(), cached.clone());
         DEX_CACHE.insert(program.program_id.clone(), cached.clone());
 
         // Update Redis
         if let Some(mut conn) = self.redis_conn.clone() {
             let cached_json = serde_json::to_string(&cached)?;
-            let _: Result<(), _> = conn.set_ex(
-                format!("dex:{}", program.program_id),
-                cached_json,
-                self.ttl_seconds,
-            ).await;
+            let _: Result<(), _> = conn
+                .set_ex(
+                    format!("dex:{}", program.program_id),
+                    cached_json,
+                    self.ttl_seconds,
+                )
+                .await;
         }
 
-        debug!("Cached DEX program: {} ({})", program.dex_name, program.program_id);
+        debug!(
+            "Cached DEX program: {} ({})",
+            program.dex_name, program.program_id
+        );
         Ok(())
     }
 
@@ -180,17 +198,20 @@ impl RegistryCache {
         };
 
         // Update in-memory cache
-        self.tokens.insert(token.mint_address.clone(), cached.clone());
+        self.tokens
+            .insert(token.mint_address.clone(), cached.clone());
         TOKEN_CACHE.insert(token.mint_address.clone(), cached.clone());
 
         // Update Redis
         if let Some(mut conn) = self.redis_conn.clone() {
             let cached_json = serde_json::to_string(&cached)?;
-            let _: Result<(), _> = conn.set_ex(
-                format!("token:{}", token.mint_address),
-                cached_json,
-                self.ttl_seconds,
-            ).await;
+            let _: Result<(), _> = conn
+                .set_ex(
+                    format!("token:{}", token.mint_address),
+                    cached_json,
+                    self.ttl_seconds,
+                )
+                .await;
         }
 
         debug!("Cached token: {:?} ({})", token.symbol, token.mint_address);
@@ -237,25 +258,21 @@ impl RegistryCache {
     /// Background task: Refresh stale cache entries
     pub async fn start_refresh_task(&self) -> Result<()> {
         let refresh_interval = self.refresh_interval;
-        
+
         tokio::spawn(async move {
             let mut interval = tokio::time::interval(refresh_interval);
-            
+
             loop {
                 interval.tick().await;
-                
+
                 // Clean up expired entries from global caches
                 let now = chrono::Utc::now().timestamp() as u64;
                 let ttl = 3600; // 1 hour for global cache
-                
-                DEX_CACHE.retain(|_, cached| {
-                    now - cached.cached_at < ttl
-                });
-                
-                TOKEN_CACHE.retain(|_, cached| {
-                    now - cached.cached_at < ttl
-                });
-                
+
+                DEX_CACHE.retain(|_, cached| now - cached.cached_at < ttl);
+
+                TOKEN_CACHE.retain(|_, cached| now - cached.cached_at < ttl);
+
                 debug!("Cache refresh completed");
             }
         });
@@ -265,7 +282,7 @@ impl RegistryCache {
     }
 
     // Helper methods
-    
+
     fn is_expired(&self, cached_at: u64) -> bool {
         let now = chrono::Utc::now().timestamp() as u64;
         now - cached_at > self.ttl_seconds
@@ -311,11 +328,15 @@ impl RegistryCache {
 
     /// Get DEX name for program ID (hot path optimized)
     pub fn get_dex_name(program_id: &str) -> Option<String> {
-        DEX_CACHE.get(program_id).map(|entry| entry.dex_name.clone())
+        DEX_CACHE
+            .get(program_id)
+            .map(|entry| entry.dex_name.clone())
     }
 
     /// Get token symbol for mint address (hot path optimized)
     pub fn get_token_symbol(mint_address: &str) -> Option<String> {
-        TOKEN_CACHE.get(mint_address).and_then(|entry| entry.symbol.clone())
+        TOKEN_CACHE
+            .get(mint_address)
+            .and_then(|entry| entry.symbol.clone())
     }
 }

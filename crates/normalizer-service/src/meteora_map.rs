@@ -1,9 +1,9 @@
-use normalizer_runtime::{
-    layouts::{LayoutJson, LayoutRegistry},
-    layout_parser::{read_scalar, ScalarValue},
-    models::{PoolSnapshot, SwapEvent, LiquidityEvent},
-};
 use bs58;
+use normalizer_runtime::{
+    layout_parser::{read_scalar, ScalarValue},
+    layouts::{LayoutJson, LayoutRegistry},
+    models::{LiquidityEvent, PoolSnapshot, SwapEvent},
+};
 
 // ---------- DLMM Pool → PoolSnapshot (minimal) ----------
 pub fn decode_meteora_dlmm_pool_snapshot(
@@ -14,22 +14,28 @@ pub fn decode_meteora_dlmm_pool_snapshot(
 ) -> Option<PoolSnapshot> {
     let key = "meteora_dlmm/pool";
     let lj = reg.get(key)?;
-    let LayoutJson::Fields { fields, .. } = lj else { return None; };
+    let LayoutJson::Fields { fields, .. } = lj else {
+        return None;
+    };
 
-    let mut mint_x=[0u8;32]; let mut mint_y=[0u8;32];
-    let mut dec_x=0u8; let mut dec_y=0u8;
-    let mut active=0i32; let mut step=0i32; let mut fee=0u16;
+    let mut mint_x = [0u8; 32];
+    let mut mint_y = [0u8; 32];
+    let mut dec_x = 0u8;
+    let mut dec_y = 0u8;
+    let mut active = 0i32;
+    let mut step = 0i32;
+    let mut fee = 0u16;
 
     for f in fields {
         let v = read_scalar(data, f).ok()?;
         match (f.name.as_str(), v) {
-            ("token_mint_x",  ScalarValue::Pubkey(p)) => mint_x=p,
-            ("token_mint_y",  ScalarValue::Pubkey(p)) => mint_y=p,
-            ("decimals_x",    ScalarValue::U8(n))     => dec_x=n,
-            ("decimals_y",    ScalarValue::U8(n))     => dec_y=n,
-            ("active_bin_id", ScalarValue::I32(n))    => active=n,
-            ("bin_step",      ScalarValue::I32(n))    => step=n,
-            ("base_fee_bps",  ScalarValue::U16(n))    => fee=n,
+            ("token_mint_x", ScalarValue::Pubkey(p)) => mint_x = p,
+            ("token_mint_y", ScalarValue::Pubkey(p)) => mint_y = p,
+            ("decimals_x", ScalarValue::U8(n)) => dec_x = n,
+            ("decimals_y", ScalarValue::U8(n)) => dec_y = n,
+            ("active_bin_id", ScalarValue::I32(n)) => active = n,
+            ("bin_step", ScalarValue::I32(n)) => step = n,
+            ("base_fee_bps", ScalarValue::U16(n)) => fee = n,
             _ => {}
         }
     }
@@ -68,7 +74,7 @@ pub fn decode_meteora_damm_pool_snapshot(
 #[derive(Debug, Clone)]
 pub struct DlmmBin {
     pub bin_id: i32,
-    pub price: u128,  // Q64.64 price
+    pub price: u128, // Q64.64 price
     pub liquidity_x: u128,
     pub liquidity_y: u128,
 }
@@ -76,20 +82,30 @@ pub struct DlmmBin {
 pub fn decode_meteora_bin(reg: &LayoutRegistry, data: &[u8]) -> Option<DlmmBin> {
     let key = "meteora_dlmm/bin";
     let lj = reg.get(key)?;
-    let LayoutJson::Fields { fields, .. } = lj else { return None; };
+    let LayoutJson::Fields { fields, .. } = lj else {
+        return None;
+    };
 
-    let mut bin_id=0i32; let mut price=0u128; let mut lx=0u128; let mut ly=0u128;
+    let mut bin_id = 0i32;
+    let mut price = 0u128;
+    let mut lx = 0u128;
+    let mut ly = 0u128;
     for f in fields {
         let v = read_scalar(data, f).ok()?;
         match (f.name.as_str(), v) {
-            ("bin_id",      ScalarValue::I32(n))  => bin_id = n,
-            ("price",       ScalarValue::U128(n)) => price = n,
+            ("bin_id", ScalarValue::I32(n)) => bin_id = n,
+            ("price", ScalarValue::U128(n)) => price = n,
             ("liquidity_x", ScalarValue::U128(n)) => lx = n,
             ("liquidity_y", ScalarValue::U128(n)) => ly = n,
             _ => {}
         }
     }
-    Some(DlmmBin { bin_id, price, liquidity_x: lx, liquidity_y: ly })
+    Some(DlmmBin {
+        bin_id,
+        price,
+        liquidity_x: lx,
+        liquidity_y: ly,
+    })
 }
 
 // ---------- Event Extraction Functions ----------

@@ -22,15 +22,26 @@ async fn main() -> Result<()> {
     if !Path::new(&registry_path).exists() {
         anyhow::bail!("Registry file not found: {registry_path}");
     }
-    let cfg = AccountRegistryConfig { strict: true, path: Some(registry_path.clone()) };
+    let cfg = AccountRegistryConfig {
+        strict: true,
+        path: Some(registry_path.clone()),
+    };
     let reg = AccountRegistry::load(&cfg)?;
-    println!("Loaded registry OK flash_loans={} clmm_pools={} orderbooks={} oracles={}",
-        reg.data.flash_loans.len(), reg.data.clmm_pools.len(), reg.data.orderbooks.len(), reg.data.oracles.len());
+    println!(
+        "Loaded registry OK flash_loans={} clmm_pools={} orderbooks={} oracles={}",
+        reg.data.flash_loans.len(),
+        reg.data.clmm_pools.len(),
+        reg.data.orderbooks.len(),
+        reg.data.oracles.len()
+    );
 
     let token_reg = TokenRegistry::new();
-    let snapshot_path = std::env::var("TOKEN_REGISTRY_SNAPSHOT_PATH").unwrap_or_else(|_| "token_registry_snapshot.json".into());
+    let snapshot_path = std::env::var("TOKEN_REGISTRY_SNAPSHOT_PATH")
+        .unwrap_or_else(|_| "token_registry_snapshot.json".into());
     let _ = token_reg.load_snapshot_file(&snapshot_path)?;
-    for mint in &args { token_reg.note_seen_mint(mint); }
+    for mint in &args {
+        token_reg.note_seen_mint(mint);
+    }
     // Run a short wait to allow enrichment (noop currently)
     tokio::time::sleep(Duration::from_secs(1)).await;
     println!("Smoke test complete.");

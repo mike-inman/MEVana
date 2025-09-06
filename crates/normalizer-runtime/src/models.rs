@@ -52,5 +52,5 @@ pub struct QuoteUpdate {
     pub slot: u64,
     pub test_size_mint: String,
     pub test_size_amount: String,
-    pub effective_price_a_per_b: f64
+    pub effective_price_a_per_b: f64,
 }

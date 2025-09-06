@@ -11,7 +11,7 @@ use crate::stats::record_profit;
 
 // Re-export from executor-service
 pub use crate::executor_integration::{
-    JupiterIntegration, MultiHopOpportunity, HopStep, COMMON_TOKENS
+    HopStep, JupiterIntegration, MultiHopOpportunity, COMMON_TOKENS,
 };
 
 #[derive(Debug, Clone)]
@@ -28,15 +28,15 @@ pub struct JupiterArbConfig {
 impl Default for JupiterArbConfig {
     fn default() -> Self {
         Self {
-            min_profit_bps: 50, // Higher threshold for multi-hop due to complexity
-            max_price_impact: 3.0, // 3% max price impact
-            max_slippage_bps: 200, // 2% max slippage
+            min_profit_bps: 50,     // Higher threshold for multi-hop due to complexity
+            max_price_impact: 3.0,  // 3% max price impact
+            max_slippage_bps: 200,  // 2% max slippage
             scan_interval_ms: 2000, // Scan every 2 seconds
             base_amounts: vec![
-                1_000_000_000,   // 1 SOL
-                5_000_000_000,   // 5 SOL  
-                10_000_000_000,  // 10 SOL
-                25_000_000_000,  // 25 SOL
+                1_000_000_000,  // 1 SOL
+                5_000_000_000,  // 5 SOL
+                10_000_000_000, // 10 SOL
+                25_000_000_000, // 25 SOL
             ],
             max_hops: 3,
             enable_paper_trading: true, // Start in paper trading mode
@@ -67,7 +67,7 @@ pub struct JupiterArbitrageScanner {
 impl JupiterArbitrageScanner {
     pub fn new(signal_tx: SignalTx, config: Option<JupiterArbConfig>) -> Self {
         let config = config.unwrap_or_default();
-        
+
         let jupiter = JupiterIntegration::with_config(
             config.max_slippage_bps,
             config.max_price_impact,
@@ -75,9 +75,7 @@ impl JupiterArbitrageScanner {
         );
 
         // Use common high-volume tokens for better liquidity
-        let tokens = COMMON_TOKENS.iter()
-            .map(|s| s.to_string())
-            .collect();
+        let tokens = COMMON_TOKENS.iter().map(|s| s.to_string()).collect();
 
         Self {
             jupiter: Arc::new(RwLock::new(jupiter)),
@@ -128,7 +126,9 @@ impl JupiterArbitrageScanner {
                     Arc::clone(&paper_results),
                     &config,
                     &tokens,
-                ).await {
+                )
+                .await
+                {
                     error!("Error scanning Jupiter opportunities: {}", e);
                 }
             }
@@ -139,7 +139,8 @@ impl JupiterArbitrageScanner {
 
     /// Stop the Jupiter arbitrage scanner
     pub fn stop(&self) {
-        self.running.store(false, std::sync::atomic::Ordering::SeqCst);
+        self.running
+            .store(false, std::sync::atomic::Ordering::SeqCst);
         info!("🛑 Stopped Jupiter arbitrage scanner");
     }
 
@@ -156,27 +157,31 @@ impl JupiterArbitrageScanner {
         // Test different amounts to find optimal size opportunities
         for &amount in &config.base_amounts {
             let mut jupiter_guard = jupiter.write().await;
-            
-            match jupiter_guard.find_multi_hop_opportunities(tokens, amount).await {
+
+            match jupiter_guard
+                .find_multi_hop_opportunities(tokens, amount)
+                .await
+            {
                 Ok(opportunities) => {
                     drop(jupiter_guard); // Release lock early
-                    
+
                     for opportunity in opportunities {
-                        if opportunity.price_impact_pct <= config.max_price_impact 
-                            && opportunity.route_complexity <= config.max_hops {
-                            
+                        if opportunity.price_impact_pct <= config.max_price_impact
+                            && opportunity.route_complexity <= config.max_hops
+                        {
                             if config.enable_paper_trading {
                                 Self::process_paper_opportunity(
                                     Arc::clone(&paper_results),
                                     opportunity.clone(),
-                                ).await;
+                                )
+                                .await;
                             } else {
                                 // Send real trading signal
                                 Self::send_trading_signal(signal_tx, opportunity).await?;
                             }
                         }
                     }
-                },
+                }
                 Err(e) => {
                     warn!("Failed to find opportunities for amount {}: {}", amount, e);
                 }
@@ -189,7 +194,7 @@ impl JupiterArbitrageScanner {
         }
 
         debug!(
-            "Jupiter scan completed in {:.2}s", 
+            "Jupiter scan completed in {:.2}s",
             start_time.elapsed().as_secs_f64()
         );
 
@@ -202,30 +207,34 @@ impl JupiterArbitrageScanner {
         opportunity: MultiHopOpportunity,
     ) {
         let mut results = paper_results.write().await;
-        
+
         results.total_opportunities += 1;
-        
+
         if opportunity.profit_bps > 0 {
             results.profitable_opportunities += 1;
             results.total_paper_profit += opportunity.profit_bps as i64;
-            
+
             // Update average
-            results.average_profit_bps = results.total_paper_profit as f64 
-                / results.profitable_opportunities as f64;
-            
+            results.average_profit_bps =
+                results.total_paper_profit as f64 / results.profitable_opportunities as f64;
+
             // Track best opportunity
-            if results.best_opportunity.is_none() 
-                || opportunity.profit_bps > results.best_opportunity.as_ref().unwrap().profit_bps {
+            if results.best_opportunity.is_none()
+                || opportunity.profit_bps > results.best_opportunity.as_ref().unwrap().profit_bps
+            {
                 results.best_opportunity = Some(opportunity.clone());
             }
-            
+
             // Track venue performance
             for venue in &opportunity.venues_used {
-                let entry = results.venue_performance.entry(venue.clone()).or_insert((0, 0));
+                let entry = results
+                    .venue_performance
+                    .entry(venue.clone())
+                    .or_insert((0, 0));
                 entry.0 += 1; // count
                 entry.1 += opportunity.profit_bps as i64; // total profit
             }
-            
+
             info!(
                 "📊 Paper Trade: {}bps profit, {} hops, venues: {:?}, amount: {}",
                 opportunity.profit_bps,
@@ -234,7 +243,8 @@ impl JupiterArbitrageScanner {
                 opportunity.input_amount
             );
         } else if results.worst_opportunity.is_none()
-            || opportunity.profit_bps < results.worst_opportunity.as_ref().unwrap().profit_bps {
+            || opportunity.profit_bps < results.worst_opportunity.as_ref().unwrap().profit_bps
+        {
             results.worst_opportunity = Some(opportunity.clone());
         }
     }
@@ -251,10 +261,14 @@ impl JupiterArbitrageScanner {
             .as_nanos() as u64;
 
         // Extract pair from the first and last tokens in the route
-        let first_token = opportunity.route.first()
+        let first_token = opportunity
+            .route
+            .first()
             .map(|hop| hop.from_token.clone())
             .unwrap_or_default();
-        let last_token = opportunity.route.last()
+        let last_token = opportunity
+            .route
+            .last()
             .map(|hop| hop.to_token.clone())
             .unwrap_or_default();
 
@@ -263,36 +277,57 @@ impl JupiterArbitrageScanner {
             b: last_token,
         };
 
-        // Create ArbSignalV1 from Jupiter opportunity  
+        // Create ArbSignalV1 from Jupiter opportunity
         let signal = ArbSignal {
             id: opportunity.opportunity_id.parse().unwrap_or(0),
             pair,
-            dex_sell: opportunity.route.first()
+            dex_sell: opportunity
+                .route
+                .first()
                 .map(|hop| hop.venue.clone())
                 .unwrap_or_default(),
             dex_mid: if opportunity.route_complexity > 2 {
-                Some(format!("jupiter_multi_hop_{}", opportunity.route_complexity))
+                Some(format!(
+                    "jupiter_multi_hop_{}",
+                    opportunity.route_complexity
+                ))
             } else {
                 None
             },
-            dex_buy: opportunity.route.last()
+            dex_buy: opportunity
+                .route
+                .last()
                 .map(|hop| hop.venue.clone())
                 .unwrap_or_default(),
-            amount_in: opportunity.route.first()
+            amount_in: opportunity
+                .route
+                .first()
                 .map(|hop| hop.amount_in as u128)
                 .unwrap_or(0),
-            expected_profit_out: (opportunity.route.first().unwrap_or(&HopStep::default()).amount_in as f64 
-                * opportunity.profit_bps as f64 / 10000.0) as i128,
+            expected_profit_out: (opportunity
+                .route
+                .first()
+                .unwrap_or(&HopStep::default())
+                .amount_in as f64
+                * opportunity.profit_bps as f64
+                / 10000.0) as i128,
             slot: 0, // Jupiter doesn't provide slot info
-            sell_pool_id: opportunity.route.first()
+            sell_pool_id: opportunity
+                .route
+                .first()
                 .map(|_| format!("jupiter_{}hop", opportunity.route_complexity))
                 .unwrap_or_default(),
             mid_pool_id: if opportunity.route_complexity > 2 {
-                Some(format!("jupiter_multi_hop_{}", opportunity.route_complexity))
+                Some(format!(
+                    "jupiter_multi_hop_{}",
+                    opportunity.route_complexity
+                ))
             } else {
                 None
             },
-            buy_pool_id: opportunity.route.last()
+            buy_pool_id: opportunity
+                .route
+                .last()
                 .map(|_| format!("jupiter_{}hop", opportunity.route_complexity))
                 .unwrap_or_default(),
             profit_bps: opportunity.profit_bps,
@@ -305,10 +340,9 @@ impl JupiterArbitrageScanner {
         } else {
             info!(
                 "🎯 Sent Jupiter arbitrage signal: {}bps profit via {} hops",
-                opportunity.profit_bps,
-                opportunity.route_complexity
+                opportunity.profit_bps, opportunity.route_complexity
             );
-            
+
             // Record profit for statistics
             record_profit(opportunity.profit_bps);
         }
@@ -324,12 +358,11 @@ impl JupiterArbitrageScanner {
     /// Switch from paper trading to live trading
     pub async fn enable_live_trading(&mut self) {
         self.config.enable_paper_trading = false;
-        
+
         let results = self.paper_results.read().await;
         info!(
             "🔥 Switching to LIVE TRADING mode! Paper results: {} opportunities, {}bps avg profit",
-            results.profitable_opportunities,
-            results.average_profit_bps
+            results.profitable_opportunities, results.average_profit_bps
         );
     }
 
@@ -345,7 +378,10 @@ impl std::fmt::Debug for JupiterArbitrageScanner {
         f.debug_struct("JupiterArbitrageScanner")
             .field("config", &self.config)
             .field("tokens", &self.tokens.len())
-            .field("running", &self.running.load(std::sync::atomic::Ordering::SeqCst))
+            .field(
+                "running",
+                &self.running.load(std::sync::atomic::Ordering::SeqCst),
+            )
             .finish()
     }
 }
@@ -373,7 +409,7 @@ mod tests {
     async fn test_jupiter_scanner_creation() {
         let (tx, _rx) = mpsc::unbounded_channel();
         let scanner = JupiterArbitrageScanner::new(tx, None);
-        
+
         assert!(!scanner.running.load(std::sync::atomic::Ordering::SeqCst));
         assert_eq!(scanner.tokens.len(), COMMON_TOKENS.len());
     }
@@ -383,10 +419,10 @@ mod tests {
         let (tx, _rx) = mpsc::unbounded_channel();
         let mut config = JupiterArbConfig::default();
         config.enable_paper_trading = true;
-        
+
         let scanner = JupiterArbitrageScanner::new(tx, Some(config));
         let results = scanner.get_paper_results().await;
-        
+
         assert_eq!(results.total_opportunities, 0);
         assert_eq!(results.profitable_opportunities, 0);
     }

@@ -1,13 +1,13 @@
 use anyhow::Result;
+use log::{debug, error, info};
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::time::Duration;
-use log::{debug, error, info};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct WalletBalances {
-    pub sol_balance: u64, // in lamports
+    pub sol_balance: u64,                     // in lamports
     pub token_balances: HashMap<String, u64>, // mint -> balance
 }
 
@@ -70,7 +70,7 @@ impl ShyftClient {
     pub async fn get_wallet_balances(&self, wallet_address: &str) -> Result<WalletBalances> {
         // Get SOL balance
         let sol_balance = self.get_sol_balance(wallet_address).await?;
-        
+
         // Get token balances
         let token_balances = self.get_token_balances(wallet_address).await?;
 
@@ -81,13 +81,18 @@ impl ShyftClient {
     }
 
     /// Submit Jito bundle via Shyft.to premium endpoint
-    pub async fn submit_jito_bundle(&self, transactions: Vec<String>, priority_fee: Option<u64>) -> Result<JitoBundleResponse> {
+    pub async fn submit_jito_bundle(
+        &self,
+        transactions: Vec<String>,
+        priority_fee: Option<u64>,
+    ) -> Result<JitoBundleResponse> {
         let request = JitoBundleRequest {
             transactions,
             priority_fee,
         };
 
-        let response = self.client
+        let response = self
+            .client
             .post(&format!("{}/api/v1/bundle", self.jito_url))
             .header("Authorization", format!("Bearer {}", self.api_key))
             .header("Content-Type", "application/json")
@@ -101,15 +106,19 @@ impl ShyftClient {
         }
 
         let bundle_response: JitoBundleResponse = response.json().await?;
-        
-        info!("Jito bundle submitted successfully: {}", bundle_response.bundle_id);
-        
+
+        info!(
+            "Jito bundle submitted successfully: {}",
+            bundle_response.bundle_id
+        );
+
         Ok(bundle_response)
     }
 
     /// Get bundle status
     pub async fn get_bundle_status(&self, bundle_id: &str) -> Result<JitoBundleResponse> {
-        let response = self.client
+        let response = self
+            .client
             .get(&format!("{}/api/v1/bundle/{}", self.jito_url, bundle_id))
             .header("Authorization", format!("Bearer {}", self.api_key))
             .send()
@@ -121,7 +130,7 @@ impl ShyftClient {
         }
 
         let bundle_status: JitoBundleResponse = response.json().await?;
-        
+
         Ok(bundle_status)
     }
 
@@ -141,16 +150,22 @@ impl ShyftClient {
         };
 
         let response = self.send_rpc_request(request).await?;
-        
+
         if let Some(error) = response.error {
             anyhow::bail!("RPC error: {}", error);
         }
 
-        response.result.ok_or_else(|| anyhow::anyhow!("No result in RPC response"))
+        response
+            .result
+            .ok_or_else(|| anyhow::anyhow!("No result in RPC response"))
     }
 
     /// Get token accounts by owner
-    pub async fn get_token_accounts_by_owner(&self, owner: &str, mint: Option<&str>) -> Result<serde_json::Value> {
+    pub async fn get_token_accounts_by_owner(
+        &self,
+        owner: &str,
+        mint: Option<&str>,
+    ) -> Result<serde_json::Value> {
         let filter = if let Some(mint) = mint {
             serde_json::json!({
                 "mint": mint
@@ -176,12 +191,14 @@ impl ShyftClient {
         };
 
         let response = self.send_rpc_request(request).await?;
-        
+
         if let Some(error) = response.error {
             anyhow::bail!("RPC error: {}", error);
         }
 
-        response.result.ok_or_else(|| anyhow::anyhow!("No result in RPC response"))
+        response
+            .result
+            .ok_or_else(|| anyhow::anyhow!("No result in RPC response"))
     }
 
     /// Simulate transaction
@@ -203,12 +220,14 @@ impl ShyftClient {
         };
 
         let response = self.send_rpc_request(request).await?;
-        
+
         if let Some(error) = response.error {
             anyhow::bail!("Simulation error: {}", error);
         }
 
-        response.result.ok_or_else(|| anyhow::anyhow!("No result in simulation response"))
+        response
+            .result
+            .ok_or_else(|| anyhow::anyhow!("No result in simulation response"))
     }
 
     /// Get recent blockhash
@@ -223,22 +242,24 @@ impl ShyftClient {
         };
 
         let response = self.send_rpc_request(request).await?;
-        
+
         if let Some(error) = response.error {
             anyhow::bail!("RPC error: {}", error);
         }
 
-        let result = response.result.ok_or_else(|| anyhow::anyhow!("No result in RPC response"))?;
-        
+        let result = response
+            .result
+            .ok_or_else(|| anyhow::anyhow!("No result in RPC response"))?;
+
         let blockhash = result["value"]["blockhash"]
             .as_str()
             .ok_or_else(|| anyhow::anyhow!("Invalid blockhash format"))?;
-        
+
         Ok(blockhash.to_string())
     }
 
     // Private helper methods
-    
+
     async fn get_sol_balance(&self, wallet_address: &str) -> Result<u64> {
         let request = ShyftRpcRequest {
             jsonrpc: "2.0".to_string(),
@@ -253,30 +274,34 @@ impl ShyftClient {
         };
 
         let response = self.send_rpc_request(request).await?;
-        
+
         if let Some(error) = response.error {
             anyhow::bail!("Balance RPC error: {}", error);
         }
 
-        let result = response.result.ok_or_else(|| anyhow::anyhow!("No result in balance response"))?;
-        
+        let result = response
+            .result
+            .ok_or_else(|| anyhow::anyhow!("No result in balance response"))?;
+
         let balance = result["value"]
             .as_u64()
             .ok_or_else(|| anyhow::anyhow!("Invalid balance format"))?;
-        
+
         Ok(balance)
     }
 
     async fn get_token_balances(&self, wallet_address: &str) -> Result<HashMap<String, u64>> {
-        let token_accounts = self.get_token_accounts_by_owner(wallet_address, None).await?;
-        
+        let token_accounts = self
+            .get_token_accounts_by_owner(wallet_address, None)
+            .await?;
+
         let mut token_balances = HashMap::new();
-        
+
         if let Some(accounts) = token_accounts["value"].as_array() {
             for account in accounts {
                 if let (Some(mint), Some(amount)) = (
                     account["account"]["data"]["parsed"]["info"]["mint"].as_str(),
-                    account["account"]["data"]["parsed"]["info"]["tokenAmount"]["amount"].as_str()
+                    account["account"]["data"]["parsed"]["info"]["tokenAmount"]["amount"].as_str(),
                 ) {
                     if let Ok(balance) = amount.parse::<u64>() {
                         token_balances.insert(mint.to_string(), balance);
@@ -284,14 +309,18 @@ impl ShyftClient {
                 }
             }
         }
-        
+
         Ok(token_balances)
     }
 
     async fn send_rpc_request(&self, request: ShyftRpcRequest) -> Result<ShyftRpcResponse> {
-        debug!("Sending RPC request: {} (ID: {})", request.method, request.id);
-        
-        let response = self.client
+        debug!(
+            "Sending RPC request: {} (ID: {})",
+            request.method, request.id
+        );
+
+        let response = self
+            .client
             .post(&self.rpc_url)
             .header("Authorization", format!("Bearer {}", self.api_key))
             .header("Content-Type", "application/json")
@@ -305,13 +334,14 @@ impl ShyftClient {
         }
 
         let rpc_response: ShyftRpcResponse = response.json().await?;
-        
+
         debug!("RPC response received for ID: {}", rpc_response.id);
-        
+
         Ok(rpc_response)
     }
 
     fn next_request_id(&self) -> u64 {
-        self.request_id_counter.fetch_add(1, std::sync::atomic::Ordering::Relaxed)
+        self.request_id_counter
+            .fetch_add(1, std::sync::atomic::Ordering::Relaxed)
     }
 }

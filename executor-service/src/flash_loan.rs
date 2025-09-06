@@ -56,10 +56,10 @@ impl FlashLoanProvider {
 
     pub fn base_fee_bps(&self) -> u16 {
         match self {
-            Self::Solend => 9,     // 0.09%
-            Self::Marginfi => 5,   // 0.05%
-            Self::Tulip => 10,     // 0.10%
-            Self::Mango => 8,      // 0.08%
+            Self::Solend => 9,       // 0.09%
+            Self::Marginfi => 5,     // 0.05%
+            Self::Tulip => 10,       // 0.10%
+            Self::Mango => 8,        // 0.08%
             Self::PortFinance => 12, // 0.12%
             Self::JetProtocol => 15, // 0.15%
         }
@@ -71,11 +71,11 @@ pub struct FlashLoanAggregator {
     config: Arc<ExecutorConfig>,
     shyft_client: Arc<ShyftClient>,
     providers: Vec<FlashLoanProvider>,
-    
+
     // Rate caching for performance
     quote_cache: Arc<DashMap<String, FlashLoanQuote>>, // token_mint -> best_quote
     provider_health: Arc<DashMap<FlashLoanProvider, ProviderHealth>>,
-    
+
     // Performance metrics
     last_quote_refresh: std::sync::atomic::AtomicU64,
     successful_loans: Arc<DashMap<FlashLoanProvider, u64>>,
@@ -91,10 +91,7 @@ struct ProviderHealth {
 }
 
 impl FlashLoanAggregator {
-    pub fn new(
-        config: Arc<ExecutorConfig>,
-        shyft_client: Arc<ShyftClient>,
-    ) -> Result<Self> {
+    pub fn new(config: Arc<ExecutorConfig>, shyft_client: Arc<ShyftClient>) -> Result<Self> {
         let providers: Vec<FlashLoanProvider> = config
             .flash_loan_providers
             .iter()
@@ -105,7 +102,10 @@ impl FlashLoanAggregator {
             anyhow::bail!("No valid flash loan providers configured");
         }
 
-        info!("Flash loan aggregator initialized with {} providers", providers.len());
+        info!(
+            "Flash loan aggregator initialized with {} providers",
+            providers.len()
+        );
         for provider in &providers {
             info!("  - {:?} ({})", provider, provider.program_id());
         }
@@ -123,12 +123,15 @@ impl FlashLoanAggregator {
 
         // Initialize provider health
         for provider in providers {
-            aggregator.provider_health.insert(provider, ProviderHealth {
-                is_healthy: true,
-                consecutive_failures: 0,
-                last_successful_quote: 0,
-                average_latency_ms: 100,
-            });
+            aggregator.provider_health.insert(
+                provider,
+                ProviderHealth {
+                    is_healthy: true,
+                    consecutive_failures: 0,
+                    last_successful_quote: 0,
+                    average_latency_ms: 100,
+                },
+            );
         }
 
         Ok(aggregator)
@@ -138,10 +141,12 @@ impl FlashLoanAggregator {
     pub async fn get_best_quote(&self, token_mint: &str, amount: u64) -> Result<FlashLoanQuote> {
         // Check cache first (refresh every 5 seconds)
         let now = chrono::Utc::now().timestamp_millis() as u64;
-        let last_refresh = self.last_quote_refresh.load(std::sync::atomic::Ordering::Relaxed);
-        
+        let last_refresh = self
+            .last_quote_refresh
+            .load(std::sync::atomic::Ordering::Relaxed);
+
         let should_refresh = now - last_refresh > 5000; // 5 seconds
-        
+
         if should_refresh {
             self.refresh_quotes(token_mint, amount).await?;
         }
@@ -156,38 +161,38 @@ impl FlashLoanAggregator {
     /// Get quotes from all providers
     pub async fn get_all_quotes(&self, token_mint: &str, amount: u64) -> Vec<FlashLoanQuote> {
         let mut quotes = Vec::new();
-        
+
         // Query all healthy providers in parallel
         let mut tasks = Vec::new();
-        
+
         for provider in &self.providers {
             if self.is_provider_healthy(provider) {
                 let provider_clone = provider.clone();
                 let token_mint = token_mint.to_string();
                 let shyft_client = Arc::clone(&self.shyft_client);
-                
+
                 let task = tokio::spawn(async move {
                     Self::get_provider_quote(shyft_client, provider_clone, token_mint, amount).await
                 });
-                
+
                 tasks.push(task);
             }
         }
-        
+
         // Collect results
         for task in tasks {
             if let Ok(Ok(quote)) = task.await {
                 quotes.push(quote);
             }
         }
-        
+
         // Sort by effective cost (fee + latency penalty)
         quotes.sort_by(|a, b| {
             let cost_a = a.fee_bps as u32 + (a.estimated_latency_ms as u32 / 10);
             let cost_b = b.fee_bps as u32 + (b.estimated_latency_ms as u32 / 10);
             cost_a.cmp(&cost_b)
         });
-        
+
         quotes
     }
 
@@ -199,24 +204,36 @@ impl FlashLoanAggregator {
         borrower_pubkey: &str,
     ) -> Result<Vec<String>> {
         let quote = self.get_best_quote(token_mint, amount).await?;
-        
-        info!("Building flash loan instructions for {:?} provider", quote.provider);
-        
+
+        info!(
+            "Building flash loan instructions for {:?} provider",
+            quote.provider
+        );
+
         match quote.provider {
             FlashLoanProvider::Solend => {
-                self.build_solend_instructions(token_mint, amount, borrower_pubkey).await
+                self.build_solend_instructions(token_mint, amount, borrower_pubkey)
+                    .await
             }
             FlashLoanProvider::Marginfi => {
-                self.build_marginfi_instructions(token_mint, amount, borrower_pubkey).await
+                self.build_marginfi_instructions(token_mint, amount, borrower_pubkey)
+                    .await
             }
             FlashLoanProvider::Tulip => {
-                self.build_tulip_instructions(token_mint, amount, borrower_pubkey).await
+                self.build_tulip_instructions(token_mint, amount, borrower_pubkey)
+                    .await
             }
             _ => {
                 // For now, return placeholder instructions
                 // In production, would implement actual instruction building
-                warn!("Flash loan provider {:?} not yet implemented", quote.provider);
-                Ok(vec!["placeholder_borrow_instruction".to_string(), "placeholder_repay_instruction".to_string()])
+                warn!(
+                    "Flash loan provider {:?} not yet implemented",
+                    quote.provider
+                );
+                Ok(vec![
+                    "placeholder_borrow_instruction".to_string(),
+                    "placeholder_repay_instruction".to_string(),
+                ])
             }
         }
     }
@@ -224,8 +241,11 @@ impl FlashLoanAggregator {
     /// Record flash loan success/failure for provider health tracking
     pub fn record_loan_result(&self, provider: FlashLoanProvider, success: bool) {
         if success {
-            self.successful_loans.entry(provider).and_modify(|count| *count += 1).or_insert(1);
-            
+            self.successful_loans
+                .entry(provider)
+                .and_modify(|count| *count += 1)
+                .or_insert(1);
+
             // Update provider health
             if let Some(mut health) = self.provider_health.get_mut(&provider) {
                 health.is_healthy = true;
@@ -233,12 +253,15 @@ impl FlashLoanAggregator {
                 health.last_successful_quote = chrono::Utc::now().timestamp_millis() as u64;
             }
         } else {
-            self.failed_loans.entry(provider).and_modify(|count| *count += 1).or_insert(1);
-            
+            self.failed_loans
+                .entry(provider)
+                .and_modify(|count| *count += 1)
+                .or_insert(1);
+
             // Update provider health
             if let Some(mut health) = self.provider_health.get_mut(&provider) {
                 health.consecutive_failures += 1;
-                
+
                 // Mark as unhealthy after 3 consecutive failures
                 if health.consecutive_failures >= 3 {
                     health.is_healthy = false;
@@ -252,47 +275,56 @@ impl FlashLoanAggregator {
     pub fn get_status(&self) -> FlashLoanAggregatorStatus {
         FlashLoanAggregatorStatus {
             total_providers: self.providers.len(),
-            healthy_providers: self.provider_health.iter()
+            healthy_providers: self
+                .provider_health
+                .iter()
                 .filter(|entry| entry.value().is_healthy)
                 .count(),
             cached_quotes: self.quote_cache.len(),
-            provider_stats: self.providers.iter().map(|provider| {
-                let successful = self.successful_loans.get(provider).map(|v| *v).unwrap_or(0);
-                let failed = self.failed_loans.get(provider).map(|v| *v).unwrap_or(0);
-                let health = self.provider_health.get(provider).unwrap().clone();
-                
-                ProviderStats {
-                    provider: provider.clone(),
-                    is_healthy: health.is_healthy,
-                    successful_loans: successful,
-                    failed_loans: failed,
-                    success_rate: if successful + failed > 0 {
-                        successful as f64 / (successful + failed) as f64
-                    } else {
-                        0.0
-                    },
-                    average_latency_ms: health.average_latency_ms,
-                }
-            }).collect(),
+            provider_stats: self
+                .providers
+                .iter()
+                .map(|provider| {
+                    let successful = self.successful_loans.get(provider).map(|v| *v).unwrap_or(0);
+                    let failed = self.failed_loans.get(provider).map(|v| *v).unwrap_or(0);
+                    let health = self.provider_health.get(provider).unwrap().clone();
+
+                    ProviderStats {
+                        provider: provider.clone(),
+                        is_healthy: health.is_healthy,
+                        successful_loans: successful,
+                        failed_loans: failed,
+                        success_rate: if successful + failed > 0 {
+                            successful as f64 / (successful + failed) as f64
+                        } else {
+                            0.0
+                        },
+                        average_latency_ms: health.average_latency_ms,
+                    }
+                })
+                .collect(),
         }
     }
 
     // Private helper methods
-    
+
     async fn refresh_quotes(&self, token_mint: &str, amount: u64) -> Result<()> {
         let quotes = self.get_all_quotes(token_mint, amount).await;
-        
+
         if let Some(best_quote) = quotes.first() {
-            self.quote_cache.insert(token_mint.to_string(), best_quote.clone());
-            debug!("Cached best quote for {}: {:?} @ {} bps", 
-                   token_mint, best_quote.provider, best_quote.fee_bps);
+            self.quote_cache
+                .insert(token_mint.to_string(), best_quote.clone());
+            debug!(
+                "Cached best quote for {}: {:?} @ {} bps",
+                token_mint, best_quote.provider, best_quote.fee_bps
+            );
         }
-        
+
         self.last_quote_refresh.store(
             chrono::Utc::now().timestamp_millis() as u64,
-            std::sync::atomic::Ordering::Relaxed
+            std::sync::atomic::Ordering::Relaxed,
         );
-        
+
         Ok(())
     }
 
@@ -310,16 +342,16 @@ impl FlashLoanAggregator {
         amount: u64,
     ) -> Result<FlashLoanQuote> {
         let start_time = Instant::now();
-        
+
         // For now, return simulated quotes based on provider characteristics
         // In production, would query actual lending pool states
-        
+
         let base_fee = provider.base_fee_bps();
         let utilization_fee = Self::calculate_utilization_fee(&provider, &token_mint, amount).await;
         let total_fee = base_fee + utilization_fee;
-        
+
         let latency = start_time.elapsed().as_millis() as u16;
-        
+
         Ok(FlashLoanQuote {
             provider,
             token_mint,
@@ -339,9 +371,9 @@ impl FlashLoanAggregator {
         // Simplified utilization fee calculation
         // In production, would fetch actual pool utilization
         match provider {
-            FlashLoanProvider::Solend => 2,     // +0.02% if high utilization
-            FlashLoanProvider::Marginfi => 1,   // +0.01% if high utilization
-            FlashLoanProvider::Tulip => 3,      // +0.03% if high utilization
+            FlashLoanProvider::Solend => 2,   // +0.02% if high utilization
+            FlashLoanProvider::Marginfi => 1, // +0.01% if high utilization
+            FlashLoanProvider::Tulip => 3,    // +0.03% if high utilization
             _ => 2,
         }
     }
@@ -357,7 +389,7 @@ impl FlashLoanAggregator {
         // 1. Derive lending market and reserve PDAs
         // 2. Build borrow instruction
         // 3. Build repay instruction with fees
-        
+
         Ok(vec![
             "solend_flash_borrow_instruction".to_string(),
             "solend_flash_repay_instruction".to_string(),
