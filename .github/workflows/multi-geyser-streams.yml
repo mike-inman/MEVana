@@ -83,10 +83,19 @@ jobs:
         mkdir -p ~/.ssh
         ssh-keyscan -H ${{ secrets.PRODUCTION_SERVER }} >> ~/.ssh/known_hosts
 
+    - name: Checkout code for config files
+      uses: actions/checkout@v4
+
     - name: Deploy to production server
       run: |
         # Copy binary to server
         scp multi-geyser-streams ${{ secrets.DEPLOY_USER }}@${{ secrets.PRODUCTION_SERVER }}:/opt/mevana/bin/
+
+        # Copy Prometheus configuration
+        scp infrastructure/prometheus.yml ${{ secrets.DEPLOY_USER }}@${{ secrets.PRODUCTION_SERVER }}:/opt/mevana/infrastructure/
+
+        # Copy Grafana dashboard
+        scp infrastructure/grafana/dashboards/multi-geyser-streams-gauges.json ${{ secrets.DEPLOY_USER }}@${{ secrets.PRODUCTION_SERVER }}:/opt/mevana/infrastructure/grafana/dashboards/
 
         # Deploy with systemd
         ssh ${{ secrets.DEPLOY_USER }}@${{ secrets.PRODUCTION_SERVER }} << 'EOF'
@@ -124,19 +133,43 @@ jobs:
         UNIT
           fi
           
+          # Restart Prometheus to pick up new configuration
+          echo "🔄 Restarting Prometheus with updated configuration..."
+          cd /opt/mevana/infrastructure
+          docker compose restart prometheus
+          sleep 10
+          
+          # Restart Grafana to pick up new dashboard
+          echo "📊 Restarting Grafana with updated dashboard..."
+          docker compose restart grafana
+          sleep 10
+          
           # Reload systemd and start service
           sudo systemctl daemon-reload
           sudo systemctl enable multi-geyser-streams
           sudo systemctl start multi-geyser-streams
           
           # Wait for service to start
-          sleep 10
+          sleep 15
           
           # Check service status
           sudo systemctl status multi-geyser-streams
           
           # Verify metrics endpoint is responding
+          echo "🔍 Testing metrics endpoint..."
           curl -f http://localhost:8086/metrics || (echo "Service health check failed" && exit 1)
+          
+          # Test Prometheus scraping
+          echo "🎯 Testing Prometheus scraping..."
+          curl -s http://localhost:9090/api/v1/targets | grep "multi-geyser-streams" || echo "Warning: Prometheus may not be scraping yet"
+          
+          # Verify Grafana dashboard access
+          echo "📊 Testing Grafana dashboard..."
+          curl -s http://localhost:3000/api/dashboards/uid/multi-geyser-gauges || echo "Dashboard will be available shortly"
+          
+          echo "✅ Multi-Geyser Streams deployment complete!"
+          echo "📊 Grafana: http://$(curl -s ifconfig.me):3000"
+          echo "🎯 Metrics: http://$(curl -s ifconfig.me):8086/metrics"
         EOF
 
     - name: Verify deployment

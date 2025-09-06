@@ -70,3 +70,14 @@ scrape_configs:
     metrics_path: '/metrics'
     scrape_interval: 5s
     scrape_timeout: 3s
+
+  # =============================================================================
+  # MULTI-GEYSER-STREAMS (HOST) - scrape directly from host process (systemd service) via Docker -> host bridge
+  # =============================================================================
+  - job_name: 'multi-geyser-streams'
+    static_configs:
+      - targets:
+        - 'host.docker.internal:8086'
+    metrics_path: '/metrics'
+    scrape_interval: 5s
+    scrape_timeout: 3s

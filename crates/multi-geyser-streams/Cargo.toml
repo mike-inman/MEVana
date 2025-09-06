@@ -16,13 +16,14 @@ lazy_static = { workspace = true }
 # Geyser/gRPC dependencies - match existing dex-stream-integrated versions
 yellowstone-grpc-client = "4.2.1"
 yellowstone-grpc-proto = "4.2.1"
-tonic = "0.12"
+tonic = { version = "0.12", features = ["tls"] }
 prost = "0.12"
+rustls = { version = "0.23", features = ["ring"] }
 bs58 = { workspace = true }
 
 # Metrics
 metrics = "0.22"
-metrics-exporter-prometheus = "0.13"
+metrics-exporter-prometheus = "0.15"
 axum = "0.7"
 
 # Async utilities
@@ -32,6 +33,7 @@ crossbeam = "0.8"
 dashmap = "5.5"
 chrono = { version = "0.4", features = ["serde"] }
 uuid = { version = "1.0", features = ["serde", "v4"] }
+dotenv = "0.15"
 
 [[bin]]
 name = "multi-geyser-streams"
