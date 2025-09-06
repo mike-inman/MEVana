@@ -166,12 +166,12 @@ impl<'a> ClmmQuoter<'a> {
                 let dx_in_clip = dx_in.min(max_dx_in);
 
                 // Recompute effective dx_raw from clipped dx_in
-                let dx_eff_clip = (dx_in_clip as u128) * fee_num / (fee_denom as u128);
+                let dx_eff_clip = dx_in_clip * fee_num / (fee_denom as u128);
                 // Within a tick: dy = L * (sp - sp_new), where sp_new solves dx_raw.
                 // For small steps, linear approx: dy ≈ L * (sp - sp_next) * (dx_eff_clip / max_dx_raw)
                 // Good enough for prefiltering; we’ll replace with exact step solver later.
                 let dy_raw = if max_dx_raw > 0 {
-                    (current_liquidity as u128)
+                    current_liquidity
                         .saturating_mul(sp.saturating_sub(sp_next))
                         .saturating_mul(dx_eff_clip)
                         / max_dx_raw
@@ -199,10 +199,10 @@ impl<'a> ClmmQuoter<'a> {
                 let max_dx_in = apply_input_fee(max_dy_raw, self.total_fee_bps);
                 let dx_in_clip = dx_in.min(max_dx_in);
 
-                let dx_eff_clip = (dx_in_clip as u128) * fee_num / (fee_denom as u128);
+                let dx_eff_clip = dx_in_clip * fee_num / (fee_denom as u128);
                 // Within tick B->A: out in token A ≈ L * (sp_next - sp) * (dx_eff_clip / max_dy_raw) / (sp * sp_next)
                 // For now use same linear fraction; exact solver will replace this.
-                let num = (current_liquidity as u128)
+                let num = current_liquidity
                     .saturating_mul(sp_next.saturating_sub(sp))
                     .saturating_mul(dx_eff_clip);
                 let dy_out = if max_dy_raw > 0 { num / max_dy_raw } else { 0 };
