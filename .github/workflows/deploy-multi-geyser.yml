@@ -1,0 +1,74 @@
+name: Fast Deploy - multi-geyser-streams
+
+on:
+  push:
+    branches: [ main ]
+    paths:
+      - 'crates/multi-geyser-streams/**'
+      - 'infrastructure/grafana/dashboards/multi-geyser-streams-*.json'
+      - '.github/workflows/deploy-multi-geyser.yml'
+  workflow_dispatch: {}
+
+env:
+  SERVER_HOST: 149.28.56.125
+  SERVER_USER: root
+  DEPLOYMENT_PATH: /opt/MEVana
+
+jobs:
+  deploy-mgs:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Build multi-geyser-streams (release)
+        run: |
+          cargo build -p multi-geyser-streams --release --locked
+
+      - name: Setup SSH
+        uses: webfactory/ssh-agent@v0.9.0
+        with:
+          ssh-private-key: ${{ secrets.VULTR_SERVER_SSH_KEY }}
+
+      - name: Add server to known hosts
+        run: ssh-keyscan -H $SERVER_HOST >> ~/.ssh/known_hosts
+
+      - name: Upload updated binary and dashboard
+        run: |
+          scp target/release/multi-geyser-streams $SERVER_USER@$SERVER_HOST:$DEPLOYMENT_PATH/target/release/multi-geyser-streams
+          if [ -f infrastructure/grafana/dashboards/multi-geyser-streams-bar-charts.json ]; then
+            scp infrastructure/grafana/dashboards/multi-geyser-streams-bar-charts.json $SERVER_USER@$SERVER_HOST:$DEPLOYMENT_PATH/infrastructure/grafana/dashboards/
+          fi
+
+      - name: Restart multi-geyser-streams and verify
+        run: |
+          ssh $SERVER_USER@$SERVER_HOST << 'ENDSSH'
+            set -e
+            cd /opt/MEVana
+            echo "Stopping old multi-geyser-streams..."
+            pkill -f "multi-geyser-streams" || true
+            sleep 2
+            echo "Starting new multi-geyser-streams..."
+            mkdir -p logs
+            nohup ./target/release/multi-geyser-streams --verbose > logs/multi-geyser-streams.log 2>&1 &
+            # wait for metrics
+            for i in {1..12}; do
+              if curl -s http://localhost:8086/metrics | grep -q multi_geyser_stream_messages_per_minute; then
+                echo "Metrics healthy"
+                break
+              fi
+              echo "Waiting for metrics ($i/12)..."; sleep 5
+            done
+            if ! curl -s http://localhost:8086/metrics | grep -q multi_geyser_stream_messages_per_minute; then
+              echo "Metrics endpoint not healthy"; exit 1
+            fi
+          ENDSSH
+
+      - name: Summary
+        run: |
+          echo "Deployed multi-geyser-streams to $SERVER_HOST" >> $GITHUB_STEP_SUMMARY
+          echo "Metrics: http://$SERVER_HOST:8086/metrics" >> $GITHUB_STEP_SUMMARY
+          echo "Grafana: http://$SERVER_HOST:3000" >> $GITHUB_STEP_SUMMARY

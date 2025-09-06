@@ -34,6 +34,14 @@ jobs:
     - name: Add server to known hosts
       run: |
         ssh-keyscan -H $SERVER_HOST >> ~/.ssh/known_hosts
+
+    - name: Package source for deploy
+      run: |
+        tar --exclude='.git' -czf mevana-src.tar.gz .
+
+    - name: Upload source to server
+      run: |
+        scp mevana-src.tar.gz $SERVER_USER@$SERVER_HOST:/tmp/mevana-src.tar.gz
         
     - name: Deploy to server
       run: |
@@ -43,12 +51,12 @@ jobs:
           echo "🚀 Starting MEVana deployment..."
           
           # Navigate to deployment directory
+          mkdir -p /opt/MEVana
           cd /opt/MEVana
           
-          # Pull latest changes
-          echo "📦 Pulling latest changes..."
-          git fetch origin
-          git reset --hard origin/main
+          # Update code from uploaded archive
+          echo "📦 Updating code from uploaded archive..."
+          tar -xzf /tmp/mevana-src.tar.gz -C /opt/MEVana
           
           # Stop existing services gracefully
           echo "🛑 Stopping existing services..."
