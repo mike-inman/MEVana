@@ -30,6 +30,11 @@ jobs:
         with:
           components: clippy, rustfmt, llvm-tools-preview
 
+      - name: Install protobuf compiler
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y protobuf-compiler
+
       - name: Install cargo tools (deny, llvm-cov)
         run: |
           cargo install cargo-deny --locked || true
