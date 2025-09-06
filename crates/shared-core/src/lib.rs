@@ -1,6 +1,8 @@
 // crates/shared-core/src/lib.rs
 //! Shared utilities and types for MEVana-MCP components
 
+pub mod wallet_safety;
+
 use serde::{Deserialize, Serialize};
 use std::fmt;
 

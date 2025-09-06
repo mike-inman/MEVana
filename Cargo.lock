@@ -5934,8 +5934,10 @@ name = "shared-core"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "log",
  "serde",
  "serde_json",
+ "solana-sdk 2.1.21",
  "tokio",
 ]
 
