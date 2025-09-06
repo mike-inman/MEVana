@@ -325,9 +325,17 @@ use normalizer_runtime::{
 
         // decoder body
         let has_positions = pg.ixs.iter().any(|ix| !ix.positions.is_empty());
-        let accs_param = if has_positions { "accs: &[u8]" } else { "_accs: &[u8]" };
-        let keys_param = if has_positions { "keys: &[String]" } else { "_keys: &[String]" };
-        
+        let accs_param = if has_positions {
+            "accs: &[u8]"
+        } else {
+            "_accs: &[u8]"
+        };
+        let keys_param = if has_positions {
+            "keys: &[String]"
+        } else {
+            "_keys: &[String]"
+        };
+
         if pg.ixs.is_empty() {
             src.push_str(&format!(
 r#"
@@ -349,14 +357,19 @@ fn decode_{dex}(data: &[u8], {accs_param}, {keys_param}) -> Option<(String, Hash
             ));
 
             for ix in &pg.ixs {
-                let disc_name = format!("DISC_{}_{}", to_const(&pg.dex_name), to_const(&ix.ix_name));
+                let disc_name =
+                    format!("DISC_{}_{}", to_const(&pg.dex_name), to_const(&ix.ix_name));
                 let mut_modifier = if ix.positions.is_empty() { "" } else { "mut " };
                 src.push_str(&format!(
                     "\n        {} => {{\n            let {}roles = HashMap::new();\n",
                     disc_name, mut_modifier
                 ));
                 for (alias, pos) in &ix.positions {
-                    let accessor = if *pos == 0 { "first()" } else { &format!("get({})", pos) };
+                    let accessor = if *pos == 0 {
+                        "first()"
+                    } else {
+                        &format!("get({})", pos)
+                    };
                     src.push_str(&format!(
                         "            if let Some(ai) = accs.{} {{ if let Some(pk) = keys.get(*ai as usize) {{ roles.insert(\"{}\".to_string(), pk.clone()); }} }}\n",
                         accessor, alias
