@@ -1,0 +1,47 @@
+[package]
+name = "resilience-framework"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+# Core dependencies
+anyhow = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+log = { workspace = true }
+
+# Additional async features
+tokio = { version = "1", features = ["rt-multi-thread", "time", "sync", "macros"] }
+async-trait = "0.1"
+futures = "0.3"
+
+# Error handling and retry
+backoff = { version = "0.4", features = ["tokio"] }
+thiserror = "1.0"
+
+# Circuit breaker
+governor = "0.6"
+nonzero_ext = "0.3"
+
+# Dead letter queue
+crossbeam-channel = "0.5"
+
+# Database with resilience
+sqlx = { version = "0.8", features = ["runtime-tokio-rustls", "postgres", "json", "chrono"] }
+deadpool = "0.10"
+deadpool-postgres = "0.12"
+tokio-postgres = "0.7"
+
+# Metrics
+prometheus = "0.13"
+
+# Caching
+moka = { version = "0.12", features = ["future"] }
+
+# Other
+uuid = { version = "1.6", features = ["v4", "serde"] }
+chrono = { version = "0.4", features = ["serde"] }
+
+[dev-dependencies]
+mockall = "0.12"
+tokio-test = "0.4"

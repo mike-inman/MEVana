@@ -1,4 +1,0 @@
-# crate-local ignores
-**/target
-**/.git
-**/.DS_Store

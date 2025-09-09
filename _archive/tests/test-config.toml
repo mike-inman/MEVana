@@ -1,0 +1,106 @@
+# MEVana Test Configuration
+# This file defines test parameters, expected outcomes, and performance thresholds
+# Created: 2024-08-17 19:00 CDT
+
+[test_environment]
+# Test mode configuration
+test_mode = true
+test_timeout_seconds = 30
+test_retry_attempts = 3
+
+# Infrastructure endpoints
+redis_url = "redis://localhost:6379/1"
+kafka_brokers = "localhost:9092"
+shyft_api_key = "fWrVh_mDygK358FC"
+shyft_network = "mainnet-beta"
+
+[performance_thresholds]
+# Latency targets (milliseconds)
+core_trading_latency_max = 10
+validation_latency_max = 5000
+service_startup_max = 10000
+
+# Throughput targets
+transactions_per_second_min = 1000
+validation_per_minute_min = 60
+
+# Resource limits
+memory_usage_max_mb = 1024
+cpu_usage_max_percent = 80
+
+[validation_tests]
+# Shyft API validation parameters
+test_pool_address = "HJPjoWUrhoZzkNfRpHuieeFk9WcZWjwy6PBjZ81ngndJ"
+expected_tick_index = -16665
+expected_fee_rate = 3000
+
+# Validation success criteria
+min_validation_success_rate = 0.95
+max_validation_latency_ms = 5000
+
+[integration_tests]
+# Service health check parameters
+required_services = [
+    "dex-stream-universal",
+    "dex-backfill", 
+    "shyft-validator",
+    "arb-test-mode",
+    "depth-builder",
+    "ui-gateway"
+]
+
+# Data flow test parameters
+test_data_sources = [
+    "geyser_stream",
+    "shyft_apis",
+    "redis_cache"
+]
+
+# Error handling expectations
+max_error_rate = 0.01
+graceful_degradation_required = true
+
+[test_data]
+# Test transaction data (sample)
+sample_transaction = {
+    signature = "sample_signature_123",
+    slot = 123456789,
+    program_id = "whirLbMiicVdio4qvUfM5KAg6Ct8VwpYzGff3uctyCc",
+    account_data_length = 1024
+}
+
+# Expected test outcomes
+expected_outcomes = {
+    "service_startup" = "success",
+    "data_parsing" = "success", 
+    "validation" = "success",
+    "performance" = "within_thresholds"
+}
+
+[ci_cd_integration]
+# CI/CD pipeline configuration
+run_tests_on_commit = true
+run_tests_on_pr = true
+block_deployment_on_failure = true
+
+# Test reporting
+generate_test_reports = true
+test_report_format = "junit"
+test_report_path = "target/test-reports"
+
+# Performance regression detection
+detect_performance_regression = true
+performance_baseline_file = "tests/performance-baseline.json"
+regression_threshold_percent = 5.0
+
+[ai_agent_testing]
+# AI agent specific test configuration
+ai_agent_validation_required = true
+independent_test_execution = true
+test_result_learning = true
+
+# AI agent test capabilities
+can_run_tests_independently = true
+can_analyze_test_failures = true
+can_suggest_test_improvements = true
+can_learn_from_test_results = true

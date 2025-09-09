@@ -1,0 +1,39 @@
+[package]
+name = "system-orchestrator"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+# Core dependencies
+anyhow = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "time", "process", "signal"] }
+log = { workspace = true }
+env_logger = { workspace = true }
+
+# Service management
+futures = "0.3"
+async-trait = "0.1"
+
+# Health checking
+reqwest = { version = "0.11", features = ["json", "rustls-tls"] }
+redis = { version = "0.25", features = ["aio", "tokio-comp"] }
+sqlx = { version = "0.8", features = ["runtime-tokio-rustls", "postgres"] }
+
+# Configuration
+config = "0.14"
+clap = { version = "4", features = ["derive"] }
+toml = "0.8"
+tokio-postgres = "0.7"
+
+# Monitoring
+prometheus = "0.13"
+warp = "0.3"
+
+# Process management
+sysinfo = "0.30"
+
+# Utilities
+uuid = { version = "1.6", features = ["v4"] }
+chrono = { version = "0.4", features = ["serde"] }

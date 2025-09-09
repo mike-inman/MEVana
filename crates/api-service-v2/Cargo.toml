@@ -1,0 +1,105 @@
+[package]
+name = "api-service-v2"
+version = "0.1.0"
+edition = "2021"
+description = "MEVana API Service v2 - Enterprise-grade, secure, and extensible"
+
+[dependencies]
+# Core async runtime
+tokio = { version = "1.0", features = ["rt-multi-thread", "macros", "time", "signal"] }
+anyhow = { workspace = true }
+thiserror = "1.0"
+
+# Web framework - latest axum for best security and performance
+axum = { version = "0.7", features = ["json", "query", "multipart", "ws"] }
+tower = { version = "0.4", features = ["full"] }
+tower-http = { version = "0.5", features = ["cors", "trace", "compression-br", "auth", "request-id", "timeout"] }
+hyper = { version = "1.0", features = ["full"] }
+
+# Security - JWT and crypto
+jsonwebtoken = "9.2"
+bcrypt = "0.15"
+argon2 = "0.5"
+secrecy = { version = "0.8", features = ["serde"] }
+uuid = { version = "1.6", features = ["v4", "serde", "fast-rng"] }
+
+# Database - SQLx for maximum flexibility and type safety
+sqlx = { version = "0.8", features = [
+    "runtime-tokio-rustls", 
+    "postgres", 
+    "json", 
+    "uuid", 
+    "chrono", 
+    "migrate",
+    "any"
+] }
+
+# Serialization
+serde = { workspace = true }
+serde_json = { workspace = true }
+chrono = { version = "0.4", features = ["serde"] }
+
+# OpenAPI documentation
+utoipa = { version = "4.1", features = ["axum_extras", "chrono", "uuid"] }
+utoipa-swagger-ui = { version = "6.0", features = ["axum"] }
+
+# Logging and observability
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter", "json"] }
+tracing-opentelemetry = "0.22"
+
+# Caching and session management
+redis = { version = "0.25", features = ["aio", "tokio-comp", "connection-manager"] }
+moka = { version = "0.12", features = ["future"] }
+
+# Rate limiting and circuit breaker
+governor = "0.6"
+dashmap = "5.5"
+
+# Configuration management
+config = "0.14"
+clap = { version = "4.0", features = ["derive", "env"] }
+num_cpus = "1.16"
+
+# Validation
+validator = { version = "0.16", features = ["derive"] }
+
+# Metrics and monitoring  
+prometheus = "0.13"
+metrics = "0.22"
+metrics-prometheus = "0.6"
+
+# Additional security and utility dependencies
+regex = "1.10"
+hex = "0.4"
+hmac = "0.12"
+sha2 = "0.10"
+rand = "0.8"
+urlencoding = "2.1"
+
+# Testing framework
+mockall = { version = "0.12", optional = true }
+
+# MEVana internal dependencies - leveraging existing working crates
+resilience-framework = { path = "../resilience-framework" }
+wallet-vault = { path = "../wallet-vault" }
+shared-core = { path = "../shared-core" }
+
+[dev-dependencies]
+tokio-test = "0.4"
+axum-test = "14.0"
+fake = { version = "2.9", features = ["derive", "chrono", "uuid"] }
+criterion = { version = "0.5", features = ["html_reports"] }
+proptest = "1.4"
+
+# Benchmarks would go here when implemented
+# [[bench]]
+# name = "api_benchmarks"
+# harness = false
+
+[features]
+default = ["postgres"]
+postgres = []
+sqlite = ["sqlx/sqlite"]
+mysql = ["sqlx/mysql"]
+testing = ["mockall"]
