@@ -5,28 +5,41 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## 🔄 Current Session Context
 <!-- Update this section at the start/end of each work session -->
 
-**Last Updated:** 2025-01-06
-**Current Focus:** CI/CD deployment fixes (clippy warnings)
+**Last Updated:** 2025-09-09
+**Current Focus:** Production documentation organization and system operationalization
 **Active Branch:** main
 
 ### Recent Achievements
-- ✅ Implemented fringe token trading with ultra-high-frequency arbitrage
-- ✅ Fixed CI formatting issues (cargo fmt)
-- ✅ Fixed clippy warnings in whirlpool-core, edge-assembler, normalizer-runtime
-- ✅ Added protobuf compiler to CI workflow
-- ✅ Built resilient trading infrastructure with automatic failover
-- ✅ Created wallet safety protocol with emergency evacuation
-- ✅ Added circuit breaker pattern for infrastructure resilience
+- ✅ **Complete system startup/shutdown procedures** documented and tested
+- ✅ **Production-ready port mapping** with deployment strategies
+- ✅ **Graceful shutdown system** with financial safety checks
+- ✅ **Master documentation index** created with cross-references
+- ✅ **All core services operational** following system-orchestrator sequence
+- ✅ **Critical production lessons** documented from testing
+- ✅ **Documentation consolidation** reducing workspace clutter
 
 ### Active Issues/Blockers
-- 🔄 Organizing MEVana-UI workspace structure
-- 🔄 CI pipeline deployment in progress
+- 🔄 Documentation archival in progress
+- 🔄 Need to implement service-level graceful shutdown handlers
 
 ### Next Priorities
-1. Integrate resilient systems into main arbitrage engine
-2. Build monitoring dashboard with safety system endpoints
-3. Add real-time profit tracking and alerts
-4. Test full system resilience under failure scenarios
+1. Complete documentation archival and workspace cleanup
+2. Add proper signal handlers to all services for graceful shutdown
+3. Implement environment-specific configuration management
+4. Test edge cases (active trades, database failures)
+5. Set up automated documentation validation
+
+## 📚 **DOCUMENTATION REFERENCE**
+
+> **⚠️ CRITICAL** - Always reference the master documentation index first
+
+**📋 [DOCUMENTATION_INDEX.md](./DOCUMENTATION_INDEX.md)** - Master reference for all docs
+
+### **Essential Operational Documents**
+- **[STARTUP_PROGRESS.md](./STARTUP_PROGRESS.md)** - System startup procedures
+- **[SHUTDOWN_PROCEDURES.md](./SHUTDOWN_PROCEDURES.md)** - Production shutdown guide  
+- **[PORT_MAPPING.md](./PORT_MAPPING.md)** - Service configuration
+- **[PRODUCTION_LESSONS_LEARNED.md](./PRODUCTION_LESSONS_LEARNED.md)** - Critical findings
 
 ### Performance Baseline
 - HotPath detection latency: ~400-600μs

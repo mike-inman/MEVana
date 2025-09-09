@@ -1,9 +1,10 @@
 use axum::{
-    extract::{Path, State},
+    extract::{Path, State, Extension},
     http::StatusCode,
     response::IntoResponse,
     routing::{get, post, put, delete},
     Json, Router,
+    middleware,
 };
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
@@ -15,6 +16,7 @@ use uuid::Uuid;
 use crate::vault::{VaultConfig, WalletVault};
 use crate::wallet::{WalletMetadata, WalletTier};
 use crate::error::VaultError;
+use crate::auth::{AuthConfig, api_key_middleware, UserContext};
 use solana_sdk::signer::Signer;
 
 #[derive(OpenApi)]
@@ -127,8 +129,17 @@ pub type AppState = Arc<WalletVault>;
 pub fn create_api_router(vault: WalletVault) -> Router {
     let app_state = Arc::new(vault);
     
+    // Create auth config - disable in development, enable in production
+    let auth_required = std::env::var("WALLET_VAULT_AUTH_REQUIRED")
+        .unwrap_or_else(|_| "false".to_string()) == "true";
+    let jwt_secret = std::env::var("WALLET_VAULT_SECRET")
+        .unwrap_or_else(|_| "dev-secret".to_string());
+    
+    let auth_config = Arc::new(AuthConfig::new(jwt_secret, auth_required));
+    
     Router::new()
         .merge(SwaggerUi::new("/swagger-ui").url("/api-doc/openapi.json", ApiDoc::openapi()))
+        // Protected routes require authentication
         .route("/api/wallets", post(create_wallet))
         .route("/api/wallets", get(list_wallets))
         .route("/api/wallets/:id", get(get_wallet))
@@ -139,8 +150,11 @@ pub fn create_api_router(vault: WalletVault) -> Router {
         .route("/api/backup/restore", post(restore_vault))
         .route("/api/backup/list", get(list_backups))
         .route("/api/limits/reset", post(reset_daily_limits))
+        // Add authentication middleware
+        .layer(middleware::from_fn_with_state(auth_config.clone(), api_key_middleware))
         .layer(CorsLayer::permissive())
         .with_state(app_state)
+        .with_state(auth_config)
 }
 
 #[utoipa::path(
@@ -156,8 +170,11 @@ pub fn create_api_router(vault: WalletVault) -> Router {
 )]
 async fn create_wallet(
     State(vault): State<AppState>,
+    Extension(user_ctx): Extension<UserContext>,
     Json(request): Json<CreateWalletRequest>,
 ) -> impl IntoResponse {
+    log::info!("User {} creating wallet with tier {:?}", user_ctx.user_id, request.tier);
+    
     match vault.create_wallet(request.tier, request.label).await {
         Ok(metadata) => Ok(Json(WalletResponse::from(metadata))),
         Err(e) => Err((

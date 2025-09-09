@@ -20,34 +20,45 @@
 git clone https://github.com/mike-inman/MEVana.git
 cd MEVana
 
-# Build the workspace
+# Quick Setup - Complete System
+./scripts/start_system.sh
+
+# Manual Setup (if needed)
 cargo build --workspace
-
-# Start infrastructure services
-cd infrastructure
-docker-compose up -d
+cd infrastructure && docker-compose up -d
 ```
 
-### **Run Services**
+## 🎯 **PRODUCTION DOCUMENTATION** 
+
+> **⚠️ START HERE** - All critical operational procedures and configurations
+
+**📋 [DOCUMENTATION_INDEX.md](./DOCUMENTATION_INDEX.md)** - **Master documentation reference**
+
+### **Critical Operations**
+- **[System Startup Guide](./STARTUP_PROGRESS.md)** - Complete startup procedures and troubleshooting
+- **[Shutdown Procedures](./SHUTDOWN_PROCEDURES.md)** - Safe production shutdown with financial protections  
+- **[Port Configuration](./PORT_MAPPING.md)** - Service ports and production deployment strategies
+- **[Production Lessons](./PRODUCTION_LESSONS_LEARNED.md)** - Critical findings from operational testing
+
+### **Quick Operations**
 ```bash
-# Start Orca streaming service
-cargo run -p dex-stream-orca
+# System Management
+./scripts/start_system.sh    # Start all services in proper sequence
+./scripts/shutdown_system.sh # Graceful shutdown with safety checks
 
-# Start normalizer service
-cargo run -p normalizer-service
+# Health Monitoring  
+curl -s localhost:8088/performance  # HotPath arbitrage metrics
+curl -s localhost:8085/metrics      # Main arbitrage engine status
+curl -s localhost:8091/health       # Monitoring service health
 ```
 
-## 📚 Documentation
+## 📚 **DEVELOPMENT DOCUMENTATION**
 
-**📖 [Full Documentation](docs/)** - Comprehensive guides and references
+**🏗️ [System Architecture](./COMPREHENSIVE_SYSTEM_ASSESSMENT.md)** - Complete system analysis and design
 
-**🎯 [Master Summary](docs/MASTER_SUMMARY.md)** - Single source of truth for the platform
+**⚡ [HotPath Design](./HOT_PATH_DESIGN.md)** - Zero-latency MEV detection architecture  
 
-**🏗️ [Architecture](docs/architecture/)** - System design and components
-
-**⚡ [Arbitrage Strategy & Architecture (AI-friendly)](docs/AI_ARBITRAGE_STRATEGY_2025-08-21.md)** - Hot-path rules, Edge model, coherency, scaling
-
-**👨‍💻 [Development](docs/development/)** - Setup and development guides
+**💼 [Development Context](./CLAUDE.md)** - Development session management and project context
 
 **🚀 [Deployment](docs/deployment/)** - Infrastructure and deployment
 

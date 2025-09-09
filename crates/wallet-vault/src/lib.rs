@@ -4,6 +4,7 @@ pub mod wallet;
 pub mod api;
 pub mod backup;
 pub mod error;
+pub mod auth;
 
 pub use vault::WalletVault;
 pub use wallet::{SecureWallet, WalletTier};

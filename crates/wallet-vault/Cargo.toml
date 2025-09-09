@@ -39,6 +39,10 @@ tower-http = { version = "0.5", features = ["cors", "trace"] }
 utoipa = { version = "4.1", features = ["axum_extras"] }
 utoipa-swagger-ui = { version = "6.0", features = ["axum"] }
 
+# Authentication
+jsonwebtoken = "9.2"
+axum-extra = { version = "0.9", features = ["typed-header"] }
+
 # Vault integrations (optional)
 reqwest = { version = "0.11", features = ["json", "rustls-tls"] }
 
@@ -48,3 +52,7 @@ flate2 = "1.0"
 
 [dev-dependencies]
 tempfile = "3.8"
+
+[[bin]]
+name = "wallet-vault"
+path = "src/main.rs"
