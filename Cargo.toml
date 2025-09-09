@@ -13,6 +13,7 @@ members = [
   "crates/edge-assembler",               # Real-time transaction processing
   
   # SUPPORTING SERVICES
+  "crates/monitoring-service",           # Performance monitoring and APIs
   "crates/dex-registry",                 # DEX metadata registry
   "crates/discovery-service",            # Service discovery
   "crates/token-registry-service",       # Token metadata
@@ -26,7 +27,7 @@ members = [
   "crates/normalizer-runtime",
   "crates/normalizer-codegen", 
   "crates/normalizer-generated",
-  "crates/mevana-engine",
+  "crates/mevana-engine", "crates/wallet-vault", "crates/resilience-framework", "crates/api-service", "crates/api-service-v2", "crates/system-orchestrator",
 ]
 
 # Only build these on plain `cargo build` / `cargo test`

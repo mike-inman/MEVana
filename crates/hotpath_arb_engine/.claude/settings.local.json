@@ -1,0 +1,11 @@
+{
+  "permissions": {
+    "allow": [
+      "Read(//Users/michaelinman/Repos/MEVana/**)",
+      "Bash(find:*)",
+      "Bash(cargo:*)"
+    ],
+    "deny": [],
+    "ask": []
+  }
+}

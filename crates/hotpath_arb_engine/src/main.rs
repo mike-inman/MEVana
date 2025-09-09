@@ -35,11 +35,24 @@ use executor_service::jito_optimizer::{JitoBundleResult, JitoBundleStatus, JitoO
 // WALLET SECURITY SYSTEM - Enterprise-grade multi-tier wallet management
 mod wallet_manager;
 mod wallet_security;
+mod async_history_buffer;
+mod history_api;
+mod redis_publisher;
+
 use solana_sdk::signature::Keypair;
 use solana_sdk::signer::Signer;
 use uuid::Uuid;
 use wallet_manager::generate_demo_wallets;
 use wallet_security::{SecurityPolicy, WalletSecurityManager, WalletSecurityTier};
+
+// ORDERBOOK HISTORY SYSTEM - Off-hotpath database tracking
+use async_history_buffer::{AsyncHistoryBuffer, ArbitrageOpportunity as HistoryArbitrageOpportunity, create_arbitrage_opportunity, create_execution_result};
+use hotpath_arb_engine::orderbook_tracker::{create_arbitrage_event, ARBITRAGE_DETECTED};
+use hotpath_arb_engine::smart_filter::{SmartFilter, SmartFilterConfig};
+use sqlx::PgPool;
+
+// REDIS METRICS PUBLISHING - Real-time metrics for monitoring service
+use redis_publisher::RedisMetricsPublisher;
 
 /// Multi-Geyser Stream Service
 /// Runs 3 parallel Geyser connections for ultra-low latency DEX monitoring
@@ -1235,17 +1248,51 @@ impl HotPathArbitrageEngine {
 
         self.arbitrage_signals_total.fetch_add(1, Ordering::Relaxed);
 
-        // LETHAL EXECUTION TRIGGER - If opportunity found, execute trade instantly
+        // SMART FILTER EXECUTION TRIGGER - If opportunity passes intelligent filtering, execute trade
         if let Some(ref opp) = opportunity {
-            if opp.profit_bps >= 25 {
-                // Execute only high-profit opportunities (>25 bps)
+            // Convert ArbitrageOpportunity to ArbitrageEvent for smart filter
+            let token_pair = format!("{}-{}", opp.token_a, opp.token_b);
+            let arbitrage_event = create_arbitrage_event(
+                &opp.signature,
+                opp.slot,
+                &opp.venue_a,
+                &opp.venue_b,
+                &token_pair,
+                opp.profit_bps.try_into().unwrap_or(0),  // Convert u64 to i32
+                1_000_000_000.0,  // Default amount (1 SOL in lamports) - this will be improved later
+                1_100_000_000.0,  // Default expected out based on profit_bps
+                500,            // Default execution time (500μs) - actual value from detection not available
+                true,           // is_profitable (basic detection already passed)
+                None,           // slippage not calculated yet
+            );
+            
+            // Use smart filter to make execution decision
+            let smart_result = SMART_FILTER.should_execute(&arbitrage_event).await;
+            
+            if smart_result.should_execute {
+                // Execute intelligent, high-confidence opportunities
                 if let Err(e) = self.trigger_lethal_execution(opp) {
                     error!("Failed to trigger lethal execution: {}", e);
                 } else {
                     info!(
-                        "⚔️  LETHAL EXECUTION TRIGGERED: profit_bps={}",
-                        opp.profit_bps
+                        "🧠 SMART EXECUTION TRIGGERED: profit_bps={}, net_profit={:.6} SOL, confidence={:.2}",
+                        opp.profit_bps, smart_result.estimated_net_profit_sol, smart_result.confidence_score
                     );
+                }
+                
+                // Record execution for smart filter learning
+                // Note: In production, record actual result after execution completes
+                tokio::spawn(async move {
+                    SMART_FILTER.record_result(&arbitrage_event, true, smart_result.estimated_net_profit_sol).await;
+                });
+            } else {
+                // Log filtered opportunities for paper trading visibility
+                if let Some(reason) = smart_result.rejection_reason {
+                    info!("📊 PAPER TRADE FILTERED: profit_bps={}, net_profit={:.6} SOL, reason: {}", 
+                          opp.profit_bps, smart_result.estimated_net_profit_sol, reason);
+                } else {
+                    info!("📊 PAPER TRADE FILTERED: profit_bps={}, net_profit={:.6} SOL, confidence={:.2} (below threshold)", 
+                          opp.profit_bps, smart_result.estimated_net_profit_sol, smart_result.confidence_score);
                 }
             }
         }
@@ -1762,6 +1809,22 @@ lazy_static::lazy_static! {
             Duration::from_secs(30), // Run analysis every 30 seconds
         ))
     };
+
+    // SMART FILTER - Profit-first opportunity filtering system
+    static ref SMART_FILTER: Arc<SmartFilter> = {
+        let config = SmartFilterConfig {
+            min_net_profit_sol: 0.001,    // $0.20 minimum profit
+            min_profit_bps: 15,           // 15 bps minimum
+            max_profit_bps: 100,          // Skip suspiciously high opportunities  
+            min_venue_success_rate: 0.0,  // Start with no filtering, learn over time
+            max_gas_budget_pct: 30.0,     // Don't spend more than 30% of profit on gas
+            max_concurrent_opportunities: 3,   // Skip if more than 3 similar opportunities recently
+            competition_lookback_ms: 5000,    // Look back 5 seconds for competition
+            learning_rate: 0.1,               // How fast to adapt to new data
+            min_samples_for_learning: 5,      // Minimum attempts before trusting success rates
+        };
+        Arc::new(SmartFilter::new(config))
+    };
 }
 
 impl Default for StreamConfig {
@@ -1892,7 +1955,7 @@ async fn create_geyser_subscription(config: &StreamConfig) -> Result<SubscribeRe
     Ok(request)
 }
 
-async fn process_geyser_stream(config: StreamConfig) -> Result<()> {
+async fn process_geyser_stream(config: StreamConfig, history_buffer: Option<Arc<AsyncHistoryBuffer>>) -> Result<()> {
     let stream_id = config.id;
     info!("🚀 Starting Geyser stream {}: {}", stream_id, config.name);
 
@@ -1903,7 +1966,7 @@ async fn process_geyser_stream(config: StreamConfig) -> Result<()> {
     STREAM_PARSED_RATE_COUNTERS.insert(stream_id, Arc::new(RateCounter::new(60))); // 1-minute window for parsed
 
     loop {
-        match run_stream_with_retry(&config).await {
+        match run_stream_with_retry(&config, history_buffer.clone()).await {
             Ok(_) => {
                 warn!("Stream {} ended normally, restarting...", stream_id);
             }
@@ -1918,7 +1981,7 @@ async fn process_geyser_stream(config: StreamConfig) -> Result<()> {
     }
 }
 
-async fn run_stream_with_retry(config: &StreamConfig) -> Result<()> {
+async fn run_stream_with_retry(config: &StreamConfig, history_buffer: Option<Arc<AsyncHistoryBuffer>>) -> Result<()> {
     let mut client = create_geyser_client(config).await?;
     let request = create_geyser_subscription(config).await?;
 
@@ -1976,10 +2039,41 @@ async fn run_stream_with_retry(config: &StreamConfig) -> Result<()> {
                             &opportunity.strategy,
                             opportunity.profit_bps as u32,
                         );
+
+                        // HOTPATH DISCARD PILE - Zero-impact push to lock-free queue for monitoring service
+                        let arb_event = create_arbitrage_event(
+                            &opportunity.signature[0..8].to_string(),
+                            365151886, // TODO: Extract actual slot from transaction_update
+                            &opportunity.venue_a,
+                            &opportunity.venue_b,
+                            &format!("{}-{}", opportunity.token_a, opportunity.token_b),
+                            opportunity.profit_bps as i32,
+                            0.0, // amount_in not available in this struct
+                            0.0, // amount_out not available in this struct
+                            arbitrage_time_us,
+                            true, // Assume success for detected opportunities
+                            None,
+                        );
+                        ARBITRAGE_DETECTED.push(arb_event.clone());
+
+                        // REDIS BRIDGE - Fire-and-forget push to Redis for monitoring service
+                        tokio::spawn(async move {
+                            if let Ok(json_str) = serde_json::to_string(&arb_event) {
+                                if let Ok(mut conn) = redis::Client::open("redis://localhost:6379")
+                                    .and_then(|client| client.get_connection()) {
+                                    let _: Result<(), _> = redis::cmd("LPUSH")
+                                        .arg("arbitrage:detected")
+                                        .arg(json_str)
+                                        .query(&mut conn);
+                                }
+                            }
+                        });
+
+                        // Opportunity will be recorded AFTER execution completes and memory is freed
                     }
 
                     let processing_result =
-                        process_transaction_update(config, transaction_update).await;
+                        process_transaction_update(&config, transaction_update).await;
                     let processing_time_us = start_time.elapsed().as_micros() as u64;
 
                     // PERFORMANCE ANALYTICS - Record transaction processing performance
@@ -2029,6 +2123,63 @@ async fn run_stream_with_retry(config: &StreamConfig) -> Result<()> {
                             0.6
                         };
                         PERFORMANCE_ANALYTICS.update_stream_health(stream_id, health_score);
+                    }
+
+                    // ORDERBOOK HISTORY - Record opportunity and execution result AFTER processing completes
+                    if let Some(ref opportunity) = arbitrage_opportunity {
+                        if let Some(ref buffer) = history_buffer {
+                            let timestamp_ns = SystemTime::now()
+                                .duration_since(UNIX_EPOCH)
+                                .unwrap_or_default()
+                                .as_nanos() as u64;
+                            
+                            // Record the arbitrage opportunity with execution result
+                            let token_pair = format!("{}/{}", opportunity.token_a, opportunity.token_b);
+                            let arb_opp = create_arbitrage_opportunity(
+                                &opportunity.signature[0..8].to_string(),
+                                opportunity.slot,
+                                timestamp_ns,
+                                &opportunity.venue_a,
+                                &opportunity.venue_b,
+                                &token_pair,
+                                opportunity.profit_bps as i32,
+                                0.0, // amount_in - not available in current struct
+                                0.0, // expected_amount_out - not available in current struct  
+                                arbitrage_time_us,
+                                &opportunity.strategy,
+                                serde_json::json!({
+                                    "signature": opportunity.signature,
+                                    "venue_a": opportunity.venue_a,
+                                    "venue_b": opportunity.venue_b,
+                                    "token_a": opportunity.token_a,
+                                    "token_b": opportunity.token_b,
+                                    "strategy": opportunity.strategy,
+                                    "slot": opportunity.slot,
+                                    "timestamp": opportunity.timestamp,
+                                    "processing_time_us": processing_time_us
+                                })
+                            );
+                            
+                            // Record execution result
+                            let exec_result = create_execution_result(
+                                &opportunity.signature[0..8].to_string(),
+                                timestamp_ns,
+                                true, // executed = true since we processed it
+                                Some(processing_result.is_ok()), // success based on processing result
+                                if processing_result.is_ok() { Some(opportunity.profit_bps as i32) } else { None },
+                                Some(processing_time_us),
+                                processing_result.as_ref().err().map(|e| e.to_string()).as_deref(),
+                                serde_json::json!({
+                                    "processing_time_us": processing_time_us,
+                                    "arbitrage_time_us": arbitrage_time_us,
+                                    "stream_id": stream_id
+                                })
+                            );
+                            
+                            // These calls are NON-BLOCKING and return immediately
+                            buffer.record_opportunity(arb_opp);
+                            buffer.record_execution(exec_result);
+                        }
                     }
 
                     match processing_result {
@@ -2215,7 +2366,7 @@ async fn start_simple_metrics_server(port: u16) {
     let bind_addr = format!("0.0.0.0:{}", port);
     info!("🔧 Starting simple metrics server on {}", bind_addr);
 
-    let app = Router::new()
+    let mut app = Router::new()
         .route("/metrics", get(serve_prometheus_metrics))
         .route("/performance", get(serve_performance_report))
         .route("/performance/json", get(serve_performance_json))
@@ -2228,6 +2379,8 @@ async fn start_simple_metrics_server(port: u16) {
         .route("/wallet/generate", post(generate_wallet_endpoint))
         .route("/wallet/list", get(list_wallets_endpoint));
 
+    // APIs moved to separate monitoring-service for clean core separation
+
     let listener = tokio::net::TcpListener::bind(&bind_addr).await.unwrap();
     axum::serve(listener, app).await.unwrap();
 }
@@ -2236,6 +2389,7 @@ async fn start_simple_metrics_server(port: u16) {
 async fn serve_performance_report() -> String {
     PERFORMANCE_ANALYTICS.generate_performance_report()
 }
+
 
 /// Serve performance metrics as JSON
 async fn serve_performance_json() -> axum::Json<PerformanceMetrics> {
@@ -2618,6 +2772,51 @@ async fn main() -> Result<()> {
         args.metrics_port
     );
 
+    // Initialize OrderBook History System (OFF-HOTPATH)
+    let history_buffer = if std::env::var("ORDERBOOK_HISTORY_ENABLED").unwrap_or_default() == "true" {
+        let database_url = std::env::var("DATABASE_URL")
+            .unwrap_or_else(|_| "postgresql://mev:mevpassword@localhost:5433/mevdb".to_string());
+        
+        match PgPool::connect(&database_url).await {
+            Ok(pool) => {
+                info!("📊 Connected to PostgreSQL for orderbook history");
+                let buffer = AsyncHistoryBuffer::new(pool, Some(10000), Some(5000), Some(1000)).await;
+                match buffer {
+                    Ok(buffer) => {
+                        info!("🔧 AsyncHistoryBuffer initialized for off-hotpath DB writes");
+                        Some(Arc::new(buffer))
+                    }
+                    Err(e) => {
+                        warn!("⚠️  Failed to create AsyncHistoryBuffer: {}", e);
+                        None
+                    }
+                }
+            }
+            Err(e) => {
+                warn!("⚠️  Failed to connect to PostgreSQL: {}", e);
+                info!("📊 OrderBook history disabled - continuing without DB tracking");
+                None
+            }
+        }
+    } else {
+        info!("📊 OrderBook history disabled by config");
+        None
+    };
+
+    // Initialize Redis metrics publisher for monitoring service
+    let redis_url = std::env::var("REDIS_URL").ok();
+    let redis_publisher = match RedisMetricsPublisher::new(redis_url).await {
+        Ok(publisher) => {
+            info!("✅ Redis metrics publisher initialized for monitoring service");
+            Some(Arc::new(publisher))
+        }
+        Err(e) => {
+            warn!("⚠️  Failed to initialize Redis metrics publisher: {}", e);
+            info!("📊 Monitoring service integration disabled - continuing without Redis");
+            None
+        }
+    };
+
     info!("🚀 Starting Multi-Geyser Streams Service");
     info!("📡 Endpoint: {}", args.geyser_endpoint);
     info!("📊 Metrics port: {}", args.metrics_port);
@@ -2667,8 +2866,9 @@ async fn main() -> Result<()> {
     let stream_handles: Vec<_> = stream_configs
         .into_iter()
         .map(|config| {
+            let history_buffer_clone = history_buffer.clone();
             tokio::spawn(async move {
-                if let Err(e) = process_geyser_stream(config.clone()).await {
+                if let Err(e) = process_geyser_stream(config.clone(), history_buffer_clone).await {
                     error!("Stream {} terminated with error: {}", config.id, e);
                 }
             })
