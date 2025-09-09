@@ -1,9 +1,0 @@
-program_name: meteora
-program_id: "cpamdpZCGKUy5JxQXB4dcpGPiikHawvSWAd6mEn1sGG"  # example
-swap_instructions:
-  - name: "swap"
-    kind: "CPMM"
-    pool_account_roles: ["pool", "lp_vault"]
-    user_authority_roles: ["owner", "authority"]
-    token_accounts_roles_in:  ["src_token_account", "user_input"]
-    token_accounts_roles_out: ["dst_token_account", "user_output"]
