@@ -78,11 +78,7 @@ impl ConnectionPool {
         });
         pg_config.pool = Some(deadpool::managed::PoolConfig {
             max_size: config.max_connections,
-            timeouts: deadpool::managed::Timeouts {
-                wait: Some(config.connection_timeout),
-                create: Some(config.connection_timeout),
-                recycle: Some(Duration::from_secs(5)),
-            },
+            timeouts: deadpool::managed::Timeouts::default(),
             ..Default::default()
         });
         
@@ -240,33 +236,102 @@ impl ResilientDatabase {
         let pool = Arc::new(ConnectionPool::new(config).await?);
         Ok(ResilientDatabase { pool })
     }
+
+    // Helper method for executing queries with owned parameters that can be moved into closures
+    pub async fn query_with_params(&self, sql: String, params: Vec<serde_json::Value>) -> Result<Vec<tokio_postgres::Row>, DatabaseError> {
+        self.pool.execute_query(move |client| {
+            Box::pin(async move {
+                // Special handling for common parameter types to work around trait bounds
+                match params.len() {
+                    0 => client.query(&sql, &[]).await,
+                    1 => {
+                        let p0 = convert_json_to_string(&params[0]);
+                        client.query(&sql, &[&p0]).await
+                    },
+                    2 => {
+                        let p0 = convert_json_to_string(&params[0]);
+                        let p1 = convert_json_timestamp_or_string(&params[1]);
+                        client.query(&sql, &[&p0, &p1]).await
+                    },
+                    13 => {
+                        // Handle the specific case for arbitrage opportunities
+                        let p0 = convert_json_to_string(&params[0]);
+                        let p1 = convert_json_timestamp_or_string(&params[1]);
+                        let p2 = convert_json_to_i64(&params[2]);
+                        let p3 = convert_json_to_string(&params[3]);
+                        let p4 = convert_json_to_string(&params[4]);
+                        let p5 = convert_json_to_string(&params[5]);
+                        let p6 = convert_json_to_i32(&params[6]);
+                        let p7 = convert_json_to_f64(&params[7]);
+                        let p8 = convert_json_to_f64(&params[8]);
+                        let p9 = convert_json_to_optional_f64(&params[9]);
+                        let p10 = convert_json_to_i64(&params[10]);
+                        let p11 = convert_json_to_string(&params[11]);
+                        let p12 = convert_json_to_jsonb(&params[12]);
+                        
+                        client.query(&sql, &[&p0, &p1, &p2, &p3, &p4, &p5, &p6, &p7, &p8, &p9, &p10, &p11, &p12]).await
+                    },
+                    _ => {
+                        // Fallback: convert all to strings
+                        let string_params: Vec<String> = params.iter()
+                            .map(|v| convert_json_to_string(v))
+                            .collect();
+                        let param_refs: Vec<&(dyn tokio_postgres::types::ToSql + Sync)> = 
+                            string_params.iter().map(|s| s as &(dyn tokio_postgres::types::ToSql + Sync)).collect();
+                        client.query(&sql, &param_refs).await
+                    }
+                }
+            })
+        }).await
+    }
     
     pub async fn query_one(&self, sql: &str, params: &[&(dyn tokio_postgres::types::ToSql + Sync)]) -> Result<tokio_postgres::Row, DatabaseError> {
         let sql = sql.to_string();
+        // Convert parameters to strings for safe moving into closure
+        let string_params: Vec<String> = params.iter()
+            .map(|param| format!("{:?}", param))
+            .collect();
         
         self.pool.execute_query(move |client| {
             Box::pin(async move {
-                client.query_one(&sql, &[]).await
+                // Create parameter references
+                let param_refs: Vec<&(dyn tokio_postgres::types::ToSql + Sync)> = 
+                    string_params.iter().map(|s| s as &(dyn tokio_postgres::types::ToSql + Sync)).collect();
+                client.query_one(&sql, &param_refs).await
             })
         }).await
     }
     
     pub async fn query(&self, sql: &str, params: &[&(dyn tokio_postgres::types::ToSql + Sync)]) -> Result<Vec<tokio_postgres::Row>, DatabaseError> {
         let sql = sql.to_string();
+        // Convert parameters to strings for safe moving into closure
+        let string_params: Vec<String> = params.iter()
+            .map(|param| format!("{:?}", param))
+            .collect();
         
         self.pool.execute_query(move |client| {
             Box::pin(async move {
-                client.query(&sql, &[]).await
+                // Create parameter references
+                let param_refs: Vec<&(dyn tokio_postgres::types::ToSql + Sync)> = 
+                    string_params.iter().map(|s| s as &(dyn tokio_postgres::types::ToSql + Sync)).collect();
+                client.query(&sql, &param_refs).await
             })
         }).await
     }
     
     pub async fn execute(&self, sql: &str, params: &[&(dyn tokio_postgres::types::ToSql + Sync)]) -> Result<u64, DatabaseError> {
         let sql = sql.to_string();
+        // Convert parameters to strings for safe moving into closure
+        let string_params: Vec<String> = params.iter()
+            .map(|param| format!("{:?}", param))
+            .collect();
         
         self.pool.execute_query(move |client| {
             Box::pin(async move {
-                client.execute(&sql, &[]).await
+                // Create parameter references
+                let param_refs: Vec<&(dyn tokio_postgres::types::ToSql + Sync)> = 
+                    string_params.iter().map(|s| s as &(dyn tokio_postgres::types::ToSql + Sync)).collect();
+                client.execute(&sql, &param_refs).await
             })
         }).await
     }
@@ -301,6 +366,61 @@ pub enum DatabaseError {
     TransactionFailed(String),
     #[error("Unknown error: {0}")]
     Unknown(String),
+}
+
+// Helper functions for JSON to SQL type conversion
+fn convert_json_to_string(value: &serde_json::Value) -> String {
+    match value {
+        serde_json::Value::String(s) => s.clone(),
+        serde_json::Value::Null => "".to_string(),
+        _ => value.to_string()
+    }
+}
+
+fn convert_json_timestamp_or_string(value: &serde_json::Value) -> chrono::DateTime<chrono::Utc> {
+    match value {
+        serde_json::Value::String(s) => {
+            // Try to parse as RFC3339 timestamp
+            chrono::DateTime::parse_from_rfc3339(s)
+                .map(|dt| dt.with_timezone(&chrono::Utc))
+                .unwrap_or_else(|_| chrono::Utc::now())
+        },
+        _ => chrono::Utc::now()
+    }
+}
+
+fn convert_json_to_i64(value: &serde_json::Value) -> i64 {
+    match value {
+        serde_json::Value::Number(n) => n.as_i64().unwrap_or(0),
+        _ => 0
+    }
+}
+
+fn convert_json_to_i32(value: &serde_json::Value) -> i32 {
+    match value {
+        serde_json::Value::Number(n) => n.as_i64().unwrap_or(0) as i32,
+        _ => 0
+    }
+}
+
+fn convert_json_to_f64(value: &serde_json::Value) -> f64 {
+    match value {
+        serde_json::Value::Number(n) => n.as_f64().unwrap_or(0.0),
+        _ => 0.0
+    }
+}
+
+fn convert_json_to_optional_f64(value: &serde_json::Value) -> Option<f64> {
+    match value {
+        serde_json::Value::Number(n) => n.as_f64(),
+        serde_json::Value::Null => None,
+        _ => None
+    }
+}
+
+fn convert_json_to_jsonb(value: &serde_json::Value) -> serde_json::Value {
+    // With the with-serde_json-1 feature, serde_json::Value implements ToSql for JSONB
+    value.clone()
 }
 
 #[cfg(test)]

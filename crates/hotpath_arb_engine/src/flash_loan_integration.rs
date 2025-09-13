@@ -1,5 +1,5 @@
 use anyhow::Result;
-use log::{info, warn, error};
+use log::{info, warn};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -7,11 +7,16 @@ use tokio::sync::RwLock;
 use solana_sdk::{
     pubkey::Pubkey,
     instruction::Instruction,
-    transaction::Transaction,
     signature::{Keypair, Signer},
 };
 
 use crate::live_trading_config::LiveTradingConfig;
+use crate::marginfi_instructions::{
+    create_marginfi_flash_loan_instruction,
+    create_marginfi_flash_loan_repay_instruction,
+    calculate_marginfi_flash_loan_fee,
+    validate_marginfi_flash_loan_preconditions,
+};
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Hash)]
 pub enum FlashLoanProvider {
@@ -173,7 +178,10 @@ impl HotpathFlashLoanManager {
         let is_available = fastrand::f64() < 0.90;
         
         let fee_bps = provider.typical_fee_bps();
-        let estimated_cost_lamports = (amount_lamports as f64 * fee_bps as f64 / 10_000.0) as u64;
+        let estimated_cost_lamports = match provider {
+            FlashLoanProvider::Marginfi => calculate_marginfi_flash_loan_fee(amount_lamports),
+            _ => (amount_lamports as f64 * fee_bps as f64 / 10_000.0) as u64,
+        };
 
         FlashLoanQuote {
             provider,
@@ -185,22 +193,40 @@ impl HotpathFlashLoanManager {
         }
     }
 
-    /// Create flash loan instructions (simplified - in production would use real protocol calls)
+    /// Create real flash loan instructions for the specific protocol
     async fn create_flash_loan_instructions(
         &self,
         quote: &FlashLoanQuote,
         payer: &Keypair,
     ) -> Result<Vec<Instruction>> {
-        // This would create real flash loan instructions for the specific protocol
-        // For now, return placeholder instructions
         info!("Creating flash loan instructions for {:?}, amount: {} lamports", 
               quote.provider, quote.available_amount);
         
-        // In real implementation, would create protocol-specific instructions
-        Ok(vec![]) // Placeholder
+        match quote.provider {
+            FlashLoanProvider::Marginfi => {
+                // Validate preconditions
+                validate_marginfi_flash_loan_preconditions(
+                    quote.available_amount,
+                    (self.config.max_flash_loan_amount_sol * 1_000_000_000.0) as u64,
+                )?;
+                
+                // Create real Marginfi flash loan instruction
+                let instruction = create_marginfi_flash_loan_instruction(
+                    &payer.pubkey(),
+                    quote.available_amount,
+                )?;
+                
+                Ok(vec![instruction])
+            }
+            _ => {
+                // For other providers, implement similar real protocol calls
+                warn!("Provider {:?} not yet implemented with real instructions", quote.provider);
+                Ok(vec![])
+            }
+        }
     }
 
-    /// Create repay instructions
+    /// Create real repay instructions for the specific protocol
     async fn create_repay_instructions(
         &self,
         quote: &FlashLoanQuote,
@@ -211,8 +237,22 @@ impl HotpathFlashLoanManager {
         info!("Creating repay instructions for {:?}, repay amount: {} lamports", 
               quote.provider, repay_amount);
         
-        // In real implementation, would create protocol-specific repay instructions
-        Ok(vec![]) // Placeholder
+        match quote.provider {
+            FlashLoanProvider::Marginfi => {
+                // Create real Marginfi flash loan repay instruction
+                let instruction = create_marginfi_flash_loan_repay_instruction(
+                    &payer.pubkey(),
+                    repay_amount,
+                )?;
+                
+                Ok(vec![instruction])
+            }
+            _ => {
+                // For other providers, implement similar real protocol calls
+                warn!("Provider {:?} repay not yet implemented with real instructions", quote.provider);
+                Ok(vec![])
+            }
+        }
     }
 
     /// Record flash loan execution result for provider performance tracking

@@ -233,8 +233,8 @@ impl HealthChecker {
     }
 
     async fn check_postgres(&self) -> Result<()> {
-        let postgres_url = std::env::var("POSTGRES_URL")
-            .unwrap_or_else(|_| "postgresql://mevana:mevana_pass@localhost:5432/mevana_db".to_string());
+        let postgres_url = std::env::var("DATABASE_URL")
+            .context("DATABASE_URL environment variable is required - no hardcoded fallbacks allowed")?;
         
         let (client, connection) = tokio_postgres::connect(&postgres_url, tokio_postgres::NoTls).await?;
         

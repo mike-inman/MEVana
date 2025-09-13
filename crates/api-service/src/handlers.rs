@@ -4,7 +4,6 @@ use axum::{
     response::IntoResponse,
     Json,
 };
-use chrono::{DateTime, Utc};
 use std::sync::Arc;
 use uuid::Uuid;
 
@@ -93,6 +92,39 @@ pub async fn get_wallet_by_id(
 // ARBITRAGE HANDLERS
 // ============================================================================
 
+/// Create a new arbitrage opportunity
+#[utoipa::path(
+    post,
+    path = "/api/v1/arbitrage/opportunities",
+    request_body = CreateArbitrageRequest,
+    responses(
+        (status = 201, description = "Arbitrage opportunity created", body = ApiResponse<ArbitrageOpportunityRecord>),
+        (status = 400, description = "Invalid request", body = ErrorResponse),
+        (status = 500, description = "Internal server error", body = ErrorResponse)
+    ),
+    tag = "arbitrage"
+)]
+pub async fn create_arbitrage_opportunity(
+    State(db): State<AppState>,
+    Json(request): Json<CreateArbitrageRequest>,
+) -> impl IntoResponse {
+    // Data validation before database insertion
+    if let Err(validation_error) = validate_arbitrage_request(&request) {
+        return Err((
+            StatusCode::BAD_REQUEST,
+            Json(ErrorResponse::new("VALIDATION_ERROR", &validation_error)),
+        ));
+    }
+
+    match db.create_arbitrage_opportunity(request).await {
+        Ok(created_opportunity) => Ok((StatusCode::CREATED, Json(ApiResponse::success(created_opportunity)))),
+        Err(e) => Err((
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(ErrorResponse::new("DATABASE_ERROR", &e.to_string())),
+        )),
+    }
+}
+
 /// Get arbitrage opportunities with filtering
 #[utoipa::path(
     get,
@@ -149,6 +181,11 @@ pub async fn get_arbitrage_opportunity_by_id(
     State(db): State<AppState>,
     Path(opportunity_id): Path<String>,
 ) -> impl IntoResponse {
+    let opportunity_id = match opportunity_id.parse::<u64>() {
+        Ok(id) => id,
+        Err(_) => return Err((StatusCode::BAD_REQUEST, Json(ErrorResponse::new("INVALID_ID", "Invalid opportunity ID format")))),
+    };
+    
     match db.get_arbitrage_opportunity_by_id(opportunity_id).await {
         Ok(Some(opportunity)) => Ok(Json(ApiResponse::success(opportunity))),
         Ok(None) => Err((
@@ -373,9 +410,9 @@ pub async fn get_token_by_mint(
     ),
     tag = "statistics"
 )]
-pub async fn get_venue_statistics(State(_db): State<AppState>) -> impl IntoResponse {
+pub async fn get_venue_statistics(State(_db): State<AppState>) -> Result<Json<ApiResponse<Vec<VenueStatistics>>>, StatusCode> {
     // Placeholder implementation
-    let venues = vec![];
+    let venues: Vec<VenueStatistics> = vec![];
     Ok(Json(ApiResponse::success(venues)))
 }
 
@@ -389,9 +426,9 @@ pub async fn get_venue_statistics(State(_db): State<AppState>) -> impl IntoRespo
     ),
     tag = "statistics"
 )]
-pub async fn get_token_pair_statistics(State(_db): State<AppState>) -> impl IntoResponse {
+pub async fn get_token_pair_statistics(State(_db): State<AppState>) -> Result<Json<ApiResponse<Vec<TokenPairStatistics>>>, StatusCode> {
     // Placeholder implementation
-    let pairs = vec![];
+    let pairs: Vec<TokenPairStatistics> = vec![];
     Ok(Json(ApiResponse::success(pairs)))
 }
 
@@ -405,8 +442,288 @@ pub async fn get_token_pair_statistics(State(_db): State<AppState>) -> impl Into
     ),
     tag = "statistics"
 )]
-pub async fn get_wallet_performance_statistics(State(_db): State<AppState>) -> impl IntoResponse {
+pub async fn get_wallet_performance_statistics(State(_db): State<AppState>) -> Result<Json<ApiResponse<Vec<WalletPerformanceStatistics>>>, StatusCode> {
     // Placeholder implementation
-    let stats = vec![];
+    let stats: Vec<WalletPerformanceStatistics> = vec![];
     Ok(Json(ApiResponse::success(stats)))
+}
+
+// ============================================================================
+// SMART FILTER HANDLERS
+// ============================================================================
+
+/// Get current Smart Filter configuration
+#[utoipa::path(
+    get,
+    path = "/api/v1/smart-filter/config",
+    responses(
+        (status = 200, description = "Current Smart Filter configuration", body = ApiResponse<SmartFilterConfig>),
+        (status = 500, description = "Internal server error", body = ErrorResponse)
+    ),
+    tag = "smart-filter"
+)]
+pub async fn get_smart_filter_config(State(db): State<AppState>) -> impl IntoResponse {
+    match db.get_smart_filter_config().await {
+        Ok(config) => Ok(Json(ApiResponse::success(config))),
+        Err(e) => Err((
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(ErrorResponse::new("DATABASE_ERROR", &e.to_string())),
+        )),
+    }
+}
+
+/// Update Smart Filter configuration parameter
+#[utoipa::path(
+    post,
+    path = "/api/v1/smart-filter/config",
+    request_body = UpdateSmartFilterConfigRequest,
+    responses(
+        (status = 200, description = "Configuration updated successfully", body = ApiResponse<SmartFilterConfigUpdateResponse>),
+        (status = 400, description = "Invalid request", body = ErrorResponse),
+        (status = 500, description = "Internal server error", body = ErrorResponse)
+    ),
+    tag = "smart-filter"
+)]
+pub async fn update_smart_filter_config(
+    State(db): State<AppState>,
+    Json(request): Json<UpdateSmartFilterConfigRequest>,
+) -> impl IntoResponse {
+    // Validate the parameter and value
+    if let Err(validation_error) = validate_smart_filter_config(&request) {
+        return Err((
+            StatusCode::BAD_REQUEST,
+            Json(ErrorResponse::new("VALIDATION_ERROR", &validation_error)),
+        ));
+    }
+
+    match db.update_smart_filter_config(request).await {
+        Ok(update_response) => Ok(Json(ApiResponse::success(update_response))),
+        Err(e) => Err((
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(ErrorResponse::new("DATABASE_ERROR", &e.to_string())),
+        )),
+    }
+}
+
+/// Get Smart Filter performance snapshots
+#[utoipa::path(
+    get,
+    path = "/api/v1/smart-filter/performance",
+    params(SmartFilterPerformanceQueryParams),
+    responses(
+        (status = 200, description = "Smart Filter performance data", body = PaginatedResponse<SmartFilterPerformanceSnapshot>),
+        (status = 500, description = "Internal server error", body = ErrorResponse)
+    ),
+    tag = "smart-filter"
+)]
+pub async fn get_smart_filter_performance(
+    State(db): State<AppState>,
+    Query(params): Query<SmartFilterPerformanceQueryParams>,
+) -> impl IntoResponse {
+    match db.get_smart_filter_performance(params).await {
+        Ok(snapshots) => {
+            let pagination = PaginationInfo {
+                offset: snapshots.len() as i32,
+                limit: 100,
+                total: None,
+                has_more: snapshots.len() == 100,
+            };
+
+            let response = PaginatedResponse {
+                data: snapshots,
+                pagination,
+            };
+
+            Ok(Json(ApiResponse::success(response)))
+        }
+        Err(e) => Err((
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(ErrorResponse::new("DATABASE_ERROR", &e.to_string())),
+        )),
+    }
+}
+
+/// Get Smart Filter configuration change history
+#[utoipa::path(
+    get,
+    path = "/api/v1/smart-filter/config/history",
+    params(SmartFilterConfigHistoryQueryParams),
+    responses(
+        (status = 200, description = "Configuration change history", body = PaginatedResponse<SmartFilterConfigHistoryRecord>),
+        (status = 500, description = "Internal server error", body = ErrorResponse)
+    ),
+    tag = "smart-filter"
+)]
+pub async fn get_smart_filter_config_history(
+    State(db): State<AppState>,
+    Query(params): Query<SmartFilterConfigHistoryQueryParams>,
+) -> impl IntoResponse {
+    match db.get_smart_filter_config_history(params).await {
+        Ok(history) => {
+            let pagination = PaginationInfo {
+                offset: history.len() as i32,
+                limit: 100,
+                total: None,
+                has_more: history.len() == 100,
+            };
+
+            let response = PaginatedResponse {
+                data: history,
+                pagination,
+            };
+
+            Ok(Json(ApiResponse::success(response)))
+        }
+        Err(e) => Err((
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(ErrorResponse::new("DATABASE_ERROR", &e.to_string())),
+        )),
+    }
+}
+
+// ============================================================================
+// VALIDATION FUNCTIONS
+// ============================================================================
+
+/// Validates arbitrage opportunity request data before database insertion
+fn validate_arbitrage_request(request: &CreateArbitrageRequest) -> Result<(), String> {
+    // Validate opportunity_id (should be non-empty)
+    if request.opportunity_id.trim().is_empty() {
+        return Err("opportunity_id cannot be empty".to_string());
+    }
+
+    // Validate venue names (should be non-empty)
+    if request.venue_sell.trim().is_empty() {
+        return Err("venue_sell cannot be empty".to_string());
+    }
+    if request.venue_buy.trim().is_empty() {
+        return Err("venue_buy cannot be empty".to_string());
+    }
+
+    // Validate token_pair (should be non-empty)
+    if request.token_pair.trim().is_empty() {
+        return Err("token_pair cannot be empty".to_string());
+    }
+
+    // Validate strategy_type (should be non-empty)
+    if request.strategy_type.trim().is_empty() {
+        return Err("strategy_type cannot be empty".to_string());
+    }
+
+    // Validate numeric fields
+    if request.amount_in <= 0.0 {
+        return Err("amount_in must be positive".to_string());
+    }
+    if !request.amount_in.is_finite() {
+        return Err("amount_in must be a finite number".to_string());
+    }
+
+    if request.expected_amount_out < 0.0 {
+        return Err("expected_amount_out cannot be negative".to_string());
+    }
+    if !request.expected_amount_out.is_finite() {
+        return Err("expected_amount_out must be a finite number".to_string());
+    }
+
+    // Validate optional price_impact_pct if present
+    if let Some(price_impact) = request.price_impact_pct {
+        if !price_impact.is_finite() {
+            return Err("price_impact_pct must be a finite number".to_string());
+        }
+        if price_impact < -100.0 || price_impact > 100.0 {
+            return Err("price_impact_pct must be between -100% and 100%".to_string());
+        }
+    }
+
+    // Validate slot if present (should be reasonable)
+    if let Some(slot) = request.slot {
+        if slot == 0 {
+            return Err("slot should not be zero".to_string());
+        }
+    }
+
+    // Validate detection_time_us if present (should be reasonable)
+    if let Some(detection_time) = request.detection_time_us {
+        if detection_time > 10_000_000 { // 10 seconds in microseconds
+            return Err("detection_time_us seems unreasonably high (>10s)".to_string());
+        }
+    }
+
+    // Validate profit_bps (should be reasonable)
+    if request.profit_bps < -10000 || request.profit_bps > 10000 {
+        return Err("profit_bps should be between -10000 and 10000 (i.e., -100% to 100%)".to_string());
+    }
+
+    Ok(())
+}
+
+/// Validates Smart Filter configuration update request
+fn validate_smart_filter_config(request: &UpdateSmartFilterConfigRequest) -> Result<(), String> {
+    // Validate parameter name
+    let valid_parameters = [
+        "min_profit_bps", "max_profit_bps", "min_net_profit_sol",
+        "min_venue_success_rate", "max_gas_budget_pct", "max_concurrent_opportunities",
+        "competition_lookback_ms", "learning_rate", "min_samples_for_learning"
+    ];
+    
+    if !valid_parameters.contains(&request.parameter.as_str()) {
+        return Err(format!("Invalid parameter name: {}", request.parameter));
+    }
+
+    // Validate parameter-specific values
+    match request.parameter.as_str() {
+        "min_profit_bps" => {
+            if request.value < 0.0 || request.value > 10000.0 {
+                return Err("min_profit_bps must be between 0 and 10000".to_string());
+            }
+        }
+        "max_profit_bps" => {
+            if request.value < 0.0 || request.value > 10000.0 {
+                return Err("max_profit_bps must be between 0 and 10000".to_string());
+            }
+        }
+        "min_net_profit_sol" => {
+            if request.value < 0.0 || request.value > 10.0 {
+                return Err("min_net_profit_sol must be between 0 and 10 SOL".to_string());
+            }
+        }
+        "min_venue_success_rate" => {
+            if request.value < 0.0 || request.value > 100.0 {
+                return Err("min_venue_success_rate must be between 0 and 100".to_string());
+            }
+        }
+        "max_gas_budget_pct" => {
+            if request.value < 0.0 || request.value > 100.0 {
+                return Err("max_gas_budget_pct must be between 0 and 100".to_string());
+            }
+        }
+        "max_concurrent_opportunities" => {
+            if request.value < 1.0 || request.value > 1000.0 || request.value.fract() != 0.0 {
+                return Err("max_concurrent_opportunities must be an integer between 1 and 1000".to_string());
+            }
+        }
+        "competition_lookback_ms" => {
+            if request.value < 100.0 || request.value > 60000.0 || request.value.fract() != 0.0 {
+                return Err("competition_lookback_ms must be an integer between 100 and 60000".to_string());
+            }
+        }
+        "learning_rate" => {
+            if request.value < 0.001 || request.value > 1.0 {
+                return Err("learning_rate must be between 0.001 and 1.0".to_string());
+            }
+        }
+        "min_samples_for_learning" => {
+            if request.value < 1.0 || request.value > 10000.0 || request.value.fract() != 0.0 {
+                return Err("min_samples_for_learning must be an integer between 1 and 10000".to_string());
+            }
+        }
+        _ => return Err("Unknown parameter".to_string()),
+    }
+
+    // Validate applied_by field
+    if request.applied_by.trim().is_empty() {
+        return Err("applied_by cannot be empty".to_string());
+    }
+
+    Ok(())
 }

@@ -1,6 +1,6 @@
 use chrono::{DateTime, Utc, NaiveDate};
 use serde::{Deserialize, Serialize};
-use utoipa::ToSchema;
+use utoipa::{ToSchema, IntoParams};
 use uuid::Uuid;
 
 // ============================================================================
@@ -22,7 +22,7 @@ pub struct WalletRecord {
     pub total_volume_lamports: u64,
 }
 
-#[derive(Debug, Deserialize, ToSchema)]
+#[derive(Debug, Deserialize, ToSchema, utoipa::IntoParams)]
 pub struct WalletQueryParams {
     pub tier: Option<String>,
     pub is_active: Option<bool>,
@@ -53,7 +53,7 @@ pub struct ArbitrageOpportunityRecord {
     pub created_at: DateTime<Utc>,
 }
 
-#[derive(Debug, Deserialize, ToSchema)]
+#[derive(Debug, Deserialize, ToSchema, utoipa::IntoParams)]
 pub struct ArbitrageQueryParams {
     pub venue: Option<String>,
     pub token_pair: Option<String>,
@@ -63,6 +63,22 @@ pub struct ArbitrageQueryParams {
     pub to_time: Option<DateTime<Utc>>,
     pub limit: Option<i32>,
     pub offset: Option<i32>,
+}
+
+#[derive(Debug, Deserialize, ToSchema)]
+pub struct CreateArbitrageRequest {
+    pub opportunity_id: String,
+    pub slot: Option<u64>,
+    pub venue_sell: String,
+    pub venue_buy: String,
+    pub token_pair: String,
+    pub profit_bps: i32,
+    pub amount_in: f64,
+    pub expected_amount_out: f64,
+    pub price_impact_pct: Option<f64>,
+    pub detection_time_us: Option<u64>,
+    pub strategy_type: String,
+    pub raw_opportunity: serde_json::Value,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
@@ -84,7 +100,7 @@ pub struct ExecutionResultRecord {
     pub created_at: DateTime<Utc>,
 }
 
-#[derive(Debug, Deserialize, ToSchema)]
+#[derive(Debug, Deserialize, ToSchema, utoipa::IntoParams)]
 pub struct ExecutionQueryParams {
     pub opportunity_id: Option<String>,
     pub wallet_id: Option<Uuid>,
@@ -116,7 +132,7 @@ pub struct PerformanceMetricRecord {
     pub created_at: DateTime<Utc>,
 }
 
-#[derive(Debug, Deserialize, ToSchema)]
+#[derive(Debug, Deserialize, ToSchema, utoipa::IntoParams)]
 pub struct MetricsQueryParams {
     pub from_time: Option<DateTime<Utc>>,
     pub to_time: Option<DateTime<Utc>>,
@@ -146,7 +162,7 @@ pub struct TokenRecord {
     pub updated_at: DateTime<Utc>,
 }
 
-#[derive(Debug, Deserialize, ToSchema)]
+#[derive(Debug, Deserialize, ToSchema, utoipa::IntoParams)]
 pub struct TokenQueryParams {
     pub symbol: Option<String>,
     pub is_verified: Option<bool>,
@@ -179,7 +195,7 @@ pub struct TradingPerformanceRecord {
     pub active_wallets: u64,
 }
 
-#[derive(Debug, Deserialize, ToSchema)]
+#[derive(Debug, Deserialize, ToSchema, utoipa::IntoParams)]
 pub struct TradingPerformanceQueryParams {
     pub days: Option<i32>,
 }
@@ -326,6 +342,93 @@ pub struct WalletPerformanceStatistics {
     pub total_profit_bps: Option<i64>,
     pub avg_execution_time_ms: Option<f64>,
     pub success_rate: f64,
+}
+
+// ============================================================================
+// SMART FILTER MODELS
+// ============================================================================
+
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+pub struct SmartFilterConfig {
+    pub min_profit_bps: f64,
+    pub max_profit_bps: f64,
+    pub min_net_profit_sol: f64,
+    pub min_venue_success_rate: f64,
+    pub max_gas_budget_pct: f64,
+    pub max_concurrent_opportunities: f64,
+    pub competition_lookback_ms: f64,
+    pub learning_rate: f64,
+    pub min_samples_for_learning: f64,
+    pub last_updated: DateTime<Utc>,
+    pub updated_by: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+pub struct UpdateSmartFilterConfigRequest {
+    pub parameter: String,
+    pub value: f64,
+    pub applied_by: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+pub struct SmartFilterConfigUpdateResponse {
+    pub parameter: String,
+    pub old_value: Option<f64>,
+    pub new_value: f64,
+    pub config_change_id: i32,
+    pub timestamp: DateTime<Utc>,
+    pub applied_by: String,
+    pub success: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+pub struct SmartFilterPerformanceSnapshot {
+    pub id: i32,
+    pub timestamp: DateTime<Utc>,
+    pub opportunities_detected: i32,
+    pub opportunities_executed: i32,
+    pub total_profit_captured_bps: i64,
+    pub success_rate: f64,
+    pub avg_processing_time_us: i32,
+    pub total_opportunities: i32,
+    pub passed_profit_filter: i32,
+    pub passed_gas_filter: i32,
+    pub passed_competition_filter: i32,
+    pub rejected_low_profit: i32,
+    pub rejected_high_gas: i32,
+    pub rejected_suspicious: i32,
+    pub rejected_low_success_rate: i32,
+    pub rejected_competition: i32,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+pub struct SmartFilterConfigHistoryRecord {
+    pub id: i32,
+    pub timestamp: DateTime<Utc>,
+    pub parameter_name: String,
+    pub old_value: Option<serde_json::Value>,
+    pub new_value: serde_json::Value,
+    pub applied_by: String,
+    pub performance_before: Option<serde_json::Value>,
+    pub performance_after: Option<serde_json::Value>,
+}
+
+#[derive(Debug, Deserialize, ToSchema, IntoParams)]
+pub struct SmartFilterPerformanceQueryParams {
+    pub limit: Option<i32>,
+    pub offset: Option<i32>,
+    pub from_timestamp: Option<DateTime<Utc>>,
+    pub to_timestamp: Option<DateTime<Utc>>,
+}
+
+#[derive(Debug, Deserialize, ToSchema, IntoParams)]
+pub struct SmartFilterConfigHistoryQueryParams {
+    pub limit: Option<i32>,
+    pub offset: Option<i32>,
+    pub parameter_name: Option<String>,
+    pub applied_by: Option<String>,
+    pub from_timestamp: Option<DateTime<Utc>>,
+    pub to_timestamp: Option<DateTime<Utc>>,
 }
 
 // ============================================================================

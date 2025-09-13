@@ -1,0 +1,147 @@
+Key Findings
+
+  Current Data Flow Status
+
+  - ✅ Infrastructure: Docker-based system with Postgres, Kafka, Redis is properly configured
+  - ✅ Queue System: AsyncHistoryBuffer is implemented for off-hotpath database writes
+  - ✅ Database Schema: arbitrage_opportunities table exists and is properly structured
+  - ❌ Data Gap: Opportunities are being filtered out by overly restrictive thresholds
+
+  Primary Issue: Aggressive Filtering Preventing Data Flow
+
+  The main culprit is the SmartFilter in hotpath_arb_engine/src/smart_filter.rs. Current default settings are:
+
+  min_profit_bps: 15,           // 15 bps minimum (very high)
+  min_net_profit_sol: 0.001,   // $0.20 minimum profit (high) 
+  max_profit_bps: 100,         // Rejects "suspicious" opportunities
+  min_venue_success_rate: 0.0, // Starts permissive but becomes restrictive
+
+  Secondary Issues
+
+  1. Synthetic opportunity detection creates placeholder data but may not reflect real market conditions
+  2. Competition detection can reject opportunities unnecessarily
+  3. Database configuration requires proper environment variables
+
+  Remediation Plan
+
+  Phase 1: Immediate Data Flow Restoration (15 minutes)
+
+  1. Lower filtering thresholds temporarily:
+  min_profit_bps: 1,            // Lower to 1 bps
+  min_net_profit_sol: 0.0001,   // Lower to ~$0.02
+  max_profit_bps: 1000,         // Raise to allow more opportunities
+  2. Verify database connectivity:
+    - Ensure DATABASE_URL environment variable is set
+    - Test connection: postgresql://mev:mevpassword@localhost:5433/mevdb
+  3. Enable debug logging:
+    - Set RUST_LOG=debug to see filtering decisions
+    - Monitor logs for "should_execute=false" messages
+
+  Phase 2: Infrastructure Verification (10 minutes)
+
+  1. Start the system:
+  cd /Users/michaelinman/Repos/MEVana
+  cargo run -p system-orchestrator
+  2. Verify services are running:
+    - Check Docker containers: docker compose -f infrastructure/docker-compose.yml ps
+    - Verify database: docker exec postgres psql -U mev -d mevdb -c "SELECT COUNT(*) FROM arbitrage_opportunities;"
+
+  Phase 3: Data Flow Validation (15 minutes)
+
+  1. Monitor the async queue:
+    - Watch logs for "AsyncHistoryBuffer worker started"
+    - Look for "Flushed X events to DB" messages
+  2. Test opportunity detection:
+    - The system generates synthetic opportunities based on transaction patterns
+    - Verify opportunities are being created: check logs for "ARBITRAGE DETECTED"
+  3. Validate database writes:
+  SELECT COUNT(*), MIN(timestamp), MAX(timestamp)
+  FROM arbitrage_opportunities
+  ORDER BY timestamp DESC LIMIT 10;
+
+  Phase 4: Threshold Optimization (20 minutes)
+
+  1. Gradually adjust thresholds once data is flowing:
+  min_profit_bps: 5,           // Increase slowly to 5 bps
+  min_net_profit_sol: 0.0005,  // Increase to ~$0.10
+  2. Monitor data quality:
+    - Track opportunities vs executions ratio
+    - Monitor profit distribution in database
+  3. Enable learning mode:
+    - Let the system learn from actual performance
+    - Adjust learning_rate if needed
+
+  Implementation Steps
+
+  Step 1: Modify Filter Thresholds
+
+  Edit /Users/michaelinman/Repos/MEVana/crates/hotpath_arb_engine/src/smart_filter.rs:48-62:
+
+  fn default() -> Self {
+      Self {
+          min_net_profit_sol: 0.0001,    // Lower threshold temporarily
+          min_profit_bps: 1,             // Very permissive
+          max_profit_bps: 1000,          // Allow high profits
+          min_venue_success_rate: 0.0,   // Keep permissive
+          max_gas_budget_pct: 80.0,      // Allow higher gas costs
+          max_concurrent_opportunities: 10, // Allow more concurrent
+          competition_lookback_ms: 5000,
+          learning_rate: 0.1,
+          min_samples_for_learning: 5,
+      }
+  }
+
+  Step 2: Verify Environment Variables
+
+  Ensure these are set:
+  export DATABASE_URL="postgresql://mev:mevpassword@localhost:5433/mevdb"
+  export RUST_LOG=info
+  export GEYSER_ENDPOINT="https://grpc.ny.shyft.to"  # or your endpoint
+  export X_TOKEN="your_shyft_token"  # if using Shyft
+
+  Step 3: Start System and Monitor
+
+  # Start infrastructure first
+  cd /Users/michaelinman/Repos/MEVana
+  docker compose -f infrastructure/docker-compose.yml up -d
+
+  # Wait for services to be healthy (check logs)
+  cargo run -p system-orchestrator
+
+  Step 4: Validate Data Flow
+
+  Check database for data:
+  -- Connect to database
+  psql $DATABASE_URL
+
+  -- Check for new opportunities
+  SELECT
+      COUNT(*) as total_opportunities,
+      MIN(timestamp) as earliest,
+      MAX(timestamp) as latest,
+      AVG(profit_bps) as avg_profit_bps
+  FROM arbitrage_opportunities
+  WHERE timestamp > NOW() - INTERVAL '1 hour';
+
+  -- Check recent opportunities
+  SELECT opportunity_id, timestamp, venue_sell, venue_buy, profit_bps
+  FROM arbitrage_opportunities
+  ORDER BY timestamp DESC LIMIT 5;
+
+  Expected Results
+
+  After implementing these changes, you should see:
+
+  1. Log messages showing opportunities being detected and written
+  2. Database entries in the arbitrage_opportunities table
+  3. Queue activity in AsyncHistoryBuffer logs
+  4. Metrics showing opportunity detection rates
+
+  Monitoring and Troubleshooting
+
+  - Check service health: http://localhost:9999/status (system orchestrator)
+  - View metrics: http://localhost:9999/metrics
+  - Database monitoring: Watch arbitrage_opportunities table growth
+  - Log monitoring: Look for "should_execute=false" to see filtered opportunities
+
+  This plan should restore data flow within 30-60 minutes and allow you to adjust thresholds based on actual market data rather than restrictive defaults.

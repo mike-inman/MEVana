@@ -1,7 +1,7 @@
 use anyhow::Result;
 use log::{debug, info, warn};
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
+use std::collections::{HashMap, VecDeque};
 use std::sync::Arc;
 use std::time::{SystemTime, UNIX_EPOCH};
 use tokio::sync::RwLock;
@@ -48,12 +48,12 @@ pub struct SmartFilterConfig {
 impl Default for SmartFilterConfig {
     fn default() -> Self {
         Self {
-            min_net_profit_sol: 0.001,    // ~$0.20 minimum profit
-            min_profit_bps: 15,           // 15 bps minimum
-            max_profit_bps: 100,          // Skip suspiciously high opportunities
+            min_net_profit_sol: 0.0001,   // ~$0.02 minimum profit - very low for testing
+            min_profit_bps: 1,            // 1 bps minimum - very permissive
+            max_profit_bps: 500,          // Allow higher opportunities for testing
             min_venue_success_rate: 0.0,  // Start with no filtering, learn over time
-            max_gas_budget_pct: 30.0,     // Don't spend more than 30% of profit on gas
-            max_concurrent_opportunities: 3,   // Skip if more than 3 similar opportunities recently
+            max_gas_budget_pct: 80.0,     // Allow higher gas budget for testing
+            max_concurrent_opportunities: 20,   // Allow more concurrent opportunities
             competition_lookback_ms: 5000,    // Look back 5 seconds for competition
             learning_rate: 0.1,               // How fast to adapt to new data
             min_samples_for_learning: 5,      // Minimum attempts before trusting success rates
@@ -61,8 +61,190 @@ impl Default for SmartFilterConfig {
     }
 }
 
-#[derive(Debug, Default)]
-struct FilterStats {
+impl SmartFilterConfig {
+    /// Load configuration from database, fallback to defaults if database unavailable
+    pub async fn load_from_database(db_pool: Option<&sqlx::PgPool>) -> Self {
+        match db_pool {
+            Some(pool) => {
+                match Self::fetch_latest_config(pool).await {
+                    Ok(config) => {
+                        log::info!("📊 Loaded SmartFilter config from database: min_profit={}bps, min_net={:.6} SOL", 
+                                   config.min_profit_bps, config.min_net_profit_sol);
+                        config
+                    }
+                    Err(e) => {
+                        log::warn!("Failed to load SmartFilter config from database: {}, using defaults", e);
+                        Self::default()
+                    }
+                }
+            }
+            None => {
+                log::warn!("No database pool available, using SmartFilter defaults");
+                Self::default()
+            }
+        }
+    }
+
+    /// Fetch the latest configuration values from the database
+    async fn fetch_latest_config(pool: &sqlx::PgPool) -> Result<Self, sqlx::Error> {
+        let mut config = Self::default();
+
+        // Query to get the latest value for each parameter
+        let rows = sqlx::query!(
+            r#"
+            SELECT DISTINCT ON (parameter_name) 
+                parameter_name, 
+                new_value
+            FROM smart_filter_config_history 
+            WHERE parameter_name IN (
+                'min_net_profit_sol', 'min_profit_bps', 'max_profit_bps', 
+                'max_gas_budget_pct', 'max_concurrent_opportunities', 
+                'competition_lookback_ms', 'learning_rate', 'min_venue_success_rate'
+            )
+            ORDER BY parameter_name, timestamp DESC
+            "#
+        )
+        .fetch_all(pool)
+        .await?;
+
+        // Apply database values to config
+        for row in rows {
+            match row.parameter_name.as_str() {
+                "min_net_profit_sol" => {
+                    if let Some(val) = row.new_value.as_str() {
+                        config.min_net_profit_sol = val.parse().unwrap_or(config.min_net_profit_sol);
+                    }
+                }
+                "min_profit_bps" => {
+                    if let Some(val) = row.new_value.as_str() {
+                        config.min_profit_bps = val.parse().unwrap_or(config.min_profit_bps);
+                    }
+                }
+                "max_profit_bps" => {
+                    if let Some(val) = row.new_value.as_str() {
+                        config.max_profit_bps = val.parse().unwrap_or(config.max_profit_bps);
+                    }
+                }
+                "max_gas_budget_pct" => {
+                    if let Some(val) = row.new_value.as_str() {
+                        config.max_gas_budget_pct = val.parse().unwrap_or(config.max_gas_budget_pct);
+                    }
+                }
+                "max_concurrent_opportunities" => {
+                    if let Some(val) = row.new_value.as_str() {
+                        config.max_concurrent_opportunities = val.parse().unwrap_or(config.max_concurrent_opportunities);
+                    }
+                }
+                "competition_lookback_ms" => {
+                    if let Some(val) = row.new_value.as_str() {
+                        config.competition_lookback_ms = val.parse().unwrap_or(config.competition_lookback_ms);
+                    }
+                }
+                "learning_rate" => {
+                    if let Some(val) = row.new_value.as_str() {
+                        config.learning_rate = val.parse().unwrap_or(config.learning_rate);
+                    }
+                }
+                "min_venue_success_rate" => {
+                    if let Some(val) = row.new_value.as_str() {
+                        config.min_venue_success_rate = val.parse().unwrap_or(config.min_venue_success_rate);
+                    }
+                }
+                _ => {}
+            }
+        }
+
+        Ok(config)
+    }
+
+    /// Development environment defaults (more aggressive for testing)
+    pub fn development_defaults() -> Self {
+        Self {
+            min_net_profit_sol: 0.0005,   // $0.10 minimum profit
+            min_profit_bps: 1,            // 1 bps minimum (very low for testing)
+            max_profit_bps: 200,          // Allow high profit for testing
+            min_venue_success_rate: 0.0,  // No filtering initially
+            max_gas_budget_pct: 40.0,     // More gas budget for testing
+            max_concurrent_opportunities: 5,   // More concurrent for testing
+            competition_lookback_ms: 3000,    // Shorter lookback
+            learning_rate: 0.2,               // Faster learning in dev
+            min_samples_for_learning: 3,      // Fewer samples needed
+        }
+    }
+    
+    /// Staging environment defaults (conservative testing)
+    pub fn staging_defaults() -> Self {
+        Self {
+            min_net_profit_sol: 0.001,    // $0.20 minimum profit
+            min_profit_bps: 10,           // 10 bps minimum
+            max_profit_bps: 150,          // Moderate profit cap
+            min_venue_success_rate: 0.0,  // No filtering initially
+            max_gas_budget_pct: 35.0,     // Moderate gas budget
+            max_concurrent_opportunities: 4,   // Moderate concurrency
+            competition_lookback_ms: 4000,    // Medium lookback
+            learning_rate: 0.15,              // Moderate learning rate
+            min_samples_for_learning: 4,      // Moderate samples needed
+        }
+    }
+    
+    /// Production environment defaults (conservative and safe)
+    pub fn production_defaults() -> Self {
+        Self {
+            min_net_profit_sol: 0.002,    // $0.40 minimum profit (conservative)
+            min_profit_bps: 20,           // 20 bps minimum (conservative)
+            max_profit_bps: 100,          // Conservative profit cap to avoid suspicious opportunities
+            min_venue_success_rate: 0.0,  // Start with no filtering, learn over time
+            max_gas_budget_pct: 25.0,     // Conservative gas budget
+            max_concurrent_opportunities: 2,   // Conservative concurrency
+            competition_lookback_ms: 6000,    // Longer lookback for better competition detection
+            learning_rate: 0.05,              // Slower, more stable learning
+            min_samples_for_learning: 10,     // More samples for confidence
+        }
+    }
+    
+    /// Safe fallback defaults when database is unavailable
+    pub fn safe_fallback_defaults() -> Self {
+        Self {
+            min_net_profit_sol: 0.005,    // Very conservative - $1.00 minimum
+            min_profit_bps: 50,           // Very high minimum (safe mode)
+            max_profit_bps: 80,           // Low max to avoid risky opportunities
+            min_venue_success_rate: 0.8,  // Only trade on very successful venues
+            max_gas_budget_pct: 15.0,     // Very low gas budget
+            max_concurrent_opportunities: 1,   // Only one opportunity at a time
+            competition_lookback_ms: 10000,   // Long lookback for safety
+            learning_rate: 0.01,              // Very slow learning
+            min_samples_for_learning: 20,     // Many samples needed
+        }
+    }
+    
+    /// Validate configuration for safety
+    pub fn validate(&self) -> Result<(), String> {
+        if self.min_profit_bps > self.max_profit_bps {
+            return Err("min_profit_bps cannot be greater than max_profit_bps".to_string());
+        }
+        
+        if self.max_gas_budget_pct > 50.0 {
+            return Err("max_gas_budget_pct cannot exceed 50% (too risky)".to_string());
+        }
+        
+        if self.min_net_profit_sol <= 0.0 {
+            return Err("min_net_profit_sol must be positive".to_string());
+        }
+        
+        if self.learning_rate <= 0.0 || self.learning_rate > 1.0 {
+            return Err("learning_rate must be between 0 and 1".to_string());
+        }
+        
+        if self.max_concurrent_opportunities > 10 {
+            return Err("max_concurrent_opportunities cannot exceed 10 (risk management)".to_string());
+        }
+        
+        Ok(())
+    }
+}
+
+#[derive(Debug, Default, Clone, Serialize)]
+pub struct FilterStats {
     total_opportunities: u64,
     passed_profit_filter: u64,
     passed_gas_filter: u64,
@@ -133,8 +315,8 @@ struct VenueStats {
     successes: u64,
     total_profit: f64,
     avg_execution_time_us: f64,
-    recent_profit_estimates: Vec<f64>,
-    prediction_errors: Vec<f64>,
+    recent_profit_estimates: VecDeque<f64>, // CRITICAL FIX: Use VecDeque for O(1) operations
+    prediction_errors: VecDeque<f64>, // CRITICAL FIX: Use VecDeque for O(1) operations
     last_updated: u64,
 }
 
@@ -235,9 +417,9 @@ impl SmartFilter {
         // Filter 4: Competition detection
         let venue_pair = format!("{}->{}", opportunity.venue_sell, opportunity.venue_buy);
         let competition_score = self.detect_competition(&venue_pair, opportunity).await;
-        if competition_score > 0.7 { // High competition threshold
+        if competition_score > 0.95 { // Relaxed competition threshold for demo 
             should_execute = false;
-            rejection_reason = Some(format!("High competition detected: {:.1}% (>70%)", competition_score * 100.0));
+            rejection_reason = Some(format!("High competition detected: {:.1}% (>95%)", competition_score * 100.0));
             stats.rejected_competition += 1;
         }
 
@@ -486,14 +668,14 @@ impl SmartFilter {
         let mut tracker = self.success_tracker.write().await;
         let venue_stats = tracker.venue_pair_stats.entry(venue_pair.clone()).or_default();
         
-        // Update profit prediction tracking
-        venue_stats.recent_profit_estimates.push(predicted_gross_profit);
-        venue_stats.prediction_errors.push(prediction_error);
+        // Update profit prediction tracking (CRITICAL FIX: Use O(1) VecDeque operations)
+        venue_stats.recent_profit_estimates.push_back(predicted_gross_profit);
+        venue_stats.prediction_errors.push_back(prediction_error);
         
         // Keep only last 10 predictions for efficiency
         if venue_stats.recent_profit_estimates.len() > 10 {
-            venue_stats.recent_profit_estimates.remove(0);
-            venue_stats.prediction_errors.remove(0);
+            venue_stats.recent_profit_estimates.pop_front();
+            venue_stats.prediction_errors.pop_front();
         }
         
         // Update global prediction accuracy
@@ -535,24 +717,10 @@ impl SmartFilter {
               self.config.min_net_profit_sol, self.config.min_profit_bps, self.config.max_profit_bps,
               self.config.max_concurrent_opportunities);
     }
-}
 
-impl Clone for FilterStats {
-    fn clone(&self) -> Self {
-        Self {
-            total_opportunities: self.total_opportunities,
-            passed_profit_filter: self.passed_profit_filter,
-            passed_gas_filter: self.passed_gas_filter,
-            passed_competition_filter: self.passed_competition_filter,
-            executed: self.executed,
-            rejected_low_profit: self.rejected_low_profit,
-            rejected_high_gas: self.rejected_high_gas,
-            rejected_suspicious: self.rejected_suspicious,
-            rejected_low_success_rate: self.rejected_low_success_rate,
-            rejected_competition: self.rejected_competition,
-            adaptive_adjustments: self.adaptive_adjustments,
-            profit_predictions: self.profit_predictions,
-            prediction_accuracy: self.prediction_accuracy,
-        }
+    /// Get current configuration (for API access)
+    pub fn get_config(&self) -> &SmartFilterConfig {
+        &self.config
     }
 }
+

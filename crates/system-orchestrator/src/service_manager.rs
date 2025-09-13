@@ -1,8 +1,11 @@
 use anyhow::{Context, Result};
+use chrono;
 use log::{debug, error, info, warn};
 use std::collections::HashMap;
 use std::process::Stdio;
 use std::sync::Arc;
+use tokio::fs::OpenOptions;
+use tokio::io::AsyncWriteExt;
 use tokio::process::{Child, Command};
 use tokio::sync::RwLock;
 use tokio::time::{Duration, Instant};
@@ -67,6 +70,14 @@ impl ServiceManager {
     }
 
     pub async fn start_service(&self, service_name: &str) -> Result<()> {
+        self.start_service_with_options(service_name, false).await
+    }
+
+    pub async fn start_service_without_delay(&self, service_name: &str) -> Result<()> {
+        self.start_service_with_options(service_name, true).await
+    }
+
+    async fn start_service_with_options(&self, service_name: &str, skip_delay: bool) -> Result<()> {
         info!("🚀 Starting service: {}", service_name);
 
         // Update service status to Starting
@@ -88,10 +99,12 @@ impl ServiceManager {
                 .config.clone()
         };
 
-        // Apply startup delay
-        if !config.startup_delay.is_zero() {
+        // Apply startup delay (unless skipped)
+        if !skip_delay && !config.startup_delay.is_zero() {
             info!("⏳ Applying startup delay for '{}': {:?}", service_name, config.startup_delay);
             tokio::time::sleep(config.startup_delay).await;
+        } else if skip_delay && !config.startup_delay.is_zero() {
+            info!("⚡ Skipping startup delay for '{}' (infrastructure already healthy)", service_name);
         }
 
         // Start the process
@@ -303,8 +316,12 @@ impl ServiceManager {
                     // Update service status
                     let mut services = self.services.write().await;
                     if let Some(service) = services.get_mut(&service_name) {
+                        service.status = ServiceStatus::Crashed;
+                        
+                        // Log the crash to central error log
+                        self.log_service_crash(&service_name, &format!("Service process terminated unexpectedly")).await;
+                        
                         if service.config.critical {
-                            service.status = ServiceStatus::Crashed;
                             error!("❌ Critical service '{}' has crashed", service_name);
                             
                             // Attempt to restart critical services
@@ -346,5 +363,34 @@ impl ServiceManager {
 
         info!("✅ All services shutdown completed");
         Ok(())
+    }
+    
+    /// Log service crash to central error log for monitoring
+    async fn log_service_crash(&self, service_name: &str, error_msg: &str) {
+        let timestamp = chrono::Utc::now().format("%Y-%m-%d %H:%M:%S UTC");
+        let log_entry = format!(
+            "[{}] SERVICE_CRASH: {} - {}\n", 
+            timestamp, service_name, error_msg
+        );
+        
+        // Write to central error log file
+        match OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open("mevana_service_errors.log")
+            .await
+        {
+            Ok(mut file) => {
+                if let Err(e) = file.write_all(log_entry.as_bytes()).await {
+                    error!("Failed to write to error log: {}", e);
+                }
+            }
+            Err(e) => {
+                error!("Failed to open error log file: {}", e);
+            }
+        }
+        
+        // Also log to console
+        warn!("⚠️ SERVICE CRASH: {} - {}", service_name, error_msg);
     }
 }

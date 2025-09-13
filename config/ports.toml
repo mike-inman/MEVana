@@ -1,0 +1,198 @@
+# MEVana Centralized Port Configuration
+# Last Updated: 2025-09-11
+# Purpose: Single source of truth for all service ports
+
+[meta]
+version = "1.0"
+last_updated = "2025-09-11"
+description = "Centralized port allocation for MEVana trading platform"
+
+# =============================================================================
+# INFRASTRUCTURE SERVICES (Docker)
+# =============================================================================
+[infrastructure]
+# Message Broker Stack
+zookeeper = 2181                    # Kafka coordination service
+kafka_internal = 9092               # Kafka broker (Docker internal)
+kafka_external = 29092              # Kafka broker (external access)
+
+# Data Storage
+redis = 6379                        # Redis cache and session store
+postgres_internal = 5432            # PostgreSQL (container internal)
+postgres_external = 5433            # PostgreSQL (host mapped)
+
+# Monitoring Stack
+prometheus = 9090                   # Metrics collection
+grafana = 3000                      # Metrics visualization
+
+# Management UIs
+kafka_ui = 8080                     # Kafka management interface
+redis_ui_internal = 8081            # Redis Commander (container internal)
+redis_ui_external = 8083            # Redis Commander (host mapped)
+adminer = 8082                      # Database management
+
+# =============================================================================
+# CORE TRADING SERVICES (Native Rust)
+# =============================================================================
+[trading_services]
+# Primary Trading Pipeline
+normalizer_service = 9901           # Transaction parsing and normalization
+edge_assembler = 9902               # Real-time transaction processing
+arb_engine_api = 8085               # Main arbitrage engine (WebSocket + HTTP)
+arb_engine_metrics = 9903           # Main arbitrage engine metrics
+executor_service = 9904             # Trade execution orchestration
+
+# High-Frequency Systems
+hotpath_arb_engine = 8088           # Zero-latency MEV detection
+hotpath_metrics = 8088              # Performance analytics (same port as API)
+
+# Public APIs
+api_service = 8092                  # REST API and external integration
+monitoring_service = 8091           # System performance monitoring
+
+# =============================================================================
+# SUPPORTING SERVICES
+# =============================================================================
+[supporting_services]
+# Service Discovery and Registry
+discovery_service = 9102            # Service registration and health
+token_registry_service = 9898       # Token metadata management
+
+# Security and Storage
+wallet_vault = 8090                 # Wallet encryption and management
+
+# System Management
+system_orchestrator = 9999          # Service lifecycle management (reserved)
+
+# =============================================================================
+# DEVELOPMENT AND TESTING
+# =============================================================================
+[development]
+# Test Services (when needed)
+test_api = 8093                     # Testing API endpoints
+test_metrics = 9105                 # Testing metrics collection
+dev_hotpath = 8094                  # Development hotpath instance
+
+# Debug Services
+debug_normalizer = 9911             # Debug normalizer instance
+debug_edge = 9912                   # Debug edge assembler
+
+# =============================================================================
+# FUTURE SERVICES (Planned)
+# =============================================================================
+[future_services]
+# Web Interface
+web_ui_dev = 3200                   # React development server
+web_ui_prod = 3100                  # Production web interface
+auth_gateway = 3001                 # Authentication service
+
+# Additional APIs
+websocket_gateway = 8095            # Centralized WebSocket management
+stream_aggregator = 8096            # Multi-stream aggregation service
+analytics_api = 8097                # Advanced analytics endpoints
+
+# =============================================================================
+# PORT ALLOCATION STRATEGY
+# =============================================================================
+[allocation_ranges]
+# Infrastructure: 2181, 29092, 3000-3200, 5433, 6379, 8080-8083, 9090
+infrastructure_start = 2000
+infrastructure_end = 3299
+
+# Core Trading: 8085-8099
+trading_start = 8085
+trading_end = 8099
+
+# Internal Services: 9900-9999
+internal_start = 9900
+internal_end = 9999
+
+# Supporting: 9100-9199
+supporting_start = 9100
+supporting_end = 9199
+
+# Reserved: 9000-9099 (future high-load services)
+reserved_start = 9000
+reserved_end = 9099
+
+# =============================================================================
+# ENVIRONMENT OVERRIDES
+# =============================================================================
+[environment_variables]
+# Standard naming pattern: MEVANA_{SERVICE}_{TYPE}_PORT
+hotpath_metrics = "MEVANA_HOTPATH_METRICS_PORT"
+arb_engine_api = "MEVANA_ARB_ENGINE_API_PORT"  
+api_service_http = "MEVANA_API_SERVICE_HTTP_PORT"
+normalizer_metrics = "MEVANA_NORMALIZER_METRICS_PORT"
+edge_assembler_metrics = "MEVANA_EDGE_ASSEMBLER_METRICS_PORT"
+executor_metrics = "MEVANA_EXECUTOR_METRICS_PORT"
+
+# Legacy environment variables (for backwards compatibility)
+[legacy_env_vars]
+metrics_port = "METRICS_PORT"              # Used by hotpath_arb_engine
+ws_bind = "WS_BIND"                        # Used by arb-engine
+database_url = "DATABASE_URL"              # Used by multiple services
+kafka_broker = "KAFKA_BROKER"              # Used by Kafka consumers
+
+# =============================================================================
+# SERVICE HEALTH ENDPOINTS
+# =============================================================================
+[health_checks]
+# Standard health check paths for each service
+hotpath_arb_engine = "http://localhost:8088/performance"
+arb_engine = "http://localhost:8085/metrics"
+api_service = "http://localhost:8092/health"
+normalizer_service = "http://localhost:9901/health"
+edge_assembler = "http://localhost:9902/health" 
+executor_service = "http://localhost:9904/health"
+monitoring_service = "http://localhost:8091/health"
+discovery_service = "http://localhost:9102/health"
+token_registry = "http://localhost:9898/health"
+
+# Infrastructure health checks
+kafka = "http://localhost:8080"             # Kafka UI
+redis = "http://localhost:8083"             # Redis UI
+postgres = "http://localhost:8082"          # Adminer
+prometheus = "http://localhost:9090/-/healthy"
+grafana = "http://localhost:3000/api/health"
+
+# =============================================================================
+# DOCKER COMPOSE INTEGRATION
+# =============================================================================
+[docker_compose]
+# Port mappings for docker-compose.yml
+postgres = "5433:5432"                      # External:Internal
+redis_ui = "8083:8081"                      # External:Internal
+kafka_ui = "8080:8080"                      # External:Internal
+kafka_external = "29092:29092"              # External:Internal
+prometheus = "9090:9090"                    # External:Internal
+grafana = "3000:3000"                       # External:Internal
+adminer = "8082:8080"                       # External:Internal
+
+# =============================================================================
+# CONFLICT RESOLUTION
+# =============================================================================
+[conflicts]
+# Known port conflicts and resolutions
+kafka_ui_vs_arb_engine = "Kafka-UI uses Docker port 8080, arb-engine moved to 8085"
+redis_ui_internal_vs_external = "Redis-UI container uses 8081, mapped to 8083 externally"
+postgres_standard_vs_dev = "PostgreSQL standard port 5432 mapped to 5433 for dev"
+
+# =============================================================================
+# VALIDATION RULES
+# =============================================================================
+[validation]
+# Port ranges that must not overlap
+no_overlap_ranges = [
+    [8080, 8099],  # Trading services
+    [9900, 9999],  # Internal metrics
+    [9100, 9199]   # Supporting services
+]
+
+# Ports that must remain static (external dependencies)
+static_ports = [
+    2181,  # Zookeeper
+    6379,  # Redis
+    9090,  # Prometheus
+    3000   # Grafana
+]

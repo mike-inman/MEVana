@@ -10,6 +10,7 @@ serde = { workspace = true }
 serde_json = { workspace = true }
 tokio = { version = "1", features = ["rt-multi-thread", "macros"] }
 log = { workspace = true }
+env_logger = { workspace = true }
 
 # Web framework
 axum = { version = "0.7", features = ["json", "query"] }
@@ -44,3 +45,9 @@ thiserror = "1.0"
 
 # Resilience framework
 resilience-framework = { path = "../resilience-framework" }
+
+# Shared utilities (centralized database config)
+shared-core = { path = "../shared-core" }
+
+# Kafka for consuming arbitrage opportunities from hotpath engine
+rdkafka = { version = "0.38", features = ["tokio", "ssl-vendored"] }

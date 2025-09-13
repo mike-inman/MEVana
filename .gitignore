@@ -107,3 +107,4 @@ yarn-error.log*
 *.yaml.bak
 *.yml.bak
 *.json.bak
+config/keys/

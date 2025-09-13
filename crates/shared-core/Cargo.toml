@@ -10,3 +10,6 @@ tokio = { version = "1.0", features = ["sync", "time"] }
 anyhow = "1.0"
 solana-sdk = "2.1"
 log = "0.4"
+lazy_static = "1.4"
+chrono = { version = "0.4", features = ["serde"] }
+toml = "0.8"

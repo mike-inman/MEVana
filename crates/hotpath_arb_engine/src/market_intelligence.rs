@@ -435,7 +435,7 @@ impl MarketIntelligence {
         let mut conditions = Vec::new();
         
         // 1. Check volatility
-        if let Some(volatility) = self.calculate_volatility(&event.token_a, &event.token_b).await? {
+        if let Some(volatility) = self.calculate_volatility(&event.token_pair, &event.token_pair).await? {
             if volatility > 0.05 { // 5% volatility threshold
                 conditions.push(MarketCondition::HighVolatility { threshold: volatility });
                 info!("🌪️ High volatility detected: {:.2}%", volatility * 100.0);
@@ -443,7 +443,7 @@ impl MarketIntelligence {
         }
         
         // 2. Check liquidity
-        if let Some(liquidity_depth) = self.check_liquidity_depth(&event.venue_a, &event.venue_b).await? {
+        if let Some(liquidity_depth) = self.check_liquidity_depth(&event.venue_sell, &event.venue_buy).await? {
             if liquidity_depth < 10000.0 { // $10k threshold
                 conditions.push(MarketCondition::LowLiquidity { depth_threshold: liquidity_depth });
                 warn!("💧 Low liquidity detected: ${:.0}", liquidity_depth);
@@ -451,7 +451,7 @@ impl MarketIntelligence {
         }
         
         // 3. Check for whale movements
-        if let Some(whale_movement) = self.detect_recent_whale_activity(&event.token_a).await? {
+        if let Some(whale_movement) = self.detect_recent_whale_activity(&event.token_pair).await? {
             conditions.push(MarketCondition::WhaleMovement { 
                 size_threshold: whale_movement.amount 
             });
@@ -460,7 +460,7 @@ impl MarketIntelligence {
         }
         
         // 4. Check trends
-        if let Some(trend) = self.analyze_trend(&event.token_a).await? {
+        if let Some(trend) = self.analyze_trend(&event.token_pair).await? {
             match trend {
                 Trend::StrongUp(momentum) | Trend::WeakUp(momentum) => {
                     conditions.push(MarketCondition::TrendingUp { momentum });
@@ -473,12 +473,12 @@ impl MarketIntelligence {
         }
         
         // 5. Check volume spikes
-        if let Some(volume_spike) = self.check_volume_spike(&event.venue_a, &event.token_a).await? {
+        if let Some(volume_spike) = self.check_volume_spike(&event.venue_sell, &event.token_pair).await? {
             info!("📈 Volume spike detected: {:.0}% increase", volume_spike.spike_percentage);
         }
         
         // 6. Check DeFi protocol events
-        if let Some(protocol_event) = self.check_protocol_events(&event.token_a).await? {
+        if let Some(protocol_event) = self.check_protocol_events(&event.token_pair).await? {
             conditions.push(MarketCondition::DeFiProtocolEvent { 
                 protocol: protocol_event.protocol, 
                 event_type: format!("{:?}", protocol_event.update_type)
@@ -486,7 +486,7 @@ impl MarketIntelligence {
         }
         
         // 7. News sentiment analysis
-        if let Some(news_impact) = self.analyze_news_impact(&event.token_a).await? {
+        if let Some(news_impact) = self.analyze_news_impact(&event.token_pair).await? {
             conditions.push(MarketCondition::NewsEvent { impact_score: news_impact });
         }
         

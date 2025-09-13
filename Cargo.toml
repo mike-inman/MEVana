@@ -5,7 +5,7 @@ resolver = "2"
 members = [
   # PRODUCTION HOTPATH SYSTEM
   "crates/hotpath_arb_engine",          # Zero-latency MEV detection
-  "executor-service",                    # Trade execution engine
+  "crates/executor-service",            # Trade execution engine
   
   # CORE SERVICES  
   "crates/arb-engine",                   # Arbitrage detection engine
@@ -14,6 +14,7 @@ members = [
   
   # SUPPORTING SERVICES
   "crates/monitoring-service",           # Performance monitoring and APIs
+  "crates/kafka_db_writer",              # Kafka-to-database writer service
   "crates/dex-registry",                 # DEX metadata registry
   "crates/discovery-service",            # Service discovery
   "crates/token-registry-service",       # Token metadata
@@ -27,14 +28,14 @@ members = [
   "crates/normalizer-runtime",
   "crates/normalizer-codegen", 
   "crates/normalizer-generated",
-  "crates/mevana-engine", "crates/wallet-vault", "crates/resilience-framework", "crates/api-service", "crates/api-service-v2", "crates/system-orchestrator",
+  "crates/mevana-engine", "crates/wallet-vault", "crates/resilience-framework", "crates/api-service", "crates/system-orchestrator",
 ]
 
 # Only build these on plain `cargo build` / `cargo test`
 default-members = [
   # PRODUCTION HOTPATH SYSTEM - The main event! 🚀
   "crates/hotpath_arb_engine",
-  "executor-service",
+  "crates/executor-service",
   
   # CORE PIPELINE
   "crates/normalizer-generated",

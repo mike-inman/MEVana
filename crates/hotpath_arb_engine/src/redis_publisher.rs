@@ -48,7 +48,9 @@ pub enum MetricsEvent {
 impl RedisMetricsPublisher {
     /// Create new Redis publisher (non-blocking)
     pub async fn new(redis_url: Option<String>) -> Result<Self, Box<dyn std::error::Error + Send + Sync>> {
-        let redis_url = redis_url.unwrap_or_else(|| "redis://localhost:6379".to_string());
+        let redis_url = redis_url.unwrap_or_else(|| {
+            std::env::var("REDIS_URL").unwrap_or_else(|_| "redis://localhost:6379".to_string())
+        });
         
         let (sender, receiver) = mpsc::unbounded_channel();
         

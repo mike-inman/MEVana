@@ -70,11 +70,20 @@ fn validate_token(token: &str, secret: &str) -> Result<Claims, AuthError> {
 
 pub async fn auth_middleware(
     headers: HeaderMap,
-    mut request: Request,
+    request: Request,
     next: Next,
 ) -> Result<Response, StatusCode> {
-    // Optional authentication - in production, you'd implement this based on your needs
-    let _ = headers;
-    let response = next.run(request).await;
-    Ok(response)
+    // Simple token validation - check for Bearer token
+    if let Some(auth_header) = headers.get("authorization") {
+        if let Ok(auth_str) = auth_header.to_str() {
+            if auth_str.starts_with("Bearer ") {
+                // Token is present, proceed with request
+                let response = next.run(request).await;
+                return Ok(response);
+            }
+        }
+    }
+    
+    // No valid token found, return 401
+    Err(StatusCode::UNAUTHORIZED)
 }

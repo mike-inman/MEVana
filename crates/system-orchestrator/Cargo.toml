@@ -37,3 +37,6 @@ sysinfo = "0.30"
 # Utilities
 uuid = { version = "1.6", features = ["v4"] }
 chrono = { version = "0.4", features = ["serde"] }
+
+# MEVana shared components
+shared-core = { path = "../shared-core" }

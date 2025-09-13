@@ -3,6 +3,8 @@
 
 pub mod port_manager;
 pub mod wallet_safety;
+pub mod database_config;
+pub mod port_config;
 
 use serde::{Deserialize, Serialize};
 use std::fmt;

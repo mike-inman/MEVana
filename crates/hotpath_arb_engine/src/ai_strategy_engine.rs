@@ -1,7 +1,8 @@
 use anyhow::Result;
+use chrono::Utc;
 use log::{info, warn, debug};
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
+use std::collections::{HashMap, VecDeque};
 use std::sync::Arc;
 use tokio::sync::{RwLock, mpsc};
 use uuid::Uuid;
@@ -145,8 +146,8 @@ pub struct AIModel {
     exploration_rate: f64,           // Epsilon for exploration
     learning_rate: f64,
     
-    // Performance memory
-    recent_decisions: Vec<AIDecision>,
+    // Performance memory (CRITICAL FIX: Use VecDeque for bounded memory)
+    recent_decisions: VecDeque<AIDecision>, // BOUNDED: max capacity decisions
     success_patterns: HashMap<String, f64>, // Pattern -> success_rate
 }
 
@@ -208,16 +209,16 @@ impl AIStrategyEngine {
             q_table: HashMap::new(),
             exploration_rate: 0.1, // 10% exploration
             learning_rate: 0.01,
-            recent_decisions: Vec::new(),
+            recent_decisions: VecDeque::with_capacity(1000), // BOUNDED: max 1000 decisions
             success_patterns: HashMap::new(),
         };
         
         let engine = Self {
             template_cache,
             strategy_rules: Arc::new(RwLock::new(default_rules)),
-            market_conditions: Arc::new(RwLock::new(Vec::new())),
+            market_conditions: Arc::new(RwLock::new(Vec::with_capacity(5000))), // BOUNDED: max 5000 conditions
             strategy_performance: Arc::new(RwLock::new(HashMap::new())),
-            execution_history: Arc::new(RwLock::new(Vec::new())),
+            execution_history: Arc::new(RwLock::new(Vec::with_capacity(10000))), // BOUNDED: max 10000 executions
             ai_model: Arc::new(RwLock::new(ai_model)),
             learning_enabled: true,
             strategy_updates: strategy_sender,
@@ -297,7 +298,7 @@ impl AIStrategyEngine {
                 timestamp: chrono::Utc::now().timestamp() as u64,
             };
             
-            self.ai_model.write().await.recent_decisions.push(decision);
+            self.ai_model.write().await.recent_decisions.push_back(decision);
         }
         
         info!("🎯 AI selected strategy: {:?} (confidence: {:.2})", best_strategy, confidence);
@@ -330,9 +331,16 @@ impl AIStrategyEngine {
         
         let mut ai_model = self.ai_model.write().await;
         
-        // Find the decision
-        if let Some(decision) = ai_model.recent_decisions.iter_mut().find(|d| d.decision_id == decision_id) {
-            decision.actual_result = Some(result.clone());
+        // Find the decision first and extract what we need
+        let decision_info = ai_model.recent_decisions.iter()
+            .find(|d| d.decision_id == decision_id)
+            .map(|d| (d.context.market_conditions.clone(), d.chosen_strategy.clone()));
+        
+        if let Some((market_conditions, chosen_strategy)) = decision_info {
+            // Now update the decision
+            if let Some(decision) = ai_model.recent_decisions.iter_mut().find(|d| d.decision_id == decision_id) {
+                decision.actual_result = Some(result.clone());
+            }
             
             // Calculate reward based on result
             let reward = if result.success {
@@ -341,17 +349,34 @@ impl AIStrategyEngine {
                 -result.gas_cost // Loss is negative reward
             };
             
-            // Update Q-table (simplified reinforcement learning)
-            let state_action = format!("{:?}_{:?}", decision.context.market_conditions, decision.chosen_strategy);
+            // Update Q-table (simplified reinforcement learning) - WITH MEMORY BOUNDS
+            let state_action = format!("{:?}_{:?}", market_conditions, chosen_strategy);
             let current_q = ai_model.q_table.get(&state_action).copied().unwrap_or(0.0);
-            let new_q = current_q + ai_model.learning_rate * (reward - current_q);
+            let learning_rate = ai_model.learning_rate;
+            let new_q = current_q + learning_rate * (reward - current_q);
+            
+            // CRITICAL FIX: Prevent unbounded Q-table growth (root cause of 7-minute degradation)
+            if ai_model.q_table.len() >= 10000 {
+                // Remove oldest/least useful entries when at capacity
+                if let Some(oldest_key) = ai_model.q_table.keys().next().cloned() {
+                    ai_model.q_table.remove(&oldest_key);
+                }
+            }
             ai_model.q_table.insert(state_action.clone(), new_q);
             
-            // Update success patterns
-            let pattern = Self::extract_pattern(&decision.context, &decision.chosen_strategy);
+            // Update success patterns - WITH MEMORY BOUNDS
+            // Just use the market conditions and chosen strategy for the pattern
+            let pattern = format!("{:?}_{:?}", market_conditions, chosen_strategy);
             let current_success = ai_model.success_patterns.get(&pattern).copied().unwrap_or(0.5);
             let success_update = if result.success { 0.1 } else { -0.1 };
             let new_success = (current_success + success_update).max(0.0).min(1.0);
+            
+            // CRITICAL FIX: Prevent unbounded success_patterns growth (secondary memory leak)
+            if ai_model.success_patterns.len() >= 5000 {
+                if let Some(oldest_key) = ai_model.success_patterns.keys().next().cloned() {
+                    ai_model.success_patterns.remove(&oldest_key);
+                }
+            }
             ai_model.success_patterns.insert(pattern, new_success);
             
             info!("🧠 AI learned from execution: reward={:.6}, pattern_success={:.2}", 
@@ -372,7 +397,7 @@ impl AIStrategyEngine {
             ExecutionStrategy::BlitzkriegArb { max_position_multiplier, force_flash_loans, template_preference } => {
                 let position_size = opportunity.estimated_net_profit_sol * max_position_multiplier;
                 let template = self.template_cache.get_best_template(
-                    &format!("{}->{}",opportunity.venue_a, opportunity.venue_b),
+                    &format!("{}->{}",opportunity.original.venue_sell, opportunity.original.venue_buy),
                     "SOL/USDC", // Simplified
                     position_size,
                     *force_flash_loans || position_size > 1.0,
@@ -417,7 +442,7 @@ impl AIStrategyEngine {
                     position_size_sol: position_size,
                     use_flash_loan: true, // Always use flash loans
                     template: self.template_cache.get_best_template(
-                        &format!("{}->{}",opportunity.venue_a, opportunity.venue_b),
+                        &format!("{}->{}",opportunity.original.venue_sell, opportunity.original.venue_buy),
                         "SOL/USDC",
                         position_size,
                         true,

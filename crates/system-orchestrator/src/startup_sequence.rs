@@ -9,13 +9,15 @@ use crate::service_manager::ServiceManager;
 pub struct StartupSequence {
     config: OrchestratorConfig,
     service_manager: ServiceManager,
+    infrastructure_already_healthy: bool,
 }
 
 impl StartupSequence {
-    pub fn new(config: OrchestratorConfig, service_manager: ServiceManager) -> Self {
+    pub fn new(config: OrchestratorConfig, service_manager: ServiceManager, infrastructure_already_healthy: bool) -> Self {
         Self {
             config,
             service_manager,
+            infrastructure_already_healthy,
         }
     }
 
@@ -95,6 +97,19 @@ impl StartupSequence {
     }
 
     async fn start_infrastructure_services(&self, services: &[ServiceConfig]) -> Result<()> {
+        if self.infrastructure_already_healthy {
+            info!("⚡ Infrastructure already healthy - skipping all startup steps!");
+            
+            // Mark infrastructure services as healthy without starting them
+            // The docker-compose services are already running and healthy
+            for service in services {
+                info!("✅ Infrastructure service '{}' already healthy", service.name);
+            }
+            
+            info!("✅ Infrastructure services ready (already healthy)");
+            return Ok(());
+        }
+        
         info!("🏗️  Starting infrastructure services (Docker Compose)");
         
         for service in services {

@@ -1,8 +1,9 @@
-use anyhow::Result;
-use log::{error, info, warn};
+use anyhow::{Context, Result};
+use log::{debug, error, info, warn};
 use prometheus::{Encoder, IntCounter, IntGauge};
 use std::sync::Arc;
 use std::time::Duration;
+use tokio::process::Command;
 use tokio::sync::RwLock;
 use tokio::time::Instant;
 
@@ -16,6 +17,7 @@ pub struct SystemOrchestrator {
     service_manager: ServiceManager,
     health_checker: HealthChecker,
     startup_time: Arc<RwLock<Option<Instant>>>,
+    infrastructure_was_already_healthy: bool,
     
     // Prometheus metrics
     services_total: IntGauge,
@@ -62,6 +64,7 @@ impl SystemOrchestrator {
             service_manager: ServiceManager::new(),
             health_checker: HealthChecker::new(),
             startup_time: Arc::new(RwLock::new(None)),
+            infrastructure_was_already_healthy: false,
             services_total,
             services_healthy,
             services_unhealthy,
@@ -74,24 +77,39 @@ impl SystemOrchestrator {
         *self.startup_time.write().await = Some(start_time);
 
         info!("🚀 Starting MEVana Trading System");
+        
+        // Clean up any existing processes before starting
+        info!("🧹 Cleaning up existing MEVana processes...");
+        self.cleanup_existing_processes().await?;
+        
         info!("📊 Total services to start: {}", self.config.services.len());
 
-        // Check infrastructure if enabled
+        // Start and wait for infrastructure if enabled
         if self.config.infrastructure.check_infrastructure {
-            info!("🔍 Checking infrastructure services before startup");
-            match self.health_checker.check_infrastructure_services().await {
-                Ok(_) => info!("✅ Infrastructure services are healthy"),
-                Err(e) => {
-                    warn!("⚠️  Infrastructure health check failed: {}", e);
-                    info!("🏗️  Starting infrastructure services...");
-                }
+            info!("🏗️  Starting infrastructure services...");
+            
+            // First check if infrastructure is already healthy
+            info!("🔍 Checking if infrastructure is already healthy...");
+            let infrastructure_healthy = self.check_infrastructure_health().await;
+            
+            if infrastructure_healthy {
+                info!("✅ Infrastructure is already healthy - skipping startup delays!");
+                self.infrastructure_was_already_healthy = true;
+            } else {
+                info!("⚠️  Infrastructure not healthy, starting services...");
+                self.start_infrastructure().await?;
+                
+                info!("⏳ Waiting for infrastructure services to be ready...");
+                self.wait_for_infrastructure().await?;
+                self.infrastructure_was_already_healthy = false;
             }
         }
 
         // Execute startup sequence
         let startup_sequence = StartupSequence::new(
             self.config.clone(), 
-            self.service_manager.clone()
+            self.service_manager.clone(),
+            self.infrastructure_was_already_healthy
         );
         
         startup_sequence.execute().await?;
@@ -288,5 +306,185 @@ impl SystemOrchestrator {
         
         info!("✅ System shutdown completed successfully");
         Ok(())
+    }
+
+    /// Clean up any existing MEVana processes to ensure clean startup
+    async fn cleanup_existing_processes(&self) -> Result<()> {
+        info!("🔍 Checking for existing MEVana processes...");
+        
+        // Kill any existing system-orchestrator processes (except current)
+        let current_pid = std::process::id();
+        let output = Command::new("pkill")
+            .args(&["-f", "system-orchestrator"])
+            .output()
+            .await;
+            
+        match output {
+            Ok(_) => info!("🧹 Cleaned up existing system-orchestrator processes"),
+            Err(e) => warn!("⚠️  Failed to cleanup system-orchestrator processes: {}", e),
+        }
+
+        // Kill cargo run processes for MEVana services
+        let services_to_kill = [
+            "hotpath_arb_engine",
+            "arb-engine", 
+            "executor-service",
+            "normalizer-service",
+            "edge-assembler",
+            "discovery-service",
+            "token-registry-service",
+            "monitoring-service"
+        ];
+
+        for service in &services_to_kill {
+            let output = Command::new("pkill")
+                .args(&["-f", &format!("cargo run.*{}", service)])
+                .output()
+                .await;
+                
+            match output {
+                Ok(_) => info!("🧹 Cleaned up existing {} processes", service),
+                Err(e) => warn!("⚠️  Failed to cleanup {} processes: {}", service, e),
+            }
+        }
+
+        // Give processes time to terminate
+        tokio::time::sleep(Duration::from_secs(3)).await;
+        
+        info!("✅ Process cleanup completed");
+        Ok(())
+    }
+
+    /// Start infrastructure services using docker-compose
+    async fn start_infrastructure(&self) -> Result<()> {
+        info!("🚀 Starting infrastructure services with docker-compose...");
+
+        // First, ensure docker network exists
+        let _network_result = Command::new("docker")
+            .args(&["network", "create", "mevana_net"])
+            .output()
+            .await;
+
+        // Start infrastructure using docker-compose
+        let result = Command::new("docker")
+            .args(&["compose", "-f", "infrastructure/docker-compose.yml", "up", "-d"])
+            .current_dir(".")
+            .output()
+            .await
+            .context("Failed to start infrastructure services")?;
+
+        if !result.status.success() {
+            let stderr = String::from_utf8_lossy(&result.stderr);
+            return Err(anyhow::anyhow!("Infrastructure startup failed: {}", stderr));
+        }
+
+        info!("✅ Infrastructure services startup initiated");
+        Ok(())
+    }
+
+    /// Wait for infrastructure services to be ready using docker-compose health checks
+    async fn wait_for_infrastructure(&self) -> Result<()> {
+        info!("⏳ Waiting for infrastructure services to be healthy...");
+        
+        let start_time = Instant::now();
+        let timeout = Duration::from_secs(300); // 5 minutes
+        let check_interval = Duration::from_secs(10);
+        
+        let mut last_status_log = Instant::now();
+        
+        loop {
+            let elapsed = start_time.elapsed();
+            if elapsed >= timeout {
+                return Err(anyhow::anyhow!("Infrastructure readiness timeout after {:?}", elapsed));
+            }
+
+            // Log status every 30 seconds
+            if last_status_log.elapsed() >= Duration::from_secs(30) {
+                info!("⏳ Still waiting for infrastructure... ({:.0}s elapsed)", elapsed.as_secs());
+                last_status_log = Instant::now();
+            }
+
+            let services = vec!["postgres", "kafka", "redis", "prometheus"];
+            let mut all_healthy = true;
+            let mut unhealthy_services = Vec::new();
+
+            for service_name in &services {
+                if !self.check_docker_service_health(service_name).await {
+                    all_healthy = false;
+                    unhealthy_services.push(service_name.to_string());
+                }
+            }
+            
+            if all_healthy {
+                info!("✅ All infrastructure services are healthy!");
+                return Ok(());
+            }
+
+            if !unhealthy_services.is_empty() {
+                debug!("⚠️  Waiting for services: {}", unhealthy_services.join(", "));
+            }
+            
+            tokio::time::sleep(check_interval).await;
+        }
+    }
+
+    /// Check if all infrastructure services are currently healthy (quick check)
+    async fn check_infrastructure_health(&self) -> bool {
+        let services = vec!["postgres", "kafka", "redis", "prometheus"];
+        
+        for service_name in &services {
+            if !self.check_docker_service_health(service_name).await {
+                debug!("❌ Infrastructure service {} is not healthy", service_name);
+                return false;
+            }
+        }
+        
+        true
+    }
+
+    /// Check if a docker service is healthy using docker-compose
+    async fn check_docker_service_health(&self, service_name: &str) -> bool {
+        let result = tokio::time::timeout(
+            Duration::from_secs(10),
+            Command::new("docker")
+                .args(&[
+                    "compose", "-f", "infrastructure/docker-compose.yml", 
+                    "ps", service_name
+                ])
+                .current_dir(".")
+                .output()
+        ).await;
+
+        match result {
+            Ok(Ok(output)) => {
+                if output.status.success() {
+                    let stdout = String::from_utf8_lossy(&output.stdout);
+                    // Check if the service is running and healthy
+                    let healthy = stdout.lines().any(|line| {
+                        line.contains(service_name) && 
+                        (line.contains("(healthy)") || line.contains("Up"))
+                    });
+                    if healthy {
+                        debug!("✅ Service {} is healthy", service_name);
+                    } else {
+                        debug!("❌ Service {} is not healthy yet", service_name);
+                        debug!("Docker ps output: {}", stdout);
+                    }
+                    healthy
+                } else {
+                    let stderr = String::from_utf8_lossy(&output.stderr);
+                    debug!("Docker health check failed for {}: {}", service_name, stderr);
+                    false
+                }
+            }
+            Ok(Err(e)) => {
+                debug!("Failed to execute docker command for {}: {}", service_name, e);
+                false
+            }
+            Err(_) => {
+                debug!("Docker health check timed out for {}", service_name);
+                false
+            }
+        }
     }
 }

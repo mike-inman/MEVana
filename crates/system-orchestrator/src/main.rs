@@ -15,23 +15,28 @@ use crate::orchestrator::SystemOrchestrator;
 #[tokio::main]
 async fn main() -> Result<()> {
     env_logger::init();
-    
+
     info!("🚀 MEVana System Orchestrator starting");
     info!("📋 Loading configuration and service definitions");
-    
+
     // Load configuration
     let config = OrchestratorConfig::load().await?;
-    info!("✅ Configuration loaded: {} services defined", config.services.len());
-    
+    info!(
+        "✅ Configuration loaded: {} services defined",
+        config.services.len()
+    );
+
     // Create orchestrator
     let mut orchestrator = SystemOrchestrator::new(config).await?;
-    
+
     // Setup graceful shutdown
     let shutdown_signal = async {
-        signal::ctrl_c().await.expect("Failed to install CTRL+C signal handler");
+        signal::ctrl_c()
+            .await
+            .expect("Failed to install CTRL+C signal handler");
         warn!("🛑 Shutdown signal received, initiating graceful shutdown...");
     };
-    
+
     // Start system orchestration
     tokio::select! {
         result = orchestrator.start_system() => {
@@ -52,6 +57,6 @@ async fn main() -> Result<()> {
             info!("✅ System shutdown completed successfully");
         }
     }
-    
+
     Ok(())
 }

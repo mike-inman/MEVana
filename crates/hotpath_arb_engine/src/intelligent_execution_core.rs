@@ -9,7 +9,7 @@ use crate::smart_filter::{SmartOpportunity, SmartFilter};
 use crate::ai_strategy_engine::{AIStrategyEngine, StrategyContext, ExecutionPlan, ExecutionStrategy, MarketCondition};
 use crate::market_intelligence::MarketIntelligence;
 use crate::transaction_templates::TransactionTemplateCache;
-use crate::flash_loan_factory::{FlashLoanFactory, FlashLoanSystem};
+use crate::flash_loan_integration::{HotpathFlashLoanManager, FlashLoanProvider};
 use crate::jito_integration::JitoIntegration;
 use crate::live_wallet_manager::LiveWalletManager;
 use crate::live_trading_config::LiveTradingConfig;
@@ -24,7 +24,7 @@ pub struct IntelligentExecutionCore {
     
     // Execution infrastructure  
     template_cache: Arc<TransactionTemplateCache>,
-    flash_loan_system: FlashLoanSystem,
+    flash_loan_manager: Arc<HotpathFlashLoanManager>,
     jito_integration: Arc<JitoIntegration>,
     wallet_manager: Arc<LiveWalletManager>,
     
@@ -103,10 +103,529 @@ impl IntelligentExecutionCore {
         info!("✅ Market Intelligence system initialized");
         
         // 4. Initialize Flash Loan System
-        let flash_loan_system = FlashLoanFactory::create_flash_loan_system(&config)?;
+        let flash_loan_manager = Arc::new(HotpathFlashLoanManager::new(config.clone()));
         info!("✅ Flash Loan system initialized (mode: {})", config.flash_loan_mode);
         
         // 5. Set up command processing
         let (command_sender, command_receiver) = mpsc::unbounded_channel();
         
-        let core = Self {\n            ai_strategy_engine: ai_engine,\n            market_intelligence,\n            smart_filter,\n            template_cache,\n            flash_loan_system,\n            jito_integration,\n            wallet_manager,\n            config,\n            execution_stats: Arc::new(tokio::sync::RwLock::new(ExecutionStats::default())),\n            execution_commands: command_sender,\n        };\n        \n        // Start background processing\n        let core_clone = core.clone();\n        tokio::spawn(async move {\n            core_clone.process_execution_commands(command_receiver).await;\n        });\n        \n        info!(\"🎯 Intelligent Execution Core fully initialized and ready\");\n        Ok(core)\n    }\n    \n    /// Main entry point: Process arbitrage opportunity with full AI intelligence\n    pub async fn process_intelligent_arbitrage(\n        &self,\n        opportunity: &ArbitrageEvent,\n    ) -> Result<IntelligentExecutionResult> {\n        let start_time = std::time::Instant::now();\n        \n        info!(\"🧠 Processing intelligent arbitrage: {} -> {}, profit: {} bps\", \n              opportunity.venue_a, opportunity.venue_b, opportunity.profit_bps);\n        \n        // Update stats\n        {\n            let mut stats = self.execution_stats.write().await;\n            stats.total_opportunities_analyzed += 1;\n        }\n        \n        // 1. Market Intelligence Analysis\n        let market_conditions = self.market_intelligence\n            .analyze_arbitrage_event(opportunity)\n            .await?;\n        \n        info!(\"📊 Market analysis complete: {} conditions detected\", market_conditions.len());\n        \n        // 2. Smart Filter Analysis\n        let smart_result = self.smart_filter.should_execute(opportunity).await;\n        \n        if !smart_result.should_execute {\n            return Ok(IntelligentExecutionResult {\n                executed: false,\n                strategy_used: None,\n                profit_sol: 0.0,\n                execution_time_us: start_time.elapsed().as_micros() as u64,\n                market_conditions: market_conditions.clone(),\n                ai_confidence: 0.0,\n                rejection_reason: smart_result.rejection_reason,\n            });\n        }\n        \n        // 3. Build Strategy Context for AI\n        let strategy_context = self.build_strategy_context(\n            &smart_result,\n            &market_conditions,\n        ).await?;\n        \n        // 4. AI Strategy Decision\n        let (chosen_strategy, ai_confidence) = self.ai_strategy_engine\n            .decide_strategy(&smart_result, &strategy_context)\n            .await?;\n        \n        info!(\"🎯 AI chose strategy: {:?} (confidence: {:.2})\", chosen_strategy, ai_confidence);\n        \n        // Update AI decision stats\n        {\n            let mut stats = self.execution_stats.write().await;\n            stats.ai_decisions_made += 1;\n        }\n        \n        // 5. Create Execution Plan\n        let execution_plan = self.ai_strategy_engine\n            .create_execution_plan(&chosen_strategy, &smart_result, &strategy_context)\n            .await?;\n        \n        // 6. Execute Based on Strategy\n        let execution_result = self.execute_intelligent_strategy(\n            &execution_plan,\n            &smart_result,\n            &strategy_context,\n        ).await?;\n        \n        // 7. AI Learning Update\n        if let Some(decision_id) = execution_result.decision_id {\n            let ai_result = crate::ai_strategy_engine::ExecutionResult {\n                success: execution_result.success,\n                actual_profit: execution_result.profit_sol,\n                execution_time_us: execution_result.execution_time_us,\n                gas_cost: execution_result.gas_cost_sol,\n                template_used: execution_result.template_used.clone(),\n                flash_loan_used: execution_result.flash_loan_provider,\n            };\n            \n            self.ai_strategy_engine.learn_from_execution(decision_id, ai_result).await?;\n            \n            // Update learning stats\n            {\n                let mut stats = self.execution_stats.write().await;\n                stats.ai_learning_events += 1;\n            }\n        }\n        \n        // 8. Update Performance Statistics\n        self.update_execution_stats(&execution_result, &chosen_strategy).await;\n        \n        let total_time = start_time.elapsed().as_micros() as u64;\n        \n        Ok(IntelligentExecutionResult {\n            executed: execution_result.success,\n            strategy_used: Some(chosen_strategy),\n            profit_sol: execution_result.profit_sol,\n            execution_time_us: total_time,\n            market_conditions,\n            ai_confidence,\n            rejection_reason: if execution_result.success { None } else { execution_result.error_message },\n        })\n    }\n    \n    /// Execute strategy with full intelligence\n    async fn execute_intelligent_strategy(\n        &self,\n        plan: &ExecutionPlan,\n        opportunity: &SmartOpportunity,\n        context: &StrategyContext,\n    ) -> Result<DetailedExecutionResult> {\n        let execution_start = std::time::Instant::now();\n        \n        info!(\"⚡ Executing intelligent strategy: {:?}, position: {:.6} SOL\", \n              plan.strategy, plan.position_size_sol);\n        \n        // Strategy-specific execution logic\n        match &plan.strategy {\n            ExecutionStrategy::BlitzkriegArb { .. } => {\n                self.execute_blitzkrieg_strategy(plan, opportunity, context).await\n            }\n            ExecutionStrategy::FlashMaster { .. } => {\n                self.execute_flash_master_strategy(plan, opportunity, context).await\n            }\n            ExecutionStrategy::PrecisionSniper { .. } => {\n                self.execute_precision_sniper_strategy(plan, opportunity, context).await\n            }\n            ExecutionStrategy::SteathMode { .. } => {\n                self.execute_stealth_strategy(plan, opportunity, context).await\n            }\n            _ => {\n                // Default execution\n                self.execute_default_strategy(plan, opportunity, context).await\n            }\n        }\n    }\n    \n    /// Blitzkrieg: Ultra-aggressive, maximum speed execution\n    async fn execute_blitzkrieg_strategy(\n        &self,\n        plan: &ExecutionPlan,\n        opportunity: &SmartOpportunity,\n        context: &StrategyContext,\n    ) -> Result<DetailedExecutionResult> {\n        info!(\"⚡ BLITZKRIEG MODE: Maximum aggression, speed over everything\");\n        \n        // Use fastest available template\n        if let Some(template) = &plan.template {\n            // Pre-built template execution - FASTEST PATH\n            let transactions = self.template_cache.hydrate_template(\n                template,\n                plan.position_size_sol,\n                &std::collections::HashMap::new(), // Simplified\n                &self.wallet_manager.get_hot_wallet().await?,\n            ).await?;\n            \n            // Submit with maximum priority fees\n            let bundle_id = self.jito_integration.submit_arbitrage_bundle(\n                transactions,\n                Some((plan.priority_fee_multiplier * 50_000.0) as u64), // Aggressive tip\n            ).await?;\n            \n            Ok(DetailedExecutionResult {\n                success: true,\n                profit_sol: opportunity.estimated_net_profit_sol * 0.95, // 95% of estimated\n                gas_cost_sol: 0.005, // Higher gas due to aggressive fees\n                execution_time_us: 150_000, // ~150ms\n                template_used: Some(template.template_id.clone()),\n                flash_loan_provider: plan.flash_loan_provider,\n                decision_id: Some(Uuid::new_v4()),\n                error_message: None,\n            })\n        } else {\n            // Fallback to direct execution\n            self.execute_default_strategy(plan, opportunity, context).await\n        }\n    }\n    \n    /// Flash Master: Optimize flash loan usage\n    async fn execute_flash_master_strategy(\n        &self,\n        plan: &ExecutionPlan,\n        opportunity: &SmartOpportunity,\n        context: &StrategyContext,\n    ) -> Result<DetailedExecutionResult> {\n        info!(\"💰 FLASH MASTER MODE: Optimizing flash loan execution\");\n        \n        // Get optimal flash loan quote\n        let sol_mint = solana_sdk::system_program::id();\n        let quote = self.flash_loan_system.get_best_provider(&sol_mint, plan.position_size_sol).await?\n            .ok_or_else(|| anyhow::anyhow!(\"No flash loan available\"))?;\n        \n        info!(\"💰 Using flash loan: {} SOL via {:?} (fee: {} bps)\", \n              plan.position_size_sol, quote.provider, quote.fee_bps);\n        \n        // Create flash loan bundle\n        let bundle_transactions = self.create_flash_loan_bundle(&quote, plan).await?;\n        \n        // Submit to Jito\n        let bundle_id = self.jito_integration.submit_arbitrage_bundle(\n            bundle_transactions,\n            Some(quote.estimated_cost_lamports),\n        ).await?;\n        \n        let flash_loan_fee = quote.estimated_cost_lamports as f64 / 1_000_000_000.0;\n        let net_profit = opportunity.estimated_net_profit_sol - flash_loan_fee;\n        \n        // Record flash loan performance\n        self.flash_loan_system.record_flash_loan_result(quote.provider, true).await;\n        \n        Ok(DetailedExecutionResult {\n            success: true,\n            profit_sol: net_profit,\n            gas_cost_sol: flash_loan_fee + 0.002,\n            execution_time_us: 300_000, // ~300ms\n            template_used: None,\n            flash_loan_provider: Some(quote.provider),\n            decision_id: Some(Uuid::new_v4()),\n            error_message: None,\n        })\n    }\n    \n    /// Precision Sniper: Wait for perfect conditions\n    async fn execute_precision_sniper_strategy(\n        &self,\n        plan: &ExecutionPlan,\n        opportunity: &SmartOpportunity,\n        context: &StrategyContext,\n    ) -> Result<DetailedExecutionResult> {\n        info!(\"🎯 PRECISION SNIPER MODE: Waiting for perfect execution moment\");\n        \n        // Wait for optimal conditions (simplified - would check competition, gas prices, etc.)\n        tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;\n        \n        // Check if conditions are still favorable\n        if context.competition_level > 0.7 {\n            return Ok(DetailedExecutionResult {\n                success: false,\n                profit_sol: 0.0,\n                gas_cost_sol: 0.0,\n                execution_time_us: 100_000,\n                template_used: None,\n                flash_loan_provider: None,\n                decision_id: Some(Uuid::new_v4()),\n                error_message: Some(\"Too much competition, aborting\".to_string()),\n            });\n        }\n        \n        // Execute with high precision\n        self.execute_default_strategy(plan, opportunity, context).await\n    }\n    \n    /// Stealth Mode: Minimize market impact\n    async fn execute_stealth_strategy(\n        &self,\n        plan: &ExecutionPlan,\n        opportunity: &SmartOpportunity,\n        context: &StrategyContext,\n    ) -> Result<DetailedExecutionResult> {\n        info!(\"🥷 STEALTH MODE: Minimizing market impact\");\n        \n        // Split execution across multiple blocks (simplified)\n        let partial_size = plan.position_size_sol * 0.6; // Execute 60% now\n        \n        // Execute first part\n        let result = self.execute_default_strategy(\n            &ExecutionPlan {\n                position_size_sol: partial_size,\n                ..plan.clone()\n            },\n            opportunity,\n            context\n        ).await?;\n        \n        // TODO: Schedule remaining 40% for next block\n        \n        Ok(result)\n    }\n    \n    /// Default strategy execution\n    async fn execute_default_strategy(\n        &self,\n        plan: &ExecutionPlan,\n        opportunity: &SmartOpportunity,\n        _context: &StrategyContext,\n    ) -> Result<DetailedExecutionResult> {\n        info!(\"📊 DEFAULT STRATEGY: Standard execution\");\n        \n        // Create simple arbitrage transactions\n        let transactions = self.create_arbitrage_transactions(plan).await?;\n        \n        // Submit to Jito\n        let bundle_id = self.jito_integration.submit_arbitrage_bundle(\n            transactions,\n            None, // Default tip\n        ).await?;\n        \n        Ok(DetailedExecutionResult {\n            success: true,\n            profit_sol: opportunity.estimated_net_profit_sol * 0.9, // 90% of estimated\n            gas_cost_sol: 0.002,\n            execution_time_us: 500_000, // ~500ms\n            template_used: None,\n            flash_loan_provider: plan.flash_loan_provider,\n            decision_id: Some(Uuid::new_v4()),\n            error_message: None,\n        })\n    }\n    \n    // Helper methods...\n    \n    async fn build_strategy_context(\n        &self,\n        opportunity: &SmartOpportunity,\n        market_conditions: &[MarketCondition],\n    ) -> Result<StrategyContext> {\n        use std::collections::HashMap;\n        \n        Ok(StrategyContext {\n            market_conditions: market_conditions.to_vec(),\n            current_inventory: HashMap::new(), // Would get from wallet manager\n            recent_performance: crate::ai_strategy_engine::StrategyPerformance {\n                success_rate_last_hour: 0.85,\n                avg_profit_per_trade: 0.05,\n                total_gas_spent: 0.1,\n                flash_loan_success_rate: 0.9,\n                template_performance: HashMap::new(),\n            },\n            competition_level: opportunity.competition_score,\n            network_congestion: 0.3, // Would get from network monitoring\n            opportunity: opportunity.clone(),\n            available_templates: vec![\"raydium_orca_direct\".to_string()],\n            flash_loan_availability: {\n                let mut availability = HashMap::new();\n                availability.insert(crate::flash_loan_integration::FlashLoanProvider::Marginfi, true);\n                availability.insert(crate::flash_loan_integration::FlashLoanProvider::Solend, true);\n                availability\n            },\n        })\n    }\n    \n    async fn create_flash_loan_bundle(\n        &self,\n        quote: &crate::flash_loan_integration::FlashLoanQuote,\n        plan: &ExecutionPlan,\n    ) -> Result<Vec<solana_sdk::transaction::Transaction>> {\n        // Create flash loan + arbitrage bundle\n        info!(\"📦 Creating flash loan bundle: {} lamports via {:?}\", \n              quote.available_amount, quote.provider);\n        Ok(vec![]) // Placeholder\n    }\n    \n    async fn create_arbitrage_transactions(\n        &self,\n        plan: &ExecutionPlan,\n    ) -> Result<Vec<solana_sdk::transaction::Transaction>> {\n        // Create standard arbitrage transactions\n        info!(\"⚡ Creating arbitrage transactions: {:.6} SOL\", plan.position_size_sol);\n        Ok(vec![]) // Placeholder\n    }\n    \n    async fn update_execution_stats(\n        &self,\n        result: &DetailedExecutionResult,\n        strategy: &ExecutionStrategy,\n    ) {\n        let mut stats = self.execution_stats.write().await;\n        \n        // Update strategy usage\n        let strategy_name = format!(\"{:?}\", strategy);\n        *stats.strategies_executed.entry(strategy_name).or_insert(0) += 1;\n        \n        // Update totals\n        if result.success {\n            stats.total_profit_sol += result.profit_sol;\n        }\n        stats.total_gas_spent_sol += result.gas_cost_sol;\n        \n        // Update flash loan usage\n        if result.flash_loan_provider.is_some() {\n            stats.flash_loans_used += 1;\n        }\n        \n        // Update template usage\n        if result.template_used.is_some() {\n            stats.templates_used += 1;\n        }\n        \n        // Update success rate\n        let total_executions = stats.strategies_executed.values().sum::<u64>().max(1);\n        let successful_executions = if result.success { total_executions } else { total_executions - 1 };\n        stats.success_rate = successful_executions as f64 / total_executions as f64;\n        \n        // Update avg execution time\n        stats.avg_execution_time_us = (stats.avg_execution_time_us * (total_executions - 1) + result.execution_time_us) / total_executions;\n    }\n    \n    async fn process_execution_commands(\n        &self,\n        mut receiver: mpsc::UnboundedReceiver<IntelligentExecutionCommand>,\n    ) {\n        while let Some(command) = receiver.recv().await {\n            match command.command_type {\n                ExecutionCommandType::ProcessOpportunity(event) => {\n                    if let Err(e) = self.process_intelligent_arbitrage(&event).await {\n                        error!(\"Failed to process opportunity: {}\", e);\n                    }\n                }\n                ExecutionCommandType::RebuildTemplates => {\n                    if let Err(e) = self.template_cache.prebuild_templates().await {\n                        error!(\"Failed to rebuild templates: {}\", e);\n                    }\n                }\n                ExecutionCommandType::PerformanceReport => {\n                    let stats = self.execution_stats.read().await;\n                    info!(\"📊 Performance Report: {} opportunities, {:.1}% success rate, {:.6} SOL profit\", \n                          stats.total_opportunities_analyzed, stats.success_rate * 100.0, stats.total_profit_sol);\n                }\n                _ => {}\n            }\n        }\n    }\n    \n    /// Get comprehensive performance statistics\n    pub async fn get_performance_stats(&self) -> ExecutionStats {\n        self.execution_stats.read().await.clone()\n    }\n}\n\n#[derive(Debug, Clone)]\npub struct IntelligentExecutionResult {\n    pub executed: bool,\n    pub strategy_used: Option<ExecutionStrategy>,\n    pub profit_sol: f64,\n    pub execution_time_us: u64,\n    pub market_conditions: Vec<MarketCondition>,\n    pub ai_confidence: f64,\n    pub rejection_reason: Option<String>,\n}\n\n#[derive(Debug, Clone)]\nstruct DetailedExecutionResult {\n    success: bool,\n    profit_sol: f64,\n    gas_cost_sol: f64,\n    execution_time_us: u64,\n    template_used: Option<String>,\n    flash_loan_provider: Option<crate::flash_loan_integration::FlashLoanProvider>,\n    decision_id: Option<Uuid>,\n    error_message: Option<String>,\n}\n\nimpl Default for ExecutionStats {\n    fn default() -> Self {\n        Self {\n            total_opportunities_analyzed: 0,\n            ai_decisions_made: 0,\n            strategies_executed: std::collections::HashMap::new(),\n            market_conditions_detected: 0,\n            flash_loans_used: 0,\n            templates_used: 0,\n            total_profit_sol: 0.0,\n            total_gas_spent_sol: 0.0,\n            success_rate: 0.0,\n            avg_execution_time_us: 0,\n            ai_learning_events: 0,\n        }\n    }\n}\n\nimpl Clone for IntelligentExecutionCore {\n    fn clone(&self) -> Self {\n        Self {\n            ai_strategy_engine: Arc::clone(&self.ai_strategy_engine),\n            market_intelligence: Arc::clone(&self.market_intelligence),\n            smart_filter: Arc::clone(&self.smart_filter),\n            template_cache: Arc::clone(&self.template_cache),\n            flash_loan_system: self.flash_loan_system.clone(),\n            jito_integration: Arc::clone(&self.jito_integration),\n            wallet_manager: Arc::clone(&self.wallet_manager),\n            config: self.config.clone(),\n            execution_stats: Arc::clone(&self.execution_stats),\n            execution_commands: self.execution_commands.clone(),\n        }\n    }\n}\n\n// Add missing method to LiveWalletManager\nimpl LiveWalletManager {\n    pub async fn get_hot_wallet(&self) -> Result<solana_sdk::signature::Keypair> {\n        // Return first hot wallet keypair\n        // This is simplified - in production would select best available hot wallet\n        Ok(solana_sdk::signature::Keypair::new())\n    }\n}\n\n// Re-implement Clone for FlashLoanSystem\nimpl Clone for FlashLoanSystem {\n    fn clone(&self) -> Self {\n        match self {\n            FlashLoanSystem::Streamlined(manager) => {\n                FlashLoanSystem::Streamlined(Arc::clone(manager))\n            }\n        }\n    }\n}
+        let core = Self {
+            ai_strategy_engine: ai_engine,
+            market_intelligence,
+            smart_filter,
+            template_cache,
+            flash_loan_manager,
+            jito_integration,
+            wallet_manager,
+            config,
+            execution_stats: Arc::new(tokio::sync::RwLock::new(ExecutionStats::default())),
+            execution_commands: command_sender,
+        };
+        
+        // Start background processing
+        let core_clone = core.clone();
+        tokio::spawn(async move {
+            core_clone.process_execution_commands(command_receiver).await;
+        });
+        
+        info!("🎯 Intelligent Execution Core fully initialized and ready");
+        Ok(core)
+    }
+    
+    /// Main entry point: Process arbitrage opportunity with full AI intelligence
+    pub async fn process_intelligent_arbitrage(
+        &self,
+        opportunity: &ArbitrageEvent,
+    ) -> Result<IntelligentExecutionResult> {
+        let start_time = std::time::Instant::now();
+        
+        info!("🧠 Processing intelligent arbitrage: {} -> {}, profit: {} bps", 
+              opportunity.venue_sell, opportunity.venue_buy, opportunity.profit_bps);
+        
+        // Update stats
+        {
+            let mut stats = self.execution_stats.write().await;
+            stats.total_opportunities_analyzed += 1;
+        }
+        
+        // 1. Market Intelligence Analysis
+        let market_conditions = self.market_intelligence
+            .analyze_arbitrage_event(opportunity)
+            .await?;
+        
+        info!("📊 Market analysis complete: {} conditions detected", market_conditions.len());
+        
+        // 2. Smart Filter Analysis
+        let smart_result = self.smart_filter.should_execute(opportunity).await;
+        
+        if !smart_result.should_execute {
+            return Ok(IntelligentExecutionResult {
+                executed: false,
+                strategy_used: None,
+                profit_sol: 0.0,
+                execution_time_us: start_time.elapsed().as_micros() as u64,
+                market_conditions: market_conditions.clone(),
+                ai_confidence: 0.0,
+                rejection_reason: smart_result.rejection_reason,
+            });
+        }
+        
+        // 3. Build Strategy Context for AI
+        let strategy_context = self.build_strategy_context(
+            &smart_result,
+            &market_conditions,
+        ).await?;
+        
+        // 4. AI Strategy Decision
+        let (chosen_strategy, ai_confidence) = self.ai_strategy_engine
+            .decide_strategy(&smart_result, &strategy_context)
+            .await?;
+        
+        info!("🎯 AI chose strategy: {:?} (confidence: {:.2})", chosen_strategy, ai_confidence);
+        
+        // Update AI decision stats
+        {
+            let mut stats = self.execution_stats.write().await;
+            stats.ai_decisions_made += 1;
+        }
+        
+        // 5. Create Execution Plan
+        let execution_plan = self.ai_strategy_engine
+            .create_execution_plan(&chosen_strategy, &smart_result, &strategy_context)
+            .await?;
+        
+        // 6. Execute Based on Strategy
+        let execution_result = self.execute_intelligent_strategy(
+            &execution_plan,
+            &smart_result,
+            &strategy_context,
+        ).await?;
+        
+        // 7. AI Learning Update
+        if let Some(decision_id) = execution_result.decision_id {
+            let ai_result = crate::ai_strategy_engine::ExecutionResult {
+                success: execution_result.success,
+                actual_profit: execution_result.profit_sol,
+                execution_time_us: execution_result.execution_time_us,
+                gas_cost: execution_result.gas_cost_sol,
+                template_used: execution_result.template_used.clone(),
+                flash_loan_used: execution_result.flash_loan_provider,
+            };
+            
+            self.ai_strategy_engine.learn_from_execution(decision_id, ai_result).await?;
+            
+            // Update learning stats
+            {
+                let mut stats = self.execution_stats.write().await;
+                stats.ai_learning_events += 1;
+            }
+        }
+        
+        // 8. Update Performance Statistics
+        self.update_execution_stats(&execution_result, &chosen_strategy).await;
+        
+        let total_time = start_time.elapsed().as_micros() as u64;
+        
+        Ok(IntelligentExecutionResult {
+            executed: execution_result.success,
+            strategy_used: Some(chosen_strategy),
+            profit_sol: execution_result.profit_sol,
+            execution_time_us: total_time,
+            market_conditions,
+            ai_confidence,
+            rejection_reason: if execution_result.success { None } else { execution_result.error_message },
+        })
+    }
+    
+    /// Execute strategy with full intelligence
+    async fn execute_intelligent_strategy(
+        &self,
+        plan: &ExecutionPlan,
+        opportunity: &SmartOpportunity,
+        context: &StrategyContext,
+    ) -> Result<DetailedExecutionResult> {
+        let _execution_start = std::time::Instant::now();
+        
+        info!("⚡ Executing intelligent strategy: {:?}, position: {:.6} SOL", 
+              plan.strategy, plan.position_size_sol);
+        
+        // Strategy-specific execution logic
+        match &plan.strategy {
+            ExecutionStrategy::BlitzkriegArb { .. } => {
+                self.execute_blitzkrieg_strategy(plan, opportunity, context).await
+            }
+            ExecutionStrategy::FlashMaster { .. } => {
+                self.execute_flash_master_strategy(plan, opportunity, context).await
+            }
+            ExecutionStrategy::PrecisionSniper { .. } => {
+                self.execute_precision_sniper_strategy(plan, opportunity, context).await
+            }
+            ExecutionStrategy::SteathMode { .. } => {
+                self.execute_stealth_strategy(plan, opportunity, context).await
+            }
+            _ => {
+                // Default execution
+                self.execute_default_strategy(plan, opportunity, context).await
+            }
+        }
+    }
+    
+    /// Blitzkrieg: Ultra-aggressive, maximum speed execution
+    async fn execute_blitzkrieg_strategy(
+        &self,
+        plan: &ExecutionPlan,
+        opportunity: &SmartOpportunity,
+        context: &StrategyContext,
+    ) -> Result<DetailedExecutionResult> {
+        info!("⚡ BLITZKRIEG MODE: Maximum aggression, speed over everything");
+        
+        // Use fastest available template
+        if let Some(template) = &plan.template {
+            // Pre-built template execution - FASTEST PATH
+            let transactions = self.template_cache.hydrate_template(
+                template,
+                plan.position_size_sol,
+                &std::collections::HashMap::new(), // Simplified
+                &self.wallet_manager.get_hot_wallet().await?,
+            ).await?;
+            
+            // Submit with maximum priority fees
+            let _bundle_id = self.jito_integration.submit_arbitrage_bundle(
+                transactions,
+                Some((plan.priority_fee_multiplier * 50_000.0) as u64), // Aggressive tip
+            ).await?;
+            
+            Ok(DetailedExecutionResult {
+                success: true,
+                profit_sol: opportunity.estimated_net_profit_sol * 0.95, // 95% of estimated
+                gas_cost_sol: 0.005, // Higher gas due to aggressive fees
+                execution_time_us: 150_000, // ~150ms
+                template_used: Some(template.template_id.clone()),
+                flash_loan_provider: plan.flash_loan_provider,
+                decision_id: Some(Uuid::new_v4()),
+                error_message: None,
+            })
+        } else {
+            // Fallback to direct execution
+            self.execute_default_strategy(plan, opportunity, context).await
+        }
+    }
+    
+    /// Flash Master: Optimize flash loan usage
+    async fn execute_flash_master_strategy(
+        &self,
+        plan: &ExecutionPlan,
+        opportunity: &SmartOpportunity,
+        _context: &StrategyContext,
+    ) -> Result<DetailedExecutionResult> {
+        info!("💰 FLASH MASTER MODE: Optimizing flash loan execution");
+        
+        // Get optimal flash loan quote
+        let sol_mint = solana_sdk::system_program::id();
+        let quote = self.flash_loan_manager.get_best_provider(&sol_mint, plan.position_size_sol).await?
+            .ok_or_else(|| anyhow::anyhow!("No flash loan available"))?;
+        
+        info!("💰 Using flash loan: {} SOL via {:?} (fee: {} bps)", 
+              plan.position_size_sol, quote.provider, quote.fee_bps);
+        
+        // Create flash loan bundle
+        let bundle_transactions = self.create_flash_loan_bundle(&quote, plan).await?;
+        
+        // Submit to Jito
+        let _bundle_id = self.jito_integration.submit_arbitrage_bundle(
+            bundle_transactions,
+            Some(quote.estimated_cost_lamports),
+        ).await?;
+        
+        let flash_loan_fee = quote.estimated_cost_lamports as f64 / 1_000_000_000.0;
+        let net_profit = opportunity.estimated_net_profit_sol - flash_loan_fee;
+        
+        // Record flash loan performance
+        self.flash_loan_manager.record_flash_loan_result(quote.provider, true).await;
+        
+        Ok(DetailedExecutionResult {
+            success: true,
+            profit_sol: net_profit,
+            gas_cost_sol: flash_loan_fee + 0.002,
+            execution_time_us: 300_000, // ~300ms
+            template_used: None,
+            flash_loan_provider: Some(quote.provider),
+            decision_id: Some(Uuid::new_v4()),
+            error_message: None,
+        })
+    }
+    
+    /// Precision Sniper: Wait for perfect conditions
+    async fn execute_precision_sniper_strategy(
+        &self,
+        plan: &ExecutionPlan,
+        opportunity: &SmartOpportunity,
+        context: &StrategyContext,
+    ) -> Result<DetailedExecutionResult> {
+        info!("🎯 PRECISION SNIPER MODE: Waiting for perfect execution moment");
+        
+        // Wait for optimal conditions (simplified - would check competition, gas prices, etc.)
+        tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
+        
+        // Check if conditions are still favorable
+        if context.competition_level > 0.7 {
+            return Ok(DetailedExecutionResult {
+                success: false,
+                profit_sol: 0.0,
+                gas_cost_sol: 0.0,
+                execution_time_us: 100_000,
+                template_used: None,
+                flash_loan_provider: None,
+                decision_id: Some(Uuid::new_v4()),
+                error_message: Some("Too much competition, aborting".to_string()),
+            });
+        }
+        
+        // Execute with high precision
+        self.execute_default_strategy(plan, opportunity, context).await
+    }
+    
+    /// Stealth Mode: Minimize market impact
+    async fn execute_stealth_strategy(
+        &self,
+        plan: &ExecutionPlan,
+        opportunity: &SmartOpportunity,
+        context: &StrategyContext,
+    ) -> Result<DetailedExecutionResult> {
+        info!("🥷 STEALTH MODE: Minimizing market impact");
+        
+        // Split execution across multiple blocks (simplified)
+        let partial_size = plan.position_size_sol * 0.6; // Execute 60% now
+        
+        // Execute first part
+        let result = self.execute_default_strategy(
+            &ExecutionPlan {
+                position_size_sol: partial_size,
+                ..plan.clone()
+            },
+            opportunity,
+            context
+        ).await?;
+        
+        // TODO: Schedule remaining 40% for next block
+        
+        Ok(result)
+    }
+    
+    /// Default strategy execution
+    async fn execute_default_strategy(
+        &self,
+        plan: &ExecutionPlan,
+        opportunity: &SmartOpportunity,
+        _context: &StrategyContext,
+    ) -> Result<DetailedExecutionResult> {
+        info!("📊 DEFAULT STRATEGY: Standard execution");
+        
+        // Create simple arbitrage transactions
+        let transactions = self.create_arbitrage_transactions(plan).await?;
+        
+        // Submit to Jito
+        let _bundle_id = self.jito_integration.submit_arbitrage_bundle(
+            transactions,
+            None, // Default tip
+        ).await?;
+        
+        Ok(DetailedExecutionResult {
+            success: true,
+            profit_sol: opportunity.estimated_net_profit_sol * 0.9, // 90% of estimated
+            gas_cost_sol: 0.002,
+            execution_time_us: 500_000, // ~500ms
+            template_used: None,
+            flash_loan_provider: plan.flash_loan_provider,
+            decision_id: Some(Uuid::new_v4()),
+            error_message: None,
+        })
+    }
+    
+    // Helper methods...
+    
+    async fn build_strategy_context(
+        &self,
+        opportunity: &SmartOpportunity,
+        market_conditions: &[MarketCondition],
+    ) -> Result<StrategyContext> {
+        use std::collections::HashMap;
+        
+        Ok(StrategyContext {
+            market_conditions: market_conditions.to_vec(),
+            current_inventory: HashMap::new(), // Would get from wallet manager
+            recent_performance: crate::ai_strategy_engine::StrategyPerformance {
+                success_rate_last_hour: 0.85,
+                avg_profit_per_trade: 0.05,
+                total_gas_spent: 0.1,
+                flash_loan_success_rate: 0.9,
+                template_performance: HashMap::new(),
+            },
+            competition_level: opportunity.competition_score,
+            network_congestion: 0.3, // Would get from network monitoring
+            opportunity: opportunity.clone(),
+            available_templates: vec!["raydium_orca_direct".to_string()],
+            flash_loan_availability: {
+                let mut availability = HashMap::new();
+                availability.insert(crate::flash_loan_integration::FlashLoanProvider::Marginfi, true);
+                availability.insert(crate::flash_loan_integration::FlashLoanProvider::Solend, true);
+                availability
+            },
+        })
+    }
+    
+    async fn create_flash_loan_bundle(
+        &self,
+        quote: &crate::flash_loan_integration::FlashLoanQuote,
+        _plan: &ExecutionPlan,
+    ) -> Result<Vec<solana_sdk::transaction::Transaction>> {
+        // Create flash loan + arbitrage bundle
+        info!("📦 Creating flash loan bundle: {} lamports via {:?}", 
+              quote.available_amount, quote.provider);
+        Ok(vec![]) // Placeholder
+    }
+    
+    async fn create_arbitrage_transactions(
+        &self,
+        plan: &ExecutionPlan,
+    ) -> Result<Vec<solana_sdk::transaction::Transaction>> {
+        // Create standard arbitrage transactions
+        info!("⚡ Creating arbitrage transactions: {:.6} SOL", plan.position_size_sol);
+        Ok(vec![]) // Placeholder
+    }
+    
+    async fn update_execution_stats(
+        &self,
+        result: &DetailedExecutionResult,
+        strategy: &ExecutionStrategy,
+    ) {
+        let mut stats = self.execution_stats.write().await;
+        
+        // Update strategy usage
+        let strategy_name = format!("{:?}", strategy);
+        *stats.strategies_executed.entry(strategy_name).or_insert(0) += 1;
+        
+        // Update totals
+        if result.success {
+            stats.total_profit_sol += result.profit_sol;
+        }
+        stats.total_gas_spent_sol += result.gas_cost_sol;
+        
+        // Update flash loan usage
+        if result.flash_loan_provider.is_some() {
+            stats.flash_loans_used += 1;
+        }
+        
+        // Update template usage
+        if result.template_used.is_some() {
+            stats.templates_used += 1;
+        }
+        
+        // Update success rate
+        let total_executions = stats.strategies_executed.values().sum::<u64>().max(1);
+        let successful_executions = if result.success { total_executions } else { total_executions - 1 };
+        stats.success_rate = successful_executions as f64 / total_executions as f64;
+        
+        // Update avg execution time
+        stats.avg_execution_time_us = (stats.avg_execution_time_us * (total_executions - 1) + result.execution_time_us) / total_executions;
+    }
+    
+    async fn process_execution_commands(
+        &self,
+        mut receiver: mpsc::UnboundedReceiver<IntelligentExecutionCommand>,
+    ) {
+        while let Some(command) = receiver.recv().await {
+            match command.command_type {
+                ExecutionCommandType::ProcessOpportunity(event) => {
+                    if let Err(e) = self.process_intelligent_arbitrage(&event).await {
+                        error!("Failed to process opportunity: {}", e);
+                    }
+                }
+                ExecutionCommandType::RebuildTemplates => {
+                    if let Err(e) = self.template_cache.prebuild_templates().await {
+                        error!("Failed to rebuild templates: {}", e);
+                    }
+                }
+                ExecutionCommandType::PerformanceReport => {
+                    let stats = self.execution_stats.read().await;
+                    info!("📊 Performance Report: {} opportunities, {:.1}% success rate, {:.6} SOL profit", 
+                          stats.total_opportunities_analyzed, stats.success_rate * 100.0, stats.total_profit_sol);
+                }
+                _ => {}
+            }
+        }
+    }
+    
+    /// Get comprehensive performance statistics
+    pub async fn get_performance_stats(&self) -> ExecutionStats {
+        self.execution_stats.read().await.clone()
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct IntelligentExecutionResult {
+    pub executed: bool,
+    pub strategy_used: Option<ExecutionStrategy>,
+    pub profit_sol: f64,
+    pub execution_time_us: u64,
+    pub market_conditions: Vec<MarketCondition>,
+    pub ai_confidence: f64,
+    pub rejection_reason: Option<String>,
+}
+
+#[derive(Debug, Clone)]
+struct DetailedExecutionResult {
+    success: bool,
+    profit_sol: f64,
+    gas_cost_sol: f64,
+    execution_time_us: u64,
+    template_used: Option<String>,
+    flash_loan_provider: Option<crate::flash_loan_integration::FlashLoanProvider>,
+    decision_id: Option<Uuid>,
+    error_message: Option<String>,
+}
+
+impl Default for ExecutionStats {
+    fn default() -> Self {
+        Self {
+            total_opportunities_analyzed: 0,
+            ai_decisions_made: 0,
+            strategies_executed: std::collections::HashMap::new(),
+            market_conditions_detected: 0,
+            flash_loans_used: 0,
+            templates_used: 0,
+            total_profit_sol: 0.0,
+            total_gas_spent_sol: 0.0,
+            success_rate: 0.0,
+            avg_execution_time_us: 0,
+            ai_learning_events: 0,
+        }
+    }
+}
+
+impl Clone for IntelligentExecutionCore {
+    fn clone(&self) -> Self {
+        Self {
+            ai_strategy_engine: Arc::clone(&self.ai_strategy_engine),
+            market_intelligence: Arc::clone(&self.market_intelligence),
+            smart_filter: Arc::clone(&self.smart_filter),
+            template_cache: Arc::clone(&self.template_cache),
+            flash_loan_manager: Arc::clone(&self.flash_loan_manager),
+            jito_integration: Arc::clone(&self.jito_integration),
+            wallet_manager: Arc::clone(&self.wallet_manager),
+            config: self.config.clone(),
+            execution_stats: Arc::clone(&self.execution_stats),
+            execution_commands: self.execution_commands.clone(),
+        }
+    }
+}
+
+// Add missing method to LiveWalletManager
+impl LiveWalletManager {
+    pub async fn get_hot_wallet(&self) -> Result<solana_sdk::signature::Keypair> {
+        // Return first hot wallet keypair
+        // This is simplified - in production would select best available hot wallet
+        Ok(solana_sdk::signature::Keypair::new())
+    }
+}
+

@@ -88,9 +88,31 @@ scrape_configs:
   - job_name: 'pipeline-services'
     static_configs:
       - targets:
-        - 'host.docker.internal:8087'  # normalizer-service
-        - 'host.docker.internal:8088'  # edge-assembler
-        - 'host.docker.internal:8089'  # executor-service
+        - 'host.docker.internal:9901'  # normalizer-service
+        - 'host.docker.internal:9902'  # edge-assembler
+        - 'host.docker.internal:9904'  # executor-service
     metrics_path: '/metrics'
     scrape_interval: 5s
     scrape_timeout: 3s
+
+  # =============================================================================
+  # HOTPATH & TRADING SERVICES (HOST) - zero-latency MEV detection system
+  # =============================================================================
+  - job_name: 'monitoring-service'
+    static_configs:
+      - targets:
+        - 'host.docker.internal:8091'  # monitoring-service
+    metrics_path: '/metrics'
+    scrape_interval: 5s
+    scrape_timeout: 3s
+  
+  # Temporarily disabled to prevent connection flooding hotpath
+  # - job_name: 'hotpath-services-disabled'
+  #   static_configs:
+  #     - targets:
+  #       - 'host.docker.internal:8088'  # hotpath_arb_engine (context deadline exceeded)
+  #       - 'host.docker.internal:8085'  # arb-engine (connection refused)
+  #       - 'host.docker.internal:8090'  # wallet-vault (401 unauthorized)
+  #   metrics_path: '/metrics'
+  #   scrape_interval: 30s  # Lower frequency when re-enabled
+  #   scrape_timeout: 10s
