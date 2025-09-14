@@ -16,4 +16,3 @@ pub mod config_api;
 pub mod ai_strategy_engine;
 pub mod market_intelligence;
 pub mod intelligent_execution_core;
-pub mod synthetic_data_mode;

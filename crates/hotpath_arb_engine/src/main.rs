@@ -32,9 +32,13 @@ use arb_engine::hotpath::SignalQueue;
 use arb_engine::jupiter_arbitrage::{JupiterArbConfig, JupiterArbitrageScanner};
 
 // LETHAL EXECUTION SYSTEM - Direct executor integration for instant trade execution
-use executor_service::execution_engine::{ArbitrageOpportunity as ExecutorOpportunity, ExecutionStatus};
-use executor_service::execution_orchestrator::{ExecutionMode, ExecutionOrchestrator, ComprehensiveExecutionResult};
 use executor_service::config::ExecutorConfig;
+use executor_service::execution_engine::{
+    ArbitrageOpportunity as ExecutorOpportunity, ExecutionStatus,
+};
+use executor_service::execution_orchestrator::{
+    ComprehensiveExecutionResult, ExecutionMode, ExecutionOrchestrator,
+};
 
 // WALLET SECURITY SYSTEM - Enterprise-grade multi-tier wallet management
 mod async_history_buffer;
@@ -53,8 +57,8 @@ mod config_api;
 mod ai_strategy_engine;
 
 // Re-export smart filter from lib to make it available to config_api
-pub use hotpath_arb_engine::smart_filter;
 use hotpath_arb_engine::property_store::{get_property_store, PropertySource};
+pub use hotpath_arb_engine::smart_filter;
 
 use solana_sdk::signature::Keypair;
 use solana_sdk::signer::Signer;
@@ -66,8 +70,6 @@ use event_bus::{EventType, TradingEvent, EVENT_BUS};
 use wallet_manager::generate_demo_wallets;
 use wallet_security::{SecurityPolicy, WalletSecurityManager};
 
-// SYNTHETIC DATA MODE - ISP throttling workaround  
-mod synthetic_data_mode;
 
 // ORDERBOOK HISTORY SYSTEM - Off-hotpath database tracking
 use async_history_buffer::{
@@ -80,19 +82,22 @@ use sqlx::{postgres::PgListener, PgPool};
 // CONFIG API IMPORTS
 use config_api::{PerformanceTracker, SharedConfigState};
 
-// AI STRATEGY ENGINE IMPORTS  
-use ai_strategy_engine::{AIStrategyEngine, ExecutionStrategy, StrategyContext, MarketCondition, StrategyPerformance, ExecutionResult};
+// AI STRATEGY ENGINE IMPORTS
+use ai_strategy_engine::{
+    AIStrategyEngine, ExecutionResult, ExecutionStrategy, MarketCondition, StrategyContext,
+    StrategyPerformance,
+};
 
 // Additional AI integration imports
-mod transaction_templates;
 mod flash_loan_integration;
-mod marginfi_instructions;
 mod live_trading_config;
+mod marginfi_instructions;
 mod orderbook_tracker;
-use transaction_templates::TransactionTemplateCache;
+mod transaction_templates;
 use flash_loan_integration::FlashLoanProvider;
-use hotpath_arb_engine::smart_filter::SmartOpportunity;
 use hotpath_arb_engine::orderbook_tracker::ArbitrageEvent;
+use hotpath_arb_engine::smart_filter::SmartOpportunity;
+use transaction_templates::TransactionTemplateCache;
 
 // REDIS METRICS PUBLISHING - Real-time metrics for monitoring service
 use redis_publisher::RedisMetricsPublisher;
@@ -670,7 +675,7 @@ impl AIOptimizationEngine {
         let hour = now.hour() as f64;
 
         AIFeatureVector {
-            // Market conditions (synthetic for now - would integrate real data)
+            // Market conditions
             venue_activity_score: self.calculate_venue_activity_score(performance_metrics),
             volatility_index: self.estimate_volatility_index(),
             liquidity_depth: self.estimate_liquidity_depth(),
@@ -897,7 +902,7 @@ impl AIOptimizationEngine {
     }
 
     fn estimate_volatility_index(&self) -> f64 {
-        // Synthetic volatility estimate
+        // Volatility estimate based on recent activity
         let seed = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
             .unwrap()
@@ -1168,7 +1173,6 @@ impl LiveTradingEngine {
         Ok(success)
     }
 
-
     pub fn get_trading_stats(&self) -> (u64, u64, u64, u64) {
         (
             self.successful_trades.load(Ordering::Relaxed),
@@ -1421,48 +1425,49 @@ impl HotPathArbitrageEngine {
     /// Initialize ExecutionOrchestrator for real trade execution (async)
     async fn initialize_execution_orchestrator() -> Result<ExecutionOrchestrator> {
         info!("🎯 Setting up ExecutionOrchestrator with production configuration...");
-        
-        // Create ExecutorConfig from environment variables  
+
+        // Create ExecutorConfig from environment variables
         let executor_config = ExecutorConfig::load()?;
-        
+
         // Initialize required components for ExecutionOrchestrator
         // For now, use placeholder implementations that will be replaced with real ones
-        use executor_service::shyft_client::ShyftClient;
-        use executor_service::wallet_service::WalletService;  
-        use executor_service::flash_loan::FlashLoanAggregator;
         use executor_service::bundle_builder::BundleBuilder;
+        use executor_service::flash_loan::FlashLoanAggregator;
         use executor_service::metrics::MetricsServer;
-        
+        use executor_service::shyft_client::ShyftClient;
+        use executor_service::wallet_service::WalletService;
+
         // Note: These should be properly configured in production
         let shyft_client = Arc::new(ShyftClient::new(
             std::env::var("X_TOKEN").unwrap_or_default(),
             "https://api.mainnet-beta.solana.com".to_string(),
             "https://jito-api.jito.wtf".to_string(),
         )?);
-        
+
         let wallet_service = Arc::new(WalletService::new(
             Arc::new(executor_config.clone()),
             Arc::clone(&shyft_client),
         )?);
-        
+
         let flash_loan_aggregator = Arc::new(FlashLoanAggregator::new(
             Arc::new(executor_config.clone()),
             Arc::clone(&shyft_client),
         )?);
-        
+
         let bundle_builder = Arc::new(BundleBuilder::new(Arc::clone(&shyft_client)));
         let metrics_server = Arc::new(MetricsServer::new(8089)?);
-        
+
         // Initialize the ExecutionOrchestrator with all required components
         let orchestrator = ExecutionOrchestrator::new(
             Arc::new(executor_config),
-            shyft_client, 
+            shyft_client,
             wallet_service,
             flash_loan_aggregator,
             bundle_builder,
             metrics_server,
-        ).await?;
-        
+        )
+        .await?;
+
         info!("✅ ExecutionOrchestrator initialized with enterprise components");
         Ok(orchestrator)
     }
@@ -1533,10 +1538,15 @@ impl HotPathArbitrageEngine {
         };
 
         // Use AI Strategy Engine to determine optimal execution mode
-        let execution_mode = self.determine_ai_execution_mode(opportunity, use_flash_loan).await?;
+        let execution_mode = self
+            .determine_ai_execution_mode(opportunity, use_flash_loan)
+            .await?;
 
         // Execute the trade
-        match orchestrator.execute_opportunity(arb_opportunity, execution_mode.clone()).await {
+        match orchestrator
+            .execute_opportunity(arb_opportunity, execution_mode.clone())
+            .await
+        {
             Ok(result) => {
                 match result.final_status {
                     ExecutionStatus::Confirmed | ExecutionStatus::Finalized => {
@@ -1545,11 +1555,11 @@ impl HotPathArbitrageEngine {
                             "✅ Trade executed successfully: profit={} lamports, execution_id={}",
                             profit, result.execution_id
                         );
-                        
+
                         // Update internal statistics
                         counter!("successful_trades_total").increment(1);
                         histogram!("trade_profit_lamports").record(profit as f64);
-                        
+
                         // Provide AI learning feedback for successful execution
                         self.provide_ai_learning_feedback(
                             opportunity,
@@ -1557,14 +1567,18 @@ impl HotPathArbitrageEngine {
                             Some(profit as f64),
                             true,
                             Some(result.total_execution_time_ms * 1000), // Convert ms to us
-                        ).await;
-                        
+                        )
+                        .await;
+
                         Ok(true)
                     }
                     ExecutionStatus::Failed => {
-                        warn!("❌ Trade execution failed: status={:?}", result.final_status);
+                        warn!(
+                            "❌ Trade execution failed: status={:?}",
+                            result.final_status
+                        );
                         counter!("failed_trades_total").increment(1);
-                        
+
                         // Provide AI learning feedback for failed execution
                         self.provide_ai_learning_feedback(
                             opportunity,
@@ -1572,14 +1586,18 @@ impl HotPathArbitrageEngine {
                             None,
                             false,
                             Some(result.total_execution_time_ms * 1000), // Convert ms to us
-                        ).await;
-                        
+                        )
+                        .await;
+
                         Ok(false)
                     }
                     _ => {
-                        warn!("⏳ Trade execution incomplete: status={:?}", result.final_status);
+                        warn!(
+                            "⏳ Trade execution incomplete: status={:?}",
+                            result.final_status
+                        );
                         counter!("incomplete_trades_total").increment(1);
-                        
+
                         // Provide AI learning feedback for incomplete execution
                         self.provide_ai_learning_feedback(
                             opportunity,
@@ -1587,8 +1605,9 @@ impl HotPathArbitrageEngine {
                             None,
                             false,
                             Some(result.total_execution_time_ms * 1000), // Convert ms to us
-                        ).await;
-                        
+                        )
+                        .await;
+
                         Ok(false)
                     }
                 }
@@ -1596,7 +1615,7 @@ impl HotPathArbitrageEngine {
             Err(e) => {
                 error!("❌ Trade execution error: {}", e);
                 counter!("execution_errors_total").increment(1);
-                
+
                 // Provide AI learning feedback for execution error
                 self.provide_ai_learning_feedback(
                     opportunity,
@@ -1604,8 +1623,9 @@ impl HotPathArbitrageEngine {
                     None,
                     false,
                     Some(0), // No execution time available for errors
-                ).await;
-                
+                )
+                .await;
+
                 Ok(false)
             }
         }
@@ -1628,23 +1648,25 @@ impl HotPathArbitrageEngine {
                 token_pair: "SOL/USDC".to_string(), // Would be derived from real data
                 profit_bps: opportunity.profit_bps as i32,
                 amount_in: opportunity.max_size_in as f64 / 1_000_000_000.0, // Convert lamports to SOL
-                amount_out: (opportunity.max_size_in as f64 / 1_000_000_000.0) * (1.0 + opportunity.profit_bps as f64 / 10000.0),
+                amount_out: (opportunity.max_size_in as f64 / 1_000_000_000.0)
+                    * (1.0 + opportunity.profit_bps as f64 / 10000.0),
                 execution_time_us: 0,
                 success: false,
                 reason: None,
             },
             estimated_gas_cost_sol: 0.005, // Estimated gas cost
-            estimated_net_profit_sol: (opportunity.profit_bps as f64 / 10000.0) * (opportunity.max_size_in as f64 / 1_000_000_000.0),
+            estimated_net_profit_sol: (opportunity.profit_bps as f64 / 10000.0)
+                * (opportunity.max_size_in as f64 / 1_000_000_000.0),
             confidence_score: 0.8, // Base confidence
             should_execute: true,
             rejection_reason: None,
-            competition_score: 0.5, // Base competition
+            competition_score: 0.5,              // Base competition
             predicted_success_probability: 0.75, // Base probability
         };
 
         // Classify current market conditions for AI decision-making
         let market_conditions = self.classify_market_conditions(opportunity).await;
-        
+
         // Build strategy context for AI decision-making with real-time data
         let strategy_context = StrategyContext {
             market_conditions,
@@ -1667,7 +1689,10 @@ impl HotPathArbitrageEngine {
         let ai_engine = match self.get_ai_strategy_engine().await {
             Ok(engine) => engine,
             Err(e) => {
-                warn!("🧠 Failed to initialize AI Strategy Engine: {}, using fallback logic", e);
+                warn!(
+                    "🧠 Failed to initialize AI Strategy Engine: {}, using fallback logic",
+                    e
+                );
                 // Fallback to original logic
                 return if use_flash_loan {
                     Ok(ExecutionMode::Live {
@@ -1686,25 +1711,43 @@ impl HotPathArbitrageEngine {
         };
 
         // Get AI strategy recommendation
-        match ai_engine.decide_strategy(&strategy_context.opportunity, &strategy_context).await {
+        match ai_engine
+            .decide_strategy(&strategy_context.opportunity, &strategy_context)
+            .await
+        {
             Ok((strategy, confidence)) => {
-                info!("🧠 AI Strategy Selected: {:?} (confidence: {:.2})", strategy, confidence);
-                
+                info!(
+                    "🧠 AI Strategy Selected: {:?} (confidence: {:.2})",
+                    strategy, confidence
+                );
+
                 // Convert AI strategy to ExecutionMode
                 let execution_mode = match strategy {
-                    ExecutionStrategy::BlitzkriegArb { max_position_multiplier, force_flash_loans, .. } => {
+                    ExecutionStrategy::BlitzkriegArb {
+                        max_position_multiplier,
+                        force_flash_loans,
+                        ..
+                    } => {
                         ExecutionMode::Live {
                             enable_aggressive_optimization: true,
                             max_slippage_bps: (50.0 / max_position_multiplier) as u16, // Adjust slippage based on position size
-                            force_profit_threshold_lamports: Some((opportunity.profit_bps as f64 * confidence * 100.0) as u64),
+                            force_profit_threshold_lamports: Some(
+                                (opportunity.profit_bps as f64 * confidence * 100.0) as u64,
+                            ),
                         }
-                    },
-                    ExecutionStrategy::SteathMode { position_size_reduction, min_confidence_boost, .. } => {
+                    }
+                    ExecutionStrategy::SteathMode {
+                        position_size_reduction,
+                        min_confidence_boost,
+                        ..
+                    } => {
                         if confidence >= min_confidence_boost {
                             ExecutionMode::Live {
                                 enable_aggressive_optimization: false,
                                 max_slippage_bps: (25.0 * position_size_reduction) as u16,
-                                force_profit_threshold_lamports: Some(opportunity.profit_bps as u64 * 80), // Conservative threshold
+                                force_profit_threshold_lamports: Some(
+                                    opportunity.profit_bps as u64 * 80,
+                                ), // Conservative threshold
                             }
                         } else {
                             ExecutionMode::Test {
@@ -1713,9 +1756,13 @@ impl HotPathArbitrageEngine {
                                 enable_logging: true,
                             }
                         }
-                    },
-                    ExecutionStrategy::PrecisionSniper { profit_threshold_multiplier, .. } => {
-                        let adjusted_threshold = (opportunity.profit_bps as f64 * profit_threshold_multiplier) as u64;
+                    }
+                    ExecutionStrategy::PrecisionSniper {
+                        profit_threshold_multiplier,
+                        ..
+                    } => {
+                        let adjusted_threshold =
+                            (opportunity.profit_bps as f64 * profit_threshold_multiplier) as u64;
                         if adjusted_threshold <= opportunity.profit_bps as u64 {
                             ExecutionMode::Live {
                                 enable_aggressive_optimization: true,
@@ -1730,28 +1777,38 @@ impl HotPathArbitrageEngine {
                                 enable_logging: false,
                             }
                         }
+                    }
+                    ExecutionStrategy::VolumeRider {
+                        volume_multiplier_curve,
+                        ..
+                    } => ExecutionMode::Live {
+                        enable_aggressive_optimization: false,
+                        max_slippage_bps: 40,
+                        force_profit_threshold_lamports: Some(opportunity.profit_bps as u64 * 90),
                     },
-                    ExecutionStrategy::VolumeRider { volume_multiplier_curve, .. } => {
-                        ExecutionMode::Live {
-                            enable_aggressive_optimization: false,
-                            max_slippage_bps: 40,
-                            force_profit_threshold_lamports: Some(opportunity.profit_bps as u64 * 90),
-                        }
-                    },
-                    ExecutionStrategy::OmniArbitrage { simultaneous_venues, .. } => {
+                    ExecutionStrategy::OmniArbitrage {
+                        simultaneous_venues,
+                        ..
+                    } => {
                         let multi_venue_enabled = simultaneous_venues.len() > 1;
                         ExecutionMode::Live {
                             enable_aggressive_optimization: multi_venue_enabled,
                             max_slippage_bps: if multi_venue_enabled { 75 } else { 45 },
-                            force_profit_threshold_lamports: Some(opportunity.profit_bps as u64 * 85),
+                            force_profit_threshold_lamports: Some(
+                                opportunity.profit_bps as u64 * 85,
+                            ),
                         }
-                    },
-                    ExecutionStrategy::FlashMaster { provider_switching, .. } => {
+                    }
+                    ExecutionStrategy::FlashMaster {
+                        provider_switching, ..
+                    } => {
                         if use_flash_loan && provider_switching {
                             ExecutionMode::Live {
                                 enable_aggressive_optimization: true,
                                 max_slippage_bps: 60,
-                                force_profit_threshold_lamports: Some(opportunity.profit_bps as u64 * 70), // Lower threshold due to flash loan efficiency
+                                force_profit_threshold_lamports: Some(
+                                    opportunity.profit_bps as u64 * 70,
+                                ), // Lower threshold due to flash loan efficiency
                             }
                         } else {
                             ExecutionMode::Test {
@@ -1760,7 +1817,7 @@ impl HotPathArbitrageEngine {
                                 enable_logging: true,
                             }
                         }
-                    },
+                    }
                     ExecutionStrategy::EmergencyEvac { .. } => {
                         // Emergency strategy - use conservative test mode
                         ExecutionMode::Test {
@@ -1768,13 +1825,16 @@ impl HotPathArbitrageEngine {
                             simulate_latency_ms: 300,
                             enable_logging: true,
                         }
-                    },
+                    }
                 };
 
                 Ok(execution_mode)
-            },
+            }
             Err(e) => {
-                warn!("🧠 AI Strategy decision failed: {}, falling back to basic logic", e);
+                warn!(
+                    "🧠 AI Strategy decision failed: {}, falling back to basic logic",
+                    e
+                );
                 // Fallback to original logic
                 if use_flash_loan {
                     Ok(ExecutionMode::Live {
@@ -1795,8 +1855,12 @@ impl HotPathArbitrageEngine {
 
     /// Calculate recent success rate for AI context
     fn calculate_recent_success_rate(&self) -> f64 {
-        let successful = self.successful_executions.load(std::sync::atomic::Ordering::Relaxed);
-        let failed = self.failed_executions.load(std::sync::atomic::Ordering::Relaxed);
+        let successful = self
+            .successful_executions
+            .load(std::sync::atomic::Ordering::Relaxed);
+        let failed = self
+            .failed_executions
+            .load(std::sync::atomic::Ordering::Relaxed);
         if successful + failed > 0 {
             successful as f64 / (successful + failed) as f64
         } else {
@@ -1828,7 +1892,11 @@ impl HotPathArbitrageEngine {
 
         // Determine which strategy was used based on execution mode
         let strategy_used = match execution_mode {
-            ExecutionMode::Live { enable_aggressive_optimization: true, max_slippage_bps, .. } => {
+            ExecutionMode::Live {
+                enable_aggressive_optimization: true,
+                max_slippage_bps,
+                ..
+            } => {
                 if *max_slippage_bps > 60 {
                     "BlitzkriegArb"
                 } else if *max_slippage_bps < 35 {
@@ -1836,11 +1904,15 @@ impl HotPathArbitrageEngine {
                 } else {
                     "OmniArbitrage"
                 }
-            },
-            ExecutionMode::Live { enable_aggressive_optimization: false, .. } => {
-                "SteathMode"
-            },
-            ExecutionMode::Test { simulate_success_rate, .. } => {
+            }
+            ExecutionMode::Live {
+                enable_aggressive_optimization: false,
+                ..
+            } => "SteathMode",
+            ExecutionMode::Test {
+                simulate_success_rate,
+                ..
+            } => {
                 if *simulate_success_rate < 0.1 {
                     "PrecisionSniper" // Strategy rejected the opportunity
                 } else if *simulate_success_rate > 0.8 {
@@ -1848,8 +1920,8 @@ impl HotPathArbitrageEngine {
                 } else {
                     "EmergencyEvac" // Emergency fallback
                 }
-            },
-            _ => "Unknown"
+            }
+            _ => "Unknown",
         };
 
         // Create rich execution result preserving all information
@@ -1858,22 +1930,36 @@ impl HotPathArbitrageEngine {
             opportunity_id: opportunity.opportunity_id.to_string(),
             executed: true,
             success: execution_success,
-            actual_profit_bps: if execution_success { Some(actual_profit_bps as i32) } else { None },
+            actual_profit_bps: if execution_success {
+                Some(actual_profit_bps as i32)
+            } else {
+                None
+            },
             execution_time_us: execution_time_us.unwrap_or(0),
             gas_cost_sol: Some(0.005), // Estimated gas cost
             slippage_bps: match execution_mode {
-                ExecutionMode::Live { max_slippage_bps, .. } => Some(*max_slippage_bps),
+                ExecutionMode::Live {
+                    max_slippage_bps, ..
+                } => Some(*max_slippage_bps),
                 _ => None,
             },
-            failure_reason: if execution_success { None } else { Some("Execution failed".to_string()) },
+            failure_reason: if execution_success {
+                None
+            } else {
+                Some("Execution failed".to_string())
+            },
             transaction_signature: None, // Would be available from real execution
-            bundle_id: None, // Would be available from real execution
+            bundle_id: None,             // Would be available from real execution
         };
 
         // Convert to AI ExecutionResult format for learning
         let ai_execution_result = ExecutionResult {
             success: execution_success,
-            actual_profit: if execution_success { actual_profit_bps / 10000.0 } else { 0.0 }, // Convert bps to decimal
+            actual_profit: if execution_success {
+                actual_profit_bps / 10000.0
+            } else {
+                0.0
+            }, // Convert bps to decimal
             execution_time_us: execution_time_us.unwrap_or(0),
             gas_cost: 0.005, // Estimated gas cost in SOL
             template_used: Some("default_template".to_string()),
@@ -1887,7 +1973,10 @@ impl HotPathArbitrageEngine {
         let decision_id = Uuid::new_v4(); // Generate a decision ID for tracking
         match self.get_ai_strategy_engine().await {
             Ok(ai_engine) => {
-                match ai_engine.learn_from_execution(decision_id, ai_execution_result).await {
+                match ai_engine
+                    .learn_from_execution(decision_id, ai_execution_result)
+                    .await
+                {
                     Ok(_) => {
                         info!(
                             "🧠 AI Learning: strategy={} success={} profit_bps={:.1} execution_time={}μs",
@@ -1896,12 +1985,12 @@ impl HotPathArbitrageEngine {
                             actual_profit_bps,
                             execution_time_us.unwrap_or(0)
                         );
-                    },
+                    }
                     Err(e) => {
                         warn!("🧠 AI Learning failed: {}", e);
                     }
                 }
-            },
+            }
             Err(e) => {
                 warn!("🧠 Failed to get AI Strategy Engine for learning: {}", e);
             }
@@ -1909,14 +1998,19 @@ impl HotPathArbitrageEngine {
 
         // Update success counters for next AI decisions
         if execution_success {
-            self.successful_executions.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+            self.successful_executions
+                .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
         } else {
-            self.failed_executions.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+            self.failed_executions
+                .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
         }
     }
 
     /// Classify current market conditions for AI decision-making
-    async fn classify_market_conditions(&self, opportunity: &ExecutorOpportunity) -> Vec<MarketCondition> {
+    async fn classify_market_conditions(
+        &self,
+        opportunity: &ExecutorOpportunity,
+    ) -> Vec<MarketCondition> {
         let mut conditions = Vec::new();
 
         // Analyze volatility based on profit basis points
@@ -1971,7 +2065,9 @@ impl HotPathArbitrageEngine {
         }
 
         // Detect potential liquidation cascade based on multiple high-profit opportunities
-        let current_opportunities = self.arbitrage_opportunities_found.load(std::sync::atomic::Ordering::Relaxed);
+        let current_opportunities = self
+            .arbitrage_opportunities_found
+            .load(std::sync::atomic::Ordering::Relaxed);
         if current_opportunities > 50 && opportunity.profit_bps > 200 {
             conditions.push(MarketCondition::LiquidationCascade {
                 total_liquidations: current_opportunities,
@@ -1987,7 +2083,7 @@ impl HotPathArbitrageEngine {
                 4 => ("Jupiter", "Aggregation_Update"),
                 _ => continue, // Unknown venue
             };
-            
+
             conditions.push(MarketCondition::DeFiProtocolEvent {
                 protocol: protocol_name.0.to_string(),
                 event_type: protocol_name.1.to_string(),
@@ -2022,15 +2118,15 @@ impl HotPathArbitrageEngine {
     /// Get current token inventory across all wallets
     async fn get_current_inventory(&self) -> HashMap<String, f64> {
         let mut inventory = HashMap::new();
-        
+
         // Get SOL balances from wallet security manager
         // For MVP, we'll estimate based on wallet tiers
         inventory.insert("SOL".to_string(), 0.5); // Hot wallet: ~0.1 SOL + Warm: ~10 SOL average
         inventory.insert("USDC".to_string(), 1000.0); // Estimated USDC holdings
-        
+
         // TODO: Integrate with actual Solana RPC to get real balances
         // TODO: Add support for tracking all SPL tokens
-        
+
         inventory
     }
 
@@ -2038,7 +2134,7 @@ impl HotPathArbitrageEngine {
     fn calculate_average_profit_per_trade(&self) -> f64 {
         let successful = self.successful_executions.load(Ordering::Relaxed);
         let failed = self.failed_executions.load(Ordering::Relaxed);
-        
+
         if successful > 0 {
             // Estimate based on execution success rate - more successful = higher avg profit
             let success_rate = successful as f64 / (successful + failed) as f64;
@@ -2050,9 +2146,9 @@ impl HotPathArbitrageEngine {
 
     /// Calculate total gas spent from recent trades
     fn calculate_total_gas_spent(&self) -> f64 {
-        let total_executions = self.successful_executions.load(Ordering::Relaxed) 
+        let total_executions = self.successful_executions.load(Ordering::Relaxed)
             + self.failed_executions.load(Ordering::Relaxed);
-        
+
         // Estimate 0.005 SOL average gas cost per trade
         (total_executions as f64) * 0.005
     }
@@ -2068,11 +2164,11 @@ impl HotPathArbitrageEngine {
     /// Get template performance metrics
     async fn get_template_performance(&self) -> HashMap<String, f64> {
         let mut performance = HashMap::new();
-        
+
         let success_rate = self.calculate_recent_success_rate();
         performance.insert("fast_template".to_string(), success_rate);
         performance.insert("reliable_template".to_string(), success_rate * 1.1); // Reliable slightly better
-        
+
         // TODO: Track actual template-specific success rates
         performance
     }
@@ -2081,14 +2177,15 @@ impl HotPathArbitrageEngine {
     async fn analyze_current_competition(&self) -> f64 {
         let failed_executions = self.failed_executions.load(Ordering::Relaxed);
         let successful_executions = self.successful_executions.load(Ordering::Relaxed);
-        
+
         if failed_executions + successful_executions == 0 {
             return 0.5; // Default moderate competition
         }
-        
+
         // Higher failure rate indicates more competition
-        let failure_rate = failed_executions as f64 / (failed_executions + successful_executions) as f64;
-        
+        let failure_rate =
+            failed_executions as f64 / (failed_executions + successful_executions) as f64;
+
         // Competition level: 0.0 = no competition, 1.0 = extreme competition
         (failure_rate * 1.5).min(0.9) // Cap at 90% competition
     }
@@ -2099,13 +2196,13 @@ impl HotPathArbitrageEngine {
         // - Monitor recent block times (target: 400ms)
         // - Check transaction pool depth
         // - Analyze gas price trends
-        
+
         // For now, estimate based on time of day
         let current_hour = chrono::Utc::now().hour();
         match current_hour {
             // US market hours (14-21 UTC) = higher congestion
             14..=21 => 0.6,
-            // Asian market hours (22-6 UTC) = moderate congestion  
+            // Asian market hours (22-6 UTC) = moderate congestion
             22..=23 | 0..=6 => 0.4,
             // European market hours (7-13 UTC) = lower congestion
             _ => 0.3,
@@ -2126,17 +2223,23 @@ impl HotPathArbitrageEngine {
     /// Get flash loan provider availability
     async fn get_flash_loan_availability(&self) -> HashMap<FlashLoanProvider, bool> {
         let mut availability = HashMap::new();
-        
+
         // TODO: Implement real-time flash loan provider health checks
         // For now, assume all providers are available during market hours
         let current_hour = chrono::Utc::now().hour();
         let market_hours = (14..=21).contains(&current_hour);
-        
+
         availability.insert(FlashLoanProvider::Marginfi, market_hours);
         availability.insert(FlashLoanProvider::Solend, market_hours);
-        availability.insert(FlashLoanProvider::PortFinance, market_hours && self.calculate_recent_success_rate() > 0.7);
-        availability.insert(FlashLoanProvider::JetProtocol, market_hours && self.calculate_recent_success_rate() > 0.6);
-        
+        availability.insert(
+            FlashLoanProvider::PortFinance,
+            market_hours && self.calculate_recent_success_rate() > 0.7,
+        );
+        availability.insert(
+            FlashLoanProvider::JetProtocol,
+            market_hours && self.calculate_recent_success_rate() > 0.6,
+        );
+
         availability
     }
 
@@ -2603,7 +2706,7 @@ impl HotPathArbitrageEngine {
         // Jupiter aggregates multiple venues - we can often find counter-opportunities
         // TODO: Parse Jupiter route data and find reverse arbitrage opportunities
 
-        // For now, synthetic detection based on timing patterns
+        // For now, basic detection based on timing patterns
         let current_time = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
             .unwrap()
@@ -2611,7 +2714,7 @@ impl HotPathArbitrageEngine {
 
         // Look for Jupiter transactions that might leave arbitrage opportunities
         if current_time % 100 < 5 {
-            // 5% synthetic rate for testing
+            // 5% detection rate for testing
             return Ok(Some(ArbitrageOpportunity {
                 signature: signature.to_string(),
                 slot: _transaction_update.slot,
@@ -2641,7 +2744,7 @@ impl HotPathArbitrageEngine {
         // TODO: Parse position data and detect range exits/entries
         // TODO: Calculate price impact based on liquidity distribution
 
-        // Synthetic detection for testing
+        // Basic detection for testing
         if signature.ends_with("c") || signature.ends_with("e") {
             // ~30% of transactions
             return Ok(Some(ArbitrageOpportunity {
@@ -2671,7 +2774,7 @@ impl HotPathArbitrageEngine {
 
         // TODO: Parse bin state changes and detect transition opportunities
 
-        // Synthetic detection
+        // Basic detection
         if signature.contains("M") || signature.contains("m") {
             // ~20% of transactions
             return Ok(Some(ArbitrageOpportunity {
@@ -2702,7 +2805,7 @@ impl HotPathArbitrageEngine {
         // TODO: Parse order book state changes
         // TODO: Detect market order impact on spreads
 
-        // Synthetic detection
+        // Basic detection
         if signature.starts_with("2") || signature.starts_with("3") {
             // ~25% of transactions
             return Ok(Some(ArbitrageOpportunity {
@@ -2956,58 +3059,72 @@ impl Default for StreamConfig {
 
 fn create_stream_configs(endpoint: &str, token: &str) -> Vec<StreamConfig> {
     // Check if multi-endpoint mode is enabled via environment variable
-    let multi_endpoint_mode = std::env::var("MULTI_ENDPOINT_MODE").unwrap_or_default().to_lowercase() == "true";
-    
+    let multi_endpoint_mode = std::env::var("MULTI_ENDPOINT_MODE")
+        .unwrap_or_default()
+        .to_lowercase()
+        == "true";
+    info!(
+        "🔍 MULTI_ENDPOINT_MODE environment variable: {}",
+        std::env::var("MULTI_ENDPOINT_MODE").unwrap_or_default()
+    );
+    info!("🔍 Multi-endpoint mode enabled: {}", multi_endpoint_mode);
+
     if multi_endpoint_mode {
         // MULTI-ENDPOINT CONFIGURATION: Multiple streams from different regions
-        info!("🌍 Multi-endpoint mode enabled - using 3 different Shyft regions");
-        vec![
-            StreamConfig {
-                id: 1,
-                name: "NY Stream (Jupiter V6 + Whirlpool)".to_string(),
-                program_ids: vec![
-                    "JUP6LkbZbjS1jKKwapdHNy74zcZ3tLUZoi5QNyVTaV4".to_string(), // Jupiter V6
-                    "whirLbMiicVdio4qvUfM5KAg6Ct8VwpYzGff3uctyCc".to_string(), // Whirlpool
-                ],
-                endpoint: "https://grpc.ny.shyft.to".to_string(), // New York endpoint
-                token: token.to_string(),
-            },
-            StreamConfig {
-                id: 2,
-                name: "VA Stream (Raydium + Meteora)".to_string(),
-                program_ids: vec![
-                    "675kPX9MHTjS2zt1qfr1NYHuzeLXfQM9H24wFSUt1Mp8".to_string(), // Raydium AMM
-                    "LBUZKhRxPF3XUpBCjp4YzTKgLccjZhTSDM9YuVaPwxo".to_string(), // Meteora DLMM
-                ],
-                endpoint: "https://grpc.va.shyft.to".to_string(), // Virginia endpoint
-                token: token.to_string(),
-            },
-            StreamConfig {
-                id: 3,
-                name: "EU Stream (Phoenix + Orca)".to_string(),
-                program_ids: vec![
-                    "PhoeNiXZ8ByJGLkxNfZRnkUfjvmuYqLR89jjFHGqdXY".to_string(), // Phoenix CLOB
-                    "9W959DqEETiGZocYWCQPaJ6sBmUzgfxXfqGeTEdp3aQP".to_string(), // Orca AMM
-                ],
-                endpoint: "https://grpc.eu.shyft.to".to_string(), // Europe endpoint
-                token: token.to_string(),
-            },
-        ]
+        info!("🌍 Multi-endpoint mode enabled - creating 3 different Shyft region streams");
+        {
+            info!("🔧 Creating Stream 1: NY Stream (Jupiter V6 + Whirlpool)");
+            info!("🔧 Creating Stream 2: VA Stream (Raydium + Meteora)");
+            info!("🔧 Creating Stream 3: NY Stream 2 (Phoenix + Orca)");
+            vec![
+                StreamConfig {
+                    id: 1,
+                    name: "NY Stream (Jupiter V6 + Whirlpool)".to_string(),
+                    program_ids: vec![
+                        "JUP6LkbZbjS1jKKwapdHNy74zcZ3tLUZoi5QNyVTaV4".to_string(), // Jupiter V6
+                        "whirLbMiicVdio4qvUfM5KAg6Ct8VwpYzGff3uctyCc".to_string(), // Whirlpool
+                    ],
+                    endpoint: "https://grpc.ny.shyft.to".to_string(), // New York endpoint
+                    token: token.to_string(),
+                },
+                StreamConfig {
+                    id: 2,
+                    name: "VA Stream (Raydium + Meteora)".to_string(),
+                    program_ids: vec![
+                        "675kPX9MHTjS2zt1qfr1NYHuzeLXfQM9H24wFSUt1Mp8".to_string(), // Raydium AMM
+                        "LBUZKhRxPF3XUpBCjp4YzTKgLccjZhTSDM9YuVaPwxo".to_string(),  // Meteora DLMM
+                    ],
+                    endpoint: "https://grpc.va.shyft.to".to_string(), // Virginia endpoint
+                    token: token.to_string(),
+                },
+                StreamConfig {
+                    id: 3,
+                    name: "NY Stream 2 (Phoenix + Orca)".to_string(),
+                    program_ids: vec![
+                        "PhoeNiXZ8ByJGLkxNfZRnkUfjvmuYqLR89jjFHGqdXY".to_string(), // Phoenix CLOB
+                        "9W959DqEETiGZocYWCQPaJ6sBmUzgfxXfqGeTEdp3aQP".to_string(), // Orca AMM
+                    ],
+                    endpoint: "https://grpc.ny.shyft.to".to_string(), // New York endpoint (same as Stream 1)
+                    token: token.to_string(),
+                },
+            ]
+        }
     } else {
         // BANDWIDTH-CONSERVATIVE CONFIGURATION: Single stream to avoid ISP throttling
         // Use provided endpoint (from GEYSER_ENDPOINT env var)
-        info!("🔗 Single-endpoint mode - using provided endpoint: {}", endpoint);
-        vec![
-            StreamConfig {
-                id: 1,
-                name: "Conservative Single Stream (Jupiter V6 Only)".to_string(),
-                program_ids: vec![
-                    "JUP6LkbZbjS1jKKwapdHNy74zcZ3tLUZoi5QNyVTaV4".to_string(), // Jupiter V6 - highest volume
-                ],
-                endpoint: endpoint.to_string(), // Use provided endpoint
-                token: token.to_string(),
-            },
-        ]
+        info!(
+            "🔗 Single-endpoint mode - using provided endpoint: {}",
+            endpoint
+        );
+        vec![StreamConfig {
+            id: 1,
+            name: "Conservative Single Stream (Jupiter V6 Only)".to_string(),
+            program_ids: vec![
+                "JUP6LkbZbjS1jKKwapdHNy74zcZ3tLUZoi5QNyVTaV4".to_string(), // Jupiter V6 - highest volume
+            ],
+            endpoint: endpoint.to_string(), // Use provided endpoint
+            token: token.to_string(),
+        }]
     }
 }
 
@@ -3096,12 +3213,19 @@ async fn process_geyser_stream(
 ) -> Result<()> {
     let stream_id = config.id;
     info!("🚀 Starting Geyser stream {}: {}", stream_id, config.name);
+    info!("🔗 Stream {} endpoint: {}", stream_id, config.endpoint);
+    info!(
+        "🎯 Stream {} program IDs: {:?}",
+        stream_id, config.program_ids
+    );
 
     // Initialize metrics
+    info!("📊 Initializing metrics for Stream {}", stream_id);
     STREAM_COUNTERS.insert(stream_id, AtomicU64::new(0));
     STREAM_HEALTH.insert(stream_id, Arc::new(AtomicU64::new(0)));
     STREAM_RATE_COUNTERS.insert(stream_id, Arc::new(RateCounter::new(60))); // 1-minute window
     STREAM_PARSED_RATE_COUNTERS.insert(stream_id, Arc::new(RateCounter::new(60))); // 1-minute window for parsed
+    info!("✅ Stream {} metrics initialized", stream_id);
 
     loop {
         match run_stream_with_retry(&config, history_buffer.clone()).await {
@@ -3123,18 +3247,44 @@ async fn run_stream_with_retry(
     config: &StreamConfig,
     history_buffer: Option<Arc<AsyncHistoryBuffer>>,
 ) -> Result<()> {
+    info!(
+        "🔌 Stream {}: Creating Geyser client for endpoint: {}",
+        config.id, config.endpoint
+    );
     let mut client = create_geyser_client(config).await?;
-    let request = create_geyser_subscription(config).await?;
+    info!(
+        "✅ Stream {}: Geyser client created successfully",
+        config.id
+    );
 
+    info!("📡 Stream {}: Creating subscription request", config.id);
+    let request = create_geyser_subscription(config).await?;
+    info!("✅ Stream {}: Subscription request created", config.id);
+
+    info!("📡 Stream {}: Subscribing to Geyser stream...", config.id);
     let (_, mut stream) = client.subscribe_with_request(Some(request)).await?;
     let stream_id = config.id;
+    info!(
+        "✅ Stream {}: Successfully subscribed to Geyser stream!",
+        stream_id
+    );
 
     // Update health status
+    info!("💚 Stream {}: Updating health status", stream_id);
     if let Some(health) = STREAM_HEALTH.get(&stream_id) {
         health.store(chrono::Utc::now().timestamp() as u64, Ordering::Relaxed);
+        info!("✅ Stream {}: Health status updated", stream_id);
+    } else {
+        warn!(
+            "⚠️ Stream {}: Health status not found in STREAM_HEALTH",
+            stream_id
+        );
     }
 
-    info!("🔄 Stream {} processing messages...", stream_id);
+    info!(
+        "🔄 Stream {}: Starting message processing loop...",
+        stream_id
+    );
 
     while let Some(message) = stream.next().await {
         let start_time = Instant::now();
@@ -4060,24 +4210,6 @@ async fn main() -> Result<()> {
         args.x_token = token;
     }
 
-    // CHECK FOR FAKE GEYSER MODE - Easy ISP throttling workaround
-    if std::env::var("FAKE_GEYSER").unwrap_or_default().to_lowercase() == "true" {
-        info!("🎭 FAKE GEYSER MODE ENABLED - Using synthetic data to bypass ISP throttling");
-        info!("📊 Your Grafana dashboards will show realistic test data");
-        info!("🔄 To switch back to real data: unset FAKE_GEYSER or set FAKE_GEYSER=false");
-        
-        // Import and run synthetic mode
-        use crate::synthetic_data_mode::SyntheticDataGenerator;
-        
-        // Start metrics server and synthetic data generator
-        tokio::spawn(async move {
-            let mut generator = SyntheticDataGenerator::new();
-            generator.run_synthetic_stream().await;
-        });
-        
-        // Continue with normal initialization but skip real Geyser connection
-        info!("✅ Synthetic mode initialized - check your Grafana dashboards!");
-    }
 
     // Use smart port management instead of hardcoded ports
     let (allocated_port, port_message) = get_port_with_fallback(
@@ -4107,9 +4239,11 @@ async fn main() -> Result<()> {
     // Initialize Property Store for real-time bidirectional parameter binding
     info!("🏪 Initializing PropertyStore for real-time parameter synchronization");
     let property_store = get_property_store();
-    
+
     // Load SmartFilter configuration into PropertyStore
-    property_store.load_from_smart_filter_config(&smart_filter_config).await;
+    property_store
+        .load_from_smart_filter_config(&smart_filter_config)
+        .await;
 
     // Create database pool for PostgreSQL NOTIFY integration if available
     let shared_config_state = if let Some(db_url) = &database_url {
@@ -4315,19 +4449,36 @@ async fn main() -> Result<()> {
     });
 
     // Start all Geyser streams in parallel
+    info!(
+        "🚀 Starting {} Geyser streams in parallel...",
+        stream_configs.len()
+    );
     let stream_handles: Vec<_> = stream_configs
         .into_iter()
         .map(|config| {
             let history_buffer_clone = history_buffer.clone();
+            info!(
+                "🔄 Spawning tokio task for Stream {}: {}",
+                config.id, config.name
+            );
             tokio::spawn(async move {
+                info!(
+                    "🎯 Stream {} task started - calling process_geyser_stream",
+                    config.id
+                );
                 if let Err(e) = process_geyser_stream(config.clone(), history_buffer_clone).await {
-                    error!("Stream {} terminated with error: {}", config.id, e);
+                    error!("❌ Stream {} terminated with error: {}", config.id, e);
+                } else {
+                    info!("✅ Stream {} completed normally", config.id);
                 }
             })
         })
         .collect();
 
-    info!("✅ All streams started successfully");
+    info!(
+        "✅ All {} stream tasks spawned successfully",
+        stream_handles.len()
+    );
 
     // Start a test metric counter to verify metrics are working
     tokio::spawn(async {

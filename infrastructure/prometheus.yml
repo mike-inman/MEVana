@@ -60,26 +60,10 @@ scrape_configs:
   # TRADING SERVICES (when available)
   # =============================================================================
   
-  - job_name: 'hotpath-arb-engine-stream1'
+  - job_name: 'hotpath-arb-engine'
     static_configs:
       - targets:
-          - 'host.docker.internal:8088'  # Stream 1: NY Geyser
-    metrics_path: '/metrics'
-    scrape_interval: 5s
-    scrape_timeout: 3s
-
-  - job_name: 'hotpath-arb-engine-stream2'
-    static_configs:
-      - targets:
-          - 'host.docker.internal:8089'  # Stream 2: US1 Geyser
-    metrics_path: '/metrics'
-    scrape_interval: 5s
-    scrape_timeout: 3s
-
-  - job_name: 'hotpath-arb-engine-stream3'
-    static_configs:
-      - targets:
-          - 'host.docker.internal:8090'  # Stream 3: EU1 Geyser
+          - 'host.docker.internal:8088'  # Single Geyser stream
     metrics_path: '/metrics'
     scrape_interval: 5s
     scrape_timeout: 3s

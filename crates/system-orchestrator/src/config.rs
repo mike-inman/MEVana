@@ -92,10 +92,10 @@ impl OrchestratorConfig {
                     normalizer_service: 9901,
                     edge_assembler: 9902,
                     arb_engine_api: 8085,
-                    arb_engine_metrics: 9903,
+                    arb_engine_metrics: 8085,
                     executor_service: 9904,
                     hotpath_arb_engine: 8088,
-                    hotpath_metrics: 8087,
+                    hotpath_metrics: 8088,
                     api_service: 8092,
                     monitoring_service: 8091,
                 },
@@ -216,11 +216,15 @@ impl OrchestratorConfig {
                     env: HashMap::from([
                         ("RUST_LOG".to_string(), "info".to_string()),
                         ("METRICS_PORT".to_string(), port_config.trading_services.arb_engine_metrics.to_string()),
+                        ("WS_BIND".to_string(), format!("0.0.0.0:{}", port_config.trading_services.arb_engine_api)),
                         ("ARB_SIZING_MODE".to_string(), "adaptive".to_string()),
                         ("KAFKA_BROKER".to_string(), format!("localhost:{}", port_config.infrastructure.kafka_external)),
                         ("HOTPATH_LOG".to_string(), "true".to_string()),
                         ("ARB_MIN_PROFIT_BPS".to_string(), "25".to_string()),
                         ("ARB_HTTP_PORT".to_string(), port_config.trading_services.arb_engine_api.to_string()),
+                        ("ENABLE_JUPITER".to_string(), "true".to_string()),
+                        ("ARB_MAX_SLIPPAGE_BPS".to_string(), "50".to_string()),
+                        ("TRADING_MODE".to_string(), "paper".to_string()),
                     ]),
                     working_dir: Some(".".to_string()),
                     dependencies: vec!["infrastructure".to_string()],
@@ -244,7 +248,7 @@ impl OrchestratorConfig {
                     env: HashMap::from([
                         ("RUST_LOG".to_string(), "info".to_string()),
                         ("METRICS_PORT".to_string(), port_config.trading_services.executor_service.to_string()),
-                        ("DATABASE_URL".to_string(), env::var("DATABASE_URL").unwrap_or_else(|_| "postgresql://mev:mevpassword@localhost:5433/mevdb".to_string())),
+                        ("DATABASE_URL".to_string(), env::var("DATABASE_URL").expect("DATABASE_URL environment variable is required")),
                         ("ALLOW_EMPTY_SHYFT_API".to_string(), "1".to_string()), // Allow service to run without API key for local dev
                         ("KAFKA_BROKER".to_string(), format!("localhost:{}", port_config.infrastructure.kafka_external)),
                     ]),
@@ -293,7 +297,8 @@ impl OrchestratorConfig {
                     args: vec!["run".to_string(), "-p".to_string(), "token-registry-service".to_string()],
                     env: HashMap::from([
                         ("RUST_LOG".to_string(), "info".to_string()),
-                        ("TOKEN_REGISTRY_PORT".to_string(), port_config.supporting_services.token_registry_service.to_string()),
+                        ("TOKEN_REGISTRY_BIND".to_string(), format!("0.0.0.0:{}", port_config.supporting_services.token_registry_service)),
+                        ("DATABASE_URL".to_string(), env::var("DATABASE_URL").expect("DATABASE_URL environment variable is required")),
                     ]),
                     working_dir: Some(".".to_string()),
                     dependencies: vec!["infrastructure".to_string()],
@@ -318,9 +323,9 @@ impl OrchestratorConfig {
                     env: HashMap::from([
                         ("RUST_LOG".to_string(), "info".to_string()),
                         ("METRICS_PORT".to_string(), port_config.trading_services.hotpath_arb_engine.to_string()),
-                        ("GEYSER_ENDPOINT".to_string(), std::env::var("GEYSER_ENDPOINT").unwrap_or_else(|_| "https://grpc.ny.shyft.to".to_string())),
-                        ("X_TOKEN".to_string(), std::env::var("X_TOKEN").unwrap_or_else(|_| "your_token_here".to_string())),
-                        ("DATABASE_URL".to_string(), env::var("DATABASE_URL").unwrap_or_else(|_| "postgresql://mev:mevpassword@localhost:5433/mevdb".to_string())),
+                        ("GEYSER_ENDPOINT".to_string(), env::var("GEYSER_ENDPOINT").expect("GEYSER_ENDPOINT environment variable is required")),
+                        ("X_TOKEN".to_string(), env::var("X_TOKEN").expect("X_TOKEN environment variable is required")),
+                        ("DATABASE_URL".to_string(), env::var("DATABASE_URL").expect("DATABASE_URL environment variable is required")),
                         ("PAPER_TRADING".to_string(), "true".to_string()), // CRITICAL: Must be true to prevent safety shutdown
                         ("ORDERBOOK_HISTORY_ENABLED".to_string(), "true".to_string()),
                         ("MULTI_ENDPOINT_MODE".to_string(), "true".to_string()), // ENABLE THREE GEYSER STREAMS: NY/VA/EU
@@ -348,6 +353,7 @@ impl OrchestratorConfig {
                     env: HashMap::from([
                         ("RUST_LOG".to_string(), "info".to_string()),
                         ("MONITORING_PORT".to_string(), port_config.trading_services.monitoring_service.to_string()),
+                        ("DATABASE_URL".to_string(), env::var("DATABASE_URL").expect("DATABASE_URL environment variable is required")),
                     ]),
                     working_dir: Some(".".to_string()),
                     dependencies: vec!["infrastructure".to_string()],

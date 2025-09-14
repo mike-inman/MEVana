@@ -215,7 +215,16 @@
       "Bash(ORDERBOOK_HISTORY_ENABLED=true )",
       "Bash(METRICS_PORT=8088 )",
       "Bash(RUST_LOG=info )",
-      "Bash(METRICS_PORT=8095 )"
+      "Bash(METRICS_PORT=8095 )",
+      "Bash(DATABASE_URL=\"postgresql://mev:mevpassword@localhost:5433/mevdb\" cargo check -p hotpath_arb_engine)",
+      "Read(//dev/**)",
+      "Bash(RUST_LOG=debug DATABASE_URL=\"postgresql://mev:mevpassword@localhost:5433/mevdb\" cargo run -p normalizer-service --bin normalizer-service)",
+      "Bash(env RUST_LOG=debug DATABASE_URL=\"postgresql://mev:mevpassword@localhost:5433/mevdb\" cargo run -p normalizer-service --bin normalizer-service)",
+      "Bash(DATABASE_URL=\"postgresql://mev:mevpassword@localhost:5433/mevdb\" GEYSER_ENDPOINT=\"https://grpc.ny.shyft.to\" X_TOKEN=\"efff2d23-97ae-4c5f-8b8b-9a6265001189\" RUST_LOG=debug cargo run -p system-orchestrator --bin system-orchestrator)",
+      "Bash(RUST_LOG=debug TOKEN_REGISTRY_PORT=9898 cargo run -p token-registry-service --bin token-registry-service)",
+      "Bash(MULTI_ENDPOINT_MODE=true PAPER_TRADING=true DATABASE_URL=\"postgresql://mev:mevpassword@localhost:5433/mevdb\" GEYSER_ENDPOINT=\"https://grpc.ny.shyft.to\" X_TOKEN=\"efff2d23-97ae-4c5f-8b8b-9a6265001189\" METRICS_PORT=8088 RUST_LOG=info cargo run -p hotpath_arb_engine --bin hotpath_arb_engine)",
+      "Bash(./scripts/deploy-multi-stream.sh:*)",
+      "Bash(./scripts/deploy-single-stream.sh:*)"
     ],
     "deny": [],
     "ask": []
