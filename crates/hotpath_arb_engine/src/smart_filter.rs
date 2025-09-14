@@ -8,6 +8,7 @@ use tokio::sync::RwLock;
 use chrono::{DateTime, Utc, Timelike};
 
 use crate::orderbook_tracker::ArbitrageEvent;
+use crate::property_store::get_property_store;
 
 /// Simple but effective profit filter to eliminate unprofitable trades
 /// Goal: $1-2/minute consistently by executing only high-confidence opportunities
@@ -390,27 +391,33 @@ impl SmartFilter {
             stats.rejected_low_profit += 1;
         }
 
-        // Filter 2: Profit BPS range
-        if opportunity.profit_bps < self.config.min_profit_bps {
+        // Filter 2: Profit BPS range - Using dynamic PropertyStore values
+        let min_profit_bps = get_property_store().get_atomic_i32("min_profit_bps")
+            .unwrap_or(self.config.min_profit_bps);
+        if opportunity.profit_bps < min_profit_bps {
             should_execute = false;
             rejection_reason = Some(format!("Profit {}bps below minimum {}bps", 
-                                           opportunity.profit_bps, self.config.min_profit_bps));
+                                           opportunity.profit_bps, min_profit_bps));
             stats.rejected_low_profit += 1;
         }
 
-        if opportunity.profit_bps > self.config.max_profit_bps {
+        let max_profit_bps = get_property_store().get_atomic_i32("max_profit_bps")
+            .unwrap_or(self.config.max_profit_bps);
+        if opportunity.profit_bps > max_profit_bps {
             should_execute = false;
             rejection_reason = Some(format!("Profit {}bps suspiciously high (max {}bps)", 
-                                           opportunity.profit_bps, self.config.max_profit_bps));
+                                           opportunity.profit_bps, max_profit_bps));
             stats.rejected_suspicious += 1;
         }
 
-        // Filter 3: Gas budget check
+        // Filter 3: Gas budget check - Using dynamic PropertyStore values
         let gas_pct_of_profit = (gas_cost_sol / gross_profit_sol) * 100.0;
-        if gas_pct_of_profit > self.config.max_gas_budget_pct {
+        let max_gas_budget_pct = get_property_store().get_atomic_f64("max_gas_budget_pct")
+            .unwrap_or(self.config.max_gas_budget_pct);
+        if gas_pct_of_profit > max_gas_budget_pct {
             should_execute = false;
             rejection_reason = Some(format!("Gas cost {:.1}% of profit exceeds {:.1}% limit", 
-                                           gas_pct_of_profit, self.config.max_gas_budget_pct));
+                                           gas_pct_of_profit, max_gas_budget_pct));
             stats.rejected_high_gas += 1;
         }
 

@@ -4,6 +4,7 @@
 pub mod event_bus;
 pub mod orderbook_tracker;
 pub mod smart_filter;
+pub mod property_store;
 pub mod execution_integration;
 pub mod live_trading_config;
 pub mod live_wallet_manager;
@@ -15,3 +16,4 @@ pub mod config_api;
 pub mod ai_strategy_engine;
 pub mod market_intelligence;
 pub mod intelligent_execution_core;
+pub mod synthetic_data_mode;

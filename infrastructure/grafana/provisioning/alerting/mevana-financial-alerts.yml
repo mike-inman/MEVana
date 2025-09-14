@@ -1,0 +1,126 @@
+# MEVana Financial & Risk Management Alerts
+# Critical monitoring for P&L, wallet balances, and trading risks
+
+groups:
+  - name: mevana_financial_health
+    interval: 30s
+    rules:
+      - alert: SignificantDailyLoss
+        expr: increase(arb_loss_total_sol[24h]) > 5
+        for: 1m
+        labels:
+          severity: critical
+          alert_type: financial
+        annotations:
+          summary: "Significant daily loss detected"
+          description: "Daily losses exceed 5 SOL: {{ $value }} SOL lost in 24h"
+          
+      - alert: NegativePnLTrend
+        expr: arb_total_pnl_sol < 0 and increase(arb_total_pnl_sol[1h]) < -0.5
+        for: 5m
+        labels:
+          severity: warning
+          alert_type: financial
+        annotations:
+          summary: "Negative P&L trend detected"
+          description: "P&L is {{ $value }} SOL and trending downward"
+
+  - name: mevana_wallet_security
+    interval: 30s  
+    rules:
+      - alert: LowHotWalletBalance
+        expr: wallet_balance_sol{wallet_type="hot"} < 0.1
+        for: 1m
+        labels:
+          severity: warning
+          alert_type: wallet
+          wallet_id: "{{ $labels.wallet_id }}"
+        annotations:
+          summary: "Hot wallet balance critically low"
+          description: "Hot wallet {{ $labels.wallet_id }} balance: {{ $value }} SOL (< 0.1 SOL threshold)"
+          
+      - alert: HotWalletOverUtilization
+        expr: wallet_utilization_percent{wallet_type="hot"} > 90
+        for: 2m
+        labels:
+          severity: critical
+          alert_type: wallet
+        annotations:
+          summary: "Hot wallet over-utilized"
+          description: "Hot wallet utilization at {{ $value }}%, exceeding 90% safety limit"
+          
+      - alert: WalletBalanceAnomaly
+        expr: abs(rate(wallet_balance_sol[5m])) > 1
+        for: 1m
+        labels:
+          severity: warning
+          alert_type: wallet
+        annotations:
+          summary: "Unusual wallet balance change"
+          description: "Wallet {{ $labels.wallet_id }} balance changing at {{ $value }} SOL/min"
+
+  - name: mevana_trading_performance
+    interval: 60s
+    rules:
+      - alert: LowTradingSuccessRate
+        expr: arb_execution_success_rate < 0.3
+        for: 10m
+        labels:
+          severity: warning
+          alert_type: performance
+        annotations:
+          summary: "Low trading success rate"
+          description: "Trading success rate dropped to {{ $value }}%, below 30% threshold"
+          
+      - alert: HighExecutionLatency
+        expr: histogram_quantile(0.95, rate(arb_execution_latency_ms_bucket[10m])) > 5000
+        for: 5m
+        labels:
+          severity: warning
+          alert_type: performance
+        annotations:
+          summary: "High execution latency detected"
+          description: "95th percentile execution latency: {{ $value }}ms, above 5s threshold"
+          
+      - alert: ExcessiveSlippage
+        expr: arb_avg_slippage_bps > 100
+        for: 3m
+        labels:
+          severity: warning  
+          alert_type: performance
+        annotations:
+          summary: "Excessive trading slippage"
+          description: "Average slippage: {{ $value }} basis points, above 100 bps threshold"
+
+  - name: mevana_risk_management
+    interval: 60s
+    rules:
+      - alert: MaxDrawdownExceeded
+        expr: arb_max_drawdown_percent > 10
+        for: 1m
+        labels:
+          severity: critical
+          alert_type: risk
+        annotations:
+          summary: "Maximum drawdown exceeded"
+          description: "Current drawdown: {{ $value }}%, exceeding 10% risk limit"
+          
+      - alert: HighRiskScore
+        expr: wallet_exposure_risk_score > 80
+        for: 2m
+        labels:
+          severity: warning
+          alert_type: risk
+        annotations:
+          summary: "High risk exposure detected"
+          description: "Wallet risk score: {{ $value }}/100, above 80 threshold"
+          
+      - alert: TradingActivityStalled
+        expr: rate(arb_trades_executed_total[10m]) == 0
+        for: 5m
+        labels:
+          severity: critical
+          alert_type: trading
+        annotations:
+          summary: "Trading activity completely stalled"
+          description: "No trades executed in the last 5 minutes"

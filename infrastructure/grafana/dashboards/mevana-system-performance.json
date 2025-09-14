@@ -1,0 +1,273 @@
+{
+  "id": null,
+  "title": "MEVana System Performance & Infrastructure",
+  "tags": ["mevana", "infrastructure", "performance", "system"],
+  "style": "dark",
+  "timezone": "browser", 
+  "editable": true,
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 1,
+  "time": {
+    "from": "now-1h",
+    "to": "now"
+  },
+  "timepicker": {
+    "refresh_intervals": ["5s", "10s", "30s", "1m", "5m", "15m"],
+    "time_options": ["5m", "15m", "1h", "6h", "12h", "24h", "2d", "7d", "30d"]
+  },
+  "refresh": "10s",
+  "panels": [
+    {
+      "id": 1,
+      "title": "🎯 MEVana Service Orchestration",
+      "type": "stat",
+      "targets": [
+        {
+          "expr": "mevana_services_healthy",
+          "legendFormat": "Healthy",
+          "refId": "A"
+        },
+        {
+          "expr": "mevana_services_unhealthy",
+          "legendFormat": "Unhealthy", 
+          "refId": "B"
+        },
+        {
+          "expr": "mevana_system_restarts_total",
+          "legendFormat": "System Restarts",
+          "refId": "C"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "color": {"mode": "thresholds"},
+          "thresholds": {
+            "steps": [
+              {"color": "green", "value": 0},
+              {"color": "yellow", "value": 1},
+              {"color": "red", "value": 3}
+            ]
+          },
+          "unit": "short"
+        }
+      },
+      "options": {
+        "reduceOptions": {
+          "values": false,
+          "calcs": ["lastNotNull"]
+        },
+        "orientation": "horizontal",
+        "textMode": "value_and_name",
+        "colorMode": "background"
+      },
+      "gridPos": {"h": 6, "w": 24, "x": 0, "y": 0}
+    },
+    {
+      "id": 2,
+      "title": "📡 Service Discovery & Health Monitoring",
+      "type": "graph",
+      "targets": [
+        {
+          "expr": "rate(discovery_programs_discovered_total[5m]) * 60",
+          "legendFormat": "Programs Discovered (/min)",
+          "refId": "A"
+        },
+        {
+          "expr": "rate(discovery_programs_queued_total[5m]) * 60",
+          "legendFormat": "Programs Queued (/min)",
+          "refId": "B"
+        },
+        {
+          "expr": "discovery_ai_analysis_time_ms",
+          "legendFormat": "AI Analysis Time (ms)",
+          "refId": "C"
+        }
+      ],
+      "yAxes": [
+        {"label": "Count/Rate", "min": 0},
+        {"label": "Time (ms)", "min": 0}
+      ],
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 6}
+    },
+    {
+      "id": 3,
+      "title": "⚡ Token Enrichment Performance", 
+      "type": "heatmap",
+      "targets": [
+        {
+          "expr": "rate(token_enrich_latency_seconds_bucket[5m])",
+          "legendFormat": "{{le}}",
+          "refId": "A"
+        }
+      ],
+      "heatmap": {
+        "yAxis": {
+          "unit": "s",
+          "min": 0,
+          "max": 5
+        },
+        "colorMode": "spectrum"
+      },
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 6}
+    },
+    {
+      "id": 4,
+      "title": "🔍 Prometheus Scrape Performance",
+      "type": "graph",
+      "targets": [
+        {
+          "expr": "prometheus_tsdb_wal_fsync_duration_seconds",
+          "legendFormat": "WAL Fsync Duration",
+          "refId": "A"
+        },
+        {
+          "expr": "prometheus_tsdb_compaction_duration_seconds", 
+          "legendFormat": "Compaction Duration",
+          "refId": "B"
+        },
+        {
+          "expr": "rate(prometheus_config_last_reload_successful[5m])",
+          "legendFormat": "Config Reload Success Rate",
+          "refId": "C"
+        }
+      ],
+      "yAxes": [
+        {"label": "Seconds", "min": 0}
+      ],
+      "gridPos": {"h": 8, "w": 24, "x": 0, "y": 14}
+    },
+    {
+      "id": 5,
+      "title": "💾 Infrastructure Resource Usage",
+      "type": "graph",
+      "targets": [
+        {
+          "expr": "prometheus_tsdb_symbol_table_size_bytes / 1024 / 1024",
+          "legendFormat": "Prometheus Memory Usage (MB)",
+          "refId": "A"
+        },
+        {
+          "expr": "prometheus_tsdb_head_samples",
+          "legendFormat": "Head Samples Count",
+          "refId": "B"
+        },
+        {
+          "expr": "rate(prometheus_rule_evaluation_duration_seconds[5m])",
+          "legendFormat": "Rule Evaluation Duration",
+          "refId": "C"
+        }
+      ],
+      "yAxes": [
+        {"label": "Various Units", "min": 0}
+      ],
+      "gridPos": {"h": 8, "w": 24, "x": 0, "y": 22}
+    },
+    {
+      "id": 6,
+      "title": "🌐 Network & Connectivity Status",
+      "type": "table",
+      "targets": [
+        {
+          "expr": "up",
+          "legendFormat": "{{job}} - {{instance}}",
+          "refId": "A",
+          "format": "table"
+        },
+        {
+          "expr": "prometheus_notifications_total",
+          "legendFormat": "Notifications Sent",
+          "refId": "B",
+          "format": "table"
+        }
+      ],
+      "transformations": [
+        {
+          "id": "organize",
+          "options": {
+            "excludeByName": {"Time": true, "__name__": true},
+            "renameByName": {
+              "job": "Service",
+              "instance": "Endpoint",
+              "Value": "Status/Count"
+            }
+          }
+        }
+      ],
+      "fieldConfig": {
+        "overrides": [
+          {
+            "matcher": {"id": "byName", "options": "Status/Count"},
+            "properties": [
+              {
+                "id": "custom.displayMode", 
+                "value": "color-background"
+              },
+              {
+                "id": "mappings",
+                "value": [
+                  {"options": {"0": {"text": "DOWN", "color": "red"}}, "type": "value"},
+                  {"options": {"1": {"text": "UP", "color": "green"}}, "type": "value"}
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      "gridPos": {"h": 8, "w": 24, "x": 0, "y": 30}
+    },
+    {
+      "id": 7,
+      "title": "📈 MEVana Pipeline Throughput",
+      "type": "graph",
+      "targets": [
+        {
+          "expr": "rate(normalizer_transactions_processed[5m])",
+          "legendFormat": "Normalizer Transactions/sec",
+          "refId": "A"
+        },
+        {
+          "expr": "rate(edge_assembler_edges_processed[5m])",
+          "legendFormat": "Edge Assembler Edges/sec", 
+          "refId": "B"
+        },
+        {
+          "expr": "rate(executor_operations_total[5m])",
+          "legendFormat": "Executor Operations/sec",
+          "refId": "C"
+        }
+      ],
+      "yAxes": [
+        {"label": "Operations per second", "min": 0}
+      ],
+      "gridPos": {"h": 8, "w": 24, "x": 0, "y": 38}
+    }
+  ],
+  "templating": {
+    "list": [
+      {
+        "name": "service",
+        "type": "query",
+        "query": "label_values(up, job)",
+        "refresh": 1,
+        "includeAll": true,
+        "multi": true
+      }
+    ]
+  },
+  "annotations": {
+    "list": [
+      {
+        "builtIn": 1,
+        "datasource": "-- Grafana --",
+        "enable": true,
+        "hide": true,
+        "iconColor": "rgba(0, 211, 255, 1)",
+        "name": "Annotations & Alerts",
+        "type": "dashboard"
+      }
+    ]
+  },
+  "description": "System performance and infrastructure monitoring for MEVana trading platform. Tracks service health, resource usage, and operational metrics.",
+  "gnetId": null,
+  "version": 1
+}

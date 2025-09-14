@@ -1,5 +1,6 @@
 use anyhow::Result;
 use log::{error, info, warn};
+use prometheus::{Counter, Encoder, TextEncoder};
 use rdkafka::config::ClientConfig;
 use rdkafka::consumer::{Consumer, StreamConsumer};
 use rdkafka::message::BorrowedMessage;
@@ -20,6 +21,18 @@ mod venue_handlers;
 use edge::{ClmmState, EdgeDelta};
 use pool_manager::PoolManager;
 use venue_handlers::VenueId;
+
+// Metrics
+lazy_static::lazy_static! {
+    static ref EDGES_PROCESSED: Counter = Counter::new(
+        "edge_assembler_edges_processed",
+        "Total edges processed by edge assembler"
+    ).unwrap();
+    static ref POOLS_UPDATED: Counter = Counter::new(
+        "edge_assembler_pools_updated", 
+        "Total pool updates processed"
+    ).unwrap();
+}
 
 pub struct EdgeAssembler {
     consumer: StreamConsumer,
@@ -89,6 +102,41 @@ impl EdgeAssembler {
         info!("Input topics: {:?}", self.input_topics);
         info!("Output delta topic: {}", self.output_topic_delta);
         info!("Output snapshot topic: {}", self.output_topic_snapshot);
+
+        // Register metrics
+        let registry = prometheus::default_registry();
+        registry.register(Box::new(EDGES_PROCESSED.clone())).unwrap();
+        registry.register(Box::new(POOLS_UPDATED.clone())).unwrap();
+
+        // Start metrics server
+        tokio::spawn(async move {
+            use warp::Filter;
+            let metrics_route = warp::path("metrics").and(warp::get()).map(|| {
+                let encoder = TextEncoder::new();
+                let metric_families = prometheus::gather();
+                let mut buffer = Vec::new();
+                if encoder.encode(&metric_families, &mut buffer).is_ok() {
+                    warp::reply::with_status(
+                        String::from_utf8_lossy(&buffer).to_string(),
+                        warp::http::StatusCode::OK,
+                    )
+                } else {
+                    warp::reply::with_status(
+                        "encode_error".into(),
+                        warp::http::StatusCode::INTERNAL_SERVER_ERROR,
+                    )
+                }
+            });
+            let health = warp::path("health").and(warp::get()).map(|| "OK");
+            let routes = metrics_route.or(health);
+            let port: u16 = std::env::var("METRICS_PORT")
+                .ok()
+                .and_then(|v| v.parse().ok())
+                .unwrap_or(9902);
+            let addr: std::net::SocketAddr = format!("0.0.0.0:{}", port).parse().unwrap();
+            info!("edge-assembler metrics listening on {}", addr);
+            warp::serve(routes).run(addr).await;
+        });
 
         // Subscribe to input topics
         let mut topic_partition_list = TopicPartitionList::new();
@@ -219,6 +267,7 @@ impl EdgeAssembler {
         slot: u64,
         write_version: u64,
     ) -> Result<()> {
+        POOLS_UPDATED.inc();
         // Update pool in manager
         self.pool_manager
             .update_pool(pool_pubkey, pool.clone(), slot, write_version);
@@ -233,6 +282,7 @@ impl EdgeAssembler {
         // Emit both edges
         self.emit_edge_delta(&edge_a_to_b).await?;
         self.emit_edge_delta(&edge_b_to_a).await?;
+        EDGES_PROCESSED.inc_by(2.0);
 
         Ok(())
     }

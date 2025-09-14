@@ -16,6 +16,7 @@ use serde::Deserialize;
 use std::{fs, path::PathBuf};
 // use kafka::{make_producer, publish_json};
 use anyhow::{Context, Result};
+use prometheus::{Counter, Encoder, TextEncoder};
 
 use clap::{Parser, Subcommand};
 use normalizer_generated::registry as gen;
@@ -122,6 +123,41 @@ async fn run_pipe(
     env_logger::init();
     log::info!("pipe: {in_topic} -> {out_topic} @ {broker} (group={group})");
 
+    // Register metrics
+    let registry = prometheus::default_registry();
+    registry.register(Box::new(TRANSACTIONS_PROCESSED.clone())).unwrap();
+    registry.register(Box::new(SWAPS_EXTRACTED.clone())).unwrap();
+
+    // Start metrics server
+    tokio::spawn(async move {
+        use warp::Filter;
+        let metrics_route = warp::path("metrics").and(warp::get()).map(|| {
+            let encoder = TextEncoder::new();
+            let metric_families = prometheus::gather();
+            let mut buffer = Vec::new();
+            if encoder.encode(&metric_families, &mut buffer).is_ok() {
+                warp::reply::with_status(
+                    String::from_utf8_lossy(&buffer).to_string(),
+                    warp::http::StatusCode::OK,
+                )
+            } else {
+                warp::reply::with_status(
+                    "encode_error".into(),
+                    warp::http::StatusCode::INTERNAL_SERVER_ERROR,
+                )
+            }
+        });
+        let health = warp::path("health").and(warp::get()).map(|| "OK");
+        let routes = metrics_route.or(health);
+        let port: u16 = std::env::var("METRICS_PORT")
+            .ok()
+            .and_then(|v| v.parse().ok())
+            .unwrap_or(9901);
+        let addr: std::net::SocketAddr = format!("0.0.0.0:{}", port).parse().unwrap();
+        log::info!("normalizer-service metrics listening on {}", addr);
+        warp::serve(routes).run(addr).await;
+    });
+
     let consumer: StreamConsumer = ClientConfig::new()
         .set("bootstrap.servers", broker)
         .set("group.id", group)
@@ -157,6 +193,7 @@ async fn handle_raw(
     producer: &rdkafka::producer::FutureProducer,
     out_topic: &str,
 ) -> anyhow::Result<()> {
+    TRANSACTIONS_PROCESSED.inc();
     let update = ypp::SubscribeUpdateTransaction::decode(payload)?;
     let info = match update.transaction.as_ref() {
         Some(i) => i,
@@ -206,6 +243,7 @@ async fn handle_raw(
 
             for ex in extractors.iter().filter(|e| e.program_id() == pid) {
                 if let Some(mut ns) = ex.try_extract(&ctx) {
+                    SWAPS_EXTRACTED.inc();
                     // 1) fill from decoded roles
                     if ns.pool_id.is_empty() {
                         if let Some(roles) = &ctx.decoded_accounts_by_role {
@@ -273,6 +311,14 @@ lazy_static! {
         std::env::var("KAFKA_BROKER").unwrap_or_else(|_| "localhost:29092".into());
     static ref SWAP_TOPIC: String =
         std::env::var("NORMALIZED_SWAPS_TOPIC").unwrap_or_else(|_| "normalized-swaps.v1".into());
+    static ref TRANSACTIONS_PROCESSED: Counter = Counter::new(
+        "normalizer_transactions_processed",
+        "Total transactions processed by normalizer"
+    ).unwrap();
+    static ref SWAPS_EXTRACTED: Counter = Counter::new(
+        "normalizer_swaps_extracted", 
+        "Total swaps extracted by normalizer"
+    ).unwrap();
 }
 
 // ---------------- small helper: map normalized -> wire ----------------

@@ -32,6 +32,9 @@ prost-types = "0.13"
 dotenv = "0.15"
 redis = { version = "0.32", features = ["tokio-comp"] }
 chrono = { version = "0.4", features = ["serde"] }
+prometheus = "0.13"
+warp = "0.3"
+lazy_static = "1.4"
 
 [build-dependencies]
 prost-build = "0.13"

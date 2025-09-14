@@ -36,6 +36,8 @@ lru = "0.12"
 # axum = "0.7"
 tower = "0.4"
 tower-http = { version = "0.5", features = ["cors"] }
+prometheus = "0.13"
+warp = "0.3"
 normalizer-codegen = { path = "../normalizer-codegen" }
 futures-util = "0.3.31"
 # tokio-stream = "0.1.17"

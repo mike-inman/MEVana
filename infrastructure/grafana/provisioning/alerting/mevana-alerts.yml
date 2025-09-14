@@ -1,0 +1,67 @@
+# MEVana Critical Alerting Rules
+# Monitors essential system health and trading performance
+
+groups:
+  - name: mevana_system_health
+    interval: 30s
+    rules:
+      - alert: MEVanaServiceDown
+        expr: up{job=~"system-orchestrator|discovery-service|arb-engine"} == 0
+        for: 1m
+        labels:
+          severity: critical
+          service: "{{ $labels.job }}"
+        annotations:
+          summary: "MEVana service {{ $labels.job }} is down"
+          description: "Service {{ $labels.job }} at {{ $labels.instance }} has been down for more than 1 minute"
+          
+      - alert: MEVanaUnhealthyServices
+        expr: mevana_services_unhealthy > 2
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Multiple MEVana services unhealthy"
+          description: "{{ $value }} services are currently unhealthy"
+
+  - name: mevana_arbitrage_performance  
+    interval: 15s
+    rules:
+      - alert: LowArbitrageSuccessRate
+        expr: arb_execution_success_rate < 0.5
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Low arbitrage execution success rate"
+          description: "Arbitrage success rate is {{ $value }}%, below 50% threshold"
+          
+      - alert: ArbitrageOpportunitiesStalled
+        expr: rate(arb_opportunities_detected_total[5m]) == 0
+        for: 3m
+        labels:
+          severity: critical
+        annotations:
+          summary: "No arbitrage opportunities detected"
+          description: "No new arbitrage opportunities detected in the last 3 minutes"
+
+  - name: mevana_infrastructure
+    interval: 60s
+    rules:
+      - alert: PrometheusTargetDown
+        expr: up{job="prometheus"} == 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Prometheus monitoring is down"
+          description: "Prometheus instance is unreachable"
+          
+      - alert: HighTokenEnrichmentLatency
+        expr: histogram_quantile(0.95, rate(token_enrich_latency_seconds_bucket[5m])) > 2
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High token enrichment latency"
+          description: "95th percentile latency is {{ $value }}s, above 2s threshold"

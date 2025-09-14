@@ -19,31 +19,51 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - ❌ **Service port chaos**: Multiple hotpath_arb_engine instances with different configs
 - ❌ **Data corruption**: Database counts jumping between 322 ↔ 6010 opportunities
 - ❌ **Inconsistent environment variables**: Different DATABASE_URL values across processes
+- ❌ **GEYSER ENDPOINT MONITORING**: Multiple instances trigger abuse detection, stuck at old slots
 
-**Root Cause:** Hardcoded database connections in archived code:
-```rust
-// crates/_archive/api-service-v2-original/src/database/mod.rs:40
-url: "postgresql://localhost:5432/mevana".to_string(),  // WRONG DATABASE!
-```
+**Root Causes:**
+1. Hardcoded database connections in archived code
+2. **CRITICAL**: Background processes from testing cause endpoint throttling/blocking
 
 **Solution Implemented:**
-1. ✅ **Killed local Postgres.app** on port 5432
-2. ✅ **Use ONLY Docker PostgreSQL** on port 5433: `postgresql://mev:mevpassword@localhost:5433/mevdb`
-3. ✅ **Created clean startup script**: `scripts/start_clean.sh`
-4. ✅ **Use system-orchestrator ONLY**: Centralized service management
+1. ✅ **Enhanced cleanup script**: `scripts/lifecycle/start_clean.sh` 
+2. ✅ **Comprehensive process killing**: cargo run, pkill, lsof port cleanup
+3. ✅ **Single instance policy**: Prevents Geyser endpoint monitoring issues
+4. ✅ **Multi-endpoint distribution**: NY/Virginia/Frankfurt to avoid congestion
 
-### MANDATORY FOR ALL FUTURE SESSIONS:
+### 🚨 MANDATORY FOR ALL FUTURE SESSIONS 🚨
 
 ```bash
-# ALWAYS use this clean startup - NO manual service spinning!
-./scripts/start_clean.sh
+# ALWAYS use this clean startup - KILLS ALL BACKGROUND PROCESSES!
+./scripts/lifecycle/start_clean.sh
 ```
 
-**Never do:**
-- ❌ Start multiple hotpath_arb_engine instances manually
-- ❌ Use different DATABASE_URL values
-- ❌ Start services without system-orchestrator
+**Critical Rules:**
+- ❌ **NEVER start multiple hotpath_arb_engine instances** (triggers endpoint monitoring)  
+- ❌ **NEVER use background processes** without cleanup first
+- ❌ **NEVER start services manually** without using the clean startup script
 - ❌ Connect to port 5432 (local Postgres.app)
+- ✅ **ALWAYS use comprehensive cleanup** before any service startup
+- ✅ **ALWAYS verify single instance** running after startup
+
+### 🛠️ **CONFLICT DETECTION TOOLS**
+
+```bash
+# Check for multiple instance conflicts (run anytime)
+./scripts/lifecycle/check_conflicts.sh
+
+# Clean startup with built-in conflict detection
+./scripts/lifecycle/start_clean.sh
+
+# Full system shutdown
+./scripts/lifecycle/shutdown_system.sh
+```
+
+**The enhanced startup script now includes:**
+- ✅ **Comprehensive process cleanup** (cargo, pkill, lsof)
+- ✅ **Pre-startup conflict detection** (aborts if conflicts found)
+- ✅ **Port occupation checks** (prevents dual endpoint access)
+- ✅ **Single instance enforcement** (protects against Geyser monitoring)
 
 ### Recent Achievements
 - ✅ **Smart Filter Real-Time Configuration System** - COMPLETED

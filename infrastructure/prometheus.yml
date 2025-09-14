@@ -7,6 +7,9 @@ rule_files:
   # - "second_rules.yml"
 
 scrape_configs:
+  # =============================================================================
+  # INFRASTRUCTURE SERVICES (Docker Internal)
+  # =============================================================================
   - job_name: 'prometheus'
     static_configs:
       - targets: ['localhost:9090']
@@ -24,95 +27,75 @@ scrape_configs:
       - targets: ['grafana:3000']
 
   # =============================================================================
-  # MEVANA SERVICES MONITORING
+  # MEVANA SERVICES (Host via Docker Bridge)
   # =============================================================================
   
-  - job_name: 'mevana-services'
+  - job_name: 'system-orchestrator'
     static_configs:
-      - targets: 
-        - 'dex-stream-universal:8080'
-        - 'dex-backfill:8080'
-        - 'shyft-validator:8080'
-        - 'arb-test-mode:8080'
-        - 'depth-builder:8080'
-        - 'ui-gateway:8080'
+      - targets:
+          - 'host.docker.internal:9999'  # system-orchestrator
     metrics_path: '/metrics'
-    scrape_interval: 5s
-    scrape_timeout: 3s
+    scrape_interval: 15s
+    scrape_timeout: 5s
 
-  - job_name: 'mevana-testing'
+  - job_name: 'discovery-service'
     static_configs:
-      - targets: ['localhost:9091']  # Use localhost for host services
+      - targets:
+          - 'host.docker.internal:9102'  # discovery-service
+    metrics_path: '/metrics'
+    scrape_interval: 15s
+    scrape_timeout: 5s
+
+  - job_name: 'pipeline-services'
+    static_configs:
+      - targets:
+          - 'host.docker.internal:9901'  # normalizer-service
+          - 'host.docker.internal:9902'  # edge-assembler
+          - 'host.docker.internal:9904'  # executor-service
     metrics_path: '/metrics'
     scrape_interval: 10s
     scrape_timeout: 5s
 
   # =============================================================================
-  # PERFORMANCE MONITORING
+  # TRADING SERVICES (when available)
   # =============================================================================
   
-  - job_name: 'mevana-performance'
+  - job_name: 'hotpath-arb-engine-stream1'
     static_configs:
-      - targets: ['localhost:9092']  # Use localhost for host services
+      - targets:
+          - 'host.docker.internal:8088'  # Stream 1: NY Geyser
     metrics_path: '/metrics'
-    scrape_interval: 1s  # High frequency for performance monitoring
-    scrape_timeout: 1s 
+    scrape_interval: 5s
+    scrape_timeout: 3s
 
-  # =============================================================================
-  # ARB ENGINE (HOST) - scrape directly from host process (cargo run) via Docker -> host bridge
-  # NOTE: On macOS Docker Desktop, 'host.docker.internal' resolves to the host.
-  # If you later containerize arb-engine, replace with 'arb-engine:8080'.
-  # =============================================================================
+  - job_name: 'hotpath-arb-engine-stream2'
+    static_configs:
+      - targets:
+          - 'host.docker.internal:8089'  # Stream 2: US1 Geyser
+    metrics_path: '/metrics'
+    scrape_interval: 5s
+    scrape_timeout: 3s
+
+  - job_name: 'hotpath-arb-engine-stream3'
+    static_configs:
+      - targets:
+          - 'host.docker.internal:8090'  # Stream 3: EU1 Geyser
+    metrics_path: '/metrics'
+    scrape_interval: 5s
+    scrape_timeout: 3s
+
   - job_name: 'arb-engine'
     static_configs:
       - targets:
-        - 'host.docker.internal:8180'
+          - 'host.docker.internal:8085'  # arb-engine API (when ready)
     metrics_path: '/metrics'
-    scrape_interval: 5s
-    scrape_timeout: 3s
+    scrape_interval: 10s
+    scrape_timeout: 5s
 
-  # =============================================================================
-  # MULTI-GEYSER-STREAMS (HOST) - scrape directly from host process (systemd service) via Docker -> host bridge
-  # =============================================================================
-  - job_name: 'multi-geyser-streams'
-    static_configs:
-      - targets:
-        - 'host.docker.internal:8086'
-    metrics_path: '/metrics'
-    scrape_interval: 5s
-    scrape_timeout: 3s
-
-  # =============================================================================
-  # PIPELINE SERVICES (HOST) - full MEVana data processing pipeline
-  # =============================================================================
-  - job_name: 'pipeline-services'
-    static_configs:
-      - targets:
-        - 'host.docker.internal:9901'  # normalizer-service
-        - 'host.docker.internal:9902'  # edge-assembler
-        - 'host.docker.internal:9904'  # executor-service
-    metrics_path: '/metrics'
-    scrape_interval: 5s
-    scrape_timeout: 3s
-
-  # =============================================================================
-  # HOTPATH & TRADING SERVICES (HOST) - zero-latency MEV detection system
-  # =============================================================================
   - job_name: 'monitoring-service'
     static_configs:
       - targets:
-        - 'host.docker.internal:8091'  # monitoring-service
+          - 'host.docker.internal:8091'  # monitoring-service (when ready)
     metrics_path: '/metrics'
-    scrape_interval: 5s
-    scrape_timeout: 3s
-  
-  # Temporarily disabled to prevent connection flooding hotpath
-  # - job_name: 'hotpath-services-disabled'
-  #   static_configs:
-  #     - targets:
-  #       - 'host.docker.internal:8088'  # hotpath_arb_engine (context deadline exceeded)
-  #       - 'host.docker.internal:8085'  # arb-engine (connection refused)
-  #       - 'host.docker.internal:8090'  # wallet-vault (401 unauthorized)
-  #   metrics_path: '/metrics'
-  #   scrape_interval: 30s  # Lower frequency when re-enabled
-  #   scrape_timeout: 10s
+    scrape_interval: 10s
+    scrape_timeout: 5s

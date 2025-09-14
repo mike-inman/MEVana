@@ -54,6 +54,7 @@ mod ai_strategy_engine;
 
 // Re-export smart filter from lib to make it available to config_api
 pub use hotpath_arb_engine::smart_filter;
+use hotpath_arb_engine::property_store::{get_property_store, PropertySource};
 
 use solana_sdk::signature::Keypair;
 use solana_sdk::signer::Signer;
@@ -64,6 +65,9 @@ extern crate executor_service;
 use event_bus::{EventType, TradingEvent, EVENT_BUS};
 use wallet_manager::generate_demo_wallets;
 use wallet_security::{SecurityPolicy, WalletSecurityManager};
+
+// SYNTHETIC DATA MODE - ISP throttling workaround  
+mod synthetic_data_mode;
 
 // ORDERBOOK HISTORY SYSTEM - Off-hotpath database tracking
 use async_history_buffer::{
@@ -2951,40 +2955,60 @@ impl Default for StreamConfig {
 }
 
 fn create_stream_configs(endpoint: &str, token: &str) -> Vec<StreamConfig> {
-    vec![
-        StreamConfig {
-            id: 1,
-            name: "Direct DEX Stream".to_string(),
-            program_ids: vec![
-                "whirLbMiicVdio4qvUfM5KAg6Ct8VwpYzGff3uctyCc".to_string(), // Whirlpool (Orca CLMM)
-                "675kPX9MHTjS2zt1qfr1NYHuzeLXfQM9H24wFSUt1Mp8".to_string(), // Raydium AMM V4
-                "LBUZKhRxPF3XUpBCjp4YzTKgLccjZhTSDM9YuVaPwxo".to_string(), // Meteora DLMM
-                "PhoeNiXZ8ByJGLkxNfZRnkUfjvmuYqLR89jjFHGqdXY".to_string(), // Phoenix CLOB
-            ],
-            endpoint: endpoint.to_string(),
-            token: token.to_string(),
-        },
-        StreamConfig {
-            id: 2,
-            name: "OpenBook & Legacy Stream".to_string(),
-            program_ids: vec![
-                "srmqPvymJeFKQ4zGQed1GFppgkRHL9kaELCbyksJtPX".to_string(), // OpenBook V2
-                "9W959DqEETiGZocYWCQPaJ6sBmUzgfxXfqGeTEdp3aQP".to_string(), // Orca AMM (legacy)
-                "CAMMCzo5YL8w4VFF8KVHrK22GGUsp5VTaW7grrKgrWqK".to_string(), // Raydium CLMM
-            ],
-            endpoint: endpoint.to_string(),
-            token: token.to_string(),
-        },
-        StreamConfig {
-            id: 3,
-            name: "Aggregator Analysis Stream".to_string(),
-            program_ids: vec![
-                "JUP6LkbZbjS1jKKwapdHNy74zcZ3tLUZoi5QNyVTaV4".to_string(), // Jupiter V6 (for route analysis)
-            ],
-            endpoint: endpoint.to_string(),
-            token: token.to_string(),
-        },
-    ]
+    // Check if multi-endpoint mode is enabled via environment variable
+    let multi_endpoint_mode = std::env::var("MULTI_ENDPOINT_MODE").unwrap_or_default().to_lowercase() == "true";
+    
+    if multi_endpoint_mode {
+        // MULTI-ENDPOINT CONFIGURATION: Multiple streams from different regions
+        info!("🌍 Multi-endpoint mode enabled - using 3 different Shyft regions");
+        vec![
+            StreamConfig {
+                id: 1,
+                name: "NY Stream (Jupiter V6 + Whirlpool)".to_string(),
+                program_ids: vec![
+                    "JUP6LkbZbjS1jKKwapdHNy74zcZ3tLUZoi5QNyVTaV4".to_string(), // Jupiter V6
+                    "whirLbMiicVdio4qvUfM5KAg6Ct8VwpYzGff3uctyCc".to_string(), // Whirlpool
+                ],
+                endpoint: "https://grpc.ny.shyft.to".to_string(), // New York endpoint
+                token: token.to_string(),
+            },
+            StreamConfig {
+                id: 2,
+                name: "VA Stream (Raydium + Meteora)".to_string(),
+                program_ids: vec![
+                    "675kPX9MHTjS2zt1qfr1NYHuzeLXfQM9H24wFSUt1Mp8".to_string(), // Raydium AMM
+                    "LBUZKhRxPF3XUpBCjp4YzTKgLccjZhTSDM9YuVaPwxo".to_string(), // Meteora DLMM
+                ],
+                endpoint: "https://grpc.va.shyft.to".to_string(), // Virginia endpoint
+                token: token.to_string(),
+            },
+            StreamConfig {
+                id: 3,
+                name: "EU Stream (Phoenix + Orca)".to_string(),
+                program_ids: vec![
+                    "PhoeNiXZ8ByJGLkxNfZRnkUfjvmuYqLR89jjFHGqdXY".to_string(), // Phoenix CLOB
+                    "9W959DqEETiGZocYWCQPaJ6sBmUzgfxXfqGeTEdp3aQP".to_string(), // Orca AMM
+                ],
+                endpoint: "https://grpc.eu.shyft.to".to_string(), // Europe endpoint
+                token: token.to_string(),
+            },
+        ]
+    } else {
+        // BANDWIDTH-CONSERVATIVE CONFIGURATION: Single stream to avoid ISP throttling
+        // Use provided endpoint (from GEYSER_ENDPOINT env var)
+        info!("🔗 Single-endpoint mode - using provided endpoint: {}", endpoint);
+        vec![
+            StreamConfig {
+                id: 1,
+                name: "Conservative Single Stream (Jupiter V6 Only)".to_string(),
+                program_ids: vec![
+                    "JUP6LkbZbjS1jKKwapdHNy74zcZ3tLUZoi5QNyVTaV4".to_string(), // Jupiter V6 - highest volume
+                ],
+                endpoint: endpoint.to_string(), // Use provided endpoint
+                token: token.to_string(),
+            },
+        ]
+    }
 }
 
 fn get_dex_name_from_program_id(program_id: &str) -> String {
@@ -4035,6 +4059,26 @@ async fn main() -> Result<()> {
     if let Ok(token) = std::env::var("X_TOKEN") {
         args.x_token = token;
     }
+
+    // CHECK FOR FAKE GEYSER MODE - Easy ISP throttling workaround
+    if std::env::var("FAKE_GEYSER").unwrap_or_default().to_lowercase() == "true" {
+        info!("🎭 FAKE GEYSER MODE ENABLED - Using synthetic data to bypass ISP throttling");
+        info!("📊 Your Grafana dashboards will show realistic test data");
+        info!("🔄 To switch back to real data: unset FAKE_GEYSER or set FAKE_GEYSER=false");
+        
+        // Import and run synthetic mode
+        use crate::synthetic_data_mode::SyntheticDataGenerator;
+        
+        // Start metrics server and synthetic data generator
+        tokio::spawn(async move {
+            let mut generator = SyntheticDataGenerator::new();
+            generator.run_synthetic_stream().await;
+        });
+        
+        // Continue with normal initialization but skip real Geyser connection
+        info!("✅ Synthetic mode initialized - check your Grafana dashboards!");
+    }
+
     // Use smart port management instead of hardcoded ports
     let (allocated_port, port_message) = get_port_with_fallback(
         "hotpath_arb_engine",
@@ -4058,7 +4102,14 @@ async fn main() -> Result<()> {
     let database_url = std::env::var("DATABASE_URL").ok();
     let smart_filter_config =
         config_api::load_smart_filter_configuration(database_url.as_deref()).await;
-    let smart_filter = SmartFilter::new(smart_filter_config);
+    let smart_filter = SmartFilter::new(smart_filter_config.clone());
+
+    // Initialize Property Store for real-time bidirectional parameter binding
+    info!("🏪 Initializing PropertyStore for real-time parameter synchronization");
+    let property_store = get_property_store();
+    
+    // Load SmartFilter configuration into PropertyStore
+    property_store.load_from_smart_filter_config(&smart_filter_config).await;
 
     // Create database pool for PostgreSQL NOTIFY integration if available
     let shared_config_state = if let Some(db_url) = &database_url {

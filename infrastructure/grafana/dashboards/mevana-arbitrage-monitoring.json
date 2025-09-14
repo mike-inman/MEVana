@@ -1,0 +1,298 @@
+{
+  "id": null,
+  "title": "MEVana Real-Time Arbitrage Monitoring",
+  "tags": ["mevana", "arbitrage", "trading", "real-time"],
+  "style": "dark",
+  "timezone": "browser",
+  "editable": true,
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 1,
+  "time": {
+    "from": "now-30m",
+    "to": "now"
+  },
+  "timepicker": {
+    "refresh_intervals": ["1s", "5s", "10s", "30s", "1m", "5m"],
+    "time_options": ["5m", "15m", "1h", "6h", "12h", "24h", "2d", "7d", "30d"]
+  },
+  "refresh": "5s",
+  "panels": [
+    {
+      "id": 1,
+      "title": "🚀 MEVana System Health Overview",
+      "type": "stat",
+      "targets": [
+        {
+          "expr": "mevana_services_healthy",
+          "legendFormat": "Healthy Services",
+          "refId": "A"
+        },
+        {
+          "expr": "mevana_services_unhealthy", 
+          "legendFormat": "Unhealthy Services",
+          "refId": "B"
+        },
+        {
+          "expr": "mevana_services_total",
+          "legendFormat": "Total Services", 
+          "refId": "C"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "thresholds": {
+            "steps": [
+              {"color": "red", "value": 0},
+              {"color": "yellow", "value": 5},
+              {"color": "green", "value": 8}
+            ]
+          },
+          "unit": "short"
+        }
+      },
+      "options": {
+        "reduceOptions": {
+          "values": false,
+          "calcs": ["lastNotNull"],
+          "fields": ""
+        },
+        "orientation": "horizontal",
+        "textMode": "value_and_name",
+        "colorMode": "background"
+      },
+      "gridPos": {"h": 6, "w": 24, "x": 0, "y": 0}
+    },
+    {
+      "id": 2,
+      "title": "⚡ Discovery Service - AI Analysis Performance",
+      "type": "graph",
+      "targets": [
+        {
+          "expr": "rate(discovery_ai_analysis_time_ms_sum[5m]) / rate(discovery_ai_analysis_time_ms_count[5m])",
+          "legendFormat": "Avg Analysis Time (ms)",
+          "refId": "A"
+        },
+        {
+          "expr": "rate(discovery_programs_discovered_total[5m])",
+          "legendFormat": "Programs Discovery Rate (/min)",
+          "refId": "B"
+        }
+      ],
+      "yAxes": [
+        {"label": "Time (ms)", "min": 0},
+        {"label": "Rate (/min)", "min": 0}
+      ],
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 6}
+    },
+    {
+      "id": 3,
+      "title": "🎯 Token Enrichment Latency",
+      "type": "graph", 
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.50, rate(token_enrich_latency_seconds_bucket[5m]))",
+          "legendFormat": "p50 Latency",
+          "refId": "A"
+        },
+        {
+          "expr": "histogram_quantile(0.95, rate(token_enrich_latency_seconds_bucket[5m]))",
+          "legendFormat": "p95 Latency", 
+          "refId": "B"
+        },
+        {
+          "expr": "histogram_quantile(0.99, rate(token_enrich_latency_seconds_bucket[5m]))",
+          "legendFormat": "p99 Latency",
+          "refId": "C"
+        }
+      ],
+      "yAxes": [
+        {"label": "Seconds", "min": 0}
+      ],
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 6}
+    },
+    {
+      "id": 4,
+      "title": "📊 Service Availability Status",
+      "type": "table",
+      "targets": [
+        {
+          "expr": "up",
+          "legendFormat": "{{job}} - {{instance}}",
+          "refId": "A",
+          "format": "table"
+        }
+      ],
+      "transformations": [
+        {
+          "id": "organize",
+          "options": {
+            "excludeByName": {"Time": true, "__name__": true},
+            "renameByName": {
+              "job": "Service",
+              "instance": "Endpoint", 
+              "Value": "Status"
+            }
+          }
+        }
+      ],
+      "fieldConfig": {
+        "overrides": [
+          {
+            "matcher": {"id": "byName", "options": "Status"},
+            "properties": [
+              {
+                "id": "custom.displayMode",
+                "value": "color-background"
+              },
+              {
+                "id": "mappings",
+                "value": [
+                  {"options": {"0": {"text": "DOWN", "color": "red"}}, "type": "value"},
+                  {"options": {"1": {"text": "UP", "color": "green"}}, "type": "value"}
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      "gridPos": {"h": 8, "w": 24, "x": 0, "y": 14}
+    },
+    {
+      "id": 5,
+      "title": "🔥 HotPath Arbitrage Engine - When Available",
+      "type": "graph",
+      "targets": [
+        {
+          "expr": "arb_opportunities_detected_total",
+          "legendFormat": "Opportunities Detected",
+          "refId": "A"
+        },
+        {
+          "expr": "arb_execution_success_rate",
+          "legendFormat": "Execution Success Rate",
+          "refId": "B"
+        },
+        {
+          "expr": "rate(arb_profit_captured_total[5m])",
+          "legendFormat": "Profit Rate (per min)",
+          "refId": "C"
+        }
+      ],
+      "alert": {
+        "conditions": [
+          {
+            "evaluator": {"params": [0.5], "type": "lt"},
+            "operator": {"type": "and"},
+            "query": {"params": ["B", "5m", "now"]},
+            "reducer": {"params": [], "type": "avg"},
+            "type": "query"
+          }
+        ],
+        "executionErrorState": "alerting",
+        "for": "5m",
+        "frequency": "10s",
+        "handler": 1,
+        "name": "Low Arbitrage Success Rate",
+        "noDataState": "no_data",
+        "notifications": []
+      },
+      "gridPos": {"h": 8, "w": 24, "x": 0, "y": 22}
+    },
+    {
+      "id": 6,
+      "title": "💰 Revenue & Performance Metrics",
+      "type": "stat",
+      "targets": [
+        {
+          "expr": "increase(arb_profit_captured_total[1h])",
+          "legendFormat": "Profit Last Hour",
+          "refId": "A"
+        },
+        {
+          "expr": "arb_execution_latency_ms",
+          "legendFormat": "Avg Execution Latency (ms)",
+          "refId": "B"
+        },
+        {
+          "expr": "rate(arb_opportunities_detected_total[5m]) * 60",
+          "legendFormat": "Opportunities/Min",
+          "refId": "C"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "color": {"mode": "palette-classic"},
+          "unit": "short",
+          "decimals": 2
+        },
+        "overrides": [
+          {
+            "matcher": {"id": "byName", "options": "Profit Last Hour"},
+            "properties": [{"id": "unit", "value": "currencyUSD"}]
+          },
+          {
+            "matcher": {"id": "byName", "options": "Avg Execution Latency (ms)"},
+            "properties": [{"id": "unit", "value": "ms"}]
+          }
+        ]
+      },
+      "options": {
+        "reduceOptions": {
+          "values": false,
+          "calcs": ["lastNotNull"]
+        },
+        "orientation": "horizontal", 
+        "textMode": "value_and_name"
+      },
+      "gridPos": {"h": 6, "w": 24, "x": 0, "y": 30}
+    },
+    {
+      "id": 7,
+      "title": "🌊 Real-Time MEV Detection Pipeline",
+      "type": "graph",
+      "targets": [
+        {
+          "expr": "rate(normalizer_transactions_processed[5m])",
+          "legendFormat": "Normalizer TPS",
+          "refId": "A"
+        },
+        {
+          "expr": "rate(edge_assembler_edges_processed[5m])", 
+          "legendFormat": "Edge Assembler EPS",
+          "refId": "B"
+        },
+        {
+          "expr": "rate(executor_bundles_submitted[5m])",
+          "legendFormat": "Bundle Submission Rate",
+          "refId": "C"
+        }
+      ],
+      "yAxes": [
+        {"label": "Transactions/Edges per second", "min": 0}
+      ],
+      "gridPos": {"h": 8, "w": 24, "x": 0, "y": 36}
+    }
+  ],
+  "templating": {
+    "list": []
+  },
+  "annotations": {
+    "list": [
+      {
+        "builtIn": 1,
+        "datasource": "-- Grafana --",
+        "enable": true,
+        "hide": true,
+        "iconColor": "rgba(0, 211, 255, 1)",
+        "name": "Annotations & Alerts",
+        "type": "dashboard"
+      }
+    ]
+  },
+  "description": "Comprehensive real-time monitoring dashboard for MEVana arbitrage trading system. Tracks system health, arbitrage opportunities, execution performance, and revenue metrics.",
+  "gnetId": null,
+  "version": 1
+}

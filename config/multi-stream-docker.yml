@@ -1,0 +1,59 @@
+version: '3.8'
+
+services:
+  # Infrastructure services
+  postgres:
+    image: postgres:15
+    environment:
+      POSTGRES_DB: mevdb
+      POSTGRES_USER: mev
+      POSTGRES_PASSWORD: mevpassword
+    ports:
+      - "5433:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+  # Redis for caching (optional, but useful)
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+
+  # Multi-endpoint mode handles all streams internally
+
+  # Multi-endpoint arbitrage engine with integrated streams
+  arb-engine-multi:
+    build: ..
+    command: hotpath_arb_engine
+    environment:
+      MULTI_ENDPOINT_MODE: true
+      PAPER_TRADING: true
+      DATABASE_URL: postgresql://mev:mevpassword@postgres:5432/mevdb
+      X_TOKEN: efff2d23-97ae-4c5f-8b8b-9a6265001189
+      METRICS_PORT: 8088
+      RUST_LOG: info
+    ports:
+      - "8088:8088"
+    depends_on:
+      - postgres
+
+  # Monitoring stack
+  prometheus:
+    image: prom/prometheus:v2.45.0
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./infrastructure/prometheus.yml:/etc/prometheus/prometheus.yml
+
+  grafana:
+    image: grafana/grafana:10.1.0
+    ports:
+      - "3000:3000"
+    environment:
+      GF_SECURITY_ADMIN_PASSWORD: admin123
+    volumes:
+      - grafana_data:/var/lib/grafana
+
+volumes:
+  postgres_data:
+  grafana_data:

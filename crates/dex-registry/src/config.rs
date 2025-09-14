@@ -5,7 +5,7 @@ use std::env;
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RegistryConfig {
     // Database configuration
-    pub sqlite_path: String,
+    pub database_url: String,
     pub redis_url: String,
     pub connection_pool_size: u32,
 
@@ -46,8 +46,8 @@ impl RegistryConfig {
     pub fn load() -> Result<Self> {
         Ok(Self {
             // Database configuration
-            sqlite_path: env::var("SQLITE_PATH")
-                .unwrap_or_else(|_| "data/dex_registry.db".to_string()),
+            database_url: env::var("DATABASE_URL")
+                .unwrap_or_else(|_| "postgresql://mev:mevpassword@localhost:5433/mevdb".to_string()),
             redis_url: env::var("REDIS_URL")
                 .unwrap_or_else(|_| "redis://localhost:6379".to_string()),
             connection_pool_size: env::var("CONNECTION_POOL_SIZE")
@@ -109,8 +109,8 @@ impl RegistryConfig {
 
     pub fn validate(&self) -> Result<()> {
         // Validate database paths
-        if self.sqlite_path.is_empty() {
-            anyhow::bail!("SQLITE_PATH cannot be empty");
+        if self.database_url.is_empty() {
+            anyhow::bail!("DATABASE_URL cannot be empty");
         }
 
         // Validate ports

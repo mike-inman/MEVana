@@ -1,17 +1,28 @@
 use anyhow::Result;
 use chrono::Utc;
-use sqlx::SqlitePool;
+use sqlx::PgPool;
 
 use super::{DexProgram, DiscoveryQueue, IdlCache, RegistryStats, Token};
 
 // DEX Program queries
-pub async fn insert_dex_program(pool: &SqlitePool, program: &DexProgram) -> Result<()> {
+pub async fn insert_dex_program(pool: &PgPool, program: &DexProgram) -> Result<()> {
     sqlx::query(
         r#"
-        INSERT OR REPLACE INTO dex_programs 
+        INSERT INTO dex_programs 
         (program_id, dex_name, protocol_type, fee_structure, liquidity_model, idl_version, quirks, 
          is_active, discovered_at, last_seen, transaction_volume_24h, metadata)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+        ON CONFLICT (program_id) DO UPDATE SET
+        dex_name = EXCLUDED.dex_name,
+        protocol_type = EXCLUDED.protocol_type,
+        fee_structure = EXCLUDED.fee_structure,
+        liquidity_model = EXCLUDED.liquidity_model,
+        idl_version = EXCLUDED.idl_version,
+        quirks = EXCLUDED.quirks,
+        is_active = EXCLUDED.is_active,
+        last_seen = EXCLUDED.last_seen,
+        transaction_volume_24h = EXCLUDED.transaction_volume_24h,
+        metadata = EXCLUDED.metadata
         "#,
     )
     .bind(&program.program_id)
@@ -32,9 +43,9 @@ pub async fn insert_dex_program(pool: &SqlitePool, program: &DexProgram) -> Resu
     Ok(())
 }
 
-pub async fn get_dex_program(pool: &SqlitePool, program_id: &str) -> Result<Option<DexProgram>> {
+pub async fn get_dex_program(pool: &PgPool, program_id: &str) -> Result<Option<DexProgram>> {
     let program =
-        sqlx::query_as::<_, DexProgram>("SELECT * FROM dex_programs WHERE program_id = ?")
+        sqlx::query_as::<_, DexProgram>("SELECT * FROM dex_programs WHERE program_id = $1")
             .bind(program_id)
             .fetch_optional(pool)
             .await?;
@@ -42,7 +53,7 @@ pub async fn get_dex_program(pool: &SqlitePool, program_id: &str) -> Result<Opti
     Ok(program)
 }
 
-pub async fn list_dex_programs(pool: &SqlitePool, active_only: bool) -> Result<Vec<DexProgram>> {
+pub async fn list_dex_programs(pool: &PgPool, active_only: bool) -> Result<Vec<DexProgram>> {
     let query = if active_only {
         "SELECT * FROM dex_programs WHERE is_active = true ORDER BY dex_name"
     } else {
@@ -56,8 +67,8 @@ pub async fn list_dex_programs(pool: &SqlitePool, active_only: bool) -> Result<V
     Ok(programs)
 }
 
-pub async fn update_dex_program_activity(pool: &SqlitePool, program_id: &str) -> Result<()> {
-    sqlx::query("UPDATE dex_programs SET last_seen = ? WHERE program_id = ?")
+pub async fn update_dex_program_activity(pool: &PgPool, program_id: &str) -> Result<()> {
+    sqlx::query("UPDATE dex_programs SET last_seen = $1 WHERE program_id = $2")
         .bind(Utc::now())
         .bind(program_id)
         .execute(pool)
@@ -67,13 +78,26 @@ pub async fn update_dex_program_activity(pool: &SqlitePool, program_id: &str) ->
 }
 
 // Token queries
-pub async fn insert_token(pool: &SqlitePool, token: &Token) -> Result<()> {
+pub async fn insert_token(pool: &PgPool, token: &Token) -> Result<()> {
     sqlx::query(
         r#"
-        INSERT OR REPLACE INTO tokens 
+        INSERT INTO tokens 
         (mint_address, symbol, name, decimals, is_stable_coin, is_wrapped, underlying_asset,
          coingecko_id, price_feeds, market_cap, daily_volume, discovered_at, verified, metadata)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
+        ON CONFLICT (mint_address) DO UPDATE SET
+        symbol = EXCLUDED.symbol,
+        name = EXCLUDED.name,
+        decimals = EXCLUDED.decimals,
+        is_stable_coin = EXCLUDED.is_stable_coin,
+        is_wrapped = EXCLUDED.is_wrapped,
+        underlying_asset = EXCLUDED.underlying_asset,
+        coingecko_id = EXCLUDED.coingecko_id,
+        price_feeds = EXCLUDED.price_feeds,
+        market_cap = EXCLUDED.market_cap,
+        daily_volume = EXCLUDED.daily_volume,
+        verified = EXCLUDED.verified,
+        metadata = EXCLUDED.metadata
         "#,
     )
     .bind(&token.mint_address)
@@ -96,8 +120,8 @@ pub async fn insert_token(pool: &SqlitePool, token: &Token) -> Result<()> {
     Ok(())
 }
 
-pub async fn get_token(pool: &SqlitePool, mint_address: &str) -> Result<Option<Token>> {
-    let token = sqlx::query_as::<_, Token>("SELECT * FROM tokens WHERE mint_address = ?")
+pub async fn get_token(pool: &PgPool, mint_address: &str) -> Result<Option<Token>> {
+    let token = sqlx::query_as::<_, Token>("SELECT * FROM tokens WHERE mint_address = $1")
         .bind(mint_address)
         .fetch_optional(pool)
         .await?;
@@ -105,7 +129,7 @@ pub async fn get_token(pool: &SqlitePool, mint_address: &str) -> Result<Option<T
     Ok(token)
 }
 
-pub async fn list_tokens(pool: &SqlitePool, verified_only: bool) -> Result<Vec<Token>> {
+pub async fn list_tokens(pool: &PgPool, verified_only: bool) -> Result<Vec<Token>> {
     let query = if verified_only {
         "SELECT * FROM tokens WHERE verified = true ORDER BY symbol"
     } else {
@@ -118,11 +142,11 @@ pub async fn list_tokens(pool: &SqlitePool, verified_only: bool) -> Result<Vec<T
 }
 
 pub async fn update_token_metadata(
-    pool: &SqlitePool,
+    pool: &PgPool,
     mint_address: &str,
     metadata: &str,
 ) -> Result<()> {
-    sqlx::query("UPDATE tokens SET metadata = ? WHERE mint_address = ?")
+    sqlx::query("UPDATE tokens SET metadata = $1 WHERE mint_address = $1")
         .bind(metadata)
         .bind(mint_address)
         .execute(pool)
@@ -132,7 +156,7 @@ pub async fn update_token_metadata(
 }
 
 // IDL cache queries
-pub async fn insert_idl_cache(pool: &SqlitePool, idl_entry: &IdlCache) -> Result<()> {
+pub async fn insert_idl_cache(pool: &PgPool, idl_entry: &IdlCache) -> Result<()> {
     sqlx::query(
         r#"
         INSERT OR REPLACE INTO idl_cache 
@@ -153,9 +177,9 @@ pub async fn insert_idl_cache(pool: &SqlitePool, idl_entry: &IdlCache) -> Result
     Ok(())
 }
 
-pub async fn get_idl_cache(pool: &SqlitePool, program_id: &str) -> Result<Option<IdlCache>> {
+pub async fn get_idl_cache(pool: &PgPool, program_id: &str) -> Result<Option<IdlCache>> {
     let idl_entry = sqlx::query_as::<_, IdlCache>(
-        "SELECT * FROM idl_cache WHERE program_id = ? AND is_valid = true",
+        "SELECT * FROM idl_cache WHERE program_id = $1 AND is_valid = true",
     )
     .bind(program_id)
     .fetch_optional(pool)
@@ -164,7 +188,7 @@ pub async fn get_idl_cache(pool: &SqlitePool, program_id: &str) -> Result<Option
     Ok(idl_entry)
 }
 
-pub async fn list_cached_idls(pool: &SqlitePool) -> Result<Vec<IdlCache>> {
+pub async fn list_cached_idls(pool: &PgPool) -> Result<Vec<IdlCache>> {
     let idl_entries = sqlx::query_as::<_, IdlCache>(
         "SELECT * FROM idl_cache WHERE is_valid = true ORDER BY fetched_at DESC",
     )
@@ -175,7 +199,7 @@ pub async fn list_cached_idls(pool: &SqlitePool) -> Result<Vec<IdlCache>> {
 }
 
 // Discovery queue queries
-pub async fn enqueue_discovery(pool: &SqlitePool, discovery: &DiscoveryQueue) -> Result<()> {
+pub async fn enqueue_discovery(pool: &PgPool, discovery: &DiscoveryQueue) -> Result<()> {
     sqlx::query(
         r#"
         INSERT OR IGNORE INTO discovery_queue 
@@ -199,14 +223,14 @@ pub async fn enqueue_discovery(pool: &SqlitePool, discovery: &DiscoveryQueue) ->
 }
 
 pub async fn dequeue_discovery(
-    pool: &SqlitePool,
+    pool: &PgPool,
     batch_size: usize,
 ) -> Result<Vec<DiscoveryQueue>> {
     // First, mark items as processing
     sqlx::query(
         r#"
         UPDATE discovery_queue 
-        SET status = 'processing', last_attempt = ?
+        SET status = 'processing', last_attempt = $1
         WHERE id IN (
             SELECT id FROM discovery_queue 
             WHERE status = 'pending' 
@@ -236,8 +260,8 @@ pub async fn dequeue_discovery(
     Ok(discoveries)
 }
 
-pub async fn complete_discovery(pool: &SqlitePool, id: &str, status: &str) -> Result<()> {
-    sqlx::query("UPDATE discovery_queue SET status = ?, attempts = attempts + 1 WHERE id = ?")
+pub async fn complete_discovery(pool: &PgPool, id: &str, status: &str) -> Result<()> {
+    sqlx::query("UPDATE discovery_queue SET status = $1, attempts = attempts + 1 WHERE id = $1")
         .bind(status)
         .bind(id)
         .execute(pool)
@@ -247,7 +271,7 @@ pub async fn complete_discovery(pool: &SqlitePool, id: &str, status: &str) -> Re
 }
 
 // Analytics queries
-pub async fn get_registry_stats(pool: &SqlitePool) -> Result<RegistryStats> {
+pub async fn get_registry_stats(pool: &PgPool) -> Result<RegistryStats> {
     let total_dex_programs: (i64,) = sqlx::query_as("SELECT COUNT(*) FROM dex_programs")
         .fetch_one(pool)
         .await?;

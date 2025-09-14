@@ -32,7 +32,7 @@ impl DexRegistry {
         // Initialize database
         let database = Arc::new(
             Database::new(
-                &format!("sqlite:{}", config.sqlite_path),
+                &config.database_url,
                 config.connection_pool_size,
             )
             .await?,

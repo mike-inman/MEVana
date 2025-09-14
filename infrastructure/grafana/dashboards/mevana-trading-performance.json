@@ -1,0 +1,310 @@
+{
+  "id": null,
+  "title": "💰 MEVana Live Trading Performance Monitor",
+  "tags": ["mevana", "trading", "performance", "arbitrage", "hotpath"],
+  "style": "dark",
+  "timezone": "browser",
+  "editable": true,
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 1,
+  "time": {
+    "from": "now-15m",
+    "to": "now"
+  },
+  "timepicker": {
+    "refresh_intervals": ["1s", "5s", "10s", "30s", "1m", "5m"],
+    "time_options": ["5m", "15m", "1h", "6h", "12h", "24h"]
+  },
+  "refresh": "5s",
+  "panels": [
+    {
+      "id": 1,
+      "title": "🔥 Live Trading Activity",
+      "type": "stat",
+      "targets": [
+        {
+          "expr": "rate(multi_geyser_stream_messages_total[1m]) * 60",
+          "legendFormat": "Transactions/min",
+          "refId": "A"
+        },
+        {
+          "expr": "sum(rate(arb_signals_emitted_total[1m])) * 60", 
+          "legendFormat": "Opportunities/min",
+          "refId": "B"
+        },
+        {
+          "expr": "sum(multi_geyser_stream_messages_total)",
+          "legendFormat": "Total Messages",
+          "refId": "C"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "color": {"mode": "thresholds"},
+          "thresholds": {
+            "steps": [
+              {"color": "red", "value": 0},
+              {"color": "yellow", "value": 10},
+              {"color": "green", "value": 100},
+              {"color": "blue", "value": 1000}
+            ]
+          },
+          "unit": "short",
+          "decimals": 1
+        },
+        "overrides": [
+          {
+            "matcher": {"id": "byName", "options": "Transactions/min"},
+            "properties": [
+              {"id": "color", "value": {"mode": "continuous-GrYlRd"}},
+              {"id": "unit", "value": "reqps"}
+            ]
+          }
+        ]
+      },
+      "options": {
+        "reduceOptions": {
+          "values": false,
+          "calcs": ["lastNotNull"]
+        },
+        "orientation": "horizontal",
+        "textMode": "value_and_name",
+        "colorMode": "background"
+      },
+      "gridPos": {"h": 8, "w": 24, "x": 0, "y": 0}
+    },
+    {
+      "id": 2,
+      "title": "⚡ Execution Performance (Sub-Millisecond Latency)",
+      "type": "graph",
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.50, rate(arb_signal_latency_ms_bucket[5m]))",
+          "legendFormat": "P50 Latency",
+          "refId": "A"
+        },
+        {
+          "expr": "histogram_quantile(0.95, rate(arb_signal_latency_ms_bucket[5m]))",
+          "legendFormat": "P95 Latency", 
+          "refId": "B"
+        },
+        {
+          "expr": "histogram_quantile(0.99, rate(arb_signal_latency_ms_bucket[5m]))",
+          "legendFormat": "P99 Latency",
+          "refId": "C"
+        }
+      ],
+      "yAxes": [
+        {"label": "Latency (μs)", "min": 0, "max": 2000}
+      ],
+      "lines": true,
+      "fill": 2,
+      "linewidth": 2,
+      "points": true,
+      "pointradius": 3,
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 8}
+    },
+    {
+      "id": 3,
+      "title": "💎 Real-Time Profit Tracking",
+      "type": "graph",
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.50, rate(arb_profit_bps_bucket[5m]))",
+          "legendFormat": "P50 Profit (BPS)",
+          "refId": "A"
+        },
+        {
+          "expr": "histogram_quantile(0.90, rate(arb_profit_bps_bucket[5m]))",
+          "legendFormat": "P90 Profit (BPS)",
+          "refId": "B"
+        },
+        {
+          "expr": "rate(arb_signals_total[5m]) * 300",
+          "legendFormat": "Signal Rate (5min)",
+          "refId": "C"
+        }
+      ],
+      "yAxes": [
+        {"label": "Basis Points (BPS)", "min": 0}
+      ],
+      "lines": true,
+      "fill": 1,
+      "linewidth": 2,
+      "points": true,
+      "pointradius": 2,
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 8}
+    },
+    {
+      "id": 4,
+      "title": "🎯 DEX Venue Performance",
+      "type": "table",
+      "targets": [
+        {
+          "expr": "sum by (stream_id) (multi_geyser_stream_messages_total)",
+          "legendFormat": "{{stream_id}}",
+          "refId": "A",
+          "format": "table"
+        }
+      ],
+      "transformations": [
+        {
+          "id": "organize",
+          "options": {
+            "excludeByName": {"Time": true, "__name__": true},
+            "renameByName": {
+              "stream_id": "DEX Venue",
+              "Value": "Messages Processed"
+            }
+          }
+        }
+      ],
+      "fieldConfig": {
+        "overrides": [
+          {
+            "matcher": {"id": "byName", "options": "Messages Processed"},
+            "properties": [
+              {"id": "custom.displayMode", "value": "color-background"},
+              {"id": "color", "value": {"mode": "continuous-GrYlRd"}}
+            ]
+          }
+        ]
+      },
+      "gridPos": {"h": 6, "w": 12, "x": 0, "y": 16}
+    },
+    {
+      "id": 5,
+      "title": "⏱️ System Health & Readiness",
+      "type": "gauge",
+      "targets": [
+        {
+          "expr": "arb_edge_readiness",
+          "legendFormat": "Edge Readiness",
+          "refId": "A"
+        },
+        {
+          "expr": "rate(arb_edge_errors_total[5m]) * 300",
+          "legendFormat": "Error Rate (5min)",
+          "refId": "B"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "color": {"mode": "thresholds"},
+          "thresholds": {
+            "steps": [
+              {"color": "red", "value": 0},
+              {"color": "yellow", "value": 0.7},
+              {"color": "green", "value": 0.9}
+            ]
+          },
+          "unit": "percentunit",
+          "min": 0,
+          "max": 1
+        }
+      },
+      "options": {
+        "reduceOptions": {
+          "values": false,
+          "calcs": ["lastNotNull"]
+        },
+        "orientation": "auto",
+        "showThresholdLabels": true,
+        "showThresholdMarkers": true
+      },
+      "gridPos": {"h": 6, "w": 12, "x": 12, "y": 16}
+    },
+    {
+      "id": 6,
+      "title": "📊 Live Transaction Flow by DEX",
+      "type": "graph",
+      "targets": [
+        {
+          "expr": "rate(multi_geyser_stream_messages_total{stream_id=\"1\"}[1m]) * 60",
+          "legendFormat": "Stream 1 (Whirlpool/Phoenix)",
+          "refId": "A"
+        },
+        {
+          "expr": "rate(multi_geyser_stream_messages_total{stream_id=\"2\"}[1m]) * 60",
+          "legendFormat": "Stream 2 (Raydium)",
+          "refId": "B"
+        },
+        {
+          "expr": "rate(multi_geyser_stream_messages_total{stream_id=\"3\"}[1m]) * 60",
+          "legendFormat": "Stream 3 (Jupiter)",
+          "refId": "C"
+        }
+      ],
+      "yAxes": [
+        {"label": "Messages per minute", "min": 0}
+      ],
+      "lines": true,
+      "fill": 2,
+      "linewidth": 2,
+      "points": true,
+      "pointradius": 2,
+      "gridPos": {"h": 8, "w": 24, "x": 0, "y": 22}
+    },
+    {
+      "id": 7,
+      "title": "🚀 Adaptive Sizing & Strategy",
+      "type": "stat",
+      "targets": [
+        {
+          "expr": "arb_adaptive_multiplier",
+          "legendFormat": "Current Multiplier",
+          "refId": "A"
+        },
+        {
+          "expr": "histogram_quantile(0.50, rate(arb_size_utilization_bps_bucket[5m]))",
+          "legendFormat": "Size Utilization (BPS)",
+          "refId": "B"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "color": {"mode": "thresholds"},
+          "thresholds": {
+            "steps": [
+              {"color": "blue", "value": 0},
+              {"color": "green", "value": 1},
+              {"color": "yellow", "value": 2},
+              {"color": "red", "value": 3}
+            ]
+          },
+          "unit": "short",
+          "decimals": 3
+        }
+      },
+      "options": {
+        "reduceOptions": {
+          "values": false,
+          "calcs": ["lastNotNull"]
+        },
+        "orientation": "horizontal",
+        "textMode": "value_and_name",
+        "colorMode": "background"
+      },
+      "gridPos": {"h": 6, "w": 24, "x": 0, "y": 30}
+    }
+  ],
+  "templating": {
+    "list": []
+  },
+  "annotations": {
+    "list": [
+      {
+        "builtIn": 1,
+        "datasource": "-- Grafana --",
+        "enable": true,
+        "hide": true,
+        "iconColor": "rgba(0, 211, 255, 1)",
+        "name": "Annotations & Alerts",
+        "type": "dashboard"
+      }
+    ]
+  },
+  "description": "Real-time MEVana trading performance monitoring showing live arbitrage detection, execution latency, profit tracking, and DEX venue performance. Critical for adjusting trading settings and gaining confidence in system performance.",
+  "gnetId": null,
+  "version": 1
+}

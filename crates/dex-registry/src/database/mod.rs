@@ -1,7 +1,7 @@
 use anyhow::Result;
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
-use sqlx::{sqlite::SqlitePoolOptions, SqlitePool};
+use sqlx::{postgres::PgPoolOptions, PgPool};
 use std::sync::Arc;
 use uuid::Uuid;
 
@@ -67,7 +67,7 @@ pub struct DiscoveryQueue {
 }
 
 pub struct Database {
-    pool: SqlitePool,
+    pool: PgPool,
 }
 
 impl Database {
@@ -77,7 +77,7 @@ impl Database {
             tokio::fs::create_dir_all(parent).await?;
         }
 
-        let pool = SqlitePoolOptions::new()
+        let pool = PgPoolOptions::new()
             .max_connections(max_connections)
             .connect(database_url)
             .await?;
@@ -94,7 +94,7 @@ impl Database {
         migrations::run_migrations(&self.pool).await
     }
 
-    pub fn pool(&self) -> &SqlitePool {
+    pub fn pool(&self) -> &PgPool {
         &self.pool
     }
 

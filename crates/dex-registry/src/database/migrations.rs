@@ -1,24 +1,24 @@
 use anyhow::Result;
 use log::info;
-use sqlx::SqlitePool;
+use sqlx::PgPool;
 
-pub async fn run_migrations(pool: &SqlitePool) -> Result<()> {
+pub async fn run_migrations(pool: &PgPool) -> Result<()> {
     info!("Running database migrations...");
 
     // Create dex_programs table
     sqlx::query(
         r#"
         CREATE TABLE IF NOT EXISTS dex_programs (
-            program_id TEXT PRIMARY KEY,
-            dex_name TEXT NOT NULL,
-            protocol_type TEXT NOT NULL,
+            program_id VARCHAR(255) PRIMARY KEY,
+            dex_name VARCHAR(255) NOT NULL,
+            protocol_type VARCHAR(255) NOT NULL,
             fee_structure TEXT, -- JSON
-            liquidity_model TEXT NOT NULL,
-            idl_version TEXT,
+            liquidity_model VARCHAR(255) NOT NULL,
+            idl_version VARCHAR(255),
             quirks TEXT, -- JSON
             is_active BOOLEAN NOT NULL DEFAULT true,
-            discovered_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-            last_seen TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            discovered_at TIMESTAMP NOT NULL DEFAULT NOW(),
+            last_seen TIMESTAMP NOT NULL DEFAULT NOW(),
             transaction_volume_24h REAL,
             metadata TEXT -- JSON
         )
@@ -125,7 +125,7 @@ pub async fn run_migrations(pool: &SqlitePool) -> Result<()> {
     Ok(())
 }
 
-async fn insert_initial_dex_programs(pool: &SqlitePool) -> Result<()> {
+async fn insert_initial_dex_programs(pool: &PgPool) -> Result<()> {
     let initial_dexs = vec![
         (
             "whirLbMi2vNtMeJ6z18WZb98sPNT1L4GzWk2vuyZgq2U",
