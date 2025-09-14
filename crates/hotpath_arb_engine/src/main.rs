@@ -3110,21 +3110,44 @@ fn create_stream_configs(endpoint: &str, token: &str) -> Vec<StreamConfig> {
             ]
         }
     } else {
-        // BANDWIDTH-CONSERVATIVE CONFIGURATION: Single stream to avoid ISP throttling
-        // Use provided endpoint (from GEYSER_ENDPOINT env var)
+        // CONNECTION-LIMIT COMPLIANT: Single NY connection with 3 internal processing streams
+        // All streams share the same endpoint but process different program IDs internally
         info!(
-            "🔗 Single-endpoint mode - using provided endpoint: {}",
+            "🔗 Single-connection mode (NY endpoint) with 3 internal processing streams: {}",
             endpoint
         );
-        vec![StreamConfig {
-            id: 1,
-            name: "Conservative Single Stream (Jupiter V6 Only)".to_string(),
-            program_ids: vec![
-                "JUP6LkbZbjS1jKKwapdHNy74zcZ3tLUZoi5QNyVTaV4".to_string(), // Jupiter V6 - highest volume
-            ],
-            endpoint: endpoint.to_string(), // Use provided endpoint
-            token: token.to_string(),
-        }]
+        vec![
+            StreamConfig {
+                id: 1,
+                name: "Internal Stream 1 (Jupiter V6 + Whirlpool)".to_string(),
+                program_ids: vec![
+                    "JUP6LkbZbjS1jKKwapdHNy74zcZ3tLUZoi5QNyVTaV4".to_string(), // Jupiter V6
+                    "whirLbMiicVdio4qvUfM5KAg6Ct8VwpYzGff3uctyCc".to_string(), // Whirlpool
+                ],
+                endpoint: endpoint.to_string(), // NY endpoint - shared connection
+                token: token.to_string(),
+            },
+            StreamConfig {
+                id: 2,
+                name: "Internal Stream 2 (Raydium + Meteora)".to_string(),
+                program_ids: vec![
+                    "675kPX9MHTjS2zt1qfr1NYHuzeLXfQM9H24wFSUt1Mp8".to_string(), // Raydium AMM
+                    "LBUZKhRxPF3XUpBCjp4YzTKgLccjZhTSDM9YuVaPwxo".to_string(),  // Meteora DLMM
+                ],
+                endpoint: endpoint.to_string(), // NY endpoint - shared connection
+                token: token.to_string(),
+            },
+            StreamConfig {
+                id: 3,
+                name: "Internal Stream 3 (Phoenix + Orca)".to_string(),
+                program_ids: vec![
+                    "PhoeNiXZ8ByJGLkxNfZRnkUfjvmuYqLR89jjFHGqdXY".to_string(), // Phoenix CLOB
+                    "9W959DqEETiGZocYWCQPaJ6sBmUzgfxXfqGeTEdp3aQP".to_string(), // Orca AMM
+                ],
+                endpoint: endpoint.to_string(), // NY endpoint - shared connection
+                token: token.to_string(),
+            },
+        ]
     }
 }
 
@@ -3170,6 +3193,53 @@ async fn create_geyser_client(
     Ok(client)
 }
 
+// Create consolidated subscription for all streams sharing the same endpoint
+async fn create_consolidated_geyser_subscription(configs: &[StreamConfig]) -> Result<SubscribeRequest> {
+    // Collect all program IDs from all streams sharing the same endpoint
+    let mut all_program_ids = std::collections::HashSet::new();
+    for config in configs {
+        for program_id in &config.program_ids {
+            all_program_ids.insert(program_id.clone());
+        }
+    }
+    let consolidated_program_ids: Vec<String> = all_program_ids.into_iter().collect();
+
+    let mut transactions: HashMap<String, SubscribeRequestFilterTransactions> = HashMap::new();
+    transactions.insert(
+        "consolidated_dex_transactions".to_string(),
+        SubscribeRequestFilterTransactions {
+            vote: Some(false),
+            failed: Some(false),
+            account_include: consolidated_program_ids.clone(),
+            account_exclude: vec![],
+            account_required: vec![],
+            signature: None,
+        },
+    );
+
+    let request = SubscribeRequest {
+        accounts: Default::default(),
+        slots: Default::default(),
+        transactions,
+        transactions_status: Default::default(),
+        blocks: Default::default(),
+        blocks_meta: Default::default(),
+        entry: Default::default(),
+        accounts_data_slice: vec![],
+        ping: None,
+        commitment: Some(CommitmentLevel::Processed as i32),
+        from_slot: None,
+    };
+
+    info!(
+        "📡 Created CONSOLIDATED subscription with {} total program IDs: {:?}",
+        consolidated_program_ids.len(),
+        consolidated_program_ids
+    );
+
+    Ok(request)
+}
+
 async fn create_geyser_subscription(config: &StreamConfig) -> Result<SubscribeRequest> {
     let mut transactions: HashMap<String, SubscribeRequestFilterTransactions> = HashMap::new();
     transactions.insert(
@@ -3205,6 +3275,145 @@ async fn create_geyser_subscription(config: &StreamConfig) -> Result<SubscribeRe
     );
 
     Ok(request)
+}
+
+// Process consolidated Geyser stream with internal message routing to multiple pipelines
+async fn process_consolidated_geyser_stream(
+    consolidated_config: StreamConfig,
+    stream_configs: Vec<StreamConfig>,
+    history_buffer: Option<Arc<AsyncHistoryBuffer>>,
+) -> Result<()> {
+    info!(
+        "🔗 Starting consolidated Geyser stream for {} internal pipelines",
+        stream_configs.len()
+    );
+
+    // Create single client connection
+    let mut client = create_geyser_client(&consolidated_config).await?;
+
+    // Create consolidated subscription with ALL program IDs
+    let request = create_consolidated_geyser_subscription(&stream_configs).await?;
+
+    info!(
+        "✅ Consolidated stream: Subscription request created for {} program IDs",
+        stream_configs.iter().map(|c| c.program_ids.len()).sum::<usize>()
+    );
+
+    // Subscribe to consolidated stream
+    info!("📡 Consolidated stream: Subscribing to Geyser stream...");
+    let (_, mut stream) = client.subscribe_with_request(Some(request)).await?;
+    info!("✅ Consolidated stream: Successfully subscribed to Geyser stream!");
+
+    // Initialize metrics for each internal pipeline
+    for config in &stream_configs {
+        info!("📊 Initializing metrics for Stream {}", config.id);
+        STREAM_COUNTERS.insert(config.id, AtomicU64::new(0));
+        STREAM_HEALTH.insert(config.id, Arc::new(AtomicU64::new(0)));
+        STREAM_RATE_COUNTERS.insert(config.id, Arc::new(RateCounter::new(60))); // 1-minute window
+        STREAM_PARSED_RATE_COUNTERS.insert(config.id, Arc::new(RateCounter::new(60))); // 1-minute window for parsed
+        info!("✅ Stream {} metrics initialized", config.id);
+    }
+
+    let mut transaction_count = 0u64;
+    info!("🎯 Consolidated stream: Starting message processing loop...");
+
+    // Process messages and route internally
+    while let Some(message) = stream.next().await {
+        match message {
+            Ok(msg) => {
+                if let Some(UpdateOneof::Transaction(transaction_update)) = msg.update_oneof {
+                    transaction_count += 1;
+
+                    // Extract program IDs from the transaction
+                    let program_ids = extract_program_ids(&transaction_update)?;
+
+                    // Route message to appropriate internal stream pipelines
+                    for config in &stream_configs {
+                        // Check if this transaction matches this stream's program IDs
+                        let matches_stream = program_ids.iter().any(|pid| config.program_ids.contains(pid));
+
+                        if matches_stream {
+                            println!("📥 Stream {} received message", config.id);
+                            println!(
+                                "💰 Stream {} processing transaction at slot {}",
+                                config.id, transaction_update.slot
+                            );
+
+                            // HOT PATH ARBITRAGE DETECTION - Same as individual streams
+                            let arbitrage_start_time = Instant::now();
+                            let arbitrage_opportunity = HOT_PATH_ENGINE
+                                .process_transaction_hot_path(&transaction_update)
+                                .await
+                                .unwrap_or_else(|e| {
+                                    error!("Stream {} hot path arbitrage detection failed: {}", config.id, e);
+                                    None
+                                });
+
+                            let arbitrage_latency_us = arbitrage_start_time.elapsed().as_micros();
+
+                            if let Some(opportunity) = arbitrage_opportunity {
+                                println!(
+                                    "✅ Stream {} SUCCESS: {} tx {} ({}μs)",
+                                    config.id,
+                                    get_dex_name_from_program_id(&opportunity.token_a), // Approximate DEX name
+                                    &opportunity.signature[..8],
+                                    arbitrage_latency_us
+                                );
+
+                                // Record in history buffer if available
+                                if let Some(ref buffer) = history_buffer {
+                                    // Convert main.rs ArbitrageOpportunity to async_history_buffer ArbitrageOpportunity
+                                    let buffer_opportunity = crate::async_history_buffer::create_arbitrage_opportunity(
+                                        &format!("{}_{}", opportunity.signature, opportunity.slot),
+                                        opportunity.slot,
+                                        opportunity.timestamp.timestamp_nanos_opt().unwrap_or(0) as u64,
+                                        &opportunity.venue_a,
+                                        &opportunity.venue_b,
+                                        &format!("{}_{}", opportunity.token_a, opportunity.token_b),
+                                        opportunity.profit_bps as i32,
+                                        1000.0, // Default amount_in
+                                        1000.0 + (opportunity.profit_bps as f64 * 10.0), // Estimated amount_out
+                                        arbitrage_latency_us as u64,
+                                        &opportunity.strategy,
+                                        serde_json::json!({
+                                            "signature": opportunity.signature,
+                                            "venue_a": opportunity.venue_a,
+                                            "venue_b": opportunity.venue_b,
+                                            "token_a": opportunity.token_a,
+                                            "token_b": opportunity.token_b
+                                        }),
+                                    );
+                                    buffer.record_opportunity(buffer_opportunity);
+                                }
+
+                                // Update success metrics
+                                if let Some(counter) = STREAM_COUNTERS.get(&config.id) {
+                                    counter.fetch_add(1, Ordering::Relaxed);
+                                }
+                                if let Some(rate_counter) = STREAM_PARSED_RATE_COUNTERS.get(&config.id) {
+                                    rate_counter.increment();
+                                }
+                            }
+
+                            // Update general stream metrics
+                            if let Some(rate_counter) = STREAM_RATE_COUNTERS.get(&config.id) {
+                                rate_counter.increment();
+                            }
+                            counter!("geyser_transactions_processed_total", "stream_id" => config.id.to_string()).increment(1);
+                        }
+                    }
+                }
+            }
+            Err(e) => {
+                error!("❌ Consolidated stream error: {}", e);
+                tokio::time::sleep(Duration::from_millis(1000)).await;
+                continue;
+            }
+        }
+    }
+
+    info!("🏁 Consolidated stream processing completed");
+    Ok(())
 }
 
 async fn process_geyser_stream(
@@ -4453,9 +4662,47 @@ async fn main() -> Result<()> {
         "🚀 Starting {} Geyser streams in parallel...",
         stream_configs.len()
     );
-    let stream_handles: Vec<_> = stream_configs
-        .into_iter()
-        .map(|config| {
+
+    // Check if all streams use the same endpoint for connection consolidation
+    let all_same_endpoint = stream_configs.len() > 1 &&
+        stream_configs.iter().all(|config| config.endpoint == stream_configs[0].endpoint);
+
+    if all_same_endpoint {
+        info!(
+            "🔗 All {} streams share endpoint: {} - using consolidated connection",
+            stream_configs.len(),
+            stream_configs[0].endpoint
+        );
+
+        // Single consolidated connection with internal message routing
+        let consolidated_config = StreamConfig {
+            id: 0,  // Special consolidated ID
+            name: "Consolidated Connection".to_string(),
+            program_ids: vec![], // Unused for consolidated
+            endpoint: stream_configs[0].endpoint.clone(),
+            token: stream_configs[0].token.clone(),
+        };
+
+        let history_buffer_clone = history_buffer.clone();
+        let stream_configs_clone = stream_configs.clone();
+
+        tokio::spawn(async move {
+            info!("🎯 Starting consolidated Geyser stream with {} internal processing pipelines", stream_configs_clone.len());
+            if let Err(e) = process_consolidated_geyser_stream(consolidated_config, stream_configs_clone, history_buffer_clone).await {
+                error!("❌ Consolidated stream terminated with error: {}", e);
+            } else {
+                info!("✅ Consolidated stream completed successfully");
+            }
+        })
+        .await
+        .map_err(|e| anyhow::anyhow!("Join error: {}", e))?;
+
+    } else {
+        info!("🔀 Streams use different endpoints - using individual connections");
+
+        let stream_handles: Vec<_> = stream_configs
+            .into_iter()
+            .map(|config| {
             let history_buffer_clone = history_buffer.clone();
             info!(
                 "🔄 Spawning tokio task for Stream {}: {}",
@@ -4472,13 +4719,21 @@ async fn main() -> Result<()> {
                     info!("✅ Stream {} completed normally", config.id);
                 }
             })
-        })
-        .collect();
+            })
+            .collect();
 
-    info!(
-        "✅ All {} stream tasks spawned successfully",
-        stream_handles.len()
-    );
+        info!(
+            "✅ All {} stream tasks spawned successfully",
+            stream_handles.len()
+        );
+
+        // Wait for all individual streams to complete
+        for handle in stream_handles {
+            if let Err(e) = handle.await {
+                error!("❌ Stream task join error: {}", e);
+            }
+        }
+    }
 
     // Start a test metric counter to verify metrics are working
     tokio::spawn(async {
@@ -4497,17 +4752,11 @@ async fn main() -> Result<()> {
     });
 
     // Wait for all tasks (they run forever)
-    tokio::select! {
-        result = futures::future::try_join_all(stream_handles) => {
-            if let Err(e) = result {
-                error!("Stream error: {}", e);
-            }
-        }
-        result = metrics_update_handle => {
-            if let Err(e) = result {
-                error!("Metrics update error: {}", e);
-            }
-        }
+    // Note: For consolidated streams, they run in the main task and never return
+    // For individual streams, we wait for the stream handles
+    loop {
+        tokio::time::sleep(tokio::time::Duration::from_secs(60)).await;
+        info!("System running - heartbeat check");
     }
 
     Ok(())

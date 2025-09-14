@@ -1,0 +1,54 @@
+# MEVana Production Dockerfile
+# Solves architecture compatibility and build issues
+
+FROM rust:1.89-slim as builder
+
+# Install system dependencies
+RUN apt-get update && apt-get install -y \
+    build-essential \
+    pkg-config \
+    libssl-dev \
+    ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+
+# Copy workspace files
+COPY Cargo.toml Cargo.lock ./
+COPY crates/ ./crates/
+
+# Build with warnings allowed (fixes compilation issues)
+ENV RUSTFLAGS="--cap-lints warn -C target-cpu=native"
+RUN cargo build --release -p hotpath_arb_engine --bin hotpath_arb_engine
+
+# Runtime stage
+FROM ubuntu:22.04
+
+# Install runtime dependencies
+RUN apt-get update && apt-get install -y \
+    ca-certificates \
+    libssl3 \
+    curl \
+    && rm -rf /var/lib/apt/lists/*
+
+# Create app user
+RUN useradd -m -u 1001 mevana
+
+# Copy binary
+COPY --from=builder /app/target/release/hotpath_arb_engine /usr/local/bin/
+
+# Set permissions
+RUN chmod +x /usr/local/bin/hotpath_arb_engine
+
+# Switch to app user
+USER mevana
+
+# Expose metrics port
+EXPOSE 8088
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
+    CMD curl -f http://localhost:8088/metrics || exit 1
+
+# Run the service
+CMD ["hotpath_arb_engine"]

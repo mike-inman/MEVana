@@ -224,7 +224,10 @@
       "Bash(RUST_LOG=debug TOKEN_REGISTRY_PORT=9898 cargo run -p token-registry-service --bin token-registry-service)",
       "Bash(MULTI_ENDPOINT_MODE=true PAPER_TRADING=true DATABASE_URL=\"postgresql://mev:mevpassword@localhost:5433/mevdb\" GEYSER_ENDPOINT=\"https://grpc.ny.shyft.to\" X_TOKEN=\"efff2d23-97ae-4c5f-8b8b-9a6265001189\" METRICS_PORT=8088 RUST_LOG=info cargo run -p hotpath_arb_engine --bin hotpath_arb_engine)",
       "Bash(./scripts/deploy-multi-stream.sh:*)",
-      "Bash(./scripts/deploy-single-stream.sh:*)"
+      "Bash(./scripts/deploy-single-stream.sh:*)",
+      "Bash(DATABASE_URL=\"postgresql://mev:mevpassword@localhost:5433/mevdb\" cargo check -p hotpath_arb_engine --bin hotpath_arb_engine --message-format short)",
+      "Bash(./scripts/deploy-to-server.sh:*)",
+      "Bash(./scripts/docker-deploy.sh:*)"
     ],
     "deny": [],
     "ask": []
