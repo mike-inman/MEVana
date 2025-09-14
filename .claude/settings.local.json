@@ -227,7 +227,11 @@
       "Bash(./scripts/deploy-single-stream.sh:*)",
       "Bash(DATABASE_URL=\"postgresql://mev:mevpassword@localhost:5433/mevdb\" cargo check -p hotpath_arb_engine --bin hotpath_arb_engine --message-format short)",
       "Bash(./scripts/deploy-to-server.sh:*)",
-      "Bash(./scripts/docker-deploy.sh:*)"
+      "Bash(./scripts/docker-deploy.sh:*)",
+      "Bash(./scripts/simple-deploy.sh:*)",
+      "Bash(cargo fix:*)",
+      "Bash(DATABASE_URL=\"postgresql://mev:mevpassword@localhost:5433/mevdb\" cargo sqlx prepare --workspace)",
+      "Bash(cargo install:*)"
     ],
     "deny": [],
     "ask": []

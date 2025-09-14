@@ -8,7 +8,7 @@ use axum::{
 };
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
-use sqlx::PgPool;
+use sqlx::{PgPool, Row};
 use std::collections::{HashMap, VecDeque};
 use std::sync::Arc;
 use tokio::sync::RwLock;
@@ -222,10 +222,10 @@ pub async fn load_configuration_from_database(
         .context("Failed to connect to database for configuration loading")?;
     
     // Query the current_smart_filter_config view to get latest configuration
-    let rows = sqlx::query!(
+    let rows = sqlx::query(
         r#"
-        SELECT parameter_name, new_value, timestamp, applied_by 
-        FROM current_smart_filter_config 
+        SELECT parameter_name, new_value, timestamp, applied_by
+        FROM current_smart_filter_config
         ORDER BY timestamp DESC
         "#
     )
@@ -250,9 +250,9 @@ pub async fn load_configuration_from_database(
     
     // Apply database configuration values
     for row in rows {
-        let param_name = &row.parameter_name;
-        let value = &row.new_value;
-        
+        let param_name: Option<String> = row.try_get("parameter_name").ok();
+        let value: Option<serde_json::Value> = row.try_get("new_value").ok();
+
         // Skip if either param_name or value is None
         if let (Some(name), Some(json_value)) = (param_name, value) {
             match name.as_str() {
@@ -441,16 +441,17 @@ pub async fn update_config(
         let new_value_json = serde_json::to_value(&request.value).unwrap_or(serde_json::Value::Null);
         let applied_by = request.applied_by.clone();
         
-        if let Err(e) = sqlx::query!(
+        if let Err(e) = sqlx::query(
             r#"
             INSERT INTO smart_filter_config_history (parameter_name, new_value, applied_by, timestamp)
             VALUES ($1, $2, $3, $4)
-            "#,
-            parameter_name,
-            new_value_json,
-            applied_by,
-            Utc::now()
-        ).execute(db_pool.as_ref()).await {
+            "#
+        )
+        .bind(&parameter_name)
+        .bind(&new_value_json)
+        .bind(&applied_by)
+        .bind(Utc::now())
+        .execute(db_pool.as_ref()).await {
             error!("❌ Failed to trigger PostgreSQL NOTIFY for config update: {}", e);
         } else {
             info!("📡 PostgreSQL NOTIFY triggered for parameter: {} -> {} (applied by {})", 

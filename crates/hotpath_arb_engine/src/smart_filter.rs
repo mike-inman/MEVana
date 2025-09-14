@@ -1,5 +1,6 @@
 use anyhow::Result;
 use log::{debug, info, warn};
+use sqlx::Row;
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, VecDeque};
 use std::sync::Arc;
@@ -91,15 +92,15 @@ impl SmartFilterConfig {
         let mut config = Self::default();
 
         // Query to get the latest value for each parameter
-        let rows = sqlx::query!(
+        let rows = sqlx::query(
             r#"
-            SELECT DISTINCT ON (parameter_name) 
-                parameter_name, 
+            SELECT DISTINCT ON (parameter_name)
+                parameter_name,
                 new_value
-            FROM smart_filter_config_history 
+            FROM smart_filter_config_history
             WHERE parameter_name IN (
-                'min_net_profit_sol', 'min_profit_bps', 'max_profit_bps', 
-                'max_gas_budget_pct', 'max_concurrent_opportunities', 
+                'min_net_profit_sol', 'min_profit_bps', 'max_profit_bps',
+                'max_gas_budget_pct', 'max_concurrent_opportunities',
                 'competition_lookback_ms', 'learning_rate', 'min_venue_success_rate'
             )
             ORDER BY parameter_name, timestamp DESC
@@ -110,44 +111,47 @@ impl SmartFilterConfig {
 
         // Apply database values to config
         for row in rows {
-            match row.parameter_name.as_str() {
+            let parameter_name: String = row.try_get("parameter_name").unwrap_or_default();
+            let new_value: Option<String> = row.try_get("new_value").ok();
+
+            match parameter_name.as_str() {
                 "min_net_profit_sol" => {
-                    if let Some(val) = row.new_value.as_str() {
+                    if let Some(val) = new_value.as_deref() {
                         config.min_net_profit_sol = val.parse().unwrap_or(config.min_net_profit_sol);
                     }
                 }
                 "min_profit_bps" => {
-                    if let Some(val) = row.new_value.as_str() {
+                    if let Some(val) = new_value.as_deref() {
                         config.min_profit_bps = val.parse().unwrap_or(config.min_profit_bps);
                     }
                 }
                 "max_profit_bps" => {
-                    if let Some(val) = row.new_value.as_str() {
+                    if let Some(val) = new_value.as_deref() {
                         config.max_profit_bps = val.parse().unwrap_or(config.max_profit_bps);
                     }
                 }
                 "max_gas_budget_pct" => {
-                    if let Some(val) = row.new_value.as_str() {
+                    if let Some(val) = new_value.as_deref() {
                         config.max_gas_budget_pct = val.parse().unwrap_or(config.max_gas_budget_pct);
                     }
                 }
                 "max_concurrent_opportunities" => {
-                    if let Some(val) = row.new_value.as_str() {
+                    if let Some(val) = new_value.as_deref() {
                         config.max_concurrent_opportunities = val.parse().unwrap_or(config.max_concurrent_opportunities);
                     }
                 }
                 "competition_lookback_ms" => {
-                    if let Some(val) = row.new_value.as_str() {
+                    if let Some(val) = new_value.as_deref() {
                         config.competition_lookback_ms = val.parse().unwrap_or(config.competition_lookback_ms);
                     }
                 }
                 "learning_rate" => {
-                    if let Some(val) = row.new_value.as_str() {
+                    if let Some(val) = new_value.as_deref() {
                         config.learning_rate = val.parse().unwrap_or(config.learning_rate);
                     }
                 }
                 "min_venue_success_rate" => {
-                    if let Some(val) = row.new_value.as_str() {
+                    if let Some(val) = new_value.as_deref() {
                         config.min_venue_success_rate = val.parse().unwrap_or(config.min_venue_success_rate);
                     }
                 }
