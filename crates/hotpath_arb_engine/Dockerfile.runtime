@@ -1,0 +1,12 @@
+# Runtime-only image for hotpath_arb_engine (binary prebuilt locally)
+FROM debian:bookworm-slim AS runtime
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    ca-certificates librdkafka1 curl && \
+    update-ca-certificates && rm -rf /var/lib/apt/lists/*
+WORKDIR /app
+# Expect host to have built target/release/hotpath_arb_engine
+COPY target/release/hotpath_arb_engine /usr/local/bin/hotpath_arb_engine
+ENV RUST_LOG=info METRICS_PORT=8088
+EXPOSE 8088
+ENTRYPOINT ["/usr/local/bin/hotpath_arb_engine"]
+

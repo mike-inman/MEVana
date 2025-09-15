@@ -10,6 +10,11 @@ Do
 - Put documentation only in `docs/` (and organize under `docs/operations/`, `docs/deployment/`, `docs/architecture/`, `docs/strategy/`, `docs/reference/`).
 - Use path-agnostic shell: prefer `tar -C`, `repo_root=$(git rev-parse --show-toplevel)`.
 
+Documentation timestamps
+- When creating or updating any Markdown under `docs/**`, include a prominent timestamp near the top:
+  - `Last updated: YYYY-MM-DD` for modifications
+  - `Created: YYYY-MM-DD` for new docs
+
 Don’t
 - Don’t create new top-level directories without an approved issue/ADR.
 - Don’t put dashboards in `dashboards/` at the repo root.
@@ -19,4 +24,3 @@ Don’t
 PR hygiene
 - Explain directory choices and confirm they match these rules.
 - Keep changes minimal and focused; avoid unrelated edits.
-

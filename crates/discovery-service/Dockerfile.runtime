@@ -1,0 +1,10 @@
+# Runtime-only image for discovery-service (binary prebuilt locally)
+FROM debian:bookworm-slim AS runtime
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    ca-certificates curl && \
+    update-ca-certificates && rm -rf /var/lib/apt/lists/*
+WORKDIR /app
+COPY target/release/discovery-service /usr/local/bin/discovery-service
+ENV RUST_LOG=info
+ENTRYPOINT ["/usr/local/bin/discovery-service"]
+

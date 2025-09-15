@@ -16,6 +16,11 @@ Process
 - If adding files, state why the chosen directory is canonical.
 - Don’t commit archives, OS metadata, or secrets.
 
+Timestamps for docs
+- All Markdown docs under `docs/**` should include a prominent timestamp near the top using one of the following lines:
+  - `Last updated: YYYY-MM-DD` (preferred when modifying)
+  - `Created: YYYY-MM-DD` (for new documents)
+
 Dashboards
 - Add only to `infrastructure/grafana/dashboards/`.
 - Verify JSON parses and imports in Grafana locally when possible.
@@ -27,4 +32,3 @@ Pre-commit
 
 AI Assistants
 - See `AGENTS.md` for strict placement rules and safe defaults.
-

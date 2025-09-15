@@ -1,0 +1,10 @@
+# Runtime-only image for executor-service (binary prebuilt locally)
+FROM debian:bookworm-slim AS runtime
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    ca-certificates librdkafka1 curl && \
+    update-ca-certificates && rm -rf /var/lib/apt/lists/*
+WORKDIR /srv
+COPY target/release/executor-service /usr/local/bin/executor-service
+ENV RUST_LOG=info
+ENTRYPOINT ["/usr/local/bin/executor-service"]
+

@@ -1,0 +1,17 @@
+# Runtime-only image for normalizer-service (binary prebuilt locally)
+FROM debian:bookworm-slim AS runtime
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    ca-certificates librdkafka1 curl && \
+    update-ca-certificates && rm -rf /var/lib/apt/lists/*
+WORKDIR /app
+# The main service binary is built as tap_orca_extract; copy to common name
+COPY target/release/tap_orca_extract /usr/local/bin/normalizer-service
+ENV RUST_LOG=info HEALTH_PORT=8085 BIND_ADDRESS=0.0.0.0 \
+    KAFKA_BROKER=kafka:9092 IN_TOPIC=dex-transactions OUT_TOPIC=orca-swaps.parsed.v2 \
+    GROUP_ID=tap-orca-extract REDIS_URL=redis://redis:6379/0 \
+    MINT_DECIMALS_TTL_MS=60000 POOL_SNAPSHOT_TTL_MS=60000 FAST_MODE=1
+EXPOSE 8085
+HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
+  CMD curl -sf http://localhost:8085/health || exit 1
+ENTRYPOINT ["/usr/local/bin/normalizer-service"]
+
