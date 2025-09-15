@@ -1,0 +1,20 @@
+name: Cargo Deny (Deps & Licenses)
+
+on:
+  pull_request:
+  push:
+    branches: [ main ]
+
+jobs:
+  cargo-deny:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Run cargo-deny (advisories, bans, licenses)
+        uses: EmbarkStudios/cargo-deny-action@v1
+        with:
+          command: check
+          arguments: "--all-features"
+

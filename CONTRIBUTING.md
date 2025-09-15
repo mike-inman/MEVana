@@ -39,3 +39,4 @@ Rust development
   - `cargo fmt --all -- --check`
   - `cargo clippy --workspace --all-targets -- -D warnings`
   - `cargo test --workspace`
+ - Dependency and license checks: `cargo deny check` (uses `deny.toml`)
