@@ -387,11 +387,15 @@ impl SmartFilter {
         let mut rejection_reason = None;
         let mut should_execute = true;
 
-        // Filter 1: Minimum net profit
-        if net_profit_sol < self.config.min_net_profit_sol {
+        // Filter 1: Minimum net profit - Using dynamic PropertyStore values
+        let min_net_profit_lamports = get_property_store().get_atomic_u64("min_net_profit_lamports")
+            .unwrap_or((self.config.min_net_profit_sol * 1_000_000_000.0) as u64);
+        let min_net_profit_sol = min_net_profit_lamports as f64 / 1_000_000_000.0;
+
+        if net_profit_sol < min_net_profit_sol {
             should_execute = false;
-            rejection_reason = Some(format!("Net profit {:.6} SOL below minimum {:.6} SOL", 
-                                           net_profit_sol, self.config.min_net_profit_sol));
+            rejection_reason = Some(format!("Net profit {:.6} SOL below minimum {:.6} SOL",
+                                           net_profit_sol, min_net_profit_sol));
             stats.rejected_low_profit += 1;
         }
 
@@ -434,14 +438,18 @@ impl SmartFilter {
             stats.rejected_competition += 1;
         }
 
-        // Filter 5: Historical success rate with learning
+        // Filter 5: Historical success rate with learning - Using dynamic PropertyStore values
         let success_rate = self.get_venue_success_rate(&venue_pair).await;
-        let min_attempts = self.config.min_samples_for_learning;
-        if success_rate < self.config.min_venue_success_rate && stats.total_opportunities > min_attempts {
+        let min_attempts = get_property_store().get_atomic_u64("min_samples_for_learning")
+            .unwrap_or(self.config.min_samples_for_learning);
+        let min_venue_success_rate = get_property_store().get_atomic_f64("min_venue_success_rate")
+            .unwrap_or(self.config.min_venue_success_rate);
+
+        if success_rate < min_venue_success_rate && stats.total_opportunities > min_attempts {
             should_execute = false;
-            rejection_reason = Some(format!("Venue pair {} success rate {:.1}% below minimum {:.1}%", 
-                                           venue_pair, success_rate * 100.0, 
-                                           self.config.min_venue_success_rate * 100.0));
+            rejection_reason = Some(format!("Venue pair {} success rate {:.1}% below minimum {:.1}%",
+                                           venue_pair, success_rate * 100.0,
+                                           min_venue_success_rate * 100.0));
             stats.rejected_low_success_rate += 1;
         }
 
@@ -557,7 +565,8 @@ impl SmartFilter {
             .unwrap_or_default()
             .as_millis() as u64;
         
-        let lookback_ms = self.config.competition_lookback_ms;
+        let lookback_ms = get_property_store().get_atomic_u64("competition_lookback_ms")
+            .unwrap_or(self.config.competition_lookback_ms);
         let recent_similar = tracker.recent_opportunities.iter()
             .filter(|opp| {
                 opp.venue_pair == venue_pair &&
@@ -565,8 +574,10 @@ impl SmartFilter {
                 (opp.profit_bps - opportunity.profit_bps).abs() < 10 // Similar profit range
             })
             .count();
-        
-        if recent_similar >= self.config.max_concurrent_opportunities as usize {
+
+        let max_concurrent = get_property_store().get_atomic_u32("max_concurrent_opportunities")
+            .unwrap_or(self.config.max_concurrent_opportunities);
+        if recent_similar >= max_concurrent as usize {
             0.8 // High competition
         } else if recent_similar > 1 {
             0.4 + (recent_similar as f64 * 0.1) // Moderate competition
@@ -579,7 +590,9 @@ impl SmartFilter {
         let tracker = self.success_tracker.read().await;
         
         if let Some(stats) = tracker.venue_pair_stats.get(venue_pair) {
-            if stats.attempts >= self.config.min_samples_for_learning {
+            let min_samples = get_property_store().get_atomic_u64("min_samples_for_learning")
+                .unwrap_or(self.config.min_samples_for_learning);
+            if stats.attempts >= min_samples {
                 let base_success_rate = stats.successes as f64 / stats.attempts as f64;
                 
                 // Adjust based on profit level

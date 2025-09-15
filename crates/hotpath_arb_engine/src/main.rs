@@ -103,46 +103,145 @@ use transaction_templates::TransactionTemplateCache;
 use redis_publisher::RedisMetricsPublisher;
 
 // ========================================================================
-// REAL-TIME HOTPATH CONFIGURATION SYSTEM
-// Zero-latency atomic configuration for event-driven parameter updates
+// BULLETPROOF PROPERTY STORE INTEGRATION
+// Anti-capsizing real-time configuration system with emergency controls
 // ========================================================================
 
-/// Zero-latency atomic configuration cache for hotpath arbitrage engine
-/// All values stored as scaled integers to avoid floating point operations
-pub struct HotPathConfig {
-    // Core profit parameters
-    pub min_profit_bps: AtomicI32,
-    pub max_profit_bps: AtomicI32,
-    pub min_net_profit_sol: AtomicU64, // Store as lamports (1 SOL = 1_000_000_000 lamports)
+// Import the bulletproof PropertyStore system
+mod property_store;
+use property_store::{get_property_store, PropertySource, PropertyValue, ValidationError};
 
-    // Venue and success parameters
-    pub min_venue_success_rate: AtomicU64, // Store as percentage * 10000 (0.75 = 7500)
-    pub max_gas_budget_pct: AtomicU64,     // Store as percentage * 100 (80.0% = 8000)
+// Import WebSocket broadcasting for real-time UI updates
+mod websocket_broadcaster;
+use websocket_broadcaster::{create_websocket_broadcaster, websocket_handler, WebSocketBroadcaster};
 
-    // Concurrency and timing
-    pub max_concurrent_opportunities: AtomicU32,
-    pub competition_lookback_ms: AtomicU64,
-
-    // Learning parameters
-    pub learning_rate: AtomicU64, // Store as rate * 10000 (0.1 = 1000)
-    pub min_samples_for_learning: AtomicU64,
+/// Emergency controls for system safety - can instantly stop/control trading
+pub struct EmergencyControls {
+    pub last_safety_check: Instant,
+    pub consecutive_failures: AtomicU32,
+    pub last_circuit_breaker_trigger: AtomicU64,
+    pub system_health_status: Arc<Mutex<SystemHealthStatus>>,
 }
 
-/// Global zero-latency configuration cache
-/// Initialized with ultra-permissive defaults to ensure data flow
-static HOT_PATH_CONFIG: Lazy<HotPathConfig> = Lazy::new(|| {
-    HotPathConfig {
-        min_profit_bps: AtomicI32::new(1), // 1 bps - ultra-low for data collection
-        max_profit_bps: AtomicI32::new(1000), // 1000 bps - high ceiling
-        min_net_profit_sol: AtomicU64::new(100_000), // 0.0001 SOL in lamports
-        min_venue_success_rate: AtomicU64::new(0), // 0% - no venue filtering initially
-        max_gas_budget_pct: AtomicU64::new(8000), // 80%
-        max_concurrent_opportunities: AtomicU32::new(20),
-        competition_lookback_ms: AtomicU64::new(1000), // 1 second
-        learning_rate: AtomicU64::new(1000),           // 0.1 learning rate
-        min_samples_for_learning: AtomicU64::new(10),
+/// System health monitoring for emergency decision making
+#[derive(Debug, Clone)]
+pub enum SystemHealthStatus {
+    Healthy,
+    Degraded { reason: String },
+    Critical { reason: String },
+    EmergencyStop { reason: String },
+}
+
+/// Global emergency controls - monitors system health and can trigger emergency stops
+static EMERGENCY_CONTROLS: Lazy<EmergencyControls> = Lazy::new(|| {
+    EmergencyControls {
+        last_safety_check: Instant::now(),
+        consecutive_failures: AtomicU32::new(0),
+        last_circuit_breaker_trigger: AtomicU64::new(0),
+        system_health_status: Arc::new(Mutex::new(SystemHealthStatus::Healthy)),
     }
 });
+
+/// Check if live trading is enabled and safe to proceed
+/// This is the MASTER SAFETY GATE - everything flows through here
+fn is_trading_enabled_and_safe() -> bool {
+    let property_store = get_property_store();
+
+    // LAYER 1: Check enable_live_execution flag
+    let live_execution_enabled = property_store.get_atomic_bool("enable_live_execution")
+        .unwrap_or(false);
+
+    if !live_execution_enabled {
+        return false; // Trading disabled
+    }
+
+    // LAYER 2: Check dry_run flag
+    let dry_run = property_store.get_atomic_bool("dry_run")
+        .unwrap_or(true);
+
+    if dry_run {
+        return false; // In dry run mode
+    }
+
+    // LAYER 3: Check simulation_mode flag
+    let simulation_mode = property_store.get_atomic_bool("simulation_mode")
+        .unwrap_or(true);
+
+    if simulation_mode {
+        return false; // In simulation mode
+    }
+
+    // LAYER 4: Check circuit breaker
+    let circuit_breaker_enabled = property_store.get_atomic_bool("circuit_breaker_enabled")
+        .unwrap_or(true);
+
+    if circuit_breaker_enabled {
+        let consecutive_failures = EMERGENCY_CONTROLS.consecutive_failures.load(Ordering::Relaxed);
+        let max_failures = property_store.get_atomic_u32("max_consecutive_failures")
+            .unwrap_or(3);
+
+        if consecutive_failures >= max_failures {
+            warn!("🚨 Circuit breaker ACTIVE: {} consecutive failures (max: {})",
+                  consecutive_failures, max_failures);
+            return false; // Circuit breaker triggered
+        }
+    }
+
+    // LAYER 5: Check system health
+    if let Ok(health) = EMERGENCY_CONTROLS.system_health_status.lock() {
+        match &*health {
+            SystemHealthStatus::EmergencyStop { reason } => {
+                error!("🚨 EMERGENCY STOP ACTIVE: {}", reason);
+                return false;
+            }
+            SystemHealthStatus::Critical { reason } => {
+                warn!("🚨 CRITICAL SYSTEM STATE: {}", reason);
+                return false;
+            }
+            _ => {} // Healthy or degraded is okay for trading
+        }
+    }
+
+    true // All safety checks passed
+}
+
+/// Record execution failure for circuit breaker tracking
+fn record_execution_failure(reason: &str) {
+    let consecutive_failures = EMERGENCY_CONTROLS.consecutive_failures.fetch_add(1, Ordering::Relaxed) + 1;
+
+    warn!("📊 Execution failure #{}: {}", consecutive_failures, reason);
+
+    let max_failures = get_property_store().get_atomic_u32("max_consecutive_failures")
+        .unwrap_or(3);
+
+    if consecutive_failures >= max_failures {
+        let now = SystemTime::now().duration_since(UNIX_EPOCH).unwrap_or_default().as_millis() as u64;
+        EMERGENCY_CONTROLS.last_circuit_breaker_trigger.store(now, Ordering::Relaxed);
+
+        error!("🚨 CIRCUIT BREAKER TRIGGERED: {} consecutive failures", consecutive_failures);
+
+        // Update system health status
+        if let Ok(mut health) = EMERGENCY_CONTROLS.system_health_status.lock() {
+            *health = SystemHealthStatus::Critical {
+                reason: format!("Circuit breaker triggered after {} failures", consecutive_failures)
+            };
+        }
+    }
+}
+
+/// Record execution success for circuit breaker reset
+fn record_execution_success() {
+    let old_failures = EMERGENCY_CONTROLS.consecutive_failures.swap(0, Ordering::Relaxed);
+
+    if old_failures > 0 {
+        info!("✅ Circuit breaker RESET: Successful execution after {} failures", old_failures);
+
+        // Update system health status back to healthy
+        if let Ok(mut health) = EMERGENCY_CONTROLS.system_health_status.lock() {
+            *health = SystemHealthStatus::Healthy;
+        }
+    }
+}
 
 /// Configuration update event from database trigger
 #[derive(Deserialize)]
@@ -2000,9 +2099,11 @@ impl HotPathArbitrageEngine {
         if execution_success {
             self.successful_executions
                 .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+            record_execution_success(); // Reset circuit breaker
         } else {
             self.failed_executions
                 .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+            record_execution_failure("Trade execution failed");
         }
     }
 
@@ -2340,9 +2441,17 @@ impl HotPathArbitrageEngine {
                     opp.signature
                 );
 
+                // ⚠️ MASTER SAFETY GATE: Check if trading is enabled and safe
+                if !is_trading_enabled_and_safe() {
+                    info!("🛡️ Trading safety gate BLOCKED execution: Live trading disabled or unsafe");
+                    // Still count as processed for metrics, but don't execute
+                    return Ok(None);
+                }
+
                 // Execute intelligent, high-confidence opportunities
                 if let Err(e) = self.trigger_lethal_execution(opp) {
                     error!("Failed to trigger lethal execution: {}", e);
+                    record_execution_failure(&format!("Execution trigger failed: {}", e));
                 } else {
                     info!(
                         "🧠 SMART EXECUTION TRIGGERED: profit_bps={}, net_profit={:.6} SOL, confidence={:.2}",
@@ -3883,7 +3992,10 @@ async fn start_auxiliary_api_server(port: u16, config_state: Option<SharedConfig
     };
 
     let bind_addr = format!("0.0.0.0:{}", port);
-    info!("🔧 Starting auxiliary API server on {}", bind_addr);
+    info!("🔧 Starting auxiliary API server with WebSocket support on {}", bind_addr);
+
+    // Initialize WebSocket broadcaster for real-time property updates
+    let websocket_broadcaster = create_websocket_broadcaster().await;
 
     let mut app = Router::new()
         .route("/performance", get(serve_performance_report))
@@ -3895,7 +4007,12 @@ async fn start_auxiliary_api_server(port: u16, config_state: Option<SharedConfig
         .route("/wallet/security", get(serve_wallet_security_status))
         .route("/wallet/audit", get(serve_wallet_security_audit))
         .route("/wallet/generate", post(generate_wallet_endpoint))
-        .route("/wallet/list", get(list_wallets_endpoint));
+        .route("/wallet/list", get(list_wallets_endpoint))
+        // WEBSOCKET REAL-TIME CONTROL PANEL
+        .route("/ws/properties", get(websocket_handler))
+        .route("/properties/all", get(serve_all_properties))
+        .route("/properties/stats", get(serve_property_stats))
+        .with_state(Arc::clone(&websocket_broadcaster));
 
     // Add smart filter configuration API if config state is provided
     if let Some(state) = config_state {
@@ -4680,6 +4797,48 @@ async fn main() -> Result<()> {
     }
 
     Ok(())
+}
+
+/// Serve all current property values as JSON
+async fn serve_all_properties() -> axum::Json<std::collections::HashMap<String, crate::property_store::PropertyValue>> {
+    use crate::property_store::get_property_store;
+
+    let properties = get_property_store().get_all_properties().await;
+    axum::Json(properties)
+}
+
+/// Serve property system statistics
+async fn serve_property_stats() -> axum::Json<serde_json::Value> {
+    use crate::property_store::get_property_store;
+    use serde_json::json;
+
+    let property_store = get_property_store();
+    let all_properties = property_store.get_all_properties().await;
+
+    let stats = json!({
+        "total_properties": all_properties.len(),
+        "property_groups": {
+            "emergency_controls": 8,
+            "profit_optimization": 7,
+            "venue_limits": 8,
+            "execution_settings": 8,
+            "ai_learning": 4,
+            "wallet_security": 5,
+            "monitoring": 4,
+            "system_performance": 3
+        },
+        "property_types": {
+            "boolean": all_properties.values().filter(|v| matches!(v, crate::property_store::PropertyValue::Boolean(_))).count(),
+            "integer": all_properties.values().filter(|v| matches!(v, crate::property_store::PropertyValue::Integer(_))).count(),
+            "float": all_properties.values().filter(|v| matches!(v, crate::property_store::PropertyValue::Float(_))).count(),
+            "string": all_properties.values().filter(|v| matches!(v, crate::property_store::PropertyValue::String(_))).count()
+        },
+        "last_updated": chrono::Utc::now().timestamp(),
+        "validation_enabled": true,
+        "websocket_broadcasting": true
+    });
+
+    axum::Json(stats)
 }
 
 /// Helper function to convert venue name to hash for execution system
