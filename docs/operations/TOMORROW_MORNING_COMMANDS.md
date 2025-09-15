@@ -86,7 +86,7 @@ sudo kill -9 <PID>
 ### If database replay stopped:
 ```bash
 # Restart database replay
-./replay_database.sh &
+./scripts/maintenance/replay_database.sh &
 ```
 
 ### If Grafana shows no data:

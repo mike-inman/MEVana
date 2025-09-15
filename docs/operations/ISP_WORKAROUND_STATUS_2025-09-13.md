@@ -33,7 +33,7 @@ Multiple background processes are running simultaneously, causing port conflicts
 
 ### 1. Database Transaction Replay (Process 07a150)
 ```bash
-./replay_database.sh
+./scripts/maintenance/replay_database.sh
 ```
 - ✅ **Processing 21,000+ transactions successfully**
 - ✅ **Updating timestamps to current time**
@@ -130,7 +130,7 @@ curl http://localhost:8088/performance
 ./scripts/lifecycle/shutdown_system.sh
 
 # 2. Start only essential services
-./replay_database.sh &  # Keep database replay
+./scripts/maintenance/replay_database.sh &  # Keep database replay
 
 # 3. Start single Fake Geyser process
 FAKE_GEYSER=true PAPER_TRADING=true \

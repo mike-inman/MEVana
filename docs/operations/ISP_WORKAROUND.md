@@ -15,7 +15,7 @@ Uses your actual 174,008 recorded transactions with updated timestamps:
 
 ```bash
 # Start database replay (continuous loop of real data)
-./replay_database.sh
+./scripts/maintenance/replay_database.sh
 ```
 
 This gives you:
@@ -29,7 +29,7 @@ Simple synthetic data generation:
 
 ```bash
 # Start standalone fake Geyser
-./start_fake_geyser.sh
+./scripts/development/start_fake_geyser.sh
 ```
 
 ### Option 3: Environment Variable Mode
