@@ -1,0 +1,20 @@
+repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v4.6.0
+    hooks:
+      - id: trailing-whitespace
+      - id: end-of-file-fixer
+      - id: check-added-large-files
+      - id: detect-private-key
+      - id: check-json
+      - id: check-yaml
+      - id: mixed-line-ending
+
+  - repo: local
+    hooks:
+      - id: repo-hygiene
+        name: repo-hygiene
+        entry: bash scripts/ci/repo_hygiene.sh
+        language: system
+        pass_filenames: false
+

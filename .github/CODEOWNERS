@@ -1,0 +1,10 @@
+# Default owner
+* @mike-inman
+
+# Areas
+infrastructure/** @mike-inman
+docs/** @mike-inman
+scripts/** @mike-inman
+crates/** @mike-inman
+.github/** @mike-inman
+
