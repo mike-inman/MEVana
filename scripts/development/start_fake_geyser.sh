@@ -18,4 +18,4 @@ echo "  GEYSER_ENDPOINT=http://localhost:50051 [your normal command]"
 echo ""
 
 # Simple standalone fake Geyser (no dependencies on your code)
-cargo run --bin fake_geyser 2>/dev/null || rustc fake_geyser.rs -o fake_geyser && ./fake_geyser
+cargo run --bin fake_geyser 2>/dev/null || rustc examples/fake_geyser.rs -o fake_geyser && ./fake_geyser
