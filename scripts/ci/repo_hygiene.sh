@@ -58,3 +58,26 @@ if [ ${#missing_ts[@]} -gt 0 ]; then
 fi
 
 echo "✅ Repo hygiene passed"
+
+# 6) Soft check: shell scripts live in standard locations
+# Allow:
+# - scripts/** (top-level operational scripts)
+# - infrastructure/scripts/** (infra helpers)
+# - crates/**/scripts/** (crate-local helpers)
+# - infrastructure/*.sh (explicit allowlist for a few infra root scripts)
+stray_scripts=()
+while IFS= read -r -d '' s; do
+  case "$s" in
+    ./scripts/*|./infrastructure/scripts/*|./crates/*/scripts/*|./infrastructure/*.sh)
+      : ;; # allowed
+    *)
+      stray_scripts+=("$s")
+      ;;
+  esac
+done < <(find . -type f -name '*.sh' -not -path './.git/*' -not -path './target/*' -print0)
+
+if [ ${#stray_scripts[@]} -gt 0 ]; then
+  echo "⚠️  WARNING: Shell scripts outside standard locations detected:" >&2
+  for s in "${stray_scripts[@]}"; do echo " - $s" >&2; done
+  echo "Prefer placing scripts under 'scripts/**' or 'infrastructure/scripts/**' (or crate-local 'crates/**/scripts/**')." >&2
+fi
