@@ -1,0 +1,33 @@
+name: PR Onboarding Comment
+
+on:
+  pull_request:
+    types: [opened]
+
+jobs:
+  comment:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Post onboarding comment
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const body = `👋 Welcome! Quick links for this repo:
+
+            - Rules for assistants: AGENTS.md
+            - Contribution guide: CONTRIBUTING.md
+            - Docs index (start here): docs/DOCUMENTATION_INDEX.md
+            - Deploy runbook: docs/operations/DEPLOYMENT_RUNBOOK.md
+            - Critical blockers: docs/operations/CRITICAL_PRODUCTION_BLOCKERS.md
+            - Scripts (preferred): scripts/ (deployment/lifecycle/monitoring/maintenance/testing)
+            - Dashboards location: infrastructure/grafana/dashboards/
+            - Hygiene: scripts/ci/repo_hygiene.sh (also enforced in CI)
+
+            Please confirm your PR follows the repo conventions in the PR template checklist.`;
+
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+              body
+            });

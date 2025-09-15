@@ -32,3 +32,10 @@ Pre-commit
 
 AI Assistants
 - See `AGENTS.md` for strict placement rules and safe defaults.
+
+Rust development
+- Style and lints: see `docs/development/RUST_STYLE.md`.
+- Run locally before pushing:
+  - `cargo fmt --all -- --check`
+  - `cargo clippy --workspace --all-targets -- -D warnings`
+  - `cargo test --workspace`

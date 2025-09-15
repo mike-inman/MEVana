@@ -1,5 +1,12 @@
 # MEVana - Solana AI Trading Platform
 
+[ AI and Contributor Quick Start ]
+- Read rules: AGENTS.md (assistant guidelines), CONTRIBUTING.md (repo conventions)
+- Start here: docs/DOCUMENTATION_INDEX.md (critical ops + quick links)
+- Scripts: scripts/ (deployment, lifecycle, monitoring, maintenance, testing)
+- Dashboards live in: infrastructure/grafana/dashboards/
+- Hygiene: scripts/ci/repo_hygiene.sh (run locally or via pre-commit)
+
 [![Rust](https://img.shields.io/badge/rust-1.70+-blue.svg)](https://www.rust-lang.org/)
 [![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 [![Documentation](https://img.shields.io/badge/docs-latest-blue.svg)](docs/)

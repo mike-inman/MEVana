@@ -10,6 +10,10 @@ Do
 - Put documentation only in `docs/` (and organize under `docs/operations/`, `docs/deployment/`, `docs/architecture/`, `docs/strategy/`, `docs/reference/`).
 - Use path-agnostic shell: prefer `tar -C`, `repo_root=$(git rev-parse --show-toplevel)`.
 
+Rust code requirements
+- Follow `docs/development/RUST_STYLE.md` for naming, error handling, logging, and async patterns.
+- Format and lint before proposing patches: `cargo fmt --all` and `cargo clippy --workspace --all-targets -- -D warnings`.
+
 Documentation timestamps
 - When creating or updating any Markdown under `docs/**`, include a prominent timestamp near the top:
   - `Last updated: YYYY-MM-DD` for modifications

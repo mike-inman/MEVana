@@ -17,4 +17,13 @@ repos:
         entry: bash scripts/ci/repo_hygiene.sh
         language: system
         pass_filenames: false
-
+      - id: rust-fmt
+        name: rust-fmt
+        entry: bash -lc 'cargo fmt --all -- --check'
+        language: system
+        pass_filenames: false
+      - id: rust-clippy
+        name: rust-clippy
+        entry: bash -lc 'cargo clippy --workspace --all-targets -- -D warnings'
+        language: system
+        pass_filenames: false
