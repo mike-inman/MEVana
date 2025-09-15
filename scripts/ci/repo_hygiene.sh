@@ -29,5 +29,18 @@ if [ -n "$bad" ]; then
   fail "Remove archives and OS files from the repo."
 fi
 
-echo "✅ Repo hygiene passed"
+# 4) Validate dashboard JSON files parse
+dash_files=$(find infrastructure/grafana/dashboards -maxdepth 1 -type f -name '*.json' 2>/dev/null || true)
+if [ -n "$dash_files" ]; then
+  echo "Validating dashboard JSON files..."
+  has_jq=$(command -v jq || true)
+  for f in $dash_files; do
+    if [ -n "$has_jq" ]; then
+      jq empty "$f" || fail "Invalid JSON: $f"
+    else
+      python3 -c "import json,sys;json.load(open(sys.argv[1]))" "$f" || fail "Invalid JSON: $f"
+    fi
+  done
+fi
 
+echo "✅ Repo hygiene passed"

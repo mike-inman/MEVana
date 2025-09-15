@@ -1,0 +1,39 @@
+name: Repository Structure Checklist
+description: Ensure new work follows directory conventions and hygiene rules
+title: "[Struct] Brief description"
+labels: ["structure", "hygiene"]
+assignees: ["mike-inman"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Please confirm your changes follow the project structure.
+
+  - type: checkboxes
+    id: dirs
+    attributes:
+      label: Directory placement
+      options:
+        - label: No new top-level directories introduced
+        - label: Infrastructure changes live under `infrastructure/`
+        - label: Dashboards are in `infrastructure/grafana/dashboards/`
+        - label: Docs live only under `docs/` (no `docs-new/`)
+        - label: Operational scripts are under `scripts/` (deployment/maintenance/monitoring/testing)
+
+  - type: checkboxes
+    id: hygiene
+    attributes:
+      label: Hygiene
+      options:
+        - label: No archives or OS files committed (`*.tgz`, `*.zip`, `.DS_Store`, `._*`)
+        - label: Secrets are not committed; sensitive values use env or GitHub Secrets
+        - label: Paths in scripts are path-agnostic (e.g., `tar -C`, `git rev-parse --show-toplevel`)
+
+  - type: textarea
+    id: summary
+    attributes:
+      label: Summary of change
+      description: What changed and why
+    validations:
+      required: true
+
