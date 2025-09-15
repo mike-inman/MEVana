@@ -1,0 +1,46 @@
+name: Self-Hosted Diagnostics
+
+on:
+  workflow_dispatch:
+    inputs:
+      services:
+        description: "Space-separated services to inspect (e.g., hotpath normalizer discovery executor). Empty = all app services"
+        required: false
+        default: "hotpath"
+
+jobs:
+  diag:
+    runs-on: self-hosted
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Compose status
+        run: |
+          docker compose -p mevana -f infrastructure/docker-compose.server.yml -f infrastructure/docker-compose.full.yml ps || true
+
+      - name: Resolve services
+        id: vars
+        shell: bash
+        run: |
+          map_service(){ case "$1" in hotpath) echo hotpath-arb-engine;; normalizer) echo normalizer-service;; discovery) echo discovery-service;; executor) echo executor-service;; *) echo "$1";; esac; }
+          S="${{ github.event.inputs.services }}"; OUT=()
+          if [ -n "$S" ]; then for sv in $S; do OUT+=("$(map_service "$sv")"); done; else OUT=(hotpath-arb-engine normalizer-service discovery-service executor-service); fi
+          echo "services=${OUT[*]}" >> "$GITHUB_OUTPUT"
+
+      - name: Logs (tail)
+        run: |
+          set +e
+          svcs=( ${{ steps.vars.outputs.services }} )
+          for s in ${svcs[*]}; do
+            echo "--- LOGS: $s ---"
+            docker ps --format '{{.Names}}' | grep -E "mevana-$s-1|$s" | xargs -I{} sh -c 'docker logs --tail=200 {} 2>&1 | tail -n 200 || true'
+          done
+
+      - name: Quick HTTP checks
+        run: |
+          set +e
+          echo "Grafana:"; curl -s -o /dev/null -w "%{http_code}\n" --connect-timeout 5 http://localhost:3000/api/health || true
+          echo "Prometheus:"; curl -s -o /dev/null -w "%{http_code}\n" --connect-timeout 5 http://localhost:9090/-/healthy || true
+          echo "Hotpath metrics head:"; curl -s --connect-timeout 5 http://localhost:8088/metrics | head -n 5 || true
+

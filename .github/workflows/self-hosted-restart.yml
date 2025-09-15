@@ -1,0 +1,33 @@
+name: Self-Hosted Restart
+
+on:
+  workflow_dispatch:
+    inputs:
+      services:
+        description: "Space-separated services to restart (e.g., hotpath normalizer discovery executor). Empty = all app services"
+        required: false
+        default: "hotpath"
+
+jobs:
+  restart:
+    runs-on: self-hosted
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Resolve services
+        id: vars
+        shell: bash
+        run: |
+          map_service(){ case "$1" in hotpath) echo hotpath-arb-engine;; normalizer) echo normalizer-service;; discovery) echo discovery-service;; executor) echo executor-service;; *) echo "$1";; esac; }
+          S="${{ github.event.inputs.services }}"; OUT=()
+          if [ -n "$S" ]; then for sv in $S; do OUT+=("$(map_service "$sv")"); done; else OUT=(hotpath-arb-engine normalizer-service discovery-service executor-service); fi
+          echo "services=${OUT[*]}" >> "$GITHUB_OUTPUT"
+
+      - name: Restart services (compose up -d)
+        run: |
+          set -e
+          svcs=( ${{ steps.vars.outputs.services }} )
+          docker compose -p mevana -f infrastructure/docker-compose.server.yml -f infrastructure/docker-compose.full.yml up -d ${svcs[*]}
+          docker compose -p mevana -f infrastructure/docker-compose.server.yml -f infrastructure/docker-compose.full.yml ps
+
