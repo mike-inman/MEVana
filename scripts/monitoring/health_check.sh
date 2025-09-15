@@ -263,7 +263,7 @@ if command -v ping &> /dev/null && [[ "$SOLANA_LATENCY" != "N/A" ]]; then
     if (( $(echo "$LATENCY_NUM > 20" | bc -l 2>/dev/null || echo 0) )); then
         echo -e "${RED}❌ High latency detected (${LATENCY_NUM}ms):${NC}"
         echo "   - Consider deploying to a datacenter closer to Solana infrastructure"
-        echo "   - Run './tools/latency_test.sh' for detailed network analysis"
+        echo "   - Run './scripts/testing/latency_test.sh' for detailed network analysis"
     fi
 fi
 

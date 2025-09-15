@@ -185,7 +185,7 @@ Upgrade to Premium ($1500+/month) when:
    - $250/month: AWS c6i.2xlarge
 
 2. Deploy and test latency:
-   ./tools/latency_test.sh
+   ./scripts/testing/latency_test.sh
 
 3. If latency < 15ms, deploy MEVana
 ```

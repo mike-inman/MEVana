@@ -20,7 +20,7 @@ cd MEVana
 sudo ./deploy.sh
 
 # Test network latency
-./tools/latency_test.sh
+./scripts/testing/latency_test.sh
 
 # Start MEVana services
 ./start_services.sh

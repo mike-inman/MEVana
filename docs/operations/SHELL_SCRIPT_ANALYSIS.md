@@ -81,9 +81,9 @@ Infrastructure:
 
 ### **4. Service-Specific Scripts**
 ```
-├── crates/edge-assembler/start_edge_assembler.sh
+├── scripts/development/start_edge_assembler.sh  
 ├── crates/normalizer-service/scripts/deploy-normalizer.sh  
-└── tools/latency_test.sh
+└── scripts/testing/latency_test.sh
 ```
 
 ## 🎯 **Recommended Organization Structure**

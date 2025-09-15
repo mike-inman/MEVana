@@ -6,7 +6,7 @@ Last updated: 2025-09-15
 ### **Step 1: Run Comprehensive Tests**
 ```bash
 # From your current location (baseline)
-./tools/latency_test.sh
+./scripts/testing/latency_test.sh
 
 # From each potential datacenter (ask providers to run)
 # Or use their testing/trial instances
@@ -162,7 +162,7 @@ traceroute api.helius.xyz
 
 1. **Run baseline test** from your current location:
    ```bash
-   ./tools/latency_test.sh
+   ./scripts/testing/latency_test.sh
    ```
 
 2. **Deploy test instances** on top 3 providers:

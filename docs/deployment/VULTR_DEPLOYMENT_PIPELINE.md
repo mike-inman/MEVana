@@ -24,7 +24,7 @@ git clone https://github.com/mike-inman/MEVana.git
 cd MEVana
 
 # 2. Run latency test first
-./tools/latency_test.sh
+./scripts/testing/latency_test.sh
 # Expected: 8-12ms to Solana (vs local 27ms)
 
 # 3. Install Rust and build
@@ -108,7 +108,7 @@ docker-compose ps
 
 echo "🎉 Deployment complete!"
 echo "Next steps:"
-echo "1. Run latency test: ./tools/latency_test.sh"
+echo "1. Run latency test: ./scripts/testing/latency_test.sh"
 echo "2. Start services: ./start_services.sh"
 echo "3. Monitor logs: tail -f logs/*.log"
 ```
@@ -312,7 +312,7 @@ sleep 30
 ### **If Performance is Poor:**
 ```bash
 # Run latency test
-./tools/latency_test.sh
+./scripts/testing/latency_test.sh
 
 # If >20ms, consider different Vultr location
 # If <10ms but still poor, check system resources
