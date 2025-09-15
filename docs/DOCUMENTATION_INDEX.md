@@ -1,6 +1,10 @@
 # MEVana Documentation Index - Production Reference
 Last updated: 2025-09-15
 
+AI Assistants — Start Here
+- Onboarding: [ai/ONBOARDING_AI.md](./ai/ONBOARDING_AI.md)
+- Pre‑flight checklist: [ai/RUN_FIRST.md](./ai/RUN_FIRST.md)
+
 **Last Updated:** 2025-09-15  
 **Status:** 🚀 PRODUCTION READY  
 **Version:** 2.0

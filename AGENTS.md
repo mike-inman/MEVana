@@ -2,6 +2,10 @@ AI Assistants Guidelines (MEVana)
 
 Your outputs must follow these rules to keep the repo consistent:
 
+Start Here for AI Agents
+- Pre‑flight checklist: docs/ai/RUN_FIRST.md
+- 2‑minute orientation: docs/ai/ONBOARDING_AI.md
+
 Do
 - Place Grafana dashboards only in `infrastructure/grafana/dashboards/`.
 - Place Grafana datasources only in `infrastructure/grafana/datasources/`.
