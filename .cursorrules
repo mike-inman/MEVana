@@ -1,3 +1,16 @@
+# AI Assistant Required Reading (do not skip)
+# - AGENTS.md
+# - docs/ai/ONBOARDING_AI.md
+# - docs/DOCUMENTATION_INDEX.md
+# - docs/operations/CRITICAL_PRODUCTION_BLOCKERS.md
+# - docs/development/RUST_STYLE.md
+# - scripts/ci/repo_hygiene.sh (skim)
+
+# Pre-flight Commands (run locally)
+# - cargo fmt --all -- --check
+# - cargo clippy --workspace --all-targets -- -D warnings
+# - bash scripts/ci/repo_hygiene.sh
+
 # Rust Project Context
 # Tell the AI about your project's core technologies and goals.
 SYSTEM_CONTEXT: |
@@ -55,3 +68,8 @@ RULES:
 DOCS_CONTEXT:
   - path: "docs/architecture.md"
   - path: "docs/api_spec.md"
+  - path: "AGENTS.md"
+  - path: "docs/ai/ONBOARDING_AI.md"
+  - path: "docs/DOCUMENTATION_INDEX.md"
+  - path: "docs/operations/CRITICAL_PRODUCTION_BLOCKERS.md"
+  - path: "docs/development/RUST_STYLE.md"

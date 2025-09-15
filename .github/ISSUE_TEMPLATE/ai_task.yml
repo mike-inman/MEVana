@@ -1,0 +1,39 @@
+name: AI Task
+description: For AI coding agents — confirm required reading and plan
+title: "[AI] Brief description"
+labels: ["ai", "triage"]
+assignees: ["mike-inman"]
+body:
+  - type: checkboxes
+    id: reading
+    attributes:
+      label: Confirm required reading
+      options:
+        - label: AGENTS.md
+        - label: docs/ai/ONBOARDING_AI.md
+        - label: docs/DOCUMENTATION_INDEX.md
+        - label: docs/operations/CRITICAL_PRODUCTION_BLOCKERS.md
+        - label: docs/development/RUST_STYLE.md
+        - label: Skim scripts/ci/repo_hygiene.sh
+  - type: textarea
+    id: summary
+    attributes:
+      label: Understanding summary (2-3 bullet points)
+      description: State the purpose and constraints relevant to your task
+    validations:
+      required: true
+  - type: textarea
+    id: plan
+    attributes:
+      label: Planned changes
+      description: Outline files to touch, approach, and tests/validation
+    validations:
+      required: true
+  - type: checkboxes
+    id: preflight
+    attributes:
+      label: Pre-flight commands (run locally)
+      options:
+        - label: cargo fmt --all -- --check
+        - label: cargo clippy --workspace --all-targets -- -D warnings
+        - label: bash scripts/ci/repo_hygiene.sh

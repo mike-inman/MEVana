@@ -39,4 +39,7 @@ Rust development
   - `cargo fmt --all -- --check`
   - `cargo clippy --workspace --all-targets -- -D warnings`
   - `cargo test --workspace`
- - Dependency and license checks: `cargo deny check` (uses `deny.toml`)
+- Dependency and license checks: `cargo deny check` (uses `deny.toml`)
+
+Temporary CI leniency (last resort)
+- If a PR must merge urgently and fmt/clippy are noisy, apply the PR label `ci:lenient` to allow the Rust lint workflow to report without blocking. Remove the label after merging and follow-up with a cleanup PR.

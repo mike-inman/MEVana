@@ -1,6 +1,19 @@
 # CLAUDE.md
 Last updated: 2025-09-15
 
+Start Here — Required Reading (confirm understanding before changes)
+- AGENTS.md — Repo rules and file placement
+- docs/ai/ONBOARDING_AI.md — 2‑minute orientation
+- docs/DOCUMENTATION_INDEX.md — Critical runbooks and quick links
+- docs/operations/CRITICAL_PRODUCTION_BLOCKERS.md — Safety constraints
+- docs/development/RUST_STYLE.md — Rust naming, errors, async, logging
+- scripts/ci/repo_hygiene.sh — What CI enforces (skim)
+
+Run locally before proposing patches
+- cargo fmt --all -- --check
+- cargo clippy --workspace --all-targets -- -D warnings
+- bash scripts/ci/repo_hygiene.sh
+
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
 ## 🔄 Current Session Context
