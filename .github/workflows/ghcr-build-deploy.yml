@@ -148,8 +148,22 @@ jobs:
 
       - name: Sync compose files to server
         run: |
-          tar -czf infra.tgz infrastructure
-          scp infra.tgz ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }}:/tmp/infra.tgz
+          # Fail fast if dashboards are placed outside the Grafana path
+          if ls "${{ github.workspace }}/dashboards"/*.json >/dev/null 2>&1; then
+            echo "Error: Found dashboards/ at repo root. Move JSON files to infrastructure/grafana/dashboards/" >&2
+            exit 1
+          fi
+          stray=$(find "${{ github.workspace }}" -type f -name '*.json' -path '*/dashboards/*' ! -path '*/infrastructure/grafana/dashboards/*' | wc -l)
+          if [ "$stray" -gt 0 ]; then
+            echo "Error: Found dashboard JSON files outside infrastructure/grafana/dashboards/. Please relocate them." >&2
+            find "${{ github.workspace }}" -type f -name '*.json' -path '*/dashboards/*' ! -path '*/infrastructure/grafana/dashboards/*'
+            exit 1
+          fi
+          # Create archive from the repository root explicitly
+          tar -C "${{ github.workspace }}" -czf "${{ github.workspace }}/infra.tgz" infrastructure
+          # Copy archive to the server
+          scp "${{ github.workspace }}/infra.tgz" ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }}:/tmp/infra.tgz
+          # Extract into SERVER_DIR (defaults to /opt/MEVana if unset)
           ssh ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }} 'mkdir -p ${SERVER_DIR:-/opt/MEVana} && tar -xzf /tmp/infra.tgz -C ${SERVER_DIR:-/opt/MEVana}'
 
       - name: Deploy via SSH (restart only changed services or rollback)

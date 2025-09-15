@@ -28,6 +28,11 @@ tmp/
 *.orig
 *~
 
+# Deployment archives
+*.tgz
+*.tar.gz
+infra.tgz
+
 # Environment files
 .env
 .env*
