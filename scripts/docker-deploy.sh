@@ -1,4 +1,6 @@
 #!/bin/bash
+# Deprecated: Use GHCR-based deploy and compose overlays (see scripts/deployment)
+# Last updated: 2025-09-15
 
 # MEVana Full Docker Deployment - EVERYTHING in containers
 # Usage: ./scripts/docker-deploy.sh

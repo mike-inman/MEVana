@@ -1,4 +1,6 @@
 #!/bin/bash
+# Deprecated: Use GHCR-based deploy (Actions) and scripts/deployment/deploy_vultr_compose.sh
+# Last updated: 2025-09-15
 
 # MEVana Simple Production Deployment
 # Transfers code and builds on server with optimized configuration

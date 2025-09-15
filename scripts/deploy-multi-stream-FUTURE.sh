@@ -1,4 +1,6 @@
 #!/bin/bash
+# Deprecated: planning artifact; prefer scripts/deployment/* and GHCR workflow
+# Last updated: 2025-09-15
 
 # =============================================================================
 # MEVana Multi-Stream Ultra-Low Latency Deployment

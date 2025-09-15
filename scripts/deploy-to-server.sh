@@ -1,4 +1,6 @@
 #!/bin/bash
+# Deprecated: use CI/CD GHCR deploy and scripts/deployment/deploy_vultr_compose.sh
+# Last updated: 2025-09-15
 
 # =============================================================================
 # MEVana Production Server Deployment Script

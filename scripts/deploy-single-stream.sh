@@ -1,4 +1,6 @@
 #!/bin/bash
+# Deprecated: superseded by GHCR compose deploy; see scripts/deployment
+# Last updated: 2025-09-15
 
 # =============================================================================
 # MEVana Single-Stream Deployment (Shyft $199 Plan Compatible)

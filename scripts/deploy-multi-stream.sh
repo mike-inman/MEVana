@@ -1,4 +1,6 @@
 #!/bin/bash
+# Deprecated: superseded by compose-based deploy; see scripts/deployment
+# Last updated: 2025-09-15
 
 # =============================================================================
 # MEVana Multi-Stream Ultra-Low Latency Deployment

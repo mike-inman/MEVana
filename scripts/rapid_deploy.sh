@@ -1,4 +1,6 @@
 #!/bin/bash
+# Deprecated: Prefer scripts/deployment/deploy_vultr_compose.sh (compose) or build-and-ship workflow
+# Last updated: 2025-09-15
 
 # Rapid Server Deployment Script
 # Deploys MEVana multi-endpoint system with Docker for maximum speed
