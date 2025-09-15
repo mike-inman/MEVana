@@ -1,0 +1,71 @@
+# Full services overlay (Phase 1) — containerize services with existing Dockerfiles
+# Use with base stack:
+#   docker compose -p mevana \
+#     -f infrastructure/docker-compose.server.yml \
+#     -f infrastructure/docker-compose.full.yml up -d --build
+
+services:
+  # Normalizer Service — consumes raw TXs → produces orca-swaps.parsed.v2
+  normalizer-service:
+    image: ghcr.io/mike-inman/mevana-normalizer-service:${MEVANA_TAG:-dev}
+    environment:
+      - RUST_LOG=info
+      - KAFKA_BROKER=kafka:9092
+      - IN_TOPIC=dex-transactions
+      - OUT_TOPIC=orca-swaps.parsed.v2
+      - GROUP_ID=tap-orca-extract
+      - REDIS_URL=redis://redis:6379/0
+      - HEALTH_PORT=8085
+      - BIND_ADDRESS=0.0.0.0
+      - FAST_MODE=1
+      - MINT_DECIMALS_TTL_MS=60000
+      - POOL_SNAPSHOT_TTL_MS=60000
+      - DEBUG_MODE=0
+    depends_on:
+      kafka:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks: [mevana_net]
+    restart: unless-stopped
+
+  # Discovery Service — discovers unknown programs
+  discovery-service:
+    image: ghcr.io/mike-inman/mevana-discovery-service:${MEVANA_TAG:-dev}
+    environment:
+      - RUST_LOG=info
+      - KAFKA_BOOTSTRAP_SERVERS=kafka:9092
+      - REDIS_URL=redis://redis:6379/0
+      - UNKNOWN_PROGRAMS_TOPIC=unknown-programs
+      - DISCOVERY_METRICS_PORT=9102
+    depends_on:
+      kafka:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks: [mevana_net]
+    restart: unless-stopped
+
+  # Executor Service — trade execution orchestration
+  executor-service:
+    image: ghcr.io/mike-inman/mevana-executor-service:${MEVANA_TAG:-dev}
+    environment:
+      - RUST_LOG=info
+      - DATABASE_URL=postgresql://mev:mevpassword@postgres:5432/mevdb
+      - KAFKA_BROKER=kafka:9092
+      - REDIS_URL=redis://redis:6379/0
+      - EXECUTION_DRY_RUN=true
+    depends_on:
+      kafka:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+    networks: [mevana_net]
+    restart: unless-stopped
+
+networks:
+  mevana_net:
+    external: true
+    name: mevana_net

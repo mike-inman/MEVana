@@ -1,27 +1,23 @@
 # Multi-stage Dockerfile for executor-service
-# Build stage
-FROM rust:1.79-slim as builder
-WORKDIR /app
-# Install build deps
-RUN apt-get update && apt-get install -y --no-install-recommends pkg-config libssl-dev ca-certificates clang && rm -rf /var/lib/apt/lists/*
 
-# Create empty dummy project for caching dependencies
-RUN USER=root cargo new --bin placeholder
-WORKDIR /app/placeholder
-COPY Cargo.toml ../
-
+# Builder stage with nightly toolchain (needed for edition2024 deps)
+FROM rust:1.83-bookworm AS builder
 WORKDIR /app
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    pkg-config libssl-dev ca-certificates clang cmake build-essential protobuf-compiler && \
+    rm -rf /var/lib/apt/lists/*
+
 # Copy full workspace
 COPY . .
-# Build release binary for account-registry-validate (example) and full workspace
-RUN cargo build --release -p executor-service
+
+# Install nightly and build package
+RUN rustup toolchain install nightly && rustup default nightly
+RUN cargo +nightly build --release -p executor-service
 
 # Runtime stage
 FROM debian:bookworm-slim AS runtime
-RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates && rm -rf /var/lib/apt/lists/*
+RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates && rm -rf /var/lib/apt/lists/* && update-ca-certificates
 WORKDIR /srv
-COPY --from=builder /app/target/release/account-registry-validate /usr/local/bin/account-registry-validate
+COPY --from=builder /app/target/release/executor-service /usr/local/bin/executor-service
 ENV RUST_LOG=info
-ENTRYPOINT ["/usr/local/bin/account-registry-validate"]
-# Default args (show help)
-CMD ["--help"]
+ENTRYPOINT ["/usr/local/bin/executor-service"]

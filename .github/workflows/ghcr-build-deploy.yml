@@ -1,0 +1,108 @@
+name: Build and Deploy (GHCR)
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  packages: write
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_PREFIX: ghcr.io/mike-inman
+
+jobs:
+  build-push:
+    name: Build and push images
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        service: [hotpath, normalizer, discovery, executor]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Rust nightly
+        uses: dtolnay/rust-toolchain@nightly
+
+      - name: Cache cargo
+        uses: Swatinem/rust-cache@v2
+
+      - name: Install build prerequisites (executor only)
+        if: matrix.service == 'executor'
+        run: sudo apt-get update && sudo apt-get install -y protobuf-compiler
+
+      - name: Docker login to GHCR
+        run: echo "${{ secrets.GHCR_TOKEN }}" | docker login ${{ env.REGISTRY }} -u "${{ secrets.GHCR_USERNAME }}" --password-stdin
+
+      - name: Build image
+        run: |
+          set -e
+          SHA=${{ github.sha }}
+          case "${{ matrix.service }}" in
+            hotpath)
+              docker build -f crates/hotpath_arb_engine/Dockerfile \
+                -t $IMAGE_PREFIX/mevana-hotpath-arb-engine:$SHA .
+              ;;
+            normalizer)
+              docker build -f crates/normalizer-service/Dockerfile \
+                -t $IMAGE_PREFIX/mevana-normalizer-service:$SHA .
+              ;;
+            discovery)
+              docker build -f crates/discovery-service/Dockerfile \
+                -t $IMAGE_PREFIX/mevana-discovery-service:$SHA .
+              ;;
+            executor)
+              docker build -f crates/executor-service/executor-service.Dockerfile \
+                -t $IMAGE_PREFIX/mevana-executor-service:$SHA .
+              ;;
+          esac
+
+      - name: Push image
+        run: |
+          SHA=${{ github.sha }}
+          case "${{ matrix.service }}" in
+            hotpath) docker push $IMAGE_PREFIX/mevana-hotpath-arb-engine:$SHA ;;
+            normalizer) docker push $IMAGE_PREFIX/mevana-normalizer-service:$SHA ;;
+            discovery) docker push $IMAGE_PREFIX/mevana-discovery-service:$SHA ;;
+            executor) docker push $IMAGE_PREFIX/mevana-executor-service:$SHA ;;
+          esac
+
+  deploy:
+    name: Deploy to server
+    needs: build-push
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main'
+    steps:
+      - name: SSH agent
+        uses: webfactory/ssh-agent@v0.9.0
+        with:
+          ssh-private-key: ${{ secrets.VULTR_SERVER_SSH_KEY }}
+
+      - name: Add server to known_hosts
+        run: ssh-keyscan -H ${{ secrets.SSH_HOST }} >> ~/.ssh/known_hosts
+
+      - name: Deploy via SSH
+        env:
+          GHCR_USERNAME: ${{ secrets.GHCR_USERNAME }}
+          GHCR_TOKEN: ${{ secrets.GHCR_TOKEN }}
+          SSH_HOST: ${{ secrets.SSH_HOST }}
+          SSH_USER: ${{ secrets.SSH_USER }}
+          SERVER_DIR: ${{ secrets.SERVER_DIR }}
+        run: |
+          SHA=${{ github.sha }}
+          ssh ${SSH_USER}@${SSH_HOST} << 'EOSSH'
+          set -e
+          cd "${SERVER_DIR:-/opt/MEVana}"
+          echo "$GHCR_TOKEN" | docker login ghcr.io -u "$GHCR_USERNAME" --password-stdin
+          export MEVANA_TAG=${SHA}
+          # Pull new images if not present (best-effort)
+          docker compose -p mevana -f infrastructure/docker-compose.server.yml -f infrastructure/docker-compose.full.yml pull || true
+          # Restart only app services (infra unchanged)
+          docker compose -p mevana -f infrastructure/docker-compose.server.yml -f infrastructure/docker-compose.full.yml up -d \
+            hotpath-arb-engine normalizer-service discovery-service executor-service
+          docker compose -p mevana -f infrastructure/docker-compose.server.yml -f infrastructure/docker-compose.full.yml ps
+          EOSSH
+
