@@ -9,6 +9,10 @@ on:
         description: 'Rollback to specific image tag (commit SHA). Leave empty to deploy latest.'
         required: false
         default: ''
+      services:
+        description: 'Space-separated services to build (hotpath normalizer discovery executor). If set, forces build+deploy regardless of detected changes.'
+        required: false
+        default: ''
 
 concurrency:
   group: ghcr-deploy-${{ github.ref }}
@@ -77,11 +81,21 @@ jobs:
       - name: Prepare dynamic matrix
         id: set-matrix
         run: |
+          forced="${{ github.event.inputs.services }}"
           changed=()
-          [[ "${{ steps.hotpath.outputs.any_changed }}" == 'true' ]] && changed+=(hotpath)
-          [[ "${{ steps.normalizer.outputs.any_changed }}" == 'true' ]] && changed+=(normalizer)
-          [[ "${{ steps.discovery.outputs.any_changed }}" == 'true' ]] && changed+=(discovery)
-          [[ "${{ steps.executor.outputs.any_changed }}" == 'true' ]] && changed+=(executor)
+          if [ -n "$forced" ]; then
+            # split on whitespace, commas, or semicolons
+            for s in $forced; do
+              case "$s" in
+                hotpath|normalizer|discovery|executor) changed+=("$s") ;;
+              esac
+            done
+          else
+            [[ "${{ steps.hotpath.outputs.any_changed }}" == 'true' ]] && changed+=(hotpath)
+            [[ "${{ steps.normalizer.outputs.any_changed }}" == 'true' ]] && changed+=(normalizer)
+            [[ "${{ steps.discovery.outputs.any_changed }}" == 'true' ]] && changed+=(discovery)
+            [[ "${{ steps.executor.outputs.any_changed }}" == 'true' ]] && changed+=(executor)
+          fi
           if [ ${#changed[@]} -eq 0 ]; then
             echo 'matrix=["none"]' >> "$GITHUB_OUTPUT"
             echo 'services=' >> "$GITHUB_OUTPUT"
