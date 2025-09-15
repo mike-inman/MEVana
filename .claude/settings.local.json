@@ -231,7 +231,18 @@
       "Bash(./scripts/simple-deploy.sh:*)",
       "Bash(cargo fix:*)",
       "Bash(DATABASE_URL=\"postgresql://mev:mevpassword@localhost:5433/mevdb\" cargo sqlx prepare --workspace)",
-      "Bash(cargo install:*)"
+      "Bash(cargo install:*)",
+      "Bash(./scripts/setup_grafana_dashboards.sh:*)",
+      "Bash(./scripts/reset_grafana_clean.sh:*)",
+      "Bash(./scripts/auto_setup_dashboard.sh:*)",
+      "WebFetch(domain:docs.rs)",
+      "Bash(PAPER_TRADING=true DATABASE_URL=\"postgresql://mev:mevpassword@localhost:5433/mevdb\" METRICS_PORT=8089 cargo run -p hotpath_arb_engine --bin hotpath_arb_engine)",
+      "Bash(./scripts/setup_grafana_production.sh:*)",
+      "Bash(PAPER_TRADING=true METRICS_PORT=8095 cargo run -p hotpath_arb_engine --bin hotpath_arb_engine)",
+      "Bash(./scripts/deploy.sh:*)",
+      "Bash(docker container ls:*)",
+      "Bash(docker system:*)",
+      "Bash(docker volume:*)"
     ],
     "deny": [],
     "ask": []

@@ -49,6 +49,23 @@ This is the **single source of truth** for all MEVana production documentation. 
 
 ---
 
+## 🚀 **STRATEGIC ROADMAP & FUTURE VISION**
+
+### **Global Expansion Strategy**
+| Document | Purpose | Status | Horizon |
+|----------|---------|---------|---------|
+| **[roadmap/GLOBAL_MEVANA_STRATEGY.md](./roadmap/GLOBAL_MEVANA_STRATEGY.md)** | Master strategy for global MEV intelligence network | 🚀 Active Planning | 6-12 months |
+| **[roadmap/README.md](./roadmap/README.md)** | Strategic roadmap index and phase overview | 🚀 Active Planning | Multi-phase |
+
+### **Advanced Monitoring & AI**
+| Document | Purpose | Status | Notes |
+|----------|---------|---------|--------|
+| **[GEYSER_MONITORING_ALERTS.md](./GEYSER_MONITORING_ALERTS.md)** | Critical Geyser monitoring with Telegram alerts | ✅ Deployed | Production-ready |
+| **[REMOTE_LOGGING_AI_AUTOMATION.md](./REMOTE_LOGGING_AI_AUTOMATION.md)** | AI-powered operational intelligence architecture | 🔄 Architecture | Foundation for global AI |
+| **[PROMETHEUS_MONITORING_SETUP.md](./PROMETHEUS_MONITORING_SETUP.md)** | Industry-standard monitoring infrastructure | ✅ Deployed | Single source of truth |
+
+---
+
 ## 💼 **BUSINESS & FINANCIAL**
 
 ### **Trading Operations**
@@ -74,6 +91,7 @@ This is the **single source of truth** for all MEVana production documentation. 
 |-----------|---------------|---------|---------|
 | **Profile Management** | [profiles/README.md](./profiles/README.md) | Account registry management | ✅ Current |
 | **Infrastructure** | [infrastructure/README-OBSERVABILITY.md](./infrastructure/README-OBSERVABILITY.md) | Monitoring and observability | ✅ Current |
+| **Prometheus Monitoring** | [docs/PROMETHEUS_MONITORING_SETUP.md](./PROMETHEUS_MONITORING_SETUP.md) | Industry-standard metrics setup | ✅ Current |
 
 ---
 

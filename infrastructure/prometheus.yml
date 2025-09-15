@@ -3,8 +3,7 @@ global:
   evaluation_interval: 15s
 
 rule_files:
-  # - "first_rules.yml"
-  # - "second_rules.yml"
+  - "/etc/prometheus/rules/*.yml"
 
 scrape_configs:
   # =============================================================================
@@ -27,59 +26,54 @@ scrape_configs:
       - targets: ['grafana:3000']
 
   # =============================================================================
-  # MEVANA SERVICES (Host via Docker Bridge)
+  # MEVANA SERVICES (internal Docker network)
   # =============================================================================
-  
-  - job_name: 'system-orchestrator'
-    static_configs:
-      - targets:
-          - 'host.docker.internal:9999'  # system-orchestrator
-    metrics_path: '/metrics'
-    scrape_interval: 15s
-    scrape_timeout: 5s
 
-  - job_name: 'discovery-service'
-    static_configs:
-      - targets:
-          - 'host.docker.internal:9102'  # discovery-service
-    metrics_path: '/metrics'
-    scrape_interval: 15s
-    scrape_timeout: 5s
-
-  - job_name: 'pipeline-services'
-    static_configs:
-      - targets:
-          - 'host.docker.internal:9901'  # normalizer-service
-          - 'host.docker.internal:9902'  # edge-assembler
-          - 'host.docker.internal:9904'  # executor-service
-    metrics_path: '/metrics'
-    scrape_interval: 10s
-    scrape_timeout: 5s
-
-  # =============================================================================
-  # TRADING SERVICES (when available)
-  # =============================================================================
-  
   - job_name: 'hotpath-arb-engine'
     static_configs:
-      - targets:
-          - 'host.docker.internal:8088'  # Single Geyser stream
+      - targets: ['hotpath-arb-engine:8088']
     metrics_path: '/metrics'
     scrape_interval: 5s
     scrape_timeout: 3s
 
+  - job_name: 'normalizer-service'
+    static_configs:
+      - targets: ['normalizer-service:8085']
+    metrics_path: '/metrics'
+    scrape_interval: 10s
+    scrape_timeout: 5s
+
+  - job_name: 'discovery-service'
+    static_configs:
+      - targets: ['discovery-service:9102']
+    metrics_path: '/metrics'
+    scrape_interval: 15s
+    scrape_timeout: 5s
+
+  - job_name: 'executor-service'
+    static_configs:
+      - targets: ['executor-service:9904']
+    metrics_path: '/metrics'
+    scrape_interval: 10s
+    scrape_timeout: 5s
+
+  - job_name: 'edge-assembler'
+    static_configs:
+      - targets: ['edge-assembler:9902']
+    metrics_path: '/metrics'
+    scrape_interval: 15s
+    scrape_timeout: 5s
+
   - job_name: 'arb-engine'
     static_configs:
-      - targets:
-          - 'host.docker.internal:8085'  # arb-engine API (when ready)
+      - targets: ['arb-engine:8085']
     metrics_path: '/metrics'
     scrape_interval: 10s
     scrape_timeout: 5s
 
   - job_name: 'monitoring-service'
     static_configs:
-      - targets:
-          - 'host.docker.internal:8091'  # monitoring-service (when ready)
+      - targets: ['monitoring-service:8091']
     metrics_path: '/metrics'
     scrape_interval: 10s
     scrape_timeout: 5s

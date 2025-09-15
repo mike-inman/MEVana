@@ -55,12 +55,67 @@ services:
       - KAFKA_BROKER=kafka:9092
       - REDIS_URL=redis://redis:6379/0
       - EXECUTION_DRY_RUN=true
+      - METRICS_PORT=9904
     depends_on:
       kafka:
         condition: service_healthy
       redis:
         condition: service_healthy
       postgres:
+        condition: service_healthy
+    networks: [mevana_net]
+    restart: unless-stopped
+
+  # Edge Assembler — builds edge deltas for arb-engine
+  edge-assembler:
+    image: ghcr.io/mike-inman/mevana-edge-assembler:${MEVANA_TAG:-dev}
+    environment:
+      - RUST_LOG=info
+      - KAFKA_BROKER=kafka:9092
+      - REDIS_URL=redis://redis:6379/0
+    depends_on:
+      kafka:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks: [mevana_net]
+    restart: unless-stopped
+
+  # Arbitrage Engine — consumes edges and emits decisions
+  arb-engine:
+    image: ghcr.io/mike-inman/mevana-arb-engine:${MEVANA_TAG:-dev}
+    environment:
+      - RUST_LOG=info
+      - REDIS_URL=redis://redis:6379/0
+      - KAFKA_BROKER=kafka:9092
+    depends_on:
+      kafka:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks: [mevana_net]
+    restart: unless-stopped
+
+  # Token Registry API — HTTP service with DB
+  token-registry-service:
+    image: ghcr.io/mike-inman/mevana-token-registry-service:${MEVANA_TAG:-dev}
+    environment:
+      - RUST_LOG=info
+      - DATABASE_URL=postgresql://mev:mevpassword@postgres:5432/mevdb
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks: [mevana_net]
+    restart: unless-stopped
+
+  # Monitoring API/UI
+  monitoring-service:
+    image: ghcr.io/mike-inman/mevana-monitoring-service:${MEVANA_TAG:-dev}
+    environment:
+      - RUST_LOG=info
+      - REDIS_URL=redis://redis:6379/0
+    depends_on:
+      redis:
         condition: service_healthy
     networks: [mevana_net]
     restart: unless-stopped

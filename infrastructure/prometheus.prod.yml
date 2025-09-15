@@ -1,0 +1,80 @@
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+
+rule_files:
+  - "/etc/prometheus/rules/*.yml"
+
+scrape_configs:
+  # =============================================================================
+  # INFRASTRUCTURE SERVICES (Docker Internal)
+  # =============================================================================
+  - job_name: 'prometheus'
+    static_configs:
+      - targets: ['localhost:9090']
+
+  - job_name: 'redis'
+    static_configs:
+      - targets: ['redis:6379']
+
+  - job_name: 'postgres'
+    static_configs:
+      - targets: ['postgres:5432']
+
+  - job_name: 'grafana'
+    static_configs:
+      - targets: ['grafana:3000']
+
+  # =============================================================================
+  # MEVANA SERVICES (Production - External IP)
+  # =============================================================================
+
+  - job_name: 'hotpath-engine'
+    static_configs:
+      - targets:
+          - '149.28.56.125:8088'  # MEVana HotPath Engine (production server)
+    metrics_path: '/metrics'
+    scrape_interval: 5s
+    scrape_timeout: 3s
+
+  - job_name: 'system-orchestrator'
+    static_configs:
+      - targets:
+          - '149.28.56.125:9999'  # system-orchestrator (production)
+    metrics_path: '/metrics'
+    scrape_interval: 15s
+    scrape_timeout: 5s
+
+  - job_name: 'discovery-service'
+    static_configs:
+      - targets:
+          - '149.28.56.125:9102'  # discovery-service (production)
+    metrics_path: '/metrics'
+    scrape_interval: 15s
+    scrape_timeout: 5s
+
+  - job_name: 'pipeline-services'
+    static_configs:
+      - targets:
+          - '149.28.56.125:9901'  # normalizer-service (production)
+          - '149.28.56.125:9902'  # edge-assembler (production)
+          - '149.28.56.125:9904'  # executor-service (production)
+    metrics_path: '/metrics'
+    scrape_interval: 10s
+    scrape_timeout: 5s
+
+  - job_name: 'arb-engine'
+    static_configs:
+      - targets:
+          - '149.28.56.125:8085'  # arb-engine API (production)
+    metrics_path: '/metrics'
+    scrape_interval: 10s
+    scrape_timeout: 5s
+
+  - job_name: 'monitoring-service'
+    static_configs:
+      - targets:
+          - '149.28.56.125:8091'  # monitoring-service (production)
+    metrics_path: '/metrics'
+    scrape_interval: 10s
+    scrape_timeout: 5s

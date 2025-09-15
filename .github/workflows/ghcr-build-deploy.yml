@@ -4,6 +4,11 @@ on:
   push:
     branches: [ main ]
   workflow_dispatch:
+    inputs:
+      rollback_sha:
+        description: 'Rollback to specific image tag (commit SHA). Leave empty to deploy latest.'
+        required: false
+        default: ''
 
 concurrency:
   group: ghcr-deploy-${{ github.ref }}
@@ -131,7 +136,7 @@ jobs:
     name: Deploy to server
     needs: [detect, build-push]
     runs-on: ubuntu-latest
-    if: github.ref == 'refs/heads/main' && needs.detect.outputs.matrix != '["none"]'
+    if: github.ref == 'refs/heads/main' && (needs.detect.outputs.matrix != '["none"]' || github.event.inputs.rollback_sha != '')
     steps:
       - name: SSH agent
         uses: webfactory/ssh-agent@v0.9.0
@@ -147,7 +152,7 @@ jobs:
           scp infra.tgz ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }}:/tmp/infra.tgz
           ssh ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }} 'mkdir -p ${SERVER_DIR:-/opt/MEVana} && tar -xzf /tmp/infra.tgz -C ${SERVER_DIR:-/opt/MEVana}'
 
-      - name: Deploy via SSH (restart only changed services)
+      - name: Deploy via SSH (restart only changed services or rollback)
         env:
           GHCR_USERNAME: ${{ secrets.GHCR_USERNAME }}
           GHCR_TOKEN: ${{ secrets.GHCR_TOKEN }}
@@ -157,16 +162,20 @@ jobs:
           HOTPATH_ENDPOINT: ${{ secrets.HOTPATH_ENDPOINT }}
           HOTPATH_X_TOKEN: ${{ secrets.HOTPATH_X_TOKEN }}
           CHANGED_SERVICES: ${{ needs.detect.outputs.services }}
+          ROLLBACK_SHA: ${{ github.event.inputs.rollback_sha }}
         run: |
           SHA=${{ github.sha }}
+          if [ -n "${ROLLBACK_SHA}" ]; then SHA="${ROLLBACK_SHA}"; fi
           CHANGED="${CHANGED_SERVICES}"
           # Attempt GHCR login only if secrets provided; for public images this is skipped
           LOGIN_CMD="true"; if [ -n "${GHCR_TOKEN}" ] && [ -n "${GHCR_USERNAME}" ]; then LOGIN_CMD="echo '${GHCR_TOKEN}' | docker login ghcr.io -u '${GHCR_USERNAME}' --password-stdin"; fi
           ssh ${SSH_USER}@${SSH_HOST} "set -e; cd '${SERVER_DIR:-/opt/MEVana}'; ${LOGIN_CMD} || echo 'Skipping GHCR login'; \
             if [ -n '${HOTPATH_ENDPOINT}' ] && [ -n '${HOTPATH_X_TOKEN}' ]; then mkdir -p infrastructure; printf 'ENDPOINT=%s\nX_TOKEN=%s\n' '${HOTPATH_ENDPOINT}' '${HOTPATH_X_TOKEN}' > infrastructure/.env; fi; \
             export MEVANA_TAG='${SHA}'; docker compose -p mevana -f infrastructure/docker-compose.server.yml -f infrastructure/docker-compose.full.yml pull || true; \
-            map_service(){ case \"$1\" in hotpath) echo hotpath-arb-engine;; normalizer) echo normalizer-service;; discovery) echo discovery-service;; executor) echo executor-service;; esac; }; \
-            if [ -n '${CHANGED}' ]; then to_restart=(); for s in ${CHANGED}; do to_restart+=( \"$(map_service \"$s\")\" ); done; echo Restarting: \"${to_restart[*]}\"; docker compose -p mevana -f infrastructure/docker-compose.server.yml -f infrastructure/docker-compose.full.yml up -d ${to_restart[*]}; else echo 'No services changed'; fi; \
+            map_service(){ case \"$1\" in hotpath) echo hotpath-arb-engine;; normalizer) echo normalizer-service;; discovery) echo discovery-service;; executor) echo executor-service;; edge) echo edge-assembler;; arb) echo arb-engine;; token) echo token-registry-service;; monitoring) echo monitoring-service;; esac; }; \
+            if [ -n '${ROLLBACK_SHA}' ]; then to_restart=(hotpath-arb-engine normalizer-service discovery-service executor-service edge-assembler arb-engine token-registry-service monitoring-service); \
+              echo Rollback tag: '${ROLLBACK_SHA}' && docker compose -p mevana -f infrastructure/docker-compose.server.yml -f infrastructure/docker-compose.full.yml up -d ${to_restart[*]}; \
+            elif [ -n '${CHANGED}' ]; then to_restart=(); for s in ${CHANGED}; do to_restart+=( \"$(map_service \"$s\")\" ); done; echo Restarting: \"${to_restart[*]}\"; docker compose -p mevana -f infrastructure/docker-compose.server.yml -f infrastructure/docker-compose.full.yml up -d ${to_restart[*]}; else echo 'No services changed'; fi; \
             docker compose -p mevana -f infrastructure/docker-compose.server.yml -f infrastructure/docker-compose.full.yml ps"
 
       - name: Healthcheck (hotpath)

@@ -1,0 +1,77 @@
+groups:
+  - name: geyser_critical
+    interval: 30s
+    rules:
+      - alert: GeyserStreamDown
+        expr: multi_geyser_stream_healthy == 0
+        for: 30s
+        labels:
+          severity: critical
+          component: geyser
+          service: mevana_hotpath
+        annotations:
+          summary: "🚨 CRITICAL: Geyser stream {{$labels.stream_id}} is DOWN"
+          description: "Stream {{$labels.stream_id}} health check failed. MEV detection may be compromised. Immediate investigation required."
+          runbook_url: "https://github.com/your-org/mevana/blob/main/docs/GEYSER_MONITORING_ALERTS.md#geyser-stream-failure"
+
+      - alert: GeyserStreamStalled
+        expr: multi_geyser_stream_seconds_since_last_message > 60
+        for: 1m
+        labels:
+          severity: critical
+          component: geyser
+          service: mevana_hotpath
+        annotations:
+          summary: "🚨 CRITICAL: Geyser stream {{$labels.stream_id}} stalled"
+          description: "No messages received for {{$value}} seconds. Stream may be disconnected or Geyser endpoint may be down."
+          runbook_url: "https://github.com/your-org/mevana/blob/main/docs/GEYSER_MONITORING_ALERTS.md#geyser-stream-stalled"
+
+  - name: geyser_high_priority
+    interval: 30s
+    rules:
+      - alert: GeyserMessageRateDropped
+        expr: rate(multi_geyser_stream_messages_total[5m]) < 0.1
+        for: 2m
+        labels:
+          severity: high
+          component: geyser
+          service: mevana_hotpath
+        annotations:
+          summary: "⚠️ HIGH: Geyser stream {{$labels.stream_id}} message rate critically low"
+          description: "Message rate has dropped to {{$value | humanize}} messages/second for stream {{$labels.stream_id}}. Expected rate: >0.1 msg/sec"
+
+      - alert: GeyserDexMessagesStopped
+        expr: increase(multi_geyser_dex_messages_total[5m]) == 0
+        for: 5m
+        labels:
+          severity: high
+          component: geyser
+          service: mevana_hotpath
+        annotations:
+          summary: "⚠️ HIGH: No {{$labels.dex}} messages received"
+          description: "No {{$labels.dex}} DEX messages received in 5 minutes. Trading activity may have stopped or DEX filtering may be misconfigured."
+
+  - name: geyser_medium_priority
+    interval: 60s
+    rules:
+      - alert: GeyserMultipleStreamFailures
+        expr: sum(multi_geyser_stream_healthy) < 2
+        for: 1m
+        labels:
+          severity: medium
+          component: geyser
+          service: mevana_hotpath
+        annotations:
+          summary: "📢 MEDIUM: Multiple Geyser stream failures - redundancy compromised"
+          description: "Only {{$value}} of 3 Geyser streams are healthy. System redundancy is compromised."
+
+      - alert: GeyserHighLatency
+        expr: multi_geyser_stream_seconds_since_last_message > 30
+        for: 2m
+        labels:
+          severity: medium
+          component: geyser
+          service: mevana_hotpath
+        annotations:
+          summary: "📢 MEDIUM: Geyser stream {{$labels.stream_id}} experiencing high latency"
+          description: "Stream {{$labels.stream_id}} last message was {{$value}} seconds ago. Higher than normal latency detected."

@@ -3876,17 +3876,16 @@ async fn update_metrics_task() {
     }
 }
 
-async fn start_simple_metrics_server(port: u16, config_state: Option<SharedConfigState>) {
+async fn start_auxiliary_api_server(port: u16, config_state: Option<SharedConfigState>) {
     use axum::{
         routing::{get, post},
         Json, Router,
     };
 
     let bind_addr = format!("0.0.0.0:{}", port);
-    info!("🔧 Starting enhanced metrics server on {}", bind_addr);
+    info!("🔧 Starting auxiliary API server on {}", bind_addr);
 
     let mut app = Router::new()
-        .route("/metrics", get(serve_prometheus_metrics))
         .route("/performance", get(serve_performance_report))
         .route("/performance/json", get(serve_performance_json))
         .route("/ai/config", get(serve_ai_config))
@@ -4150,102 +4149,8 @@ Security Status: 🟢 HEALTHY
     )
 }
 
-async fn serve_prometheus_metrics() -> String {
-    let mut output = String::new();
-
-    // Stream counters and rates
-    for entry in STREAM_COUNTERS.iter() {
-        let stream_id = entry.key();
-        let count = entry.value().load(Ordering::Relaxed);
-
-        // Total messages
-        output.push_str(&format!(
-            "# TYPE multi_geyser_stream_messages_total counter\n"
-        ));
-        output.push_str(&format!(
-            "multi_geyser_stream_messages_total{{stream_id=\"{}\"}} {}\n",
-            stream_id, count
-        ));
-
-        // Messages per minute rate
-        if let Some(rate_counter) = STREAM_RATE_COUNTERS.get(stream_id) {
-            let rate = rate_counter.rate_per_minute();
-            output.push_str(&format!(
-                "# TYPE multi_geyser_stream_messages_per_minute gauge\n"
-            ));
-            output.push_str(&format!(
-                "multi_geyser_stream_messages_per_minute{{stream_id=\"{}\"}} {:.2}\n",
-                stream_id, rate
-            ));
-        }
-
-        // New: Parsed messages per minute rate
-        if let Some(parsed_rate_counter) = STREAM_PARSED_RATE_COUNTERS.get(stream_id) {
-            let parsed_rate = parsed_rate_counter.rate_per_minute();
-            output.push_str(&format!(
-                "# TYPE multi_geyser_stream_messages_parsed_per_minute gauge\n"
-            ));
-            output.push_str(&format!(
-                "multi_geyser_stream_messages_parsed_per_minute{{stream_id=\"{}\"}} {:.2}\n",
-                stream_id, parsed_rate
-            ));
-        }
-    }
-
-    // DEX counters and rates
-    for entry in DEX_COUNTERS.iter() {
-        let dex_name = entry.key();
-        let count = entry.value().load(Ordering::Relaxed);
-
-        // Total DEX messages
-        output.push_str(&format!("# TYPE multi_geyser_dex_messages_total counter\n"));
-        output.push_str(&format!(
-            "multi_geyser_dex_messages_total{{dex=\"{}\"}} {}\n",
-            dex_name, count
-        ));
-
-        // DEX messages per minute rate
-        if let Some(rate_counter) = DEX_RATE_COUNTERS.get(dex_name) {
-            let rate = rate_counter.rate_per_minute();
-            output.push_str(&format!(
-                "# TYPE multi_geyser_dex_messages_per_minute gauge\n"
-            ));
-            output.push_str(&format!(
-                "multi_geyser_dex_messages_per_minute{{dex=\"{}\"}} {:.2}\n",
-                dex_name, rate
-            ));
-        }
-    }
-
-    // Stream health
-    for entry in STREAM_HEALTH.iter() {
-        let stream_id = entry.key();
-        let last_seen = entry.value().load(Ordering::Relaxed);
-        let now = chrono::Utc::now().timestamp() as u64;
-        let seconds_since_last = if last_seen > 0 {
-            now - last_seen
-        } else {
-            u64::MAX
-        };
-        let healthy = if seconds_since_last < 30 { 1.0 } else { 0.0 };
-
-        output.push_str(&format!("# TYPE multi_geyser_stream_healthy gauge\n"));
-        output.push_str(&format!(
-            "multi_geyser_stream_healthy{{stream_id=\"{}\"}} {}\n",
-            stream_id, healthy
-        ));
-
-        output.push_str(&format!(
-            "# TYPE multi_geyser_stream_seconds_since_last_message gauge\n"
-        ));
-        output.push_str(&format!(
-            "multi_geyser_stream_seconds_since_last_message{{stream_id=\"{}\"}} {}\n",
-            stream_id, seconds_since_last
-        ));
-    }
-
-    output
-}
+// Removed: serve_prometheus_metrics() function - now handled by industry-standard PrometheusBuilder exporter
+// All metrics::counter!() and metrics::gauge!() calls are automatically exported via /metrics endpoint
 
 /// Updates hot path configuration in real-time based on database events
 /// Zero-latency atomic updates ensure no locks or delays in hotpath
@@ -4472,20 +4377,32 @@ async fn main() -> Result<()> {
     };
 
     // Initialize metrics server with smart filter configuration API
+    // Initialize industry-standard Prometheus metrics exporter
     info!(
-        "🔧 Initializing enhanced metrics server on port {}",
+        "🔧 Initializing industry-standard Prometheus exporter on port {}",
         args.metrics_port
     );
 
-    let metrics_port = args.metrics_port;
+    use metrics_exporter_prometheus::PrometheusBuilder;
+    let _prometheus_handle = PrometheusBuilder::new()
+        .with_http_listener(format!("0.0.0.0:{}", args.metrics_port).parse::<std::net::SocketAddr>().unwrap())
+        .install()
+        .expect("Failed to install Prometheus metrics exporter");
+
+    info!(
+        "✅ Prometheus metrics exporter installed - standard /metrics endpoint active"
+    );
+
+    // Start auxiliary API server on metrics_port + 1 for other endpoints
+    let api_port = args.metrics_port + 1;
     let config_state_clone = shared_config_state.clone();
     tokio::spawn(async move {
-        start_simple_metrics_server(metrics_port, Some(config_state_clone)).await;
+        start_auxiliary_api_server(api_port, Some(config_state_clone)).await;
     });
 
     info!(
-        "✅ Enhanced metrics server initialized and running on port {} with smart filter API",
-        args.metrics_port
+        "✅ Prometheus metrics: port {} | API endpoints: port {} (smart filter, performance, AI, wallet)",
+        args.metrics_port, args.metrics_port + 1
     );
 
     // Initialize OrderBook History System (OFF-HOTPATH)
@@ -4754,9 +4671,12 @@ async fn main() -> Result<()> {
     // Wait for all tasks (they run forever)
     // Note: For consolidated streams, they run in the main task and never return
     // For individual streams, we wait for the stream handles
+    // Keep prometheus_handle alive by referencing it in the loop
     loop {
         tokio::time::sleep(tokio::time::Duration::from_secs(60)).await;
         info!("System running - heartbeat check");
+        // Ensure prometheus handle stays alive (prevents garbage collection)
+        let _ = &_prometheus_handle;
     }
 
     Ok(())

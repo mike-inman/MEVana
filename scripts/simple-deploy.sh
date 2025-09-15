@@ -50,6 +50,39 @@ main() {
         echo "📦 Extracting deployment..."
         tar -xzf /tmp/mevana-deploy.tar.gz
 
+        # Set up production Docker infrastructure
+        echo "🐳 Configuring Docker infrastructure for production..."
+        cd infrastructure
+        cp prometheus.prod.yml prometheus.yml  # Use production Prometheus config
+
+        # Set up Prometheus alert rules
+        echo "🚨 Configuring Prometheus alert rules..."
+        mkdir -p prometheus/rules
+        if [ -f "prometheus/rules/geyser_alerts.yml" ]; then
+            echo "✅ Geyser alert rules found and ready"
+        else
+            echo "⚠️ Alert rules not found - monitoring without alerts"
+        fi
+
+        # Restart Docker containers with robust fallback approach
+        if command -v docker >/dev/null 2>&1; then
+            echo "📦 Using Docker Compose..."
+            docker compose down 2>/dev/null || true
+            docker compose up -d
+        elif command -v docker >/dev/null 2>&1; then
+            echo "📦 Using native Docker commands (fallback)..."
+            docker restart $(docker ps -q --filter name=prometheus) 2>/dev/null || echo "⚠️ Prometheus not found"
+            docker restart $(docker ps -q --filter name=grafana) 2>/dev/null || echo "⚠️ Grafana not found"
+        else
+            echo "⚠️ Docker not available, skipping container restart"
+        fi
+
+        # Wait for containers to be ready
+        echo "⏳ Waiting for Docker services..."
+        sleep 15
+
+        cd ..
+
         # Build with optimized flags (allows warnings)
         echo "🔨 Building with optimized configuration..."
         export RUSTFLAGS="--cap-lints warn -C target-cpu=native"
@@ -113,6 +146,8 @@ main() {
         echo "   • Metrics: http://149.28.56.125:8088/metrics"
         echo "   • Performance: http://149.28.56.125:8088/performance"
         echo "   • AI Config: http://149.28.56.125:8088/ai/config"
+        echo "   • Grafana: http://149.28.56.125:3000 (admin/admin123)"
+        echo "   • Prometheus: http://149.28.56.125:9090"
         echo ""
         echo "📋 Management:"
         echo "   • Logs: tail -f /opt/MEVana/logs/hotpath_production.log"

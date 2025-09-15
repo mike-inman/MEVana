@@ -39,12 +39,14 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ```
 
 **Critical Rules:**
-- ❌ **NEVER start multiple hotpath_arb_engine instances** (triggers endpoint monitoring)  
+- ❌ **NEVER start multiple hotpath_arb_engine instances** (triggers endpoint monitoring)
 - ❌ **NEVER use background processes** without cleanup first
 - ❌ **NEVER start services manually** without using the clean startup script
 - ❌ Connect to port 5432 (local Postgres.app)
+- ❌ **NEVER use `docker-compose` (hyphen)** - User has mentioned multiple times
 - ✅ **ALWAYS use comprehensive cleanup** before any service startup
 - ✅ **ALWAYS verify single instance** running after startup
+- ✅ **ALWAYS use `docker compose` (space)** - Modern Docker command format
 
 ### 🛠️ **CONFLICT DETECTION TOOLS**
 
