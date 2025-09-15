@@ -8,11 +8,13 @@ WORKDIR /app
 
 # Build from workspace root with .dockerignore trimming the context
 COPY . .
-RUN cargo build --release -p normalizer-service --bin tap_orca_extract
-RUN cargo build --release -p normalizer-service --bin tap_orca_debug
+# Install nightly to support dependencies requiring edition2024
+RUN rustup toolchain install nightly && rustup default nightly
+RUN cargo +nightly build --release -p normalizer-service --bin tap_orca_extract
+RUN cargo +nightly build --release -p normalizer-service --bin tap_orca_debug
 
 FROM debian:bookworm-slim as runtime
-RUN apt-get update && apt-get install -y ca-certificates curl && update-ca-certificates && rm -rf /var/lib/apt/lists/*
+RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates librdkafka1 curl && update-ca-certificates && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
 COPY --from=builder /app/target/release/tap_orca_extract /usr/local/bin/normalizer-service
@@ -39,5 +41,3 @@ HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
   CMD curl -f http://:8085/health || exit 1
 
 ENTRYPOINT ["/usr/local/bin/normalizer-service"]
-
-

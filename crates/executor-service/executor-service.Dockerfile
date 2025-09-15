@@ -16,7 +16,7 @@ RUN cargo +nightly build --release -p executor-service
 
 # Runtime stage
 FROM debian:bookworm-slim AS runtime
-RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates && rm -rf /var/lib/apt/lists/* && update-ca-certificates
+RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates librdkafka1 curl && rm -rf /var/lib/apt/lists/* && update-ca-certificates
 WORKDIR /srv
 COPY --from=builder /app/target/release/executor-service /usr/local/bin/executor-service
 ENV RUST_LOG=info
