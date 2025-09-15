@@ -1,4 +1,5 @@
 # MEVana Deployment Strategy
+Last updated: 2025-09-15
 
 A comprehensive guide for deploying Rust services with optimal performance and maximum portability.
 

@@ -1,4 +1,5 @@
 # AI Auto-Decoder Roadmap
+Last updated: 2025-09-15
 
 This plan enables autonomous growth of supported DEX decoders while preserving safety and quality.
 

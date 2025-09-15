@@ -1,4 +1,5 @@
 # MEVana Strategic Roadmap & Future Vision
+Last updated: 2025-09-15
 
 **Directory Purpose**: Strategic planning documents for MEVana's evolution from single-region MEV capture to global AI-coordinated intelligence network.
 

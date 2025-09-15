@@ -1,4 +1,5 @@
 # Low-Latency Arbitrage Strategy (Solana / MEVana)
+Last updated: 2025-09-15
 
 ## Goals & KPIs
 - Decision latency: <= 10 ms p50 (Geyser receive → bundle submitted), p99 <= 25 ms

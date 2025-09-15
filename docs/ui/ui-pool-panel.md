@@ -1,4 +1,5 @@
 # UI Pool Panel
+Last updated: 2025-09-15
 
 ## Gateway API
 - GET `/pool/:id` → returns Redis hash `dex:pool:{id}` plus optional mint meta (future)

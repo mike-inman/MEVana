@@ -1,4 +1,5 @@
 # NY Datacenter Research Guide for MEV Trading
+Last updated: 2025-09-15
 
 ## 🎯 **Quick Decision Matrix for Today's Research**
 

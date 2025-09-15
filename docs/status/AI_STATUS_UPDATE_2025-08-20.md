@@ -1,3 +1,5 @@
+Last updated: 2025-09-15
+
 ## MEVana – Status Update (2025-08-20 UTC)
 
 ### Summary

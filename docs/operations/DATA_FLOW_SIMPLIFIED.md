@@ -1,4 +1,5 @@
 # MEVana Data Flow - Simplified View
+Last updated: 2025-09-15
 **Date:** 2024-12-17  
 **Version:** 1.0  
 **Purpose:** Printer-friendly reference for development and testing

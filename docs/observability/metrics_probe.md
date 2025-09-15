@@ -1,4 +1,5 @@
 # Metrics Probe Script
+Last updated: 2025-09-15
 
 Script: `scripts/metrics_probe.sh`
 

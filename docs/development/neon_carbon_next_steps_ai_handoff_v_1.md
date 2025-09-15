@@ -1,4 +1,5 @@
 # Neon Carbon — Next Steps & AI Handoff (v1)
+Last updated: 2025-09-15
 
 This file captures **what works now**, **what to run**, and a **short, concrete plan for tomorrow**. It also includes an **AI handoff** section so any assistant (or future you) can instantly continue.
 

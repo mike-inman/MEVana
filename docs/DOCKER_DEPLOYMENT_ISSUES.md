@@ -1,4 +1,5 @@
 # Docker Deployment Issues and Solutions
+Last updated: 2025-09-15
 
 **Last Updated**: 2025-09-15
 **Context**: Issues encountered during production Prometheus deployment

@@ -1,4 +1,5 @@
 # MEVana Production Deployment Guide
+Last updated: 2025-09-15
 
 **Document Version:** 2.0  
 **Last Updated:** September 12, 2025  

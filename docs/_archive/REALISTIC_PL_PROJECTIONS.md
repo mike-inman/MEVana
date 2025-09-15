@@ -1,4 +1,5 @@
 # MEVana Realistic P&L Projections - First 4 Weeks
+Last updated: 2025-09-15
 
 ## Executive Summary
 

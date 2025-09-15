@@ -1,4 +1,5 @@
 # CI/CD Pipeline Plan (Initial Draft)
+Last updated: 2025-09-15
 
 Goal: Provide fast feedback (<5 min) on critical paths (build, lint, unit tests), enforce registry/schema validation, and enable progressive delivery (staging -> canary -> prod) with guardrails for MEV / trading safety.
 

@@ -1,4 +1,5 @@
 # Network Port Registry
+Last updated: 2025-09-15
 ## MEVana Services Port Allocation
 
 **Updated**: August 25, 2025  

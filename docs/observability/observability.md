@@ -1,4 +1,5 @@
 # Observability & SLOs
+Last updated: 2025-09-15
 
 ## Metrics
 - Decision latency histograms (geyser→extractor, extractor→arb, arb decision)

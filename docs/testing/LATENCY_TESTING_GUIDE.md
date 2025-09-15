@@ -1,4 +1,5 @@
 # 🚀 Optimal Latency Testing for MEV Trading Infrastructure
+Last updated: 2025-09-15
 
 ## ⚡ **The Perfect Latency Testing Strategy**
 

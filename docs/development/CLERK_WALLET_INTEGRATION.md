@@ -1,4 +1,5 @@
 # MEVana + Clerk: Secure Wallet Management Integration
+Last updated: 2025-09-15
 
 Complete integration guide for MEVana wallet management with Clerk authentication and beautiful UI components.
 

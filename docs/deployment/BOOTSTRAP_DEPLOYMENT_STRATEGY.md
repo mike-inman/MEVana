@@ -1,4 +1,5 @@
 # 🚀 MEVana Bootstrap Deployment Strategy (Small Budget)
+Last updated: 2025-09-15
 
 ## 💰 **Smart Money Approach: Start Lean, Scale Smart**
 

@@ -1,4 +1,5 @@
 # Arbitrage Test Mode (Dry Run)
+Last updated: 2025-09-15
 
 ## Purpose
 - Validate extractor v2 fields and sizing logic without sending bundles

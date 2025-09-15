@@ -1,4 +1,5 @@
 # DEX Registry Architecture
+Last updated: 2025-09-15
 ## August 25, 2025 - AI Development Session
 
 ### 🎯 **OVERVIEW**

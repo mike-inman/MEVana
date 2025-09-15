@@ -1,4 +1,5 @@
 # MEVana Architecture Overview
+Last updated: 2025-09-15
 
 ## 🏗️ System Architecture
 

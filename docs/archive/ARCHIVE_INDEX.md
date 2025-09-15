@@ -1,4 +1,5 @@
 # MEVana Documentation Archive
+Last updated: 2025-09-15
 
 **Last Updated:** September 12, 2025  
 **Purpose:** Historical documentation and outdated assessments

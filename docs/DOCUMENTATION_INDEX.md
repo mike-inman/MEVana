@@ -1,4 +1,5 @@
 # MEVana Documentation Index - Production Reference
+Last updated: 2025-09-15
 
 **Last Updated:** 2025-09-15  
 **Status:** 🚀 PRODUCTION READY  
@@ -142,6 +143,24 @@ ps aux | grep -E "(arb|executor)"  # Check native services
 - Legacy documentation (being consolidated)
 - Development notes and chat history
 - Outdated or superseded procedures
+
+---
+
+## 💤 Deprecated Docs (kept for reference)
+
+- Operations
+  - [operations/DEPLOYMENT_RUNBOOK_legacy.md](./operations/DEPLOYMENT_RUNBOOK_legacy.md)
+  - [operations/DOCKER_DEPLOYMENT_ISSUES_legacy.md](./operations/DOCKER_DEPLOYMENT_ISSUES_legacy.md)
+  - [operations/ROOT_CLEANUP_COMPLETED.md](./operations/ROOT_CLEANUP_COMPLETED.md)
+  - [operations/ROOT_DIRECTORY_AUDIT.md](./operations/ROOT_DIRECTORY_AUDIT.md)
+  - [operations/deployment_readme.md](./operations/deployment_readme.md)
+  - [operations/docker-cleanup-summary.md](./operations/docker-cleanup-summary.md)
+  - [operations/PRODUCTION_IMPLEMENTATION_OUTLINE.md](./operations/PRODUCTION_IMPLEMENTATION_OUTLINE.md)
+- Strategy
+  - [strategy/AI_DATA_FLOW_2025-08-20.md](./strategy/AI_DATA_FLOW_2025-08-20.md)
+  - [strategy/AI_ARBITRAGE_STRATEGY_2025-08-21.md](./strategy/AI_ARBITRAGE_STRATEGY_2025-08-21.md)
+  - [strategy/EXECUTION_STRATEGY_UPDATE_2025-08-25.md](./strategy/EXECUTION_STRATEGY_UPDATE_2025-08-25.md)
+  - [strategy/TOMORROW_ACTION_PLAN.md](./strategy/TOMORROW_ACTION_PLAN.md)
 
 ---
 

@@ -1,4 +1,5 @@
 # Backfills (GraphQL & Accounts)
+Last updated: 2025-09-15
 
 ## GraphQL Backfill
 - Seeds Redis pool snapshots and mint metadata using Shyft GraphQL + REST

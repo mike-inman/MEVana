@@ -1,4 +1,5 @@
 # Datacenter / Hosting Research Plan
+Last updated: 2025-09-15
 
 Objective: Minimize end-to-end arbitrage cycle latency (signal -> bundle landed) while maintaining reliability and cost efficiency.
 

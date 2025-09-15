@@ -1,3 +1,5 @@
+Last updated: 2025-09-15
+
 ## 2025-08-27 — Local run + env loader
 
 - Added `scripts/load-env.sh` to load tokens from `~/.mevana.env` or `infrastructure/.env` once per shell.

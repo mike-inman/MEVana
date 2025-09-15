@@ -1,4 +1,5 @@
 # MEVana Funding Setup Guide
+Last updated: 2025-09-15
 
 ## 💰 **How to Add Funds to MEVana for Trading**
 

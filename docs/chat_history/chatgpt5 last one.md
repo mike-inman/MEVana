@@ -1,3 +1,5 @@
+Last updated: 2025-09-15
+
 
 Short version
 - You’re close. With what you have plus the “whirlpool-core” pieces, you’re 3 components away from first real fills: an exact quoter, a simple searcher, and an executor that submits Jito bundles.

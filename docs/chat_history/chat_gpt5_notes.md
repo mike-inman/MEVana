@@ -1,3 +1,5 @@
+Last updated: 2025-09-15
+
 Great timing. Here’s exactly what you asked for: a drop‑in “nearest initialized tick” utility plus where to put it and how to call it. I’ll also include a conservative capacity-to-next-tick estimator so your edge assembler can emit a useful size hint right away.
 
 Where to put it

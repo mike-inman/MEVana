@@ -1,4 +1,5 @@
 # MEVana Deployment & Security Specification (Draft)
+Last updated: 2025-09-15
 
 ## 1. Objectives
 Provide a hardened, low‑latency, auditable production environment for the MEVana executor and supporting services (streamers, normalizers, provenance DB) in a NY colocation. Primary goals: integrity, availability, confidentiality of keys & trade logic; minimize latency to Solana RPC + Jito relays; enable fast rollback.

@@ -1,4 +1,5 @@
 # 🚀 MEVana Deployment Quickstart
+Last updated: 2025-09-15
 
 ## Tomorrow's Vultr Deployment (30 minutes total)
 

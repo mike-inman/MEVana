@@ -1,4 +1,5 @@
 # MEVana — AI Handoff Pack (v1.1)
+Last updated: 2025-09-15
 
 > Single doc for any assistant (or future you) to resume work fast. Includes current state, how to run, how to verify, and what’s next.
 

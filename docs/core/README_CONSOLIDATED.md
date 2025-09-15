@@ -1,4 +1,5 @@
 # MEVana: Solana Arbitrage Trading Platform
+Last updated: 2025-09-15
 **Complete Documentation Index - Consolidated & Organized**
 
 *Last Updated: December 17, 2024*  

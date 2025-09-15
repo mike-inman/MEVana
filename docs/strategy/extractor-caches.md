@@ -1,4 +1,5 @@
 # Extractor Caches (Orca v2)
+Last updated: 2025-09-15
 
 ## Keys & Shapes
 - Pools: `dex:pool:{POOL}`

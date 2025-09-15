@@ -1,4 +1,5 @@
 # MEVana Service Status & Management Plan
+Last updated: 2025-09-15
 
 ## 🚀 CRITICAL SERVICES (Always Required)
 - **hotpath-arb-engine**: ✅ PRIMARY - Core opportunity detection engine

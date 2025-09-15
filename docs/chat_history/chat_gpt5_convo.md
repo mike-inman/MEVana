@@ -1,3 +1,5 @@
+Last updated: 2025-09-15
+
 Great problem to be working on. You’re already on the right stack for sub-10ms decisioning: Geyser → Kafka → Redis + in-memory Rust services, and Jito for atomic execution. The main work now is deciding exactly what to ingest, how to normalize it, and how to turn it into a fast “edge graph” you can search and turn into bundles.
 
 Below is an overview, the exact data you need, how to compare it, how to organize it, and a step-by-step plan to get to first profitable execution and then to scale.

@@ -1,4 +1,5 @@
 # Fast Mode (Low-Latency Settings)
+Last updated: 2025-09-15
 
 Enable via `FAST_MODE=1` on services that support it.
 

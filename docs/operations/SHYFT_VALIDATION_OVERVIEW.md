@@ -1,3 +1,5 @@
+Last updated: 2025-09-15
+
 ## SHYFT Validation Overview
 
 Date: 2025-08-19

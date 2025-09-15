@@ -1,4 +1,5 @@
 # AI Integration Endpoints
+Last updated: 2025-09-15
 
 HTTP + WebSocket surfaces for AI agents.
 

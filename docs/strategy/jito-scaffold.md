@@ -1,4 +1,5 @@
 # Jito Scaffold (Canary)
+Last updated: 2025-09-15
 
 ## Components
 - Bundle builder: assemble txn with accounts, compute budget, instructions

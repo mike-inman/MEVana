@@ -1,4 +1,5 @@
 # 🚨 CRITICAL: PostgreSQL Type Casting Issues in Monitoring APIs
+Last updated: 2025-09-15
 
 ## Problem
 PostgreSQL `AVG()` function on `BIGINT` columns returns `NUMERIC` type, but Rust SQLx expects `f64` (DOUBLE PRECISION).

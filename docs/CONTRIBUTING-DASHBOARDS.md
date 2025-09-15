@@ -1,3 +1,5 @@
+Last updated: 2025-09-15
+
 MEVana Grafana Dashboards — Contribution Guide
 
 - Single source of truth: place all Grafana dashboard JSON files in `infrastructure/grafana/dashboards/`.

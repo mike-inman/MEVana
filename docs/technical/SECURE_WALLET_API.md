@@ -1,4 +1,5 @@
 # MEVana Secure Wallet Management API
+Last updated: 2025-09-15
 
 A comprehensive security architecture for wallet management with third-party authentication integration.
 

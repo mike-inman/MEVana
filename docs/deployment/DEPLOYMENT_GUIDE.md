@@ -1,4 +1,5 @@
 # MEVana Deployment Guide
+Last updated: 2025-09-15
 
 ## Overview
 This guide covers deployment of the MEVana MEV trading bot with enterprise-grade trade execution optimization.

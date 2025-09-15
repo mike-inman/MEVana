@@ -1,4 +1,5 @@
 # Profit-First Arbitrage Engine Design
+Last updated: 2025-09-15
 
 ## Core Philosophy: **Win Every Trade We Execute**
 

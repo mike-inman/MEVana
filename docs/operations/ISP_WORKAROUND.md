@@ -1,4 +1,5 @@
 # 🎭 Fake Geyser Mode - ISP Throttling Workaround
+Last updated: 2025-09-15
 
 ## Problem
 Your ISP is throttling/caching Geyser blockchain data streams, causing:

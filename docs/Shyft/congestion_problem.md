@@ -1,3 +1,5 @@
+Last updated: 2025-09-15
+
 When using multiple Geyser streams on the Solana blockchain, the initial high velocity that gradually falls to zero is caused by a shared endpoint handling too many simultaneous requests, a problem known as congestion. As more users compete for the same resources, the system becomes a bottleneck, causing a decrease in performance over time until the queue of requests is processed. [1, 2]  
 This behavior is well-documented in the context of the Solana Geyser plugin, which is used for streaming real-time blockchain data. [1, 3, 4]  
 Primary causes for velocity drop 

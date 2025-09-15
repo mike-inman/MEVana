@@ -1,4 +1,5 @@
 # MEVana Documentation Archive
+Last updated: 2025-09-15
 
 **Date:** 2025-09-09  
 **Purpose:** Historical documentation that has been superseded by current production docs

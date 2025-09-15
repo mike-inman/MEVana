@@ -1,4 +1,5 @@
 # AI Status Update - 2025-08-31
+Last updated: 2025-09-15
 
 ## Summary
 Adaptive arbitrage feature sprint completed: sizing, depth-aware quoting, persistence, and observability integrated into `arb-engine`. System now exposes `/ai/sizing` for real-time inspection and records new Prometheus metrics (size utilization, depth factor histograms, adaptive multiplier gauge).

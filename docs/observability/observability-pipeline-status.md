@@ -1,4 +1,5 @@
 # Observability Pipeline Status
+Last updated: 2025-09-15
 **Created: 2024-08-17 19:35 CDT**  
 **Last Updated: 2024-08-17 19:35 CDT**
 

@@ -1,4 +1,5 @@
 # MEVana Startup Troubleshooting Guide
+Last updated: 2025-09-15
 
 **Last Updated:** 2025-09-09  
 **Purpose:** Comprehensive troubleshooting guide for MEVana system startup

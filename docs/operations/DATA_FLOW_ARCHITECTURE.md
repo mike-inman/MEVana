@@ -1,4 +1,5 @@
 # MEVana Data Flow Architecture
+Last updated: 2025-09-15
 **Date:** 2024-12-17  
 **Version:** 1.0  
 **Status:** Current System Architecture

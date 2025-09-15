@@ -1,4 +1,5 @@
 # MEVana: Solana Arbitrage Trading Platform
+Last updated: 2025-09-15
 
 **Real-time arbitrage detection and execution across 5+ DEXs on Solana**
 

@@ -1,3 +1,5 @@
+Last updated: 2025-09-15
+
 Perfect. Here’s a small “whirlpool-core” Rust crate you can drop into your workspace. It gives you:
 
 - Correct on-chain layouts (Whirlpool minimal, Tick, TickArray).

@@ -1,4 +1,5 @@
 # MEVana Technical Documentation - Consolidated
+Last updated: 2025-09-15
 **Complete Technical Architecture & Implementation Details**
 
 *Last Updated: December 17, 2024*  

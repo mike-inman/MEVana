@@ -1,4 +1,5 @@
 # DEX Metadata Schema v1.0
+Last updated: 2025-09-15
 
 ## Overview
 This document defines the standardized metadata format for each DEX plugin in the MEVana arbitrage system. This metadata serves multiple purposes:

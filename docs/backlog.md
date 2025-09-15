@@ -1,4 +1,5 @@
 # MEVana Arbitrage Engine Backlog
+Last updated: 2025-09-15
 
 This backlog captures deferred "nice-to-have" enhancements. Core fundamentals are complete (edge ingestion, 2-leg + 3-leg w/ pruning, dynamic histograms, diagnostics metrics export). Items tagged *priority-early* slightly benefit from earlier integration due to potential interface changes.
 

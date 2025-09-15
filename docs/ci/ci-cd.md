@@ -1,4 +1,5 @@
 # CI/CD (GitHub Actions)
+Last updated: 2025-09-15
 
 ## CI
 - Build Rust workspace (`cargo build --workspace`)

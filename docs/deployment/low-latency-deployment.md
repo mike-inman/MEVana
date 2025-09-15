@@ -1,4 +1,5 @@
 # Low-Latency Deployment Plan (Prod Readiness)
+Last updated: 2025-09-15
 
 ## Targets
 - Decision latency: <= 10 ms p50 (Geyser RX → bundle submitted), p99 <= 25 ms

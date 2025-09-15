@@ -1,4 +1,5 @@
 # Jupiter V6 Research Findings
+Last updated: 2025-09-15
 
 **Date:** September 12, 2025  
 **Time:** 21:20 UTC  

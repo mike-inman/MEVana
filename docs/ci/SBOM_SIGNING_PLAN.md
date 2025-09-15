@@ -1,4 +1,5 @@
 # SBOM & Image Signing Plan
+Last updated: 2025-09-15
 
 Goals:
 - Generate a Software Bill of Materials (SBOM) for each container image (executor-service now; others later) using `syft` or `cyclonedx-cargo`.

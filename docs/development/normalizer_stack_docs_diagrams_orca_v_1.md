@@ -1,4 +1,5 @@
 # Normalizer Stack — Docs & Diagrams (Orca v1)
+Last updated: 2025-09-15
 
 > This document captures the architecture, topics/contracts, runbooks, and near‑term plan to ship the **Orca normalizer** and a small **pricing + arbitrage UI**.
 

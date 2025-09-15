@@ -1,3 +1,5 @@
+Last updated: 2025-09-15
+
 ## Active components (2025-08-27)
 
 - dex-stream-universal (8084): primary Geyser stream (Jupiter included via PROGRAM_IDS when needed)
