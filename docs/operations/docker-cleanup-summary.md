@@ -121,3 +121,5 @@ MEVana now has a clean, focused Docker infrastructure that provides a solid foun
 ---
 
 *This cleanup provides the perfect foundation for implementing the new MEVana architecture with clean separation between infrastructure and application concerns.*
+Deprecated: Historical cleanup notes. See docs/operations/DEPLOYMENT_RUNBOOK.md for current procedures
+Last updated: 2025-09-15

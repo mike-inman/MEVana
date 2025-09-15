@@ -117,3 +117,5 @@ Shyft.to Geyser → Edge Assembler → Searcher → Executor → Shyft.to Jito �
 ---
 
 *This strategy leverages premium infrastructure to maximize our competitive advantage while maintaining the conservative risk approach necessary for sustainable profitability.*
+Deprecated: Superseded by docs/operations/CRITICAL_PRODUCTION_BLOCKERS.md and docs/strategy/REVISED_EXECUTOR_PLAN_2025-08-25.md
+Last updated: 2025-09-15

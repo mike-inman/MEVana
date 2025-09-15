@@ -33,3 +33,5 @@
 
 ### Recommended Action
 Continue with changes you wanted to discuss using the working local system. Document Docker fix for later implementation.
+Deprecated: See docs/DOCKER_DEPLOYMENT_ISSUES.md (canonical) and docs/operations/DEPLOYMENT_RUNBOOK.md
+Last updated: 2025-09-15

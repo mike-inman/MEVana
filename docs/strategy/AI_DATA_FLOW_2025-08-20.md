@@ -117,4 +117,6 @@ All network settings must be configurable via env or config files (no hardcoded 
 - `crates/shyft-raw-price-feed/src/main.rs`: consumes `shyft-full-transactions-raw` → `prices.latest.raw`.
 - `docs/NETWORK_PORT_REGISTRY.md`: reserved ports and policy.
 
+Deprecated: Incorporated into docs/strategy/STRATEGY_AND_PLANNING_CONSOLIDATED.md
+Last updated: 2025-09-15
 

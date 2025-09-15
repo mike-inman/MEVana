@@ -299,3 +299,5 @@ The MEVana HotPath Engine is now live and operational at **http://149.28.56.125:
 **Deployment Engineer**: Claude Code
 **Deployment Date**: 2025-09-14
 **Status**: ✅ **PRODUCTION READY**
+Deprecated: This document is superseded by docs/operations/DEPLOYMENT_RUNBOOK.md
+Last updated: 2025-09-15

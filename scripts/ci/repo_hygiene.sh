@@ -43,4 +43,18 @@ if [ -n "$dash_files" ]; then
   done
 fi
 
+# 5) Soft check: docs timestamp presence (warn only)
+missing_ts=()
+while IFS= read -r -d '' f; do
+  if ! grep -Eq '^(Last updated:|Created:)' "$f"; then
+    missing_ts+=("$f")
+  fi
+done < <(find docs -type f -name '*.md' -print0 2>/dev/null)
+
+if [ ${#missing_ts[@]} -gt 0 ]; then
+  echo "⚠️  WARNING: The following docs lack a timestamp (Last updated: or Created:):" >&2
+  for f in "${missing_ts[@]}"; do echo " - $f" >&2; done
+  echo "Add a timestamp near the top per CONTRIBUTING.md." >&2
+fi
+
 echo "✅ Repo hygiene passed"

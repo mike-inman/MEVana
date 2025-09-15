@@ -148,4 +148,6 @@ payload_clmm: {
 - Enforce simple freshness/coherency rules so legs are comparable
 - Add venues by implementing a `Quoter` + tx template and plugging into the same Edge model
 
+Deprecated: Incorporated into docs/strategy/STRATEGY_AND_PLANNING_CONSOLIDATED.md and docs/strategy/low-latency-arb-strategy.md
+Last updated: 2025-09-15
 

@@ -402,3 +402,5 @@ ARB_HTTP_PORT=8081                   # API server port
 ---
 
 *Implementation outline created based on comprehensive code verification as of September 12, 2025. All assessments validated against actual implementation.*
+Deprecated: Superseded by docs/operations/PRODUCTION_PLANNING.md and docs/operations/PRODUCTION_SUCCESS_CRITERIA.md
+Last updated: 2025-09-15

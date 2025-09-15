@@ -1,6 +1,6 @@
 # MEVana Documentation Index - Production Reference
 
-**Last Updated:** 2025-09-09  
+**Last Updated:** 2025-09-15  
 **Status:** 🚀 PRODUCTION READY  
 **Version:** 2.0
 
@@ -14,18 +14,24 @@ This is the **single source of truth** for all MEVana production documentation. 
 
 ## 🔥 **CRITICAL OPERATIONS - START HERE**
 
+Quick Links
+- Critical blockers: [operations/CRITICAL_PRODUCTION_BLOCKERS.md](./operations/CRITICAL_PRODUCTION_BLOCKERS.md)
+- Deployment runbook: [operations/DEPLOYMENT_RUNBOOK.md](./operations/DEPLOYMENT_RUNBOOK.md)
+- Deployment prep: [deployment/DEPLOYMENT_PREPARATION.md](./deployment/DEPLOYMENT_PREPARATION.md)
+- Production deployment: [deployment/PRODUCTION_DEPLOYMENT.md](./deployment/PRODUCTION_DEPLOYMENT.md)
+
 ### **System Operations**
 | Document | Purpose | Status | Last Updated |
 |----------|---------|---------|--------------|
 | **[STARTUP_PROGRESS.md](./STARTUP_PROGRESS.md)** | Complete system startup guide and troubleshooting | ✅ Current | 2025-09-09 |
 | **[SHUTDOWN_PROCEDURES.md](./SHUTDOWN_PROCEDURES.md)** | Production shutdown procedures with safety checks | ✅ Current | 2025-09-09 |
 | **[PORT_MAPPING.md](./PORT_MAPPING.md)** | Complete port allocation with production strategies | ✅ Current | 2025-09-09 |
-| **[PRODUCTION_LESSONS_LEARNED.md](./PRODUCTION_LESSONS_LEARNED.md)** | Critical findings from shutdown testing | ✅ Current | 2025-09-09 |
+| **[PRODUCTION_LESSONS_LEARNED.md](./operations/PRODUCTION_LESSONS_LEARNED.md)** | Critical findings from shutdown testing | ✅ Current | 2025-09-09 |
 
 ### **Configuration Management**
 | Document | Purpose | Status | Last Updated |
 |----------|---------|---------|--------------|
-| **[CLAUDE.md](./CLAUDE.md)** | Development context and session management | ✅ Current | 2025-01-06 |
+| **[CLAUDE.md](./ai/CLAUDE.md)** | Development context and session management | ✅ Current | 2025-01-06 |
 | **[database/complete_schema.sql](./database/complete_schema.sql)** | Production database schema | ✅ Current | 2025-09-09 |
 | **[scripts/start_system.sh](./scripts/start_system.sh)** | Automated system startup script | ✅ Current | 2025-09-09 |
 | **[scripts/shutdown_system.sh](./scripts/shutdown_system.sh)** | Automated system shutdown script | ✅ Current | 2025-09-09 |

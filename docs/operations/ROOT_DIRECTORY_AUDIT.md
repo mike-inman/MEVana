@@ -209,3 +209,5 @@ mv mevana_service_errors.log logs/
 5. **Professional Appearance:** Clean, organized codebase
 
 The root directory will transform from a **cluttered workspace** to a **professional, organized project structure** that follows Rust ecosystem best practices.
+Deprecated: Historical repo audit. Current canonical structure is enforced by repo hygiene and CONTRIBUTING.md
+Last updated: 2025-09-15

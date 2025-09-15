@@ -275,3 +275,5 @@ alerts:
 - **8 PM**: Results review and next day planning
 
 This aggressive timeline pushes for test trading while maintaining strict safety controls and comprehensive monitoring. The goal is to validate the complete pipeline with real market data and small-scale live testing.
+Deprecated: Folded into docs/operations/PRODUCTION_PLANNING.md
+Last updated: 2025-09-15

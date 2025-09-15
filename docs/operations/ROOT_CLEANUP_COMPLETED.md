@@ -178,3 +178,5 @@ The MEVana root directory has been transformed from a **cluttered workspace** in
 - Consider similar cleanup for other directories (infrastructure/scripts/, etc.)
 
 The codebase now presents a **clean, professional appearance** that reflects the sophisticated architecture of the MEVana trading platform! 🚀
+Deprecated: Historical cleanup log. For current repo structure and hygiene, see docs/DOCUMENTATION_INDEX.md and scripts/ci/repo_hygiene.sh
+Last updated: 2025-09-15

@@ -63,3 +63,5 @@ Admin endpoints (token or mTLS):
 
 ---
 Generated: 2025-09-01
+Deprecated: Use docs/operations/DEPLOYMENT_RUNBOOK.md (canonical)
+Last updated: 2025-09-15
