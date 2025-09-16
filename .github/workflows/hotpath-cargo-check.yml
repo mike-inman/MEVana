@@ -12,6 +12,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+      - name: Install system deps (protoc)
+        run: sudo apt-get update && sudo apt-get install -y protobuf-compiler
 
       - name: Install Rust nightly
         uses: dtolnay/rust-toolchain@nightly
@@ -24,4 +26,3 @@ jobs:
           RUSTFLAGS="--cap-lints warn" cargo +nightly check -p hotpath_arb_engine -q || true
           echo "\n--- Full cargo check output (without -q) for errors ---\n"
           cargo +nightly check -p hotpath_arb_engine
-
