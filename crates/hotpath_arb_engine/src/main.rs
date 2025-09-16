@@ -57,7 +57,6 @@ mod config_api;
 mod ai_strategy_engine;
 
 // Re-export smart filter from lib to make it available to config_api
-use hotpath_arb_engine::property_store::{get_property_store, PropertySource};
 pub use hotpath_arb_engine::smart_filter;
 
 use solana_sdk::signature::Keypair;
@@ -75,7 +74,7 @@ use wallet_security::{SecurityPolicy, WalletSecurityManager};
 use async_history_buffer::{
     create_arbitrage_opportunity, create_execution_result, AsyncHistoryBuffer,
 };
-use hotpath_arb_engine::orderbook_tracker::{create_arbitrage_event, ARBITRAGE_DETECTED};
+use crate::orderbook_tracker::{create_arbitrage_event, ARBITRAGE_DETECTED};
 use hotpath_arb_engine::smart_filter::{SmartFilter, SmartFilterConfig};
 use sqlx::{postgres::PgListener, PgPool};
 
@@ -95,7 +94,7 @@ mod marginfi_instructions;
 mod orderbook_tracker;
 mod transaction_templates;
 use flash_loan_integration::FlashLoanProvider;
-use hotpath_arb_engine::orderbook_tracker::ArbitrageEvent;
+use crate::orderbook_tracker::ArbitrageEvent;
 use hotpath_arb_engine::smart_filter::SmartOpportunity;
 use transaction_templates::TransactionTemplateCache;
 
