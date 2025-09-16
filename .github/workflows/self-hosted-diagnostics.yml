@@ -28,6 +28,18 @@ jobs:
           cd /opt/MEVana
           docker compose -p mevana -f infrastructure/docker-compose.server.yml -f infrastructure/docker-compose.full.yml ps || true
 
+      - name: Show env files (redacted)
+        run: |
+          set -euo pipefail
+          for f in /opt/MEVana/.env /opt/MEVana/infrastructure/.env; do
+            if [ -f "$f" ]; then
+              echo "--- $f ---"
+              awk 'BEGIN{FS="="} /^X_TOKEN=/{v=$2; n=length(v); if(n>8){print $1"="substr(v,1,4)"****"substr(v,n-3,4)} else {print $1"=****"}} !/^X_TOKEN=/{print}' "$f"
+            else
+              echo "(missing) $f"
+            fi
+          done
+
       - name: Resolve services
         id: vars
         shell: bash
@@ -45,6 +57,17 @@ jobs:
             echo "--- LOGS: $s ---"
             docker ps --format '{{.Names}}' | grep -E "mevana-$s-1|$s" | xargs -I{} sh -c 'docker logs --tail=200 {} 2>&1 | tail -n 200 || true'
           done
+
+      - name: Container env (hotpath, redacted)
+        run: |
+          set +e
+          cid=$(docker ps --format '{{.ID}} {{.Names}}' | awk '/hotpath-arb-engine/{print $1; exit}')
+          if [ -n "$cid" ]; then
+            echo "--- hotpath env (redacted) ---"
+            docker exec "$cid" sh -c 'env | grep -E "^(ENDPOINT|X_TOKEN|METRICS_PORT)="' | awk 'BEGIN{FS="="} /^X_TOKEN=/{v=$2; n=length(v); if(n>8){print $1"="substr(v,1,4)"****"substr(v,n-3,4)} else {print $1"=****"}} !/^X_TOKEN=/{print}'
+          else
+            echo "hotpath container not found"
+          fi
 
       - name: Quick HTTP checks
         run: |
