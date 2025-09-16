@@ -23,7 +23,7 @@ scrape_configs:
     scrape_interval: 5s
     scrape_timeout: 3s
     static_configs:
-      - targets: ['mevana-hotpath:8088']
+      - targets: ['mevana-hotpath-arb-engine-1:8088']
 
   - job_name: 'normalizer-service'
     metrics_path: '/metrics'

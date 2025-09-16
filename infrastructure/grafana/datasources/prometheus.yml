@@ -4,6 +4,6 @@ datasources:
   - name: Prometheus
     type: prometheus
     access: proxy
-    url: http://prometheus-service:9090
+    url: http://mevana-prometheus-1:9090
     isDefault: true
     editable: true
