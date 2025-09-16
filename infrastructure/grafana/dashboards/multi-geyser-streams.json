@@ -2,7 +2,12 @@
   "dashboard": {
     "id": null,
     "title": "Multi-Geyser Streams Dashboard",
-    "tags": ["mevana", "geyser", "dex", "streams"],
+    "tags": [
+      "mevana",
+      "geyser",
+      "dex",
+      "streams"
+    ],
     "style": "dark",
     "timezone": "browser",
     "refresh": "5s",
@@ -28,13 +33,24 @@
             },
             "thresholds": {
               "steps": [
-                {"color": "red", "value": null},
-                {"color": "green", "value": 1}
+                {
+                  "color": "red",
+                  "value": null
+                },
+                {
+                  "color": "green",
+                  "value": 1
+                }
               ]
             }
           }
         },
-        "gridPos": {"h": 6, "w": 6, "x": 0, "y": 0}
+        "gridPos": {
+          "h": 6,
+          "w": 6,
+          "x": 0,
+          "y": 0
+        }
       },
       {
         "id": 2,
@@ -52,7 +68,12 @@
             "min": 0
           }
         },
-        "gridPos": {"h": 8, "w": 12, "x": 6, "y": 0}
+        "gridPos": {
+          "h": 8,
+          "w": 12,
+          "x": 6,
+          "y": 0
+        }
       },
       {
         "id": 3,
@@ -66,11 +87,18 @@
         ],
         "fieldConfig": {
           "defaults": {
-            "color": {"mode": "palette-classic"},
+            "color": {
+              "mode": "palette-classic"
+            },
             "unit": "short"
           }
         },
-        "gridPos": {"h": 6, "w": 6, "x": 18, "y": 0}
+        "gridPos": {
+          "h": 6,
+          "w": 6,
+          "x": 18,
+          "y": 0
+        }
       },
       {
         "id": 4,
@@ -84,10 +112,17 @@
         ],
         "fieldConfig": {
           "defaults": {
-            "color": {"mode": "palette-classic"}
+            "color": {
+              "mode": "palette-classic"
+            }
           }
         },
-        "gridPos": {"h": 8, "w": 8, "x": 0, "y": 8}
+        "gridPos": {
+          "h": 8,
+          "w": 8,
+          "x": 0,
+          "y": 8
+        }
       },
       {
         "id": 5,
@@ -113,7 +148,12 @@
             "min": 0
           }
         },
-        "gridPos": {"h": 8, "w": 8, "x": 8, "y": 8}
+        "gridPos": {
+          "h": 8,
+          "w": 8,
+          "x": 8,
+          "y": 8
+        }
       },
       {
         "id": 6,
@@ -132,10 +172,17 @@
         "fieldConfig": {
           "defaults": {
             "unit": "reqps",
-            "color": {"mode": "palette-classic"}
+            "color": {
+              "mode": "palette-classic"
+            }
           }
         },
-        "gridPos": {"h": 8, "w": 8, "x": 16, "y": 8}
+        "gridPos": {
+          "h": 8,
+          "w": 8,
+          "x": 16,
+          "y": 8
+        }
       },
       {
         "id": 7,
@@ -150,14 +197,21 @@
         "fieldConfig": {
           "defaults": {
             "unit": "reqps",
-            "color": {"mode": "continuous-GrYlRd"}
+            "color": {
+              "mode": "continuous-GrYlRd"
+            }
           }
         },
-        "gridPos": {"h": 6, "w": 8, "x": 0, "y": 16}
+        "gridPos": {
+          "h": 6,
+          "w": 8,
+          "x": 0,
+          "y": 16
+        }
       },
       {
         "id": 8,
-        "title": "Orca+Whirlpool Stream Metrics", 
+        "title": "Orca+Whirlpool Stream Metrics",
         "type": "timeseries",
         "targets": [
           {
@@ -168,15 +222,22 @@
         "fieldConfig": {
           "defaults": {
             "unit": "reqps",
-            "color": {"mode": "continuous-BlPu"}
+            "color": {
+              "mode": "continuous-BlPu"
+            }
           }
         },
-        "gridPos": {"h": 6, "w": 8, "x": 8, "y": 16}
+        "gridPos": {
+          "h": 6,
+          "w": 8,
+          "x": 8,
+          "y": 16
+        }
       },
       {
         "id": 9,
         "title": "Other DEXs Stream Metrics",
-        "type": "timeseries", 
+        "type": "timeseries",
         "targets": [
           {
             "expr": "rate(geyser_transactions_successful_total{stream_id=\"3\"}[1m])",
@@ -186,10 +247,17 @@
         "fieldConfig": {
           "defaults": {
             "unit": "reqps",
-            "color": {"mode": "continuous-RdYlGr"}
+            "color": {
+              "mode": "continuous-RdYlGr"
+            }
           }
         },
-        "gridPos": {"h": 6, "w": 8, "x": 16, "y": 16}
+        "gridPos": {
+          "h": 6,
+          "w": 8,
+          "x": 16,
+          "y": 16
+        }
       },
       {
         "id": 10,
@@ -207,7 +275,10 @@
           {
             "id": "organize",
             "options": {
-              "excludeByName": {"Time": true, "__name__": true},
+              "excludeByName": {
+                "Time": true,
+                "__name__": true
+              },
               "renameByName": {
                 "stream_id": "Stream ID",
                 "Value": "Total Processed"
@@ -215,7 +286,12 @@
             }
           }
         ],
-        "gridPos": {"h": 8, "w": 12, "x": 0, "y": 22}
+        "gridPos": {
+          "h": 8,
+          "w": 12,
+          "x": 0,
+          "y": 22
+        }
       },
       {
         "id": 11,
@@ -227,7 +303,12 @@
             "refId": "A"
           }
         ],
-        "gridPos": {"h": 8, "w": 12, "x": 12, "y": 22}
+        "gridPos": {
+          "h": 8,
+          "w": 12,
+          "x": 12,
+          "y": 22
+        }
       }
     ],
     "templating": {
@@ -249,10 +330,13 @@
           "datasource": "-- Grafana --",
           "enable": true,
           "iconColor": "green",
-          "tags": ["deploy"]
+          "tags": [
+            "deploy"
+          ]
         }
       ]
     },
     "version": 1
-  }
+  },
+  "title": "Multi Geyser Streams Dashboard"
 }

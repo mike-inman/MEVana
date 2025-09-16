@@ -9,6 +9,10 @@ Preferred entrypoints
 - Maintenance: `scripts/maintenance/docker-data-purge.sh`, `scripts/maintenance/deploy-rollback.sh`, `scripts/maintenance/backup_postgres.sh`
 - Testing: `scripts/testing/*` (observability, E2E, validation)
 
+Local development helpers
+- `scripts/development/local-cargo-check.sh` — Runs `cargo +nightly check --workspace` to surface compile errors fast without Docker.
+- `scripts/development/build-images-locally.sh [tag]` — Builds Linux images for the 4 core app services using multi-stage Dockerfiles (ensures no exec-format issues). Defaults tag to the current commit SHA short hash.
+
 Legacy/Deprecated (use GHCR workflow + compose deploy instead)
 - scripts/simple-deploy.sh
 - scripts/docker-deploy.sh

@@ -39,6 +39,12 @@ jobs:
               echo "(missing) $f"
             fi
           done
+          if [ -f /opt/MEVana/.mevana_tag ]; then
+            echo "--- /opt/MEVana/.mevana_tag ---"
+            cat /opt/MEVana/.mevana_tag
+          else
+            echo "(missing) /opt/MEVana/.mevana_tag"
+          fi
 
       - name: Resolve services
         id: vars
@@ -67,6 +73,18 @@ jobs:
             docker exec "$cid" sh -c 'env | grep -E "^(ENDPOINT|X_TOKEN|METRICS_PORT)="' | awk 'BEGIN{FS="="} /^X_TOKEN=/{v=$2; n=length(v); if(n>8){print $1"="substr(v,1,4)"****"substr(v,n-3,4)} else {print $1"=****"}} !/^X_TOKEN=/{print}'
           else
             echo "hotpath container not found"
+          fi
+      - name: Prometheus ↔ Hotpath connectivity
+        run: |
+          set +e
+          pcid=$(docker ps --format '{{.ID}} {{.Names}}' | awk '/prometheus/{print $1; exit}')
+          if [ -n "$pcid" ]; then
+            echo "--- curl from prometheus container to hotpath:8088/metrics (head) ---"
+            docker exec "$pcid" sh -lc 'curl -s --connect-timeout 5 http://hotpath-arb-engine:8088/metrics | head -n 10' || true
+            echo "--- Prometheus active targets (hotpath) ---"
+            curl -s http://localhost:9090/api/v1/targets | jq -r '.data.activeTargets[] | select(.labels.job=="hotpath-arb-engine") | (.health + " " + .discoveredLabels.__address__ + " " + .scrapeUrl)' || true
+          else
+            echo "prometheus container not found"
           fi
 
       - name: Quick HTTP checks

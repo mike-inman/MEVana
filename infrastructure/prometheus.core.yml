@@ -3,23 +3,40 @@ global:
   evaluation_interval: 15s
 
 scrape_configs:
+  # Infrastructure Services
   - job_name: 'prometheus'
     static_configs:
-      - targets: ['prometheus:9090']
+      - targets: ['prometheus-service:9090']
 
   - job_name: 'grafana'
     static_configs:
-      - targets: ['grafana:3000']
+      - targets: ['grafana-service:3000']
 
   - job_name: 'kafka-ui'
+    metrics_path: '/actuator/prometheus'
     static_configs:
-      - targets: ['kafka-ui:8080']
+      - targets: ['kafka-ui-service:8080']
 
-  # Hotpath engine metrics (internal scrape)
+  # MEVana Services - Primary Trading Components
   - job_name: 'hotpath-arb-engine'
     metrics_path: '/metrics'
     scrape_interval: 5s
     scrape_timeout: 3s
     static_configs:
-      - targets: ['hotpath-arb-engine:8088']
+      - targets: ['mevana-hotpath:8088']
 
+  - job_name: 'normalizer-service'
+    metrics_path: '/metrics'
+    scrape_interval: 10s
+    scrape_timeout: 5s
+    static_configs:
+      - targets: ['mevana-normalizer:8085']
+
+  - job_name: 'discovery-service'
+    metrics_path: '/metrics'
+    scrape_interval: 15s
+    scrape_timeout: 5s
+    static_configs:
+      - targets: ['mevana-discovery:9102']
+
+  # Note: executor-service may not have metrics endpoint, check and add if needed

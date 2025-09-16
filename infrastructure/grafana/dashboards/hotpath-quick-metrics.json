@@ -1,0 +1,62 @@
+{
+  "title": "MEVana - Hotpath Quick Metrics",
+  "uid": "mev-hotpath-quick",
+  "timezone": "browser",
+  "schemaVersion": 36,
+  "version": 1,
+  "refresh": "10s",
+  "panels": [
+    {
+      "id": 1,
+      "type": "timeseries",
+      "title": "Stream Messages Total (by stream_id)",
+      "gridPos": {"h": 8, "w": 24, "x": 0, "y": 0},
+      "targets": [
+        {"refId": "A", "expr": "multi_geyser_stream_messages_total"}
+      ],
+      "fieldConfig": {"defaults": {"unit": "short"}}
+    },
+    {
+      "id": 2,
+      "type": "timeseries",
+      "title": "Messages / Minute (by stream_id)",
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 8},
+      "targets": [
+        {"refId": "A", "expr": "multi_geyser_stream_messages_per_minute"}
+      ],
+      "fieldConfig": {"defaults": {"unit": "opsm"}}
+    },
+    {
+      "id": 3,
+      "type": "timeseries",
+      "title": "Stream Health (0/1)",
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 8},
+      "targets": [
+        {"refId": "A", "expr": "multi_geyser_stream_healthy"}
+      ],
+      "fieldConfig": {"defaults": {"unit": "short"}}
+    },
+    {
+      "id": 4,
+      "type": "stat",
+      "title": "Heartbeat / Uptime",
+      "gridPos": {"h": 6, "w": 12, "x": 0, "y": 16},
+      "targets": [
+        {"refId": "A", "expr": "rate(test_heartbeat_total[1m])"}
+      ],
+      "options": {"reduceOptions": {"calcs": ["lastNotNull"]}},
+      "fieldConfig": {"defaults": {"unit": "opsm", "displayName": "heartbeats/min"}}
+    },
+    {
+      "id": 5,
+      "type": "stat",
+      "title": "Uptime Seconds",
+      "gridPos": {"h": 6, "w": 12, "x": 12, "y": 16},
+      "targets": [
+        {"refId": "A", "expr": "test_uptime_seconds"}
+      ],
+      "options": {"reduceOptions": {"calcs": ["lastNotNull"]}},
+      "fieldConfig": {"defaults": {"unit": "s"}}
+    }
+  ]
+}

@@ -18,6 +18,7 @@ jobs:
             - Contribution guide: CONTRIBUTING.md
             - Docs index (start here): docs/DOCUMENTATION_INDEX.md
             - Deploy runbook: docs/operations/DEPLOYMENT_RUNBOOK.md
+            - Self-hosted deploy guide (must read): docs/operations/SELF_HOSTED_DEPLOYMENT_GUIDE.md
             - Critical blockers: docs/operations/CRITICAL_PRODUCTION_BLOCKERS.md
             - Scripts (preferred): scripts/ (deployment/lifecycle/monitoring/maintenance/testing)
             - Dashboards location: infrastructure/grafana/dashboards/

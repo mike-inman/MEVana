@@ -1,8 +1,9 @@
 # MEVana - Solana AI Trading Platform
 
-[ AI and Contributor Quick Start ]
+- [ AI and Contributor Quick Start ]
 - Read rules: AGENTS.md (assistant guidelines), CONTRIBUTING.md (repo conventions)
 - Start here: docs/DOCUMENTATION_INDEX.md (critical ops + quick links)
+- Self‑hosted deploy (must read): docs/operations/SELF_HOSTED_DEPLOYMENT_GUIDE.md
 - Scripts: scripts/ (deployment, lifecycle, monitoring, maintenance, testing)
 - Dashboards live in: infrastructure/grafana/dashboards/
 - Hygiene: scripts/ci/repo_hygiene.sh (run locally or via pre-commit)

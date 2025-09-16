@@ -24,6 +24,7 @@ Quick Links
 - Deployment runbook: [operations/DEPLOYMENT_RUNBOOK.md](./operations/DEPLOYMENT_RUNBOOK.md)
 - Deployment prep: [deployment/DEPLOYMENT_PREPARATION.md](./deployment/DEPLOYMENT_PREPARATION.md)
 - Production deployment: [deployment/PRODUCTION_DEPLOYMENT.md](./deployment/PRODUCTION_DEPLOYMENT.md)
+- Self-hosted deploy guide: [operations/SELF_HOSTED_DEPLOYMENT_GUIDE.md](./operations/SELF_HOSTED_DEPLOYMENT_GUIDE.md)
 
 ### **System Operations**
 | Document | Purpose | Status | Last Updated |

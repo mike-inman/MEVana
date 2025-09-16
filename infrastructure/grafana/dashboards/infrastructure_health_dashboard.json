@@ -2,7 +2,12 @@
   "dashboard": {
     "id": null,
     "title": "MEVana Infrastructure Health Dashboard",
-    "tags": ["mevana", "infrastructure", "health", "monitoring"],
+    "tags": [
+      "mevana",
+      "infrastructure",
+      "health",
+      "monitoring"
+    ],
     "timezone": "browser",
     "refresh": "30s",
     "panels": [
@@ -10,7 +15,12 @@
         "id": 1,
         "title": "🚀 MEVana Stream Messages",
         "type": "timeseries",
-        "gridPos": {"h": 8, "w": 12, "x": 0, "y": 0},
+        "gridPos": {
+          "h": 8,
+          "w": 12,
+          "x": 0,
+          "y": 0
+        },
         "targets": [
           {
             "expr": "multi_geyser_stream_messages_total",
@@ -20,22 +30,35 @@
         ],
         "fieldConfig": {
           "defaults": {
-            "color": {"mode": "palette-classic"},
+            "color": {
+              "mode": "palette-classic"
+            },
             "custom": {
               "axisLabel": "Messages",
               "axisPlacement": "auto",
               "drawStyle": "line",
               "fillOpacity": 10,
               "gradientMode": "none",
-              "hideFrom": {"legend": false, "tooltip": false, "vis": false},
+              "hideFrom": {
+                "legend": false,
+                "tooltip": false,
+                "vis": false
+              },
               "lineInterpolation": "linear",
               "lineWidth": 1,
               "pointSize": 5,
-              "scaleDistribution": {"type": "linear"},
+              "scaleDistribution": {
+                "type": "linear"
+              },
               "showPoints": "never",
               "spanNulls": false,
-              "stacking": {"group": "A", "mode": "none"},
-              "thresholdsStyle": {"mode": "off"}
+              "stacking": {
+                "group": "A",
+                "mode": "none"
+              },
+              "thresholdsStyle": {
+                "mode": "off"
+              }
             },
             "unit": "short"
           }
@@ -45,7 +68,12 @@
         "id": 2,
         "title": "📈 Message Rate (per minute)",
         "type": "stat",
-        "gridPos": {"h": 8, "w": 12, "x": 12, "y": 0},
+        "gridPos": {
+          "h": 8,
+          "w": 12,
+          "x": 12,
+          "y": 0
+        },
         "targets": [
           {
             "expr": "rate(multi_geyser_stream_messages_total[1m]) * 60",
@@ -55,14 +83,28 @@
         ],
         "fieldConfig": {
           "defaults": {
-            "color": {"mode": "thresholds"},
-            "custom": {"displayMode": "list", "orientation": "horizontal"},
+            "color": {
+              "mode": "thresholds"
+            },
+            "custom": {
+              "displayMode": "list",
+              "orientation": "horizontal"
+            },
             "mappings": [],
             "thresholds": {
               "steps": [
-                {"color": "red", "value": null},
-                {"color": "yellow", "value": 1},
-                {"color": "green", "value": 10}
+                {
+                  "color": "red",
+                  "value": null
+                },
+                {
+                  "color": "yellow",
+                  "value": 1
+                },
+                {
+                  "color": "green",
+                  "value": 10
+                }
               ]
             },
             "unit": "short"
@@ -73,7 +115,12 @@
         "id": 3,
         "title": "⚡ Current Stream Status",
         "type": "table",
-        "gridPos": {"h": 8, "w": 24, "x": 0, "y": 8},
+        "gridPos": {
+          "h": 8,
+          "w": 24,
+          "x": 0,
+          "y": 8
+        },
         "targets": [
           {
             "expr": "multi_geyser_stream_messages_total",
@@ -90,7 +137,10 @@
           },
           "overrides": [
             {
-              "matcher": {"id": "byName", "options": "Value"},
+              "matcher": {
+                "id": "byName",
+                "options": "Value"
+              },
               "properties": [
                 {
                   "id": "custom.displayMode",
@@ -98,15 +148,26 @@
                 },
                 {
                   "id": "color",
-                  "value": {"mode": "thresholds"}
+                  "value": {
+                    "mode": "thresholds"
+                  }
                 },
                 {
                   "id": "thresholds",
                   "value": {
                     "steps": [
-                      {"color": "red", "value": null},
-                      {"color": "yellow", "value": 100},
-                      {"color": "green", "value": 1000}
+                      {
+                        "color": "red",
+                        "value": null
+                      },
+                      {
+                        "color": "yellow",
+                        "value": 100
+                      },
+                      {
+                        "color": "green",
+                        "value": 1000
+                      }
                     ]
                   }
                 }
@@ -119,7 +180,12 @@
         "id": 4,
         "title": "🔥 System Health Status",
         "type": "stat",
-        "gridPos": {"h": 4, "w": 6, "x": 0, "y": 16},
+        "gridPos": {
+          "h": 4,
+          "w": 6,
+          "x": 0,
+          "y": 16
+        },
         "targets": [
           {
             "expr": "up{job=\"hotpath-engine\"}",
@@ -134,15 +200,37 @@
         ],
         "fieldConfig": {
           "defaults": {
-            "color": {"mode": "thresholds"},
+            "color": {
+              "mode": "thresholds"
+            },
             "mappings": [
-              {"options": {"0": {"text": "DOWN"}}, "type": "value"},
-              {"options": {"1": {"text": "UP"}}, "type": "value"}
+              {
+                "options": {
+                  "0": {
+                    "text": "DOWN"
+                  }
+                },
+                "type": "value"
+              },
+              {
+                "options": {
+                  "1": {
+                    "text": "UP"
+                  }
+                },
+                "type": "value"
+              }
             ],
             "thresholds": {
               "steps": [
-                {"color": "red", "value": null},
-                {"color": "green", "value": 1}
+                {
+                  "color": "red",
+                  "value": null
+                },
+                {
+                  "color": "green",
+                  "value": 1
+                }
               ]
             },
             "unit": "short"
@@ -153,7 +241,12 @@
         "id": 5,
         "title": "📊 Messages Per Minute",
         "type": "gauge",
-        "gridPos": {"h": 4, "w": 6, "x": 6, "y": 16},
+        "gridPos": {
+          "h": 4,
+          "w": 6,
+          "x": 6,
+          "y": 16
+        },
         "targets": [
           {
             "expr": "sum(rate(multi_geyser_stream_messages_total[1m]) * 60)",
@@ -163,14 +256,25 @@
         ],
         "fieldConfig": {
           "defaults": {
-            "color": {"mode": "thresholds"},
+            "color": {
+              "mode": "thresholds"
+            },
             "max": 100,
             "min": 0,
             "thresholds": {
               "steps": [
-                {"color": "red", "value": null},
-                {"color": "yellow", "value": 10},
-                {"color": "green", "value": 50}
+                {
+                  "color": "red",
+                  "value": null
+                },
+                {
+                  "color": "yellow",
+                  "value": 10
+                },
+                {
+                  "color": "green",
+                  "value": 50
+                }
               ]
             },
             "unit": "short"
@@ -181,7 +285,12 @@
         "id": 6,
         "title": "🎯 Total Messages Processed",
         "type": "stat",
-        "gridPos": {"h": 4, "w": 6, "x": 12, "y": 16},
+        "gridPos": {
+          "h": 4,
+          "w": 6,
+          "x": 12,
+          "y": 16
+        },
         "targets": [
           {
             "expr": "sum(multi_geyser_stream_messages_total)",
@@ -191,10 +300,15 @@
         ],
         "fieldConfig": {
           "defaults": {
-            "color": {"mode": "thresholds"},
+            "color": {
+              "mode": "thresholds"
+            },
             "thresholds": {
               "steps": [
-                {"color": "green", "value": null}
+                {
+                  "color": "green",
+                  "value": null
+                }
               ]
             },
             "unit": "short"
@@ -205,7 +319,12 @@
         "id": 7,
         "title": "⏱️ Service Uptime",
         "type": "stat",
-        "gridPos": {"h": 4, "w": 6, "x": 18, "y": 16},
+        "gridPos": {
+          "h": 4,
+          "w": 6,
+          "x": 18,
+          "y": 16
+        },
         "targets": [
           {
             "expr": "(time() - process_start_time_seconds{job=\"hotpath-engine\"}) / 86400",
@@ -215,13 +334,24 @@
         ],
         "fieldConfig": {
           "defaults": {
-            "color": {"mode": "thresholds"},
+            "color": {
+              "mode": "thresholds"
+            },
             "decimals": 2,
             "thresholds": {
               "steps": [
-                {"color": "red", "value": null},
-                {"color": "yellow", "value": 0.1},
-                {"color": "green", "value": 1}
+                {
+                  "color": "red",
+                  "value": null
+                },
+                {
+                  "color": "yellow",
+                  "value": 0.1
+                },
+                {
+                  "color": "green",
+                  "value": 1
+                }
               ]
             },
             "unit": "d"
@@ -229,9 +359,13 @@
         }
       }
     ],
-    "time": {"from": "now-1h", "to": "now"},
+    "time": {
+      "from": "now-1h",
+      "to": "now"
+    },
     "timepicker": {},
     "uid": "mevana-health",
     "version": 1
-  }
+  },
+  "title": "Infrastructure Health Dashboard"
 }

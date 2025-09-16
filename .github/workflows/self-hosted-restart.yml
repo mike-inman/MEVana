@@ -37,5 +37,12 @@ jobs:
           set -euo pipefail
           svcs=( ${{ steps.vars.outputs.services }} )
           cd /opt/MEVana
+          # Load last deployed tag if present, so compose doesn't default to :dev and pull
+          if [ -f /opt/MEVana/.mevana_tag ]; then
+            export MEVANA_TAG=$(cat /opt/MEVana/.mevana_tag)
+            echo "Using MEVANA_TAG=${MEVANA_TAG} from /opt/MEVana/.mevana_tag"
+          else
+            echo "Warning: /opt/MEVana/.mevana_tag missing; MEVANA_TAG defaults to 'dev' and may trigger a GHCR pull"
+          fi
           docker compose -p mevana -f infrastructure/docker-compose.server.yml -f infrastructure/docker-compose.full.yml up -d ${svcs[*]}
           docker compose -p mevana -f infrastructure/docker-compose.server.yml -f infrastructure/docker-compose.full.yml ps

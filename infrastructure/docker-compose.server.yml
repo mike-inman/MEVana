@@ -5,6 +5,7 @@
 services:
   zookeeper:
     image: confluentinc/cp-zookeeper:7.4.0
+    container_name: zookeeper-service
     environment:
       ZOOKEEPER_CLIENT_PORT: 2181
       ZOOKEEPER_TICK_TIME: 2000
@@ -26,14 +27,15 @@ services:
 
   kafka:
     image: confluentinc/cp-kafka:7.4.0
+    container_name: kafka-service
     depends_on:
       zookeeper:
         condition: service_healthy
     environment:
       KAFKA_BROKER_ID: 1
-      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
+      KAFKA_ZOOKEEPER_CONNECT: zookeeper-service:2181
       KAFKA_LISTENERS: PLAINTEXT://0.0.0.0:9092,PLAINTEXT_HOST://0.0.0.0:29092
-      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092,PLAINTEXT_HOST://localhost:29092
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka-service:9092,PLAINTEXT_HOST://localhost:29092
       KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
       KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
       KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"
@@ -50,7 +52,7 @@ services:
       timeout: 10s
       retries: 5
       start_period: 30s
-    # Publish external 29092 if you’ll access Kafka from outside the host
+    # Publish external 29092 if you'll access Kafka from outside the host
     ports:
       - "9092:9092"
       - "29092:29092"
@@ -59,13 +61,17 @@ services:
 
   kafka-ui:
     image: provectuslabs/kafka-ui:v0.7.2
+    container_name: kafka-ui-service
     depends_on:
       kafka:
         condition: service_healthy
     environment:
       - KAFKA_CLUSTERS_0_NAME=local
-      - KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS=kafka:9092
+      - KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS=kafka-service:9092
       - KAFKA_CLUSTERS_0_READONLY=false
+      - MANAGEMENT_ENDPOINTS_WEB_EXPOSURE_INCLUDE=prometheus,health,info
+      - MANAGEMENT_METRICS_EXPORT_PROMETHEUS_ENABLED=true
+      - MANAGEMENT_SERVER_PORT=8080
     healthcheck:
       test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8080"]
       interval: 30s
@@ -78,6 +84,7 @@ services:
 
   redis:
     image: redis:7-alpine
+    container_name: redis-service
     command: redis-server --appendonly yes --maxmemory 512mb --maxmemory-policy allkeys-lru
     healthcheck:
       test: ["CMD", "redis-cli", "--raw", "incr", "ping"]
@@ -91,6 +98,7 @@ services:
 
   postgres:
     image: postgres:15
+    container_name: postgres-service
     environment:
       - POSTGRES_USER=${POSTGRES_USER:-mev}
       - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-mevpassword}
@@ -112,6 +120,7 @@ services:
 
   adminer:
     image: adminer
+    container_name: adminer-service
     depends_on:
       postgres:
         condition: service_healthy
@@ -127,6 +136,7 @@ services:
 
   prometheus:
     image: prom/prometheus:latest
+    container_name: prometheus-service
     command:
       - '--config.file=/etc/prometheus/prometheus.yml'
       - '--storage.tsdb.path=/prometheus'
@@ -146,6 +156,7 @@ services:
 
   grafana:
     image: grafana/grafana:latest
+    container_name: grafana-service
     depends_on:
       prometheus:
         condition: service_healthy
@@ -169,6 +180,7 @@ services:
 
   hotpath-arb-engine:
     image: ghcr.io/mike-inman/mevana-hotpath-arb-engine:${MEVANA_TAG:-dev}
+    container_name: mevana-hotpath
     env_file:
       - .env
     depends_on:
@@ -181,9 +193,9 @@ services:
     environment:
       - RUST_LOG=info
       - METRICS_PORT=8088
-      - KAFKA_BROKER=kafka:9092
-      - REDIS_URL=redis://redis:6379/0
-      - DATABASE_URL=postgresql://mev:mevpassword@postgres:5432/mevdb
+      - KAFKA_BROKER=kafka-service:9092
+      - REDIS_URL=redis://redis-service:6379/0
+      - DATABASE_URL=postgresql://mev:mevpassword@postgres-service:5432/mevdb
       - GEYSER_ENDPOINT=${ENDPOINT:-https://grpc.ny.shyft.to}
       - X_TOKEN=${X_TOKEN}
     healthcheck:
@@ -192,6 +204,69 @@ services:
       timeout: 10s
       retries: 5
       start_period: 40s
+    networks: [mevana_net]
+    restart: unless-stopped
+
+  # Add missing services that were running on server
+  normalizer-service:
+    image: ghcr.io/mike-inman/mevana-normalizer-service:${MEVANA_TAG:-dev}
+    container_name: mevana-normalizer
+    env_file:
+      - .env
+    depends_on:
+      kafka:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+    environment:
+      - RUST_LOG=info
+      - METRICS_PORT=8085
+      - KAFKA_BROKER=kafka-service:9092
+      - DATABASE_URL=postgresql://mev:mevpassword@postgres-service:5432/mevdb
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:8085/metrics"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 40s
+    networks: [mevana_net]
+    restart: unless-stopped
+
+  discovery-service:
+    image: ghcr.io/mike-inman/mevana-discovery-service:${MEVANA_TAG:-dev}
+    container_name: mevana-discovery
+    env_file:
+      - .env
+    depends_on:
+      kafka:
+        condition: service_healthy
+    environment:
+      - RUST_LOG=info
+      - DISCOVERY_METRICS_PORT=9102
+      - KAFKA_BROKER=kafka-service:9092
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:9102/metrics"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 40s
+    networks: [mevana_net]
+    restart: unless-stopped
+
+  executor-service:
+    image: ghcr.io/mike-inman/mevana-executor-service:${MEVANA_TAG:-dev}
+    container_name: mevana-executor
+    env_file:
+      - .env
+    depends_on:
+      kafka:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+    environment:
+      - RUST_LOG=info
+      - KAFKA_BROKER=kafka-service:9092
+      - DATABASE_URL=postgresql://mev:mevpassword@postgres-service:5432/mevdb
     networks: [mevana_net]
     restart: unless-stopped
 

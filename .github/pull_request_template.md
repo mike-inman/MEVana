@@ -12,6 +12,7 @@ Repo conventions checklist
 - [ ] No archives/OS files/secrets committed
 - [ ] Path-agnostic scripts/commands where applicable
 - [ ] Docs in `docs/**` include a timestamp line (`Last updated:` or `Created:`)
+- [ ] Read docs/operations/SELF_HOSTED_DEPLOYMENT_GUIDE.md (confirm understanding of workflows & server paths)
 
 Testing
 - How you verified the change (local, CI, server)

@@ -114,10 +114,25 @@ jobs:
           MEVANA_TAG: ${{ steps.vars.outputs.tag }}
         run: |
           set -euo pipefail
-          svcs=( ${{ steps.vars.outputs.services }} )
           cd /opt/MEVana
-          docker compose -p mevana -f infrastructure/docker-compose.server.yml -f infrastructure/docker-compose.full.yml up -d ${svcs[*]}
-          docker compose -p mevana -f infrastructure/docker-compose.server.yml -f infrastructure/docker-compose.full.yml ps
+          # Persist the tag so Restart workflow can reuse it
+          echo "${MEVANA_TAG}" > /opt/MEVana/.mevana_tag
+          echo "Using MEVANA_TAG=${MEVANA_TAG} (persisted to /opt/MEVana/.mevana_tag)"
+
+          # Start infrastructure services first
+          echo "Starting infrastructure services..."
+          docker compose -f infrastructure/docker-compose.server.yml up -d prometheus grafana kafka redis postgres zookeeper kafka-ui adminer
+
+          # Wait for infrastructure to be healthy
+          echo "Waiting for infrastructure to be ready..."
+          sleep 10
+
+          # Start MEVana application services
+          echo "Starting MEVana application services..."
+          docker compose -f infrastructure/docker-compose.server.yml up -d hotpath-arb-engine normalizer-service discovery-service executor-service
+
+          # Show final status
+          docker compose -f infrastructure/docker-compose.server.yml ps
 
       - name: Quick health checks
         run: |
