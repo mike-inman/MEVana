@@ -3431,7 +3431,7 @@ async fn process_consolidated_geyser_stream(
         match message {
             Ok(msg) => {
                 if let Some(UpdateOneof::Transaction(transaction_update)) = msg.update_oneof {
-                    transaction_count += 1;
+                    _transaction_count += 1;
 
                     // Extract program IDs from the transaction
                     let program_ids = extract_program_ids(&transaction_update)?;
