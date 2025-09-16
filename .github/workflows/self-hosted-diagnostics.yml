@@ -1,4 +1,12 @@
-name: Self-Hosted Diagnostics
+name: Diagnostics (Self-Hosted)
+run-name: "Diagnostics (Self-Hosted): services=${{ inputs.services || 'default' }}"
+
+concurrency:
+  group: self-hosted-diagnostics-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
 
 on:
   workflow_dispatch:
@@ -43,4 +51,3 @@ jobs:
           echo "Grafana:"; curl -s -o /dev/null -w "%{http_code}\n" --connect-timeout 5 http://localhost:3000/api/health || true
           echo "Prometheus:"; curl -s -o /dev/null -w "%{http_code}\n" --connect-timeout 5 http://localhost:9090/-/healthy || true
           echo "Hotpath metrics head:"; curl -s --connect-timeout 5 http://localhost:8088/metrics | head -n 5 || true
-

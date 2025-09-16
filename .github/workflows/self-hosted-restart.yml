@@ -1,4 +1,12 @@
-name: Self-Hosted Restart
+name: Restart (Self-Hosted)
+run-name: "Restart (Self-Hosted): services=${{ inputs.services || 'default' }}"
+
+concurrency:
+  group: self-hosted-restart-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
 
 on:
   workflow_dispatch:
@@ -30,4 +38,3 @@ jobs:
           svcs=( ${{ steps.vars.outputs.services }} )
           docker compose -p mevana -f infrastructure/docker-compose.server.yml -f infrastructure/docker-compose.full.yml up -d ${svcs[*]}
           docker compose -p mevana -f infrastructure/docker-compose.server.yml -f infrastructure/docker-compose.full.yml ps
-

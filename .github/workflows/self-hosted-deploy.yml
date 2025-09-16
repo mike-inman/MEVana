@@ -1,24 +1,19 @@
-name: Self-Hosted Deploy
+name: Build and Deploy (Self-Hosted)
+run-name: "Build and Deploy (Self-Hosted): all app services, local build"
+
+concurrency:
+  group: self-hosted-deploy-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
 
 on:
   workflow_dispatch:
-    inputs:
-      services:
-        description: "Space-separated: hotpath normalizer discovery executor (empty = all app services)"
-        required: false
-        default: "hotpath"
-      build_locally:
-        description: "Build images locally on the server instead of pulling from GHCR"
-        required: false
-        default: "false"
-      mevana_tag:
-        description: "Override MEVANA_TAG (defaults to this commit SHA)"
-        required: false
-        default: ""
 
 jobs:
   deploy:
-    runs-on: self-hosted
+    runs-on: [self-hosted, Linux, X64]
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -26,49 +21,90 @@ jobs:
       - name: Ensure Docker network
         run: docker network create mevana_net 2>/dev/null || true
 
+      - name: Sync infrastructure to /opt/MEVana
+        run: |
+          set -euo pipefail
+          mkdir -p /opt/MEVana
+          rsync -a --delete infrastructure/ /opt/MEVana/infrastructure/
+
       - name: Write infra env (optional)
         if: ${{ secrets.HOTPATH_ENDPOINT != '' && secrets.HOTPATH_X_TOKEN != '' }}
         run: |
-          mkdir -p infrastructure
-          printf "ENDPOINT=%s\nX_TOKEN=%s\n" "${{ secrets.HOTPATH_ENDPOINT }}" "${{ secrets.HOTPATH_X_TOKEN }}" > infrastructure/.env
+          mkdir -p /opt/MEVana/infrastructure
+          printf "ENDPOINT=%s\nX_TOKEN=%s\n" "${{ secrets.HOTPATH_ENDPOINT }}" "${{ secrets.HOTPATH_X_TOKEN }}" > /opt/MEVana/infrastructure/.env
 
-      - name: Resolve services and tag
+      - name: Resolve tag
         id: vars
         shell: bash
         run: |
-          set -e
-          # Map short names to compose service names
-          map_service(){ case "$1" in hotpath) echo hotpath-arb-engine;; normalizer) echo normalizer-service;; discovery) echo discovery-service;; executor) echo executor-service;; *) echo "$1";; esac; }
-          S="${{ github.event.inputs.services }}"; OUT=()
-          if [ -n "$S" ]; then
-            for sv in $S; do OUT+=("$(map_service "$sv")"); done
-          else
-            OUT=(hotpath-arb-engine normalizer-service discovery-service executor-service)
-          fi
-          echo "services=${OUT[*]}" >> "$GITHUB_OUTPUT"
-          TAG="${{ github.event.inputs.mevana_tag }}"; if [ -z "$TAG" ]; then TAG="${GITHUB_SHA}"; fi
-          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          set -euo pipefail
+          echo "services=hotpath-arb-engine normalizer-service discovery-service executor-service" >> "$GITHUB_OUTPUT"
+          echo "tag=${GITHUB_SHA}" >> "$GITHUB_OUTPUT"
 
-      - name: Docker login GHCR (pull mode)
-        if: ${{ github.event.inputs.build_locally != 'true' && secrets.GHCR_USERNAME != '' && secrets.GHCR_TOKEN != '' }}
-        run: echo "${{ secrets.GHCR_TOKEN }}" | docker login ghcr.io -u "${{ secrets.GHCR_USERNAME }}" --password-stdin
+      # We always build locally on the server to avoid registry/auth issues
 
-      - name: Build locally (optional)
-        if: ${{ github.event.inputs.build_locally == 'true' }}
+      - name: Build locally (explicit per-service)
+        env:
+          TAG: ${{ steps.vars.outputs.tag }}
         run: |
-          # Build only the requested services; default Dockerfiles are in crates/* where applicable
-          set -e
+          set -euo pipefail
           svcs=( ${{ steps.vars.outputs.services }} )
           if [ ${#svcs[@]} -eq 0 ]; then svcs=(hotpath-arb-engine normalizer-service discovery-service executor-service); fi
-          # Build with compose so build contexts resolve correctly
-          docker compose -f infrastructure/docker-compose.server.yml -f infrastructure/docker-compose.full.yml build ${svcs[*]}
+
+          build_one() {
+            local svc="$1"; local tag="$2"; local img=""; local df="";
+            case "$svc" in
+              hotpath-arb-engine)
+                img="ghcr.io/mike-inman/mevana-hotpath-arb-engine:${tag}";
+                df="crates/hotpath_arb_engine/Dockerfile";
+                ;;
+              normalizer-service)
+                img="ghcr.io/mike-inman/mevana-normalizer-service:${tag}";
+                df="crates/normalizer-service/Dockerfile";
+                ;;
+              discovery-service)
+                img="ghcr.io/mike-inman/mevana-discovery-service:${tag}";
+                df="crates/discovery-service/Dockerfile";
+                ;;
+              executor-service)
+                img="ghcr.io/mike-inman/mevana-executor-service:${tag}";
+                df="crates/executor-service/executor-service.Dockerfile";
+                ;;
+              edge-assembler)
+                img="ghcr.io/mike-inman/mevana-edge-assembler:${tag}";
+                df="crates/edge-assembler/Dockerfile";
+                ;;
+              arb-engine)
+                img="ghcr.io/mike-inman/mevana-arb-engine:${tag}";
+                df="crates/arb-engine/Dockerfile";
+                ;;
+              token-registry-service)
+                img="ghcr.io/mike-inman/mevana-token-registry-service:${tag}";
+                df="crates/token-registry-service/Dockerfile";
+                ;;
+              monitoring-service)
+                img="ghcr.io/mike-inman/mevana-monitoring-service:${tag}";
+                df="crates/monitoring-service/Dockerfile";
+                ;;
+              *)
+                echo "Unknown service '$svc' — skipping local build" >&2; return 0;
+                ;;
+            esac
+            echo "Building $svc -> $img using $df";
+            docker build -t "$img" -f "$df" .
+          }
+
+          for s in "${svcs[@]}"; do
+            build_one "$s" "$TAG"
+          done
 
       - name: Deploy (compose up)
         env:
           MEVANA_TAG: ${{ steps.vars.outputs.tag }}
         run: |
-          set -e
+          set -euo pipefail
           svcs=( ${{ steps.vars.outputs.services }} )
+          cd /opt/MEVana
           docker compose -p mevana -f infrastructure/docker-compose.server.yml -f infrastructure/docker-compose.full.yml up -d ${svcs[*]}
           docker compose -p mevana -f infrastructure/docker-compose.server.yml -f infrastructure/docker-compose.full.yml ps
 
@@ -78,4 +114,3 @@ jobs:
           echo "Grafana:"; curl -s -o /dev/null -w "%{http_code}\n" --connect-timeout 5 http://localhost:3000/api/health || true
           echo "Prometheus:"; curl -s -o /dev/null -w "%{http_code}\n" --connect-timeout 5 http://localhost:9090/-/healthy || true
           echo "Hotpath metrics head:"; curl -s --connect-timeout 5 http://localhost:8088/metrics | head -n 5 || true
-
