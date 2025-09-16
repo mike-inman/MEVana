@@ -2956,8 +2956,9 @@ impl HotPathArbitrageEngine {
         };
 
         // ZERO-LATENCY: Read configuration from atomic cache instead of hardcoded values
-        let min_profit = HOT_PATH_CONFIG.min_profit_bps.load(Ordering::Relaxed);
-        let max_profit = HOT_PATH_CONFIG.max_profit_bps.load(Ordering::Relaxed);
+        let store = get_property_store();
+        let min_profit = store.get_atomic_i32("min_profit_bps").unwrap_or(5);
+        let max_profit = store.get_atomic_i32("max_profit_bps").unwrap_or(100);
 
         let account_count = message.account_keys.len();
 
@@ -2986,7 +2987,7 @@ impl HotPathArbitrageEngine {
         }
 
         // Even if no accounts, use min_profit from atomic cache
-        let fallback_profit = HOT_PATH_CONFIG.min_profit_bps.load(Ordering::Relaxed);
+        let fallback_profit = store.get_atomic_i32("min_profit_bps").unwrap_or(5);
         Ok((
             fallback_profit,
             ("ANY_TOKEN".to_string(), "ANY_TOKEN".to_string()),
@@ -4271,29 +4272,24 @@ Security Status: 🟢 HEALTHY
 /// Updates hot path configuration in real-time based on database events
 /// Zero-latency atomic updates ensure no locks or delays in hotpath
 async fn update_hot_path_config(update: ConfigUpdate) {
+    let store = get_property_store();
     match update.parameter.as_str() {
         "min_profit_bps" => {
             if let Some(val) = update.value.as_i64() {
-                HOT_PATH_CONFIG
-                    .min_profit_bps
-                    .store(val as i32, Ordering::Relaxed);
+                let _ = store.set_atomic_i32("min_profit_bps", val as i32, PropertySource::DatabaseLoad);
                 info!("🔥 HOT_PATH_CONFIG updated: min_profit_bps = {} bps", val);
             }
         }
         "max_profit_bps" => {
             if let Some(val) = update.value.as_i64() {
-                HOT_PATH_CONFIG
-                    .max_profit_bps
-                    .store(val as i32, Ordering::Relaxed);
+                let _ = store.set_atomic_i32("max_profit_bps", val as i32, PropertySource::DatabaseLoad);
                 info!("🔥 HOT_PATH_CONFIG updated: max_profit_bps = {} bps", val);
             }
         }
         "min_net_profit_sol" => {
             if let Some(val) = update.value.as_f64() {
                 let lamports = (val * 1_000_000_000.0) as u64;
-                HOT_PATH_CONFIG
-                    .min_net_profit_sol
-                    .store(lamports, Ordering::Relaxed);
+                let _ = store.set_atomic_u64("min_net_profit_lamports", lamports, PropertySource::DatabaseLoad);
                 info!(
                     "🔥 HOT_PATH_CONFIG updated: min_net_profit_sol = {} SOL ({} lamports)",
                     val, lamports
@@ -4302,34 +4298,19 @@ async fn update_hot_path_config(update: ConfigUpdate) {
         }
         "min_venue_success_rate" => {
             if let Some(val) = update.value.as_f64() {
-                let scaled = (val * 10000.0) as u64; // Store 0.75 as 7500
-                HOT_PATH_CONFIG
-                    .min_venue_success_rate
-                    .store(scaled, Ordering::Relaxed);
-                info!(
-                    "🔥 HOT_PATH_CONFIG updated: min_venue_success_rate = {}% ({} scaled)",
-                    val * 100.0,
-                    scaled
-                );
+                let _ = store.set_atomic_f64("min_venue_success_rate", val, PropertySource::DatabaseLoad);
+                info!("🔥 HOT_PATH_CONFIG updated: min_venue_success_rate = {}%", val * 100.0);
             }
         }
         "max_gas_budget_pct" => {
             if let Some(val) = update.value.as_f64() {
-                let scaled = (val * 100.0) as u64; // Store 80.0 as 8000
-                HOT_PATH_CONFIG
-                    .max_gas_budget_pct
-                    .store(scaled, Ordering::Relaxed);
-                info!(
-                    "🔥 HOT_PATH_CONFIG updated: max_gas_budget_pct = {}% ({} scaled)",
-                    val, scaled
-                );
+                let _ = store.set_atomic_f64("max_gas_budget_pct", val, PropertySource::DatabaseLoad);
+                info!("🔥 HOT_PATH_CONFIG updated: max_gas_budget_pct = {}%", val);
             }
         }
         "max_concurrent_opportunities" => {
             if let Some(val) = update.value.as_i64() {
-                HOT_PATH_CONFIG
-                    .max_concurrent_opportunities
-                    .store(val as u32, Ordering::Relaxed);
+                let _ = store.set_atomic_u32("max_concurrent_opportunities", val as u32, PropertySource::DatabaseLoad);
                 info!(
                     "🔥 HOT_PATH_CONFIG updated: max_concurrent_opportunities = {}",
                     val
@@ -4338,9 +4319,7 @@ async fn update_hot_path_config(update: ConfigUpdate) {
         }
         "competition_lookback_ms" => {
             if let Some(val) = update.value.as_i64() {
-                HOT_PATH_CONFIG
-                    .competition_lookback_ms
-                    .store(val as u64, Ordering::Relaxed);
+                let _ = store.set_atomic_u64("competition_lookback_ms", val as u64, PropertySource::DatabaseLoad);
                 info!(
                     "🔥 HOT_PATH_CONFIG updated: competition_lookback_ms = {} ms",
                     val
@@ -4349,21 +4328,13 @@ async fn update_hot_path_config(update: ConfigUpdate) {
         }
         "learning_rate" => {
             if let Some(val) = update.value.as_f64() {
-                let scaled = (val * 10000.0) as u64; // Store 0.1 as 1000
-                HOT_PATH_CONFIG
-                    .learning_rate
-                    .store(scaled, Ordering::Relaxed);
-                info!(
-                    "🔥 HOT_PATH_CONFIG updated: learning_rate = {} ({} scaled)",
-                    val, scaled
-                );
+                let _ = store.set_atomic_f64("learning_rate", val, PropertySource::DatabaseLoad);
+                info!("🔥 HOT_PATH_CONFIG updated: learning_rate = {}", val);
             }
         }
         "min_samples_for_learning" => {
             if let Some(val) = update.value.as_i64() {
-                HOT_PATH_CONFIG
-                    .min_samples_for_learning
-                    .store(val as u64, Ordering::Relaxed);
+                let _ = store.set_atomic_u64("min_samples_for_learning", val as u64, PropertySource::DatabaseLoad);
                 info!(
                     "🔥 HOT_PATH_CONFIG updated: min_samples_for_learning = {}",
                     val
