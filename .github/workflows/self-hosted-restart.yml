@@ -18,7 +18,7 @@ on:
 
 jobs:
   restart:
-    runs-on: self-hosted
+    runs-on: [self-hosted, Linux, X64]
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -34,7 +34,8 @@ jobs:
 
       - name: Restart services (compose up -d)
         run: |
-          set -e
+          set -euo pipefail
           svcs=( ${{ steps.vars.outputs.services }} )
+          cd /opt/MEVana
           docker compose -p mevana -f infrastructure/docker-compose.server.yml -f infrastructure/docker-compose.full.yml up -d ${svcs[*]}
           docker compose -p mevana -f infrastructure/docker-compose.server.yml -f infrastructure/docker-compose.full.yml ps

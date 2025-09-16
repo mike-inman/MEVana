@@ -18,13 +18,14 @@ on:
 
 jobs:
   diag:
-    runs-on: self-hosted
+    runs-on: [self-hosted, Linux, X64]
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
       - name: Compose status
         run: |
+          cd /opt/MEVana
           docker compose -p mevana -f infrastructure/docker-compose.server.yml -f infrastructure/docker-compose.full.yml ps || true
 
       - name: Resolve services

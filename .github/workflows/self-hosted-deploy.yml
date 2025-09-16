@@ -29,14 +29,19 @@ jobs:
 
       - name: Write infra env (optional)
         env:
-          HOTPATH_ENDPOINT: ${{ secrets.HOTPATH_ENDPOINT }}
-          HOTPATH_X_TOKEN: ${{ secrets.HOTPATH_X_TOKEN }}
+          EP_A: ${{ secrets.HOTPATH_ENDPOINT }}
+          EP_B: ${{ secrets.ENDPOINT }}
+          XT_A: ${{ secrets.HOTPATH_X_TOKEN }}
+          XT_B: ${{ secrets.X_TOKEN }}
         run: |
-          if [ -n "$HOTPATH_ENDPOINT" ] && [ -n "$HOTPATH_X_TOKEN" ]; then
-            mkdir -p /opt/MEVana/infrastructure
-            printf "ENDPOINT=%s\nX_TOKEN=%s\n" "$HOTPATH_ENDPOINT" "$HOTPATH_X_TOKEN" > /opt/MEVana/infrastructure/.env
+          EP="${EP_A:-${EP_B:-}}"
+          XT="${XT_A:-${XT_B:-}}"
+          if [ -n "$EP" ] && [ -n "$XT" ]; then
+            mkdir -p /opt/MEVana /opt/MEVana/infrastructure
+            printf "ENDPOINT=%s\nX_TOKEN=%s\n" "$EP" "$XT" | tee /opt/MEVana/infrastructure/.env > /opt/MEVana/.env
+            echo "Wrote /opt/MEVana/.env and /opt/MEVana/infrastructure/.env"
           else
-            echo "Skipping infra .env write (HOTPATH secrets not set)"
+            echo "Skipping infra .env write (ENDPOINT/X_TOKEN secrets not set)"
           fi
 
       - name: Resolve tag
