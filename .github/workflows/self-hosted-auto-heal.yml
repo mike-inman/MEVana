@@ -1,0 +1,93 @@
+name: Auto-Heal (Self-Hosted)
+run-name: "Auto-Heal (Self-Hosted): env, targets, restarts"
+
+on:
+  workflow_dispatch:
+
+concurrency:
+  group: self-hosted-auto-heal-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  heal:
+    runs-on: [self-hosted, Linux, X64]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Ensure canonical path
+        run: |
+          set -euo pipefail
+          test -d /opt/MEVana
+          cd /opt/MEVana
+          pwd
+
+      - name: Ensure env files (ENDPOINT/X_TOKEN)
+        env:
+          EP_A: ${{ secrets.HOTPATH_ENDPOINT }}
+          EP_B: ${{ secrets.ENDPOINT }}
+          XT_A: ${{ secrets.HOTPATH_X_TOKEN }}
+          XT_B: ${{ secrets.X_TOKEN }}
+        run: |
+          set -euo pipefail
+          EP="${EP_A:-${EP_B:-}}"; XT="${XT_A:-${XT_B:-}}"
+          if [ -n "$EP" ] && [ -n "$XT" ]; then
+            mkdir -p /opt/MEVana /opt/MEVana/infrastructure
+            printf "ENDPOINT=%s\nX_TOKEN=%s\n" "$EP" "$XT" | tee /opt/MEVana/infrastructure/.env > /opt/MEVana/.env
+            echo "Wrote /opt/MEVana/.env and /opt/MEVana/infrastructure/.env"
+          else
+            echo "Warning: ENDPOINT/X_TOKEN secrets not set; skipping .env write"
+          fi
+
+      - name: Load last tag (MEVANA_TAG)
+        id: tag
+        run: |
+          set -euo pipefail
+          if [ -f /opt/MEVana/.mevana_tag ]; then
+            echo "tag=$(cat /opt/MEVana/.mevana_tag)" >> "$GITHUB_OUTPUT"
+            echo "Using persisted tag: $(cat /opt/MEVana/.mevana_tag)"
+          else
+            echo "tag=${GITHUB_SHA}" >> "$GITHUB_OUTPUT"
+            echo "Persisted tag missing; falling back to workflow SHA"
+          fi
+
+      - name: Restart critical services
+        env:
+          MEVANA_TAG: ${{ steps.tag.outputs.tag }}
+        run: |
+          set -euo pipefail
+          cd /opt/MEVana
+          echo "$MEVANA_TAG" > /opt/MEVana/.mevana_tag
+          # Restart services likely to need env/tag updates
+          docker compose -p mevana -f infrastructure/docker-compose.server.yml -f infrastructure/docker-compose.full.yml up -d hotpath-arb-engine kafka-ui prometheus
+          docker compose -p mevana -f infrastructure/docker-compose.server.yml -f infrastructure/docker-compose.full.yml ps
+
+      - name: Prometheus targets (hotpath/kafka-ui)
+        run: |
+          set +e
+          echo "--- Prometheus active targets (hotpath) ---"
+          curl -s http://localhost:9090/api/v1/targets | jq -r '.data.activeTargets[] | select(.labels.job=="hotpath-arb-engine") | (.health + " " + .discoveredLabels.__address__ + " " + .scrapeUrl)'
+          echo "--- Prometheus active targets (kafka-ui) ---"
+          curl -s http://localhost:9090/api/v1/targets | jq -r '.data.activeTargets[] | select(.labels.job=="kafka-ui") | (.health + " " + .discoveredLabels.__address__ + " " + .scrapeUrl)'
+
+      - name: Curl from Prometheus → hotpath/kafka-ui
+        run: |
+          set +e
+          pcid=$(docker ps --format '{{.ID}} {{.Names}}' | awk '/prometheus/{print $1; exit}')
+          if [ -n "$pcid" ]; then
+            echo "--- curl hotpath:8088/metrics (head) ---"
+            docker exec "$pcid" sh -lc 'curl -s --connect-timeout 5 http://hotpath-arb-engine:8088/metrics | head -n 10' || true
+            echo "--- curl kafka-ui:8080/actuator/prometheus (head) ---"
+            docker exec "$pcid" sh -lc 'curl -s --connect-timeout 5 http://kafka-ui:8080/actuator/prometheus | head -n 10' || true
+          fi
+
+      - name: Tail logs (executor/normalizer)
+        run: |
+          set +e
+          for s in mevana-executor-service-1 mevana-normalizer-service-1; do
+            echo "--- LOGS: $s ---"; docker logs --tail=120 "$s" 2>&1 | tail -n 120 || true
+          done
+
