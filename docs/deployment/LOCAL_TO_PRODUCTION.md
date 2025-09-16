@@ -212,7 +212,7 @@ services:
     volumes:
       - grafana-data:/var/lib/grafana
       - ./monitoring/grafana/provisioning:/etc/grafana/provisioning
-      - ./monitoring/grafana/dashboards:/var/lib/grafana/dashboards
+      - ./infrastructure/grafana/dashboards:/var/lib/grafana/dashboards
     depends_on:
       - prometheus
     healthcheck:

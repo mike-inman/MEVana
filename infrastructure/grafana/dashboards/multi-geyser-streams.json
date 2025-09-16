@@ -1,0 +1,258 @@
+{
+  "dashboard": {
+    "id": null,
+    "title": "Multi-Geyser Streams Dashboard",
+    "tags": ["mevana", "geyser", "dex", "streams"],
+    "style": "dark",
+    "timezone": "browser",
+    "refresh": "5s",
+    "time": {
+      "from": "now-1h",
+      "to": "now"
+    },
+    "panels": [
+      {
+        "id": 1,
+        "title": "Stream Health Status",
+        "type": "stat",
+        "targets": [
+          {
+            "expr": "up{job=\"multi-geyser-streams\"}",
+            "legendFormat": "Service Up"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "color": {
+              "mode": "thresholds"
+            },
+            "thresholds": {
+              "steps": [
+                {"color": "red", "value": null},
+                {"color": "green", "value": 1}
+              ]
+            }
+          }
+        },
+        "gridPos": {"h": 6, "w": 6, "x": 0, "y": 0}
+      },
+      {
+        "id": 2,
+        "title": "Total Transactions Per Stream",
+        "type": "timeseries",
+        "targets": [
+          {
+            "expr": "rate(geyser_transactions_processed_total[1m])",
+            "legendFormat": "Stream {{stream_id}} TPS"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "unit": "reqps",
+            "min": 0
+          }
+        },
+        "gridPos": {"h": 8, "w": 12, "x": 6, "y": 0}
+      },
+      {
+        "id": 3,
+        "title": "Stream Throughput Comparison",
+        "type": "bargauge",
+        "targets": [
+          {
+            "expr": "increase(geyser_transactions_processed_total[5m])",
+            "legendFormat": "Stream {{stream_id}}"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "color": {"mode": "palette-classic"},
+            "unit": "short"
+          }
+        },
+        "gridPos": {"h": 6, "w": 6, "x": 18, "y": 0}
+      },
+      {
+        "id": 4,
+        "title": "DEX Transaction Distribution",
+        "type": "piechart",
+        "targets": [
+          {
+            "expr": "increase(geyser_transactions_successful_total[10m])",
+            "legendFormat": "{{dex_name}}"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "color": {"mode": "palette-classic"}
+          }
+        },
+        "gridPos": {"h": 8, "w": 8, "x": 0, "y": 8}
+      },
+      {
+        "id": 5,
+        "title": "Transaction Processing Latency",
+        "type": "timeseries",
+        "targets": [
+          {
+            "expr": "histogram_quantile(0.50, rate(geyser_transaction_processing_time_us_bucket[5m]))",
+            "legendFormat": "p50"
+          },
+          {
+            "expr": "histogram_quantile(0.95, rate(geyser_transaction_processing_time_us_bucket[5m]))",
+            "legendFormat": "p95"
+          },
+          {
+            "expr": "histogram_quantile(0.99, rate(geyser_transaction_processing_time_us_bucket[5m]))",
+            "legendFormat": "p99"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "unit": "µs",
+            "min": 0
+          }
+        },
+        "gridPos": {"h": 8, "w": 8, "x": 8, "y": 8}
+      },
+      {
+        "id": 6,
+        "title": "Error Rates by Stream",
+        "type": "timeseries",
+        "targets": [
+          {
+            "expr": "rate(geyser_transactions_failed_total[1m])",
+            "legendFormat": "Stream {{stream_id}} Errors"
+          },
+          {
+            "expr": "rate(geyser_stream_errors_total[1m])",
+            "legendFormat": "Stream {{stream_id}} gRPC Errors"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "unit": "reqps",
+            "color": {"mode": "palette-classic"}
+          }
+        },
+        "gridPos": {"h": 8, "w": 8, "x": 16, "y": 8}
+      },
+      {
+        "id": 7,
+        "title": "Jupiter Stream Metrics",
+        "type": "timeseries",
+        "targets": [
+          {
+            "expr": "rate(geyser_transactions_successful_total{stream_id=\"1\"}[1m])",
+            "legendFormat": "{{dex_name}}"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "unit": "reqps",
+            "color": {"mode": "continuous-GrYlRd"}
+          }
+        },
+        "gridPos": {"h": 6, "w": 8, "x": 0, "y": 16}
+      },
+      {
+        "id": 8,
+        "title": "Orca+Whirlpool Stream Metrics", 
+        "type": "timeseries",
+        "targets": [
+          {
+            "expr": "rate(geyser_transactions_successful_total{stream_id=\"2\"}[1m])",
+            "legendFormat": "{{dex_name}}"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "unit": "reqps",
+            "color": {"mode": "continuous-BlPu"}
+          }
+        },
+        "gridPos": {"h": 6, "w": 8, "x": 8, "y": 16}
+      },
+      {
+        "id": 9,
+        "title": "Other DEXs Stream Metrics",
+        "type": "timeseries", 
+        "targets": [
+          {
+            "expr": "rate(geyser_transactions_successful_total{stream_id=\"3\"}[1m])",
+            "legendFormat": "{{dex_name}}"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "unit": "reqps",
+            "color": {"mode": "continuous-RdYlGr"}
+          }
+        },
+        "gridPos": {"h": 6, "w": 8, "x": 16, "y": 16}
+      },
+      {
+        "id": 10,
+        "title": "Stream Health Check",
+        "type": "table",
+        "targets": [
+          {
+            "expr": "geyser_transactions_processed_total",
+            "legendFormat": "",
+            "format": "table",
+            "instant": true
+          }
+        ],
+        "transformations": [
+          {
+            "id": "organize",
+            "options": {
+              "excludeByName": {"Time": true, "__name__": true},
+              "renameByName": {
+                "stream_id": "Stream ID",
+                "Value": "Total Processed"
+              }
+            }
+          }
+        ],
+        "gridPos": {"h": 8, "w": 12, "x": 0, "y": 22}
+      },
+      {
+        "id": 11,
+        "title": "Live Transaction Feed",
+        "type": "logs",
+        "targets": [
+          {
+            "expr": "{job=\"multi-geyser-streams\"}",
+            "refId": "A"
+          }
+        ],
+        "gridPos": {"h": 8, "w": 12, "x": 12, "y": 22}
+      }
+    ],
+    "templating": {
+      "list": [
+        {
+          "name": "stream_id",
+          "type": "query",
+          "query": "label_values(geyser_transactions_processed_total, stream_id)",
+          "refresh": 1,
+          "includeAll": true,
+          "multi": true
+        }
+      ]
+    },
+    "annotations": {
+      "list": [
+        {
+          "name": "Deployments",
+          "datasource": "-- Grafana --",
+          "enable": true,
+          "iconColor": "green",
+          "tags": ["deploy"]
+        }
+      ]
+    },
+    "version": 1
+  }
+}

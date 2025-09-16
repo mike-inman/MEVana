@@ -494,7 +494,7 @@ Each service exposes metrics at `/metrics`:
 - Transaction processing rates
 
 ### Grafana Dashboards
-Import dashboards from `monitoring/grafana/dashboards/`:
+Import dashboards from `infrastructure/grafana/dashboards/`:
 - Service health overview
 - Performance metrics
 - CPU pinning effectiveness
