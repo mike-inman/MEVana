@@ -107,7 +107,7 @@ impl WebSocketBroadcaster {
 
     /// Start the background task that listens for property changes and broadcasts them
     pub async fn start_property_broadcasting(&mut self) {
-        let clients = Arc::clone(&self.clients);
+        let _clients = Arc::clone(&self.clients);
         let broadcast_sender = self.broadcast_sender.clone();
 
         tokio::spawn(async move {
@@ -187,9 +187,9 @@ impl WebSocketBroadcaster {
         };
 
         if let Ok(msg_json) = serde_json::to_string(&initial_message) {
-            if let Err(e) = ws_sender.send(Message::Text(msg_json)).await {
-                warn!("Failed to send initial property list to client {}: {}", client_id, e);
-            }
+                if let Err(e) = ws_sender.lock().await.send(Message::Text(msg_json)).await {
+                    warn!("Failed to send initial property list to client {}: {}", client_id, e);
+                }
         }
 
         // Spawn task to handle outgoing messages (property broadcasts)
