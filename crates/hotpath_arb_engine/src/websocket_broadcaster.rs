@@ -438,7 +438,12 @@ pub async fn websocket_handler(
     let client_id = Uuid::new_v4().to_string();
 
     ws.on_upgrade(move |socket| {
-        broadcaster.handle_websocket_connection(socket, client_id)
+        // Move the Arc into the async task to satisfy lifetime requirements
+        let broadcaster = Arc::clone(&broadcaster);
+        let client_id = client_id;
+        async move {
+            broadcaster.handle_websocket_connection(socket, client_id).await;
+        }
     })
 }
 
