@@ -176,7 +176,9 @@ impl WebSocketBroadcaster {
         info!("🔌 WebSocket client connected: {}", client_id);
         metrics::counter!("websocket_connections_total").increment(1);
 
-        let (mut ws_sender, mut ws_receiver) = websocket.split();
+        let (ws_sender, mut ws_receiver) = websocket.split();
+        // Wrap sender in Arc<Mutex<..>> so both tasks can send safely
+        let ws_sender = Arc::new(tokio::sync::Mutex::new(ws_sender));
 
         // Send initial property list to new client
         let all_properties = get_property_store().get_all_properties().await;
@@ -193,6 +195,7 @@ impl WebSocketBroadcaster {
         // Spawn task to handle outgoing messages (property broadcasts)
         let client_id_out = client_id.clone();
         let clients_out = Arc::clone(&clients);
+        let ws_sender_out = Arc::clone(&ws_sender);
         let outgoing_task = tokio::spawn(async move {
             while let Ok(broadcast_msg) = broadcast_receiver.recv().await {
                 // Check if client is still connected and subscribed to this property
@@ -213,7 +216,7 @@ impl WebSocketBroadcaster {
 
                 if should_send {
                     if let Ok(msg_json) = serde_json::to_string(&broadcast_msg) {
-                        if let Err(e) = ws_sender.send(Message::Text(msg_json)).await {
+                        if let Err(e) = ws_sender_out.lock().await.send(Message::Text(msg_json)).await {
                             debug!("WebSocket send failed for client {}: {}", client_id_out, e);
                             break;
                         }
@@ -237,7 +240,7 @@ impl WebSocketBroadcaster {
                                 };
 
                                 if let Ok(error_json) = serde_json::to_string(&error_response) {
-                                    let _ = ws_sender.send(Message::Text(error_json)).await;
+                                    let _ = ws_sender.lock().await.send(Message::Text(error_json)).await;
                                 }
                             }
                         }

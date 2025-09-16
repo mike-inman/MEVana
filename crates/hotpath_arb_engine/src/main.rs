@@ -74,7 +74,7 @@ use wallet_security::{SecurityPolicy, WalletSecurityManager};
 use async_history_buffer::{
     create_arbitrage_opportunity, create_execution_result, AsyncHistoryBuffer,
 };
-use crate::orderbook_tracker::{create_arbitrage_event, ARBITRAGE_DETECTED};
+use hotpath_arb_engine::orderbook_tracker::{create_arbitrage_event, ARBITRAGE_DETECTED};
 use hotpath_arb_engine::smart_filter::{SmartFilter, SmartFilterConfig};
 use sqlx::{postgres::PgListener, PgPool};
 
@@ -94,7 +94,7 @@ mod marginfi_instructions;
 mod orderbook_tracker;
 mod transaction_templates;
 use flash_loan_integration::FlashLoanProvider;
-use crate::orderbook_tracker::ArbitrageEvent;
+use hotpath_arb_engine::orderbook_tracker::ArbitrageEvent;
 use hotpath_arb_engine::smart_filter::SmartOpportunity;
 use transaction_templates::TransactionTemplateCache;
 
