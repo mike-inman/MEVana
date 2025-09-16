@@ -179,15 +179,14 @@ impl WebSocketBroadcaster {
         let (mut ws_sender, mut ws_receiver) = websocket.split();
 
         // Send initial property list to new client
-        if let Ok(all_properties) = get_property_store().get_all_properties().await {
-            let initial_message = PropertyBroadcastMessage::PropertyList {
-                properties: all_properties,
-            };
+        let all_properties = get_property_store().get_all_properties().await;
+        let initial_message = PropertyBroadcastMessage::PropertyList {
+            properties: all_properties,
+        };
 
-            if let Ok(msg_json) = serde_json::to_string(&initial_message) {
-                if let Err(e) = ws_sender.send(Message::Text(msg_json)).await {
-                    warn!("Failed to send initial property list to client {}: {}", client_id, e);
-                }
+        if let Ok(msg_json) = serde_json::to_string(&initial_message) {
+            if let Err(e) = ws_sender.send(Message::Text(msg_json)).await {
+                warn!("Failed to send initial property list to client {}: {}", client_id, e);
             }
         }
 
