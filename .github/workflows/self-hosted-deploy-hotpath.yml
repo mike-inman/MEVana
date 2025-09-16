@@ -1,0 +1,76 @@
+name: Deploy Hotpath Only (Self-Hosted)
+run-name: "Deploy Hotpath Only (Self-Hosted): local build"
+
+on:
+  workflow_dispatch:
+
+concurrency:
+  group: self-hosted-deploy-hotpath-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  deploy:
+    runs-on: [self-hosted, Linux, X64]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Ensure Docker network
+        run: docker network create mevana_net 2>/dev/null || true
+
+      - name: Sync infrastructure to /opt/MEVana
+        run: |
+          set -euo pipefail
+          mkdir -p /opt/MEVana
+          rsync -a --delete infrastructure/ /opt/MEVana/infrastructure/
+
+      - name: Write infra env (ENDPOINT/X_TOKEN)
+        env:
+          EP_A: ${{ secrets.HOTPATH_ENDPOINT }}
+          EP_B: ${{ secrets.ENDPOINT }}
+          XT_A: ${{ secrets.HOTPATH_X_TOKEN }}
+          XT_B: ${{ secrets.X_TOKEN }}
+        run: |
+          EP="${EP_A:-${EP_B:-}}"
+          XT="${XT_A:-${XT_B:-}}"
+          if [ -n "$EP" ] && [ -n "$XT" ]; then
+            mkdir -p /opt/MEVana /opt/MEVana/infrastructure
+            printf "ENDPOINT=%s\nX_TOKEN=%s\n" "$EP" "$XT" | tee /opt/MEVana/infrastructure/.env > /opt/MEVana/.env
+            echo "Wrote /opt/MEVana/.env and /opt/MEVana/infrastructure/.env"
+          else
+            echo "Warning: ENDPOINT/X_TOKEN not set in repo secrets; hotpath may not connect"
+          fi
+
+      - name: Resolve tag
+        id: vars
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "tag=${GITHUB_SHA}" >> "$GITHUB_OUTPUT"
+
+      - name: Build hotpath locally (Linux)
+        env:
+          TAG: ${{ steps.vars.outputs.tag }}
+        run: |
+          set -euo pipefail
+          echo "Building hotpath-arb-engine -> ghcr.io/mike-inman/mevana-hotpath-arb-engine:${TAG}"
+          docker build -t ghcr.io/mike-inman/mevana-hotpath-arb-engine:${TAG} -f crates/hotpath_arb_engine/Dockerfile .
+
+      - name: Deploy hotpath
+        env:
+          MEVANA_TAG: ${{ steps.vars.outputs.tag }}
+        run: |
+          set -euo pipefail
+          cd /opt/MEVana
+          echo "${MEVANA_TAG}" > /opt/MEVana/.mevana_tag
+          docker compose -p mevana -f infrastructure/docker-compose.server.yml -f infrastructure/docker-compose.full.yml up -d hotpath-arb-engine
+          docker compose -p mevana -f infrastructure/docker-compose.server.yml -f infrastructure/docker-compose.full.yml ps
+
+      - name: Quick HTTP checks (hotpath)
+        run: |
+          set +e
+          echo "Hotpath metrics head:"; curl -s --connect-timeout 5 http://localhost:8088/metrics | head -n 10 || true
+
