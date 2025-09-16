@@ -1384,7 +1384,7 @@ impl HotPathArbitrageEngine {
 
                 // TODO: Initialize ExecutionOrchestrator when ready
                 // For now, simulate execution to test the pipeline
-                let execution_mode = ExecutionMode::Test {
+                let _execution_mode = ExecutionMode::Test {
                     simulate_success_rate: 0.85,
                     simulate_latency_ms: 250,
                     enable_logging: true,
@@ -1407,7 +1407,7 @@ impl HotPathArbitrageEngine {
                     );
 
                     // Call execute_live_trade to trigger event bus logging
-                    let trade_details = format!(
+                    let _trade_details = format!(
                         "SIMULATED_SUCCESS: {} - profit: {}bps, size: {}, time: {}ms",
                         opportunity.opportunity_id,
                         opportunity.profit_bps,
@@ -3423,7 +3423,7 @@ async fn process_consolidated_geyser_stream(
         info!("✅ Stream {} metrics initialized", config.id);
     }
 
-    let mut transaction_count = 0u64;
+    let mut _transaction_count = 0u64;
     info!("🎯 Consolidated stream: Starting message processing loop...");
 
     // Process messages and route internally
@@ -4535,7 +4535,7 @@ async fn main() -> Result<()> {
 
     // Initialize Redis metrics publisher for monitoring service
     let redis_url = std::env::var("REDIS_URL").ok();
-    let redis_publisher = match RedisMetricsPublisher::new(redis_url).await {
+    let _redis_publisher = match RedisMetricsPublisher::new(redis_url).await {
         Ok(publisher) => {
             info!("✅ Redis metrics publisher initialized for monitoring service");
             Some(Arc::new(publisher))
@@ -4569,12 +4569,12 @@ async fn main() -> Result<()> {
     // Metrics server is already initialized above
 
     // Start background metrics update task
-    let metrics_update_handle = tokio::spawn(async move {
+    let _metrics_update_handle = tokio::spawn(async move {
         update_metrics_task().await;
     });
 
     // Start AI optimization background task
-    let ai_optimization_handle = tokio::spawn(async move {
+    let _ai_optimization_handle = tokio::spawn(async move {
         info!("🤖 Starting AI optimization background task");
         let mut interval = tokio::time::interval(Duration::from_secs(60)); // Run every minute
         loop {
@@ -4594,7 +4594,7 @@ async fn main() -> Result<()> {
 
     // Start performance impact tracking background task
     let config_state_for_tracking = shared_config_state.clone();
-    let performance_impact_handle = tokio::spawn(async move {
+    let _performance_impact_handle = tokio::spawn(async move {
         info!("📊 Starting performance impact tracking task");
         let mut interval = tokio::time::interval(Duration::from_secs(30)); // Run every 30 seconds
 
