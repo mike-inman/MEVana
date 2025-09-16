@@ -28,10 +28,16 @@ jobs:
           rsync -a --delete infrastructure/ /opt/MEVana/infrastructure/
 
       - name: Write infra env (optional)
-        if: ${{ secrets.HOTPATH_ENDPOINT != '' && secrets.HOTPATH_X_TOKEN != '' }}
+        env:
+          HOTPATH_ENDPOINT: ${{ secrets.HOTPATH_ENDPOINT }}
+          HOTPATH_X_TOKEN: ${{ secrets.HOTPATH_X_TOKEN }}
         run: |
-          mkdir -p /opt/MEVana/infrastructure
-          printf "ENDPOINT=%s\nX_TOKEN=%s\n" "${{ secrets.HOTPATH_ENDPOINT }}" "${{ secrets.HOTPATH_X_TOKEN }}" > /opt/MEVana/infrastructure/.env
+          if [ -n "$HOTPATH_ENDPOINT" ] && [ -n "$HOTPATH_X_TOKEN" ]; then
+            mkdir -p /opt/MEVana/infrastructure
+            printf "ENDPOINT=%s\nX_TOKEN=%s\n" "$HOTPATH_ENDPOINT" "$HOTPATH_X_TOKEN" > /opt/MEVana/infrastructure/.env
+          else
+            echo "Skipping infra .env write (HOTPATH secrets not set)"
+          fi
 
       - name: Resolve tag
         id: vars
