@@ -112,6 +112,11 @@ jobs:
       - name: Deploy (compose up)
         env:
           MEVANA_TAG: ${{ steps.vars.outputs.tag }}
+          # Set production image references
+          HOTPATH_IMAGE: ghcr.io/mike-inman/mevana-hotpath-arb-engine:${{ steps.vars.outputs.tag }}
+          NORMALIZER_IMAGE: ghcr.io/mike-inman/mevana-normalizer-service:${{ steps.vars.outputs.tag }}
+          DISCOVERY_IMAGE: ghcr.io/mike-inman/mevana-discovery-service:${{ steps.vars.outputs.tag }}
+          EXECUTOR_IMAGE: ghcr.io/mike-inman/mevana-executor-service:${{ steps.vars.outputs.tag }}
         run: |
           set -euo pipefail
           cd /opt/MEVana
@@ -119,17 +124,25 @@ jobs:
           echo "${MEVANA_TAG}" > /opt/MEVana/.mevana_tag
           echo "Using MEVANA_TAG=${MEVANA_TAG} (persisted to /opt/MEVana/.mevana_tag)"
 
+          # Clean up any existing containers to avoid conflicts
+          echo "Cleaning up existing containers..."
+          docker compose -f infrastructure/docker-compose.yml down || true
+
           # Start infrastructure services first
           echo "Starting infrastructure services..."
           docker compose -f infrastructure/docker-compose.yml up -d prometheus grafana kafka redis postgres zookeeper kafka-ui adminer
 
           # Wait for infrastructure to be healthy
           echo "Waiting for infrastructure to be ready..."
-          sleep 10
+          sleep 15
 
           # Start MEVana application services
           echo "Starting MEVana application services..."
-          docker compose -f infrastructure/docker-compose.yml up -d hotpath-arb-engine normalizer-service discovery-service executor-service
+          docker compose -f infrastructure/docker-compose.yml up -d hotpath_arb_engine normalizer-service discovery-service executor-service
+
+          # Wait for services to start
+          echo "Waiting for MEVana services to initialize..."
+          sleep 20
 
           # Show final status
           docker compose -f infrastructure/docker-compose.yml ps

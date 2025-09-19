@@ -582,7 +582,7 @@ services:
   # CRITICAL: This is the core trading engine. All other services support this one.
   # It depends on PostgreSQL for data persistence and connects to external Geyser.
   hotpath_arb_engine:
-    image: mevana/hotpath_arb_engine:latest
+    image: ${HOTPATH_IMAGE:-mevana/hotpath_arb_engine:latest}
     container_name: hotpath_arb_engine
     environment:
       # Geyser connection settings
@@ -631,6 +631,77 @@ services:
         reservations:
           memory: 1G
           cpus: '0.75'
+
+  normalizer-service:
+    image: ${NORMALIZER_IMAGE:-infrastructure-normalizer-service}
+    container_name: normalizer-service
+    environment:
+      - RUST_LOG=info
+      - KAFKA_BROKER=kafka:9092
+      - IN_TOPIC=dex-transactions
+      - OUT_TOPIC=orca-swaps.parsed.v2
+      - METRICS_PORT=8085
+    ports:
+      - "9901:8085"
+    networks:
+      - mevana_net
+    depends_on:
+      kafka:
+        condition: service_healthy
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:8085/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 40s
+
+  discovery-service:
+    image: ${DISCOVERY_IMAGE:-infrastructure-discovery-service}
+    container_name: discovery-service
+    environment:
+      - RUST_LOG=info
+      - KAFKA_BOOTSTRAP_SERVERS=kafka:9092
+      - DISCOVERY_METRICS_PORT=9102
+    ports:
+      - "9102:9102"
+    networks:
+      - mevana_net
+    depends_on:
+      kafka:
+        condition: service_healthy
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:9102/metrics"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 40s
+
+  executor-service:
+    image: ${EXECUTOR_IMAGE:-infrastructure-executor-service}
+    container_name: executor-service
+    environment:
+      - RUST_LOG=info
+      - KAFKA_BROKER=kafka:9092
+      - METRICS_PORT=9904
+      - EXECUTION_DRY_RUN=true
+    ports:
+      - "9904:9904"
+    networks:
+      - mevana_net
+    depends_on:
+      kafka:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:9904/metrics"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 40s
 
 networks:
   mevana_net:
