@@ -345,11 +345,38 @@ services:
   # =============================================================================
 
   # Prometheus for metrics collection
+  # =============================================================================
+  # SOLANA DATA EXPORTER - Learning Example
+  # =============================================================================
+
+  solana-exporter:
+    image: rust:latest
+    container_name: solana-exporter
+    working_dir: /app
+    command: >
+      bash -c "
+      rm -rf * .git &&
+      git clone https://github.com/rustiqtech/solana-exporter.git . &&
+      cargo build --release &&
+      echo 'rpc = \"https://api.mainnet-beta.solana.com\"' > config.toml &&
+      echo 'target = \"0.0.0.0:9100\"' >> config.toml &&
+      ./target/release/solana-exporter -c config.toml
+      "
+    ports:
+      - "9100:9100"
+    networks:
+      - mevana_net
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9100/metrics"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 120s
+
   prometheus:
     image: prom/prometheus:latest
     container_name: prometheus
-    extra_hosts:
-      - "host.docker.internal:host-gateway"
     ports:
       # Prometheus metrics endpoint
       - "9090:9090"
@@ -391,7 +418,7 @@ services:
 
   # Grafana for metrics visualization
   grafana:
-    image: grafana/grafana:latest
+    image: grafana/grafana:10.4.5
     container_name: grafana
     ports:
       # Grafana web interface
@@ -401,13 +428,15 @@ services:
       - GF_SECURITY_ADMIN_PASSWORD=admin123
       # Disable user sign-up for security
       - GF_USERS_ALLOW_SIGN_UP=false
+      - GF_PLUGINS_ALLOW_LOADING_UNSIGNED_PLUGINS=grafana-metricsdrilldown-app,grafana-lokiexplore-app,grafana-pyroscope-app,grafana-exploretraces-app
+      - GF_LOG_LEVEL=info
     volumes:
       # Persistent storage for Grafana data
       - grafana_data:/var/lib/grafana
       # Provision Grafana dashboards
-      - ./grafana/dashboards:/etc/grafana/provisioning/dashboards
+      - ./infrastructure/grafana/dashboards/curated:/etc/grafana/provisioning/dashboards
       # Provision Grafana data sources
-      - ./grafana/datasources:/etc/grafana/provisioning/datasources
+      - ./infrastructure/grafana/datasources:/etc/grafana/provisioning/datasources
     networks:
       - mevana_net
     restart: unless-stopped
@@ -573,6 +602,7 @@ services:
     ports:
       # Metrics and API endpoint
       - "8088:8088"
+      - "8089:8089"
     networks:
       - mevana_net
     restart: unless-stopped
@@ -583,7 +613,7 @@ services:
         condition: service_healthy
     healthcheck:
       # Test metrics endpoint with data verification
-      test: ["CMD", "curl", "-f", "http://localhost:8088/metrics"]
+      test: ["CMD", "curl", "-f", "http://localhost:8089/health/ready"]
       interval: 30s
       timeout: 10s
       retries: 3
