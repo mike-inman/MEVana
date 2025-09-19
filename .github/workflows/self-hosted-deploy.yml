@@ -1,5 +1,4 @@
 name: Build and Deploy (Self-Hosted)
-run-name: "Build and Deploy (Self-Hosted): all app services, local build"
 
 concurrency:
   group: self-hosted-deploy-${{ github.ref }}

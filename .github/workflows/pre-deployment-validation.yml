@@ -1,5 +1,4 @@
 name: Pre-Deployment Validation
-run-name: "Pre-Deployment Validation: Server readiness and infrastructure analysis"
 
 on:
   workflow_dispatch:
