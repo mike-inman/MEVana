@@ -109,7 +109,19 @@ jobs:
             build_one "$s" "$TAG"
           done
 
-      - name: Deploy (compose up)
+      - name: Pre-Deployment Discovery & Validation
+        run: |
+          set -euo pipefail
+          cd /opt/MEVana
+          echo "🔍 Running comprehensive infrastructure discovery..."
+
+          # Make scripts executable
+          chmod +x scripts/ci/*.sh
+
+          # Run infrastructure discovery
+          ./scripts/ci/comprehensive-infrastructure-discovery.sh || echo "Discovery completed with warnings"
+
+      - name: Deploy Infrastructure
         env:
           MEVANA_TAG: ${{ steps.vars.outputs.tag }}
           # Set production image references
@@ -125,31 +137,88 @@ jobs:
           echo "Using MEVANA_TAG=${MEVANA_TAG} (persisted to /opt/MEVana/.mevana_tag)"
 
           # Clean up any existing containers to avoid conflicts
-          echo "Cleaning up existing containers..."
+          echo "🧹 Cleaning up existing containers..."
           docker compose -f infrastructure/docker-compose.yml down || true
 
           # Start infrastructure services first
-          echo "Starting infrastructure services..."
+          echo "🏗️ Starting infrastructure services..."
           docker compose -f infrastructure/docker-compose.yml up -d prometheus grafana kafka redis postgres zookeeper kafka-ui adminer
 
           # Wait for infrastructure to be healthy
-          echo "Waiting for infrastructure to be ready..."
+          echo "⏳ Waiting for infrastructure to be ready..."
           sleep 15
 
+      - name: Infrastructure Readiness Test
+        run: |
+          set -euo pipefail
+          cd /opt/MEVana
+          echo "🧪 Testing infrastructure readiness before deploying MEVana services..."
+
+          # Run deployment readiness test (infrastructure only)
+          timeout 120s ./scripts/ci/deployment-readiness-test.sh || {
+            echo "⚠️ Readiness test failed or timed out, but continuing with deployment"
+            echo "📊 Infrastructure services status:"
+            docker compose -f infrastructure/docker-compose.yml ps
+          }
+
+      - name: Deploy MEVana Services
+        env:
+          MEVANA_TAG: ${{ steps.vars.outputs.tag }}
+          HOTPATH_IMAGE: ghcr.io/mike-inman/mevana-hotpath-arb-engine:${{ steps.vars.outputs.tag }}
+          NORMALIZER_IMAGE: ghcr.io/mike-inman/mevana-normalizer-service:${{ steps.vars.outputs.tag }}
+          DISCOVERY_IMAGE: ghcr.io/mike-inman/mevana-discovery-service:${{ steps.vars.outputs.tag }}
+          EXECUTOR_IMAGE: ghcr.io/mike-inman/mevana-executor-service:${{ steps.vars.outputs.tag }}
+        run: |
+          set -euo pipefail
+          cd /opt/MEVana
+
           # Start MEVana application services
-          echo "Starting MEVana application services..."
+          echo "🚀 Starting MEVana application services..."
           docker compose -f infrastructure/docker-compose.yml up -d hotpath_arb_engine normalizer-service discovery-service executor-service
 
           # Wait for services to start
-          echo "Waiting for MEVana services to initialize..."
-          sleep 20
+          echo "⏳ Waiting for MEVana services to initialize..."
+          sleep 30
 
           # Show final status
+          echo "📊 Final deployment status:"
           docker compose -f infrastructure/docker-compose.yml ps
 
-      - name: Quick health checks
+      - name: Post-Deployment Comprehensive Validation
+        run: |
+          set -euo pipefail
+          cd /opt/MEVana
+          echo "🔍 Running comprehensive post-deployment diagnostics..."
+
+          # Wait a bit more for all services to fully initialize
+          echo "⏳ Allowing services additional startup time..."
+          sleep 15
+
+          # Run comprehensive diagnostics
+          ./scripts/ci/post-deployment-diagnostics.sh || {
+            echo "⚠️ Some post-deployment checks failed - review above"
+            echo "📊 Service status for troubleshooting:"
+            docker compose -f infrastructure/docker-compose.yml ps
+            docker compose -f infrastructure/docker-compose.yml logs --tail=10 hotpath_arb_engine || true
+            exit 1
+          }
+
+          echo "✅ Deployment validation completed successfully!"
+
+      - name: Live Data Verification
         run: |
           set +e
-          echo "Grafana:"; curl -s -o /dev/null -w "%{http_code}\n" --connect-timeout 5 http://localhost:3300/api/health || true
-          echo "Prometheus:"; curl -s -o /dev/null -w "%{http_code}\n" --connect-timeout 5 http://localhost:9091/-/healthy || true
-          echo "Hotpath metrics head:"; curl -s --connect-timeout 5 http://localhost:8088/metrics | head -n 5 || true
+          cd /opt/MEVana
+          echo "🎯 Verifying live arbitrage detection..."
+
+          # Check for live metrics
+          echo "📊 Hotpath Engine Metrics:"
+          curl -s --connect-timeout 5 http://localhost:8088/metrics | grep -E "(geyser_transactions|hotpath_multi_venue)" || echo "No live metrics yet"
+
+          echo "📊 Normalizer Metrics:"
+          curl -s --connect-timeout 5 http://localhost:9901/metrics | head -5 || echo "Normalizer metrics not ready"
+
+          echo "📊 Grafana Dashboard:"
+          curl -s -o /dev/null -w "Status: %{http_code}\n" --connect-timeout 5 http://localhost:3000/api/health || echo "Grafana not accessible"
+
+          echo "🎉 Deployment completed! Check live dashboard at http://$(hostname -I | awk '{print $1}'):3000"
