@@ -121,7 +121,7 @@ jobs:
 
           # Start infrastructure services first
           echo "Starting infrastructure services..."
-          docker compose -f infrastructure/docker-compose.server.yml up -d prometheus grafana kafka redis postgres zookeeper kafka-ui adminer
+          docker compose -f infrastructure/docker-compose.yml up -d prometheus grafana kafka redis postgres zookeeper kafka-ui adminer
 
           # Wait for infrastructure to be healthy
           echo "Waiting for infrastructure to be ready..."
@@ -129,14 +129,14 @@ jobs:
 
           # Start MEVana application services
           echo "Starting MEVana application services..."
-          docker compose -f infrastructure/docker-compose.server.yml up -d hotpath-arb-engine normalizer-service discovery-service executor-service
+          docker compose -f infrastructure/docker-compose.yml up -d hotpath-arb-engine normalizer-service discovery-service executor-service
 
           # Show final status
-          docker compose -f infrastructure/docker-compose.server.yml ps
+          docker compose -f infrastructure/docker-compose.yml ps
 
       - name: Quick health checks
         run: |
           set +e
-          echo "Grafana:"; curl -s -o /dev/null -w "%{http_code}\n" --connect-timeout 5 http://localhost:3000/api/health || true
-          echo "Prometheus:"; curl -s -o /dev/null -w "%{http_code}\n" --connect-timeout 5 http://localhost:9090/-/healthy || true
+          echo "Grafana:"; curl -s -o /dev/null -w "%{http_code}\n" --connect-timeout 5 http://localhost:3300/api/health || true
+          echo "Prometheus:"; curl -s -o /dev/null -w "%{http_code}\n" --connect-timeout 5 http://localhost:9091/-/healthy || true
           echo "Hotpath metrics head:"; curl -s --connect-timeout 5 http://localhost:8088/metrics | head -n 5 || true
