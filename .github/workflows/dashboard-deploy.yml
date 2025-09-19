@@ -1,0 +1,91 @@
+name: Dashboard Auto-Deploy
+run-name: "Auto-Deploy Dashboards: Hot-reload to server with zero downtime"
+
+on:
+  push:
+    paths:
+      - 'infrastructure/grafana/dashboards/curated/*.json'
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+jobs:
+  deploy-dashboards:
+    runs-on: [self-hosted, Linux, X64]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install jq for JSON processing
+        run: |
+          if ! command -v jq >/dev/null 2>&1; then
+            sudo apt-get update && sudo apt-get install -y jq
+          fi
+
+      - name: Validate dashboard JSON files
+        run: |
+          echo "🔍 Validating dashboard JSON files..."
+          INVALID_COUNT=0
+          for file in infrastructure/grafana/dashboards/curated/*.json; do
+            if [ -f "$file" ]; then
+              echo "Validating: $file"
+              if jq . "$file" >/dev/null 2>&1; then
+                echo "✅ Valid: $file"
+              else
+                echo "❌ Invalid JSON: $file"
+                INVALID_COUNT=$((INVALID_COUNT + 1))
+              fi
+            fi
+          done
+
+          if [ $INVALID_COUNT -gt 0 ]; then
+            echo "❌ Found $INVALID_COUNT invalid JSON files"
+            exit 1
+          fi
+          echo "✅ All dashboard JSON files are valid"
+
+      - name: Hot-deploy dashboards to server
+        run: |
+          echo "🚀 Hot-deploying dashboards to server Grafana..."
+
+          # Make deploy script executable
+          chmod +x scripts/dashboard/deploy-dashboard.sh
+
+          DEPLOYED_COUNT=0
+          for file in infrastructure/grafana/dashboards/curated/*.json; do
+            if [ -f "$file" ]; then
+              echo ""
+              echo "📊 Deploying: $file"
+
+              # Get dashboard title for logging
+              TITLE=$(jq -r '.dashboard.title // "Unknown"' "$file")
+              echo "Dashboard: $TITLE"
+
+              # Deploy with retry logic
+              if ./scripts/dashboard/deploy-dashboard.sh "$file"; then
+                echo "✅ Successfully deployed: $TITLE"
+                DEPLOYED_COUNT=$((DEPLOYED_COUNT + 1))
+              else
+                echo "❌ Failed to deploy: $TITLE"
+                exit 1
+              fi
+            fi
+          done
+
+          echo ""
+          echo "🎉 Dashboard deployment complete!"
+          echo "📊 Deployed $DEPLOYED_COUNT dashboards"
+          echo "⚡ Zero downtime - all dashboards updated via API"
+
+      - name: Verify deployment
+        run: |
+          echo "🔍 Verifying Grafana is accessible..."
+          if curl -s --connect-timeout 5 http://localhost:3000/api/health >/dev/null; then
+            echo "✅ Grafana is responding normally"
+            echo "🌐 Dashboard updates are live!"
+          else
+            echo "⚠️ Grafana health check failed"
+            exit 1
+          fi
