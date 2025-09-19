@@ -201,3 +201,74 @@ jobs:
           curl -s -o /dev/null -w "Status: %{http_code}\n" --connect-timeout 5 http://localhost:3000/api/health || echo "Grafana not accessible"
 
           echo "🎉 Deployment completed! Check live dashboard at http://$(hostname -I | awk '{print $1}'):3000"
+
+      - name: Create Deployment Notification Issue
+        if: always()
+        run: |
+          cd /opt/MEVana
+          echo "🐙 Creating deployment notification issue..."
+
+          if command -v gh >/dev/null 2>&1 && gh repo view >/dev/null 2>&1; then
+            # Generate deployment summary
+            DEPLOYMENT_STATUS="${{ job.status }}"
+            SERVER_IP=$(hostname -I | awk '{print $1}')
+
+            if [ "$DEPLOYMENT_STATUS" = "success" ]; then
+              TITLE="🎉 MEVana Deployment SUCCESSFUL - Live and Ready!"
+              LABELS="deployment,deployment-success,live"
+              BODY="# 🚀 MEVana Deployment Completed Successfully!
+
+## 🎯 Deployment Summary
+- **Status**: ✅ SUCCESS
+- **Server**: $(hostname) ($SERVER_IP)
+- **Completed**: $(date)
+- **Services**: All MEVana services deployed and running
+
+## 🌐 Live Access Links
+- **Grafana Dashboard**: http://$SERVER_IP:3000 (admin/admin123)
+- **Prometheus**: http://$SERVER_IP:9090
+- **Hotpath Metrics**: http://$SERVER_IP:8088/metrics
+- **Kafka UI**: http://$SERVER_IP:8084
+
+## 📊 Service Status
+\`\`\`
+$(docker compose -f infrastructure/docker-compose.yml ps 2>/dev/null || echo 'Could not fetch service status')
+\`\`\`
+
+## 🎯 Live Arbitrage Detection
+Your MEVana arbitrage detection system is now live and processing transactions!
+
+Check the Grafana dashboard for real-time metrics and opportunities."
+
+            else
+              TITLE="❌ MEVana Deployment FAILED - Requires Investigation"
+              LABELS="deployment,deployment-failed,urgent"
+              BODY="# 🚨 MEVana Deployment Failed
+
+## ⚠️ Deployment Summary
+- **Status**: ❌ FAILED
+- **Server**: $(hostname) ($SERVER_IP)
+- **Failed**: $(date)
+
+## 🔧 Next Steps
+1. Review the GitHub Actions logs above
+2. Check service status on server
+3. Run pre-deployment validation again
+4. Fix any issues and retry deployment
+
+## 📊 Current Service Status
+\`\`\`
+$(docker compose -f infrastructure/docker-compose.yml ps 2>/dev/null || echo 'Could not fetch service status')
+\`\`\`"
+            fi
+
+            gh issue create \
+              --title "$TITLE" \
+              --body "$BODY" \
+              --label "$LABELS" \
+              --assignee "@me" || echo "Could not create GitHub issue"
+
+            echo "📧 Deployment notification issue created!"
+          else
+            echo "GitHub CLI not available - skipping issue creation"
+          fi

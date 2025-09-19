@@ -101,11 +101,11 @@ jobs:
 
           echo "📄 Validation report saved: $REPORT_FILE"
 
-      - name: Create GitHub Issue on Failure
-        if: failure()
+      - name: Create GitHub Notification Issue
+        if: always()
         run: |
           cd /opt/MEVana
-          echo "🐙 Creating GitHub issue for validation failure..."
+          echo "🐙 Creating GitHub notification issue..."
 
           if command -v gh >/dev/null 2>&1 && gh repo view >/dev/null 2>&1; then
             # Get the latest report
@@ -114,11 +114,39 @@ jobs:
             if [ -n "$LATEST_REPORT" ] && [ -f "$LATEST_REPORT" ]; then
               REPORT_CONTENT=$(cat "$LATEST_REPORT")
 
+              # Determine status and create appropriate issue
+              if [ "${{ job.status }}" = "success" ]; then
+                TITLE="✅ Pre-Deployment Validation PASSED - Ready to Deploy!"
+                LABELS="deployment,validation-passed,ready-to-deploy"
+                BODY="$REPORT_CONTENT
+
+## 🚀 Next Steps
+Your server is validated and ready for deployment!
+
+**To deploy:**
+1. Go to GitHub Actions
+2. Run **'Build and Deploy (Self-Hosted)'** workflow
+3. Monitor deployment progress
+
+**Validation completed successfully at:** $(date)"
+              else
+                TITLE="🚨 Pre-Deployment Validation FAILED - Requires Fixes"
+                LABELS="deployment,validation-failed,needs-attention"
+                BODY="$REPORT_CONTENT
+
+## 🔧 Next Steps
+Fix the issues listed above, then re-run validation.
+
+**Validation failed at:** $(date)"
+              fi
+
               gh issue create \
-                --title "🚨 Pre-Deployment Validation Failed" \
-                --body "$REPORT_CONTENT" \
-                --label "deployment,validation-failed,needs-attention" \
+                --title "$TITLE" \
+                --body "$BODY" \
+                --label "$LABELS" \
                 --assignee "@me" || echo "Could not create GitHub issue"
+
+              echo "📧 GitHub issue created - you'll get a notification!"
             fi
           else
             echo "GitHub CLI not available - skipping issue creation"
