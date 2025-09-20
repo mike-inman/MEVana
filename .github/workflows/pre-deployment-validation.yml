@@ -1,10 +1,20 @@
 name: Pre-Deployment Validation
+run-name: "Pre-Deployment Validation: server readiness check"
 
-on:
-  workflow_dispatch:
+concurrency:
+  group: pre-deployment-validation-${{ github.ref }}
+  cancel-in-progress: true
 
 permissions:
   contents: read
+
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: "Validation mode (quick, full)"
+        required: false
+        default: "full"
 
 jobs:
   validate-server:
@@ -100,39 +110,39 @@ jobs:
             # Get the latest report
             LATEST_REPORT=$(ls -t deployment-reports/pre-deployment-validation-*.md 2>/dev/null | head -1)
 
-            if [ -n "$LATEST_REPORT" ] && [ -f "$LATEST_REPORT" ]; then
-              REPORT_CONTENT=$(cat "$LATEST_REPORT")
+            if [ -n "\$LATEST_REPORT" ] && [ -f "\$LATEST_REPORT" ]; then
+              REPORT_CONTENT=\$(cat "\$LATEST_REPORT")
 
               # Determine status and create appropriate issue
               if [ "${{ job.status }}" = "success" ]; then
                 TITLE="✅ Pre-Deployment Validation PASSED - Ready to Deploy!"
                 LABELS="deployment,validation-passed,ready-to-deploy"
-                BODY="$REPORT_CONTENT
+                BODY="\$REPORT_CONTENT
 
-## 🚀 Next Steps
-Your server is validated and ready for deployment!
+          ## 🚀 Next Steps
+          Your server is validated and ready for deployment!
 
-**To deploy:**
-1. Go to GitHub Actions
-2. Run **'Build and Deploy (Self-Hosted)'** workflow
-3. Monitor deployment progress
+          **To deploy:**
+          1. Go to GitHub Actions
+          2. Run **Build and Deploy (Self-Hosted)** workflow
+          3. Monitor deployment progress
 
-**Validation completed successfully at:** $(date)"
+          **Validation completed successfully at:** \$(date)"
               else
                 TITLE="🚨 Pre-Deployment Validation FAILED - Requires Fixes"
                 LABELS="deployment,validation-failed,needs-attention"
-                BODY="$REPORT_CONTENT
+                BODY="\$REPORT_CONTENT
 
-## 🔧 Next Steps
-Fix the issues listed above, then re-run validation.
+          ## 🔧 Next Steps
+          Fix the issues listed above, then re-run validation.
 
-**Validation failed at:** $(date)"
+          **Validation failed at:** \$(date)"
               fi
 
-              gh issue create \
-                --title "$TITLE" \
-                --body "$BODY" \
-                --label "$LABELS" \
+              gh issue create \\
+                --title "\$TITLE" \\
+                --body "\$BODY" \\
+                --label "\$LABELS" \\
                 --assignee "@me" || echo "Could not create GitHub issue"
 
               echo "📧 GitHub issue created - you'll get a notification!"
