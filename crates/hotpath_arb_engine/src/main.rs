@@ -421,6 +421,11 @@ impl PerformanceAnalytics {
         metrics.arbitrage_detection_time_us.push(arbitrage_time_us);
         metrics.last_updated = Utc::now();
 
+        // Publish arbitrage detection time metric
+        if let Some(&latest_detection_time) = metrics.arbitrage_detection_time_us.last() {
+            metrics::histogram!("arbitrage_detection_time_us").record(latest_detection_time as f64);
+        }
+
         // Trigger analysis if interval has passed
         self.maybe_run_analysis();
     }
@@ -458,6 +463,11 @@ impl PerformanceAnalytics {
         metrics.total_opportunities_detected += 1;
         metrics.total_profit_captured_bps += profit_bps as u64;
         metrics.last_updated = Utc::now();
+
+        // Publish arbitrage profit metrics
+        metrics::histogram!("arbitrage_profit_bps").record(profit_bps as f64);
+        metrics::counter!("arbitrage_opportunities_total", "venue" => venue.to_string(), "strategy" => strategy.to_string()).increment(1);
+        metrics::gauge!("total_profit_captured_bps").set(metrics.total_profit_captured_bps as f64);
     }
 
     /// Record execution performance
