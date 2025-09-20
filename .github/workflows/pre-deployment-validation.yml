@@ -23,11 +23,12 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Sync scripts to server
+      - name: Sync scripts and infrastructure to server
         run: |
           set -euo pipefail
           mkdir -p /opt/MEVana
           rsync -a --delete scripts/ /opt/MEVana/scripts/
+          rsync -a --delete infrastructure/ /opt/MEVana/infrastructure/
           chmod +x /opt/MEVana/scripts/ci/*.sh
 
       - name: Pre-Deployment Discovery
