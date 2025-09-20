@@ -117,7 +117,10 @@ pub async fn create_arbitrage_opportunity(
     }
 
     match db.create_arbitrage_opportunity(request).await {
-        Ok(created_opportunity) => Ok((StatusCode::CREATED, Json(ApiResponse::success(created_opportunity)))),
+        Ok(created_opportunity) => Ok((
+            StatusCode::CREATED,
+            Json(ApiResponse::success(created_opportunity)),
+        )),
         Err(e) => Err((
             StatusCode::INTERNAL_SERVER_ERROR,
             Json(ErrorResponse::new("DATABASE_ERROR", &e.to_string())),
@@ -183,9 +186,17 @@ pub async fn get_arbitrage_opportunity_by_id(
 ) -> impl IntoResponse {
     let opportunity_id = match opportunity_id.parse::<u64>() {
         Ok(id) => id,
-        Err(_) => return Err((StatusCode::BAD_REQUEST, Json(ErrorResponse::new("INVALID_ID", "Invalid opportunity ID format")))),
+        Err(_) => {
+            return Err((
+                StatusCode::BAD_REQUEST,
+                Json(ErrorResponse::new(
+                    "INVALID_ID",
+                    "Invalid opportunity ID format",
+                )),
+            ))
+        }
     };
-    
+
     match db.get_arbitrage_opportunity_by_id(opportunity_id).await {
         Ok(Some(opportunity)) => Ok(Json(ApiResponse::success(opportunity))),
         Ok(None) => Err((
@@ -410,7 +421,9 @@ pub async fn get_token_by_mint(
     ),
     tag = "statistics"
 )]
-pub async fn get_venue_statistics(State(_db): State<AppState>) -> Result<Json<ApiResponse<Vec<VenueStatistics>>>, StatusCode> {
+pub async fn get_venue_statistics(
+    State(_db): State<AppState>,
+) -> Result<Json<ApiResponse<Vec<VenueStatistics>>>, StatusCode> {
     // Placeholder implementation
     let venues: Vec<VenueStatistics> = vec![];
     Ok(Json(ApiResponse::success(venues)))
@@ -426,7 +439,9 @@ pub async fn get_venue_statistics(State(_db): State<AppState>) -> Result<Json<Ap
     ),
     tag = "statistics"
 )]
-pub async fn get_token_pair_statistics(State(_db): State<AppState>) -> Result<Json<ApiResponse<Vec<TokenPairStatistics>>>, StatusCode> {
+pub async fn get_token_pair_statistics(
+    State(_db): State<AppState>,
+) -> Result<Json<ApiResponse<Vec<TokenPairStatistics>>>, StatusCode> {
     // Placeholder implementation
     let pairs: Vec<TokenPairStatistics> = vec![];
     Ok(Json(ApiResponse::success(pairs)))
@@ -442,7 +457,9 @@ pub async fn get_token_pair_statistics(State(_db): State<AppState>) -> Result<Js
     ),
     tag = "statistics"
 )]
-pub async fn get_wallet_performance_statistics(State(_db): State<AppState>) -> Result<Json<ApiResponse<Vec<WalletPerformanceStatistics>>>, StatusCode> {
+pub async fn get_wallet_performance_statistics(
+    State(_db): State<AppState>,
+) -> Result<Json<ApiResponse<Vec<WalletPerformanceStatistics>>>, StatusCode> {
     // Placeholder implementation
     let stats: Vec<WalletPerformanceStatistics> = vec![];
     Ok(Json(ApiResponse::success(stats)))
@@ -644,14 +661,17 @@ fn validate_arbitrage_request(request: &CreateArbitrageRequest) -> Result<(), St
 
     // Validate detection_time_us if present (should be reasonable)
     if let Some(detection_time) = request.detection_time_us {
-        if detection_time > 10_000_000 { // 10 seconds in microseconds
+        if detection_time > 10_000_000 {
+            // 10 seconds in microseconds
             return Err("detection_time_us seems unreasonably high (>10s)".to_string());
         }
     }
 
     // Validate profit_bps (should be reasonable)
     if request.profit_bps < -10000 || request.profit_bps > 10000 {
-        return Err("profit_bps should be between -10000 and 10000 (i.e., -100% to 100%)".to_string());
+        return Err(
+            "profit_bps should be between -10000 and 10000 (i.e., -100% to 100%)".to_string(),
+        );
     }
 
     Ok(())
@@ -661,11 +681,17 @@ fn validate_arbitrage_request(request: &CreateArbitrageRequest) -> Result<(), St
 fn validate_smart_filter_config(request: &UpdateSmartFilterConfigRequest) -> Result<(), String> {
     // Validate parameter name
     let valid_parameters = [
-        "min_profit_bps", "max_profit_bps", "min_net_profit_sol",
-        "min_venue_success_rate", "max_gas_budget_pct", "max_concurrent_opportunities",
-        "competition_lookback_ms", "learning_rate", "min_samples_for_learning"
+        "min_profit_bps",
+        "max_profit_bps",
+        "min_net_profit_sol",
+        "min_venue_success_rate",
+        "max_gas_budget_pct",
+        "max_concurrent_opportunities",
+        "competition_lookback_ms",
+        "learning_rate",
+        "min_samples_for_learning",
     ];
-    
+
     if !valid_parameters.contains(&request.parameter.as_str()) {
         return Err(format!("Invalid parameter name: {}", request.parameter));
     }
@@ -699,12 +725,17 @@ fn validate_smart_filter_config(request: &UpdateSmartFilterConfigRequest) -> Res
         }
         "max_concurrent_opportunities" => {
             if request.value < 1.0 || request.value > 1000.0 || request.value.fract() != 0.0 {
-                return Err("max_concurrent_opportunities must be an integer between 1 and 1000".to_string());
+                return Err(
+                    "max_concurrent_opportunities must be an integer between 1 and 1000"
+                        .to_string(),
+                );
             }
         }
         "competition_lookback_ms" => {
             if request.value < 100.0 || request.value > 60000.0 || request.value.fract() != 0.0 {
-                return Err("competition_lookback_ms must be an integer between 100 and 60000".to_string());
+                return Err(
+                    "competition_lookback_ms must be an integer between 100 and 60000".to_string(),
+                );
             }
         }
         "learning_rate" => {
@@ -714,7 +745,9 @@ fn validate_smart_filter_config(request: &UpdateSmartFilterConfigRequest) -> Res
         }
         "min_samples_for_learning" => {
             if request.value < 1.0 || request.value > 10000.0 || request.value.fract() != 0.0 {
-                return Err("min_samples_for_learning must be an integer between 1 and 10000".to_string());
+                return Err(
+                    "min_samples_for_learning must be an integer between 1 and 10000".to_string(),
+                );
             }
         }
         _ => return Err("Unknown parameter".to_string()),

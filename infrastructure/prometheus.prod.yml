@@ -26,55 +26,56 @@ scrape_configs:
       - targets: ['grafana:3000']
 
   # =============================================================================
-  # MEVANA SERVICES (Production - External IP)
+  # MEVANA SERVICES (Production - Host bridge)
+  # NOTE: We rely on host.docker.internal (mapped via extra_hosts) so Prometheus can
+  #       scrape services regardless of container name. Ensure each service binds
+  #       its metrics port on the host when running outside compose.
   # =============================================================================
 
   - job_name: 'hotpath-engine'
-    static_configs:
-      - targets:
-          - '149.28.56.125:8088'  # MEVana HotPath Engine (production server)
     metrics_path: '/metrics'
     scrape_interval: 5s
     scrape_timeout: 3s
-
-  - job_name: 'system-orchestrator'
     static_configs:
       - targets:
-          - '149.28.56.125:9999'  # system-orchestrator (production)
+          - 'host.docker.internal:8088'
+
+  - job_name: 'normalizer-service'
     metrics_path: '/metrics'
-    scrape_interval: 15s
+    scrape_interval: 10s
     scrape_timeout: 5s
+    static_configs:
+      - targets:
+          - 'host.docker.internal:8085'
 
   - job_name: 'discovery-service'
-    static_configs:
-      - targets:
-          - '149.28.56.125:9102'  # discovery-service (production)
     metrics_path: '/metrics'
     scrape_interval: 15s
     scrape_timeout: 5s
-
-  - job_name: 'pipeline-services'
     static_configs:
       - targets:
-          - '149.28.56.125:9901'  # normalizer-service (production)
-          - '149.28.56.125:9902'  # edge-assembler (production)
-          - '149.28.56.125:9904'  # executor-service (production)
+          - 'host.docker.internal:9102'
+
+  - job_name: 'executor-service'
     metrics_path: '/metrics'
     scrape_interval: 10s
     scrape_timeout: 5s
+    static_configs:
+      - targets:
+          - 'host.docker.internal:9904'
 
   - job_name: 'arb-engine'
-    static_configs:
-      - targets:
-          - '149.28.56.125:8085'  # arb-engine API (production)
     metrics_path: '/metrics'
     scrape_interval: 10s
     scrape_timeout: 5s
+    static_configs:
+      - targets:
+          - 'host.docker.internal:8085'
 
   - job_name: 'monitoring-service'
-    static_configs:
-      - targets:
-          - '149.28.56.125:8091'  # monitoring-service (production)
     metrics_path: '/metrics'
     scrape_interval: 10s
     scrape_timeout: 5s
+    static_configs:
+      - targets:
+          - 'host.docker.internal:8091'

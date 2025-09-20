@@ -1,0 +1,39 @@
+# VCS
+.git
+
+# Rust source code (we only need the built binaries)
+**/*.rs
+**/src/**
+Cargo.toml
+Cargo.lock
+
+# Rust build artifacts except debug binaries
+**/target/release/**
+**/target/debug/deps/**
+**/target/debug/build/**
+**/target/debug/incremental/**
+**/target/debug/*.rlib
+**/target/debug/*.d
+
+# Keep only the specific binaries we need
+!**/target/debug/hotpath_arb_engine
+!**/target/debug/normalizer-service
+!**/target/debug/discovery-service
+
+# Node/JS
+**/node_modules/**
+
+# Logs & temp
+**/*.log
+infra/logs/**
+infrastructure/logs/**
+
+# Large media
+**/*.png
+**/*.jpg
+**/*.jpeg
+**/*.svg
+**/*.pdf
+
+# OS files
+.DS_Store

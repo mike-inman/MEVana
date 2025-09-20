@@ -5,12 +5,12 @@ use axum::{
     routing::get,
     Router,
 };
+use log::{error, info};
 use serde::{Deserialize, Serialize};
 use sqlx::PgPool;
 use std::collections::HashMap;
 use std::sync::Arc;
-use tower_http::cors::{CorsLayer, Any};
-use log::{error, info};
+use tower_http::cors::{Any, CorsLayer};
 
 #[derive(Debug, Serialize)]
 pub struct ApiResponse<T> {
@@ -104,16 +104,19 @@ pub struct PerformanceQuery {
 
 pub fn create_history_api_router(db_pool: PgPool) -> Router {
     let state = Arc::new(db_pool);
-    
+
     // Configure CORS to allow all origins for development
     // In production, you should restrict this to specific origins
     let cors = CorsLayer::new()
         .allow_origin(Any)
         .allow_methods(Any)
         .allow_headers(Any);
-    
+
     Router::new()
-        .route("/api/arbitrage/opportunities", get(get_arbitrage_opportunities))
+        .route(
+            "/api/arbitrage/opportunities",
+            get(get_arbitrage_opportunities),
+        )
         .route("/api/arbitrage/performance", get(get_venue_performance))
         .route("/api/arbitrage/live", get(get_live_stats))
         .route("/api/arbitrage/summary", get(get_summary))
@@ -151,42 +154,67 @@ pub async fn get_arbitrage_opportunities(
         FROM arbitrage_opportunities ao
         LEFT JOIN execution_results er ON ao.opportunity_id = er.opportunity_id
         WHERE ao.timestamp >= NOW() - INTERVAL '%d hours'
-    "#.to_string();
+    "#
+    .to_string();
 
     let mut conditions = Vec::new();
-    
+
     if let Some(venue_sell) = &params.venue_sell {
         conditions.push(format!("AND ao.venue_sell = '{}'", venue_sell));
     }
-    
+
     if let Some(venue_buy) = &params.venue_buy {
         conditions.push(format!("AND ao.venue_buy = '{}'", venue_buy));
     }
-    
+
     if let Some(min_profit) = params.min_profit_bps {
         conditions.push(format!("AND ao.profit_bps >= {}", min_profit));
     }
-    
+
     if params.success_only == Some(true) {
         conditions.push("AND er.success = true".to_string());
     }
 
-    query_str = format!("{} {} ORDER BY ao.timestamp DESC LIMIT {}", 
-                       query_str, conditions.join(" "), limit);
+    query_str = format!(
+        "{} {} ORDER BY ao.timestamp DESC LIMIT {}",
+        query_str,
+        conditions.join(" "),
+        limit
+    );
 
     let formatted_query = query_str.replace("%d", &last_hours.to_string());
 
-    match sqlx::query_as::<_, (String, chrono::DateTime<chrono::Utc>, i64, String, String, String, i32, Option<f64>, Option<f64>, Option<i64>, Option<String>, Option<bool>, Option<bool>, Option<i32>, Option<i64>, Option<String>)>(&formatted_query)
-        .fetch_all(db.as_ref())
-        .await 
+    match sqlx::query_as::<
+        _,
+        (
+            String,
+            chrono::DateTime<chrono::Utc>,
+            i64,
+            String,
+            String,
+            String,
+            i32,
+            Option<f64>,
+            Option<f64>,
+            Option<i64>,
+            Option<String>,
+            Option<bool>,
+            Option<bool>,
+            Option<i32>,
+            Option<i64>,
+            Option<String>,
+        ),
+    >(&formatted_query)
+    .fetch_all(db.as_ref())
+    .await
     {
         Ok(rows) => {
             let opportunities: Vec<ArbitrageOpportunityResponse> = rows
                 .into_iter()
-                .map(|(opportunity_id, timestamp, slot, venue_sell, venue_buy, token_pair, profit_bps, amount_in, expected_amount_out, detection_time_us, strategy_type, executed, success, actual_profit_bps, execution_time_us, failure_reason)| {
-                    ArbitrageOpportunityResponse {
+                .map(
+                    |(
                         opportunity_id,
-                        timestamp: timestamp.format("%Y-%m-%d %H:%M:%S UTC").to_string(),
+                        timestamp,
                         slot,
                         venue_sell,
                         venue_buy,
@@ -201,8 +229,27 @@ pub async fn get_arbitrage_opportunities(
                         actual_profit_bps,
                         execution_time_us,
                         failure_reason,
-                    }
-                })
+                    )| {
+                        ArbitrageOpportunityResponse {
+                            opportunity_id,
+                            timestamp: timestamp.format("%Y-%m-%d %H:%M:%S UTC").to_string(),
+                            slot,
+                            venue_sell,
+                            venue_buy,
+                            token_pair,
+                            profit_bps,
+                            amount_in,
+                            expected_amount_out,
+                            detection_time_us,
+                            strategy_type,
+                            executed,
+                            success,
+                            actual_profit_bps,
+                            execution_time_us,
+                            failure_reason,
+                        }
+                    },
+                )
                 .collect();
 
             Ok(Json(ApiResponse::success(opportunities)))
@@ -234,7 +281,10 @@ pub async fn get_venue_performance(
     "#.to_string();
 
     if let Some(venue_pair) = &params.venue_pair {
-        query_str.push_str(&format!(" AND CONCAT(venue_sell, '->', venue_buy) = '{}'", venue_pair));
+        query_str.push_str(&format!(
+            " AND CONCAT(venue_sell, '->', venue_buy) = '{}'",
+            venue_pair
+        ));
     }
 
     query_str.push_str(" GROUP BY venue_sell, venue_buy");
@@ -248,36 +298,60 @@ pub async fn get_venue_performance(
         Some("profit") => " ORDER BY AVG(CASE WHEN er.success = true THEN ao.profit_bps END) DESC",
         Some("volume") | _ => " ORDER BY COUNT(*) DESC",
     };
-    
+
     query_str.push_str(sort_clause);
 
-    match sqlx::query_as::<_, (String, i64, i64, i64, Option<f64>, Option<f64>, Option<chrono::DateTime<chrono::Utc>>)>(&query_str)
-        .fetch_all(db.as_ref())
-        .await 
+    match sqlx::query_as::<
+        _,
+        (
+            String,
+            i64,
+            i64,
+            i64,
+            Option<f64>,
+            Option<f64>,
+            Option<chrono::DateTime<chrono::Utc>>,
+        ),
+    >(&query_str)
+    .fetch_all(db.as_ref())
+    .await
     {
         Ok(rows) => {
             let performance: Vec<VenuePerformanceResponse> = rows
                 .into_iter()
-                .map(|(venue_pair, total_opportunities, executed_opportunities, successful_executions, average_profit_bps, average_execution_time_us, last_updated)| {
-                    let success_rate_pct = if executed_opportunities > 0 {
-                        Some((successful_executions as f64 / executed_opportunities as f64) * 100.0)
-                    } else {
-                        None
-                    };
-
-                    VenuePerformanceResponse {
+                .map(
+                    |(
                         venue_pair,
-                        total_opportunities: total_opportunities as i32,
-                        executed_opportunities: executed_opportunities as i32,
-                        successful_executions: successful_executions as i32,
-                        success_rate_pct,
+                        total_opportunities,
+                        executed_opportunities,
+                        successful_executions,
                         average_profit_bps,
                         average_execution_time_us,
-                        last_updated: last_updated
-                            .map(|ts| ts.format("%Y-%m-%d %H:%M:%S UTC").to_string())
-                            .unwrap_or_default(),
-                    }
-                })
+                        last_updated,
+                    )| {
+                        let success_rate_pct = if executed_opportunities > 0 {
+                            Some(
+                                (successful_executions as f64 / executed_opportunities as f64)
+                                    * 100.0,
+                            )
+                        } else {
+                            None
+                        };
+
+                        VenuePerformanceResponse {
+                            venue_pair,
+                            total_opportunities: total_opportunities as i32,
+                            executed_opportunities: executed_opportunities as i32,
+                            successful_executions: successful_executions as i32,
+                            success_rate_pct,
+                            average_profit_bps,
+                            average_execution_time_us,
+                            last_updated: last_updated
+                                .map(|ts| ts.format("%Y-%m-%d %H:%M:%S UTC").to_string())
+                                .unwrap_or_default(),
+                        }
+                    },
+                )
                 .collect();
 
             Ok(Json(ApiResponse::success(performance)))
@@ -305,17 +379,17 @@ pub async fn get_live_stats(
         WHERE ao.timestamp >= NOW() - INTERVAL '24 hours'
     "#;
 
-    let (total_opportunities, total_executed, total_successful, avg_profit) = match 
-        sqlx::query_as::<_, (i64, i64, i64, Option<f64>)>(stats_query)
-        .fetch_one(db.as_ref())
-        .await 
-    {
-        Ok(row) => row,
-        Err(e) => {
-            error!("Failed to fetch live stats: {}", e);
-            return Err(StatusCode::INTERNAL_SERVER_ERROR);
-        }
-    };
+    let (total_opportunities, total_executed, total_successful, avg_profit) =
+        match sqlx::query_as::<_, (i64, i64, i64, Option<f64>)>(stats_query)
+            .fetch_one(db.as_ref())
+            .await
+        {
+            Ok(row) => row,
+            Err(e) => {
+                error!("Failed to fetch live stats: {}", e);
+                return Err(StatusCode::INTERNAL_SERVER_ERROR);
+            }
+        };
 
     let overall_success_rate = if total_executed > 0 {
         (total_successful as f64 / total_executed as f64) * 100.0
@@ -349,13 +423,51 @@ pub async fn get_live_stats(
         LIMIT 50
     "#;
 
-    let recent_opportunities = match sqlx::query_as::<_, (String, chrono::DateTime<chrono::Utc>, i64, String, String, String, i32, Option<f64>, Option<f64>, Option<i64>, Option<String>, Option<bool>, Option<bool>, Option<i32>, Option<i64>, Option<String>)>(recent_query)
-        .fetch_all(db.as_ref())
-        .await 
+    let recent_opportunities = match sqlx::query_as::<
+        _,
+        (
+            String,
+            chrono::DateTime<chrono::Utc>,
+            i64,
+            String,
+            String,
+            String,
+            i32,
+            Option<f64>,
+            Option<f64>,
+            Option<i64>,
+            Option<String>,
+            Option<bool>,
+            Option<bool>,
+            Option<i32>,
+            Option<i64>,
+            Option<String>,
+        ),
+    >(recent_query)
+    .fetch_all(db.as_ref())
+    .await
     {
-        Ok(rows) => {
-            rows.into_iter()
-                .map(|(opportunity_id, timestamp, slot, venue_sell, venue_buy, token_pair, profit_bps, amount_in, expected_amount_out, detection_time_us, strategy_type, executed, success, actual_profit_bps, execution_time_us, failure_reason)| {
+        Ok(rows) => rows
+            .into_iter()
+            .map(
+                |(
+                    opportunity_id,
+                    timestamp,
+                    slot,
+                    venue_sell,
+                    venue_buy,
+                    token_pair,
+                    profit_bps,
+                    amount_in,
+                    expected_amount_out,
+                    detection_time_us,
+                    strategy_type,
+                    executed,
+                    success,
+                    actual_profit_bps,
+                    execution_time_us,
+                    failure_reason,
+                )| {
                     ArbitrageOpportunityResponse {
                         opportunity_id,
                         timestamp: timestamp.format("%Y-%m-%d %H:%M:%S UTC").to_string(),
@@ -374,9 +486,9 @@ pub async fn get_live_stats(
                         execution_time_us,
                         failure_reason,
                     }
-                })
-                .collect()
-        }
+                },
+            )
+            .collect(),
         Err(e) => {
             error!("Failed to fetch recent opportunities: {}", e);
             Vec::new()
@@ -401,13 +513,33 @@ pub async fn get_live_stats(
         LIMIT 10
     "#;
 
-    let top_venues = match sqlx::query_as::<_, (String, i64, i64, i64, Option<f64>, Option<f64>, Option<chrono::DateTime<chrono::Utc>>)>(top_venues_query)
-        .fetch_all(db.as_ref())
-        .await 
+    let top_venues = match sqlx::query_as::<
+        _,
+        (
+            String,
+            i64,
+            i64,
+            i64,
+            Option<f64>,
+            Option<f64>,
+            Option<chrono::DateTime<chrono::Utc>>,
+        ),
+    >(top_venues_query)
+    .fetch_all(db.as_ref())
+    .await
     {
-        Ok(rows) => {
-            rows.into_iter()
-                .map(|(venue_pair, total_opportunities, executed_opportunities, successful_executions, average_profit_bps, average_execution_time_us, last_updated)| {
+        Ok(rows) => rows
+            .into_iter()
+            .map(
+                |(
+                    venue_pair,
+                    total_opportunities,
+                    executed_opportunities,
+                    successful_executions,
+                    average_profit_bps,
+                    average_execution_time_us,
+                    last_updated,
+                )| {
                     let success_rate_pct = if executed_opportunities > 0 {
                         Some((successful_executions as f64 / executed_opportunities as f64) * 100.0)
                     } else {
@@ -426,9 +558,9 @@ pub async fn get_live_stats(
                             .map(|ts| ts.format("%Y-%m-%d %H:%M:%S UTC").to_string())
                             .unwrap_or_default(),
                     }
-                })
-                .collect()
-        }
+                },
+            )
+            .collect(),
         Err(_) => Vec::new(),
     };
 
@@ -443,14 +575,16 @@ pub async fn get_live_stats(
 
     let active_tokens = match sqlx::query_as::<_, (String,)>(tokens_query)
         .fetch_all(db.as_ref())
-        .await 
+        .await
     {
         Ok(rows) => rows.into_iter().map(|(token_pair,)| token_pair).collect(),
         Err(_) => Vec::new(),
     };
 
     let response = LiveStatsResponse {
-        current_time: chrono::Utc::now().format("%Y-%m-%d %H:%M:%S UTC").to_string(),
+        current_time: chrono::Utc::now()
+            .format("%Y-%m-%d %H:%M:%S UTC")
+            .to_string(),
         total_opportunities_detected: total_opportunities,
         total_executed,
         total_successful,
@@ -484,18 +618,50 @@ pub async fn get_summary(
 
     match sqlx::query_as::<_, (i64, i64, i64, Option<f64>, Option<i32>, i64, i64)>(query)
         .fetch_one(db.as_ref())
-        .await 
+        .await
     {
-        Ok((total_24h, last_hour, successful, avg_profit, max_profit, venue_pairs, token_pairs)) => {
+        Ok((
+            total_24h,
+            last_hour,
+            successful,
+            avg_profit,
+            max_profit,
+            venue_pairs,
+            token_pairs,
+        )) => {
             let mut summary = HashMap::new();
-            summary.insert("total_opportunities_24h".to_string(), serde_json::json!(total_24h));
-            summary.insert("opportunities_last_hour".to_string(), serde_json::json!(last_hour));
-            summary.insert("successful_executions_24h".to_string(), serde_json::json!(successful));
-            summary.insert("average_profit_bps".to_string(), serde_json::json!(avg_profit.unwrap_or(0.0)));
-            summary.insert("max_profit_bps".to_string(), serde_json::json!(max_profit.unwrap_or(0)));
-            summary.insert("active_venue_pairs".to_string(), serde_json::json!(venue_pairs));
-            summary.insert("active_token_pairs".to_string(), serde_json::json!(token_pairs));
-            summary.insert("system_status".to_string(), serde_json::json!("MAD_MAX_OPERATIONAL"));
+            summary.insert(
+                "total_opportunities_24h".to_string(),
+                serde_json::json!(total_24h),
+            );
+            summary.insert(
+                "opportunities_last_hour".to_string(),
+                serde_json::json!(last_hour),
+            );
+            summary.insert(
+                "successful_executions_24h".to_string(),
+                serde_json::json!(successful),
+            );
+            summary.insert(
+                "average_profit_bps".to_string(),
+                serde_json::json!(avg_profit.unwrap_or(0.0)),
+            );
+            summary.insert(
+                "max_profit_bps".to_string(),
+                serde_json::json!(max_profit.unwrap_or(0)),
+            );
+            summary.insert(
+                "active_venue_pairs".to_string(),
+                serde_json::json!(venue_pairs),
+            );
+            summary.insert(
+                "active_token_pairs".to_string(),
+                serde_json::json!(token_pairs),
+            );
+            summary.insert(
+                "system_status".to_string(),
+                serde_json::json!("MAD_MAX_OPERATIONAL"),
+            );
 
             Ok(Json(ApiResponse::success(summary)))
         }
@@ -516,8 +682,11 @@ pub async fn health_check(
             let mut health = HashMap::new();
             health.insert("status".to_string(), serde_json::json!("healthy"));
             health.insert("database".to_string(), serde_json::json!("connected"));
-            health.insert("timestamp".to_string(), serde_json::json!(chrono::Utc::now().timestamp()));
-            
+            health.insert(
+                "timestamp".to_string(),
+                serde_json::json!(chrono::Utc::now().timestamp()),
+            );
+
             Ok(Json(ApiResponse::success(health)))
         }
         Err(e) => {

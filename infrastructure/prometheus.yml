@@ -31,10 +31,11 @@ scrape_configs:
 
   - job_name: 'hotpath-arb-engine'
     static_configs:
-      - targets: ['hotpath-arb-engine:8088']
+      - targets: ['host.docker.internal:8099']
     metrics_path: '/metrics'
     scrape_interval: 5s
     scrape_timeout: 3s
+    fallback_scrape_protocol: 'PrometheusText0.0.4'
 
   - job_name: 'normalizer-service'
     static_configs:
@@ -77,3 +78,23 @@ scrape_configs:
     metrics_path: '/metrics'
     scrape_interval: 10s
     scrape_timeout: 5s
+
+  # =============================================================================
+  # EXTERNAL SOLANA DATA (Learning Example)
+  # =============================================================================
+
+  - job_name: 'laserstream-metrics'
+    static_configs:
+      - targets: ['host.docker.internal:9100']
+    metrics_path: '/metrics'
+    scrape_interval: 10s
+    scrape_timeout: 5s
+
+  - job_name: 'solana-exporter'
+    static_configs:
+      - targets: ['host.docker.internal:9101']
+    metrics_path: '/metrics'
+    scrape_interval: 30s
+    scrape_timeout: 15s
+    honor_labels: true
+    fallback_scrape_protocol: 'PrometheusText0.0.4'

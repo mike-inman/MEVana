@@ -15,28 +15,36 @@ impl AuthService {
     pub fn new(jwt_secret: String) -> Self {
         AuthService { jwt_secret }
     }
-    
+
     pub fn hash_password(&self, password: &str) -> Result<String, bcrypt::BcryptError> {
         hash(password, DEFAULT_COST)
     }
-    
-    pub fn verify_password(&self, password: &str, hashed: &str) -> Result<bool, bcrypt::BcryptError> {
+
+    pub fn verify_password(
+        &self,
+        password: &str,
+        hashed: &str,
+    ) -> Result<bool, bcrypt::BcryptError> {
         verify(password, hashed)
     }
-    
-    pub fn generate_token(&self, user_id: &str, role: &str) -> Result<String, jsonwebtoken::errors::Error> {
+
+    pub fn generate_token(
+        &self,
+        user_id: &str,
+        role: &str,
+    ) -> Result<String, jsonwebtoken::errors::Error> {
         let now = SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .unwrap()
             .as_secs() as i64;
-            
+
         let claims = Claims {
             sub: user_id.to_string(),
             role: role.to_string(),
             exp: now + 3600 * 24, // 24 hours
             iat: now,
         };
-        
+
         let encoding_key = EncodingKey::from_secret(self.jwt_secret.as_bytes());
         encode(&Header::default(), &claims, &encoding_key)
     }
@@ -76,22 +84,22 @@ pub struct RegisterRequest {
 #[cfg(test)]
 mod tests {
     use super::*;
-    
+
     #[test]
     fn test_password_hashing() {
         let auth = AuthService::new("test_secret".to_string());
         let password = "test_password";
-        
+
         let hash = auth.hash_password(password).unwrap();
         assert!(auth.verify_password(password, &hash).unwrap());
         assert!(!auth.verify_password("wrong_password", &hash).unwrap());
     }
-    
+
     #[test]
     fn test_token_generation() {
         let auth = AuthService::new("test_secret".to_string());
         let token = auth.generate_token("user123", "admin").unwrap();
-        
+
         assert!(!token.is_empty());
     }
 }

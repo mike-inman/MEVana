@@ -63,14 +63,20 @@ impl KafkaDbWriter {
             .create()?;
 
         // Subscribe to Kafka topics
-        let topics = vec!["alerts.arbitrage.opportunities", "alerts.arbitrage.executions"];
+        let topics = vec![
+            "alerts.arbitrage.opportunities",
+            "alerts.arbitrage.executions",
+        ];
         let mut topic_partition_list = TopicPartitionList::new();
         for topic in &topics {
             topic_partition_list.add_partition(topic, 0);
         }
         consumer.subscribe(&topics)?;
 
-        info!("✅ Kafka consumer initialized (broker: {}, topics: {:?})", kafka_broker, topics);
+        info!(
+            "✅ Kafka consumer initialized (broker: {}, topics: {:?})",
+            kafka_broker, topics
+        );
 
         // Initialize database connection
         let db_pool = PgPool::connect(db_url).await?;
@@ -85,8 +91,10 @@ impl KafkaDbWriter {
     }
 
     pub async fn run(&self) -> Result<()> {
-        info!("🚀 Kafka-to-Database Writer started (batch_size={}, flush_interval={}ms)", 
-               self.batch_size, self.flush_interval_ms);
+        info!(
+            "🚀 Kafka-to-Database Writer started (batch_size={}, flush_interval={}ms)",
+            self.batch_size, self.flush_interval_ms
+        );
 
         let mut opportunity_buffer = Vec::new();
         let mut execution_buffer = Vec::new();
@@ -100,15 +108,15 @@ impl KafkaDbWriter {
                     match message {
                         Ok(m) => {
                             if let Err(e) = self.process_message(
-                                &m, 
-                                &mut opportunity_buffer, 
+                                &m,
+                                &mut opportunity_buffer,
                                 &mut execution_buffer
                             ).await {
                                 error!("❌ Failed to process Kafka message: {}", e);
                             }
 
                             // Check if we need to flush due to batch size
-                            if opportunity_buffer.len() >= self.batch_size || 
+                            if opportunity_buffer.len() >= self.batch_size ||
                                execution_buffer.len() >= self.batch_size {
                                 self.flush_buffers(&mut opportunity_buffer, &mut execution_buffer).await;
                                 last_flush = std::time::Instant::now();
@@ -123,7 +131,7 @@ impl KafkaDbWriter {
 
                 // Periodic flush
                 _ = tokio::time::sleep(flush_interval) => {
-                    if last_flush.elapsed() >= flush_interval && 
+                    if last_flush.elapsed() >= flush_interval &&
                        (!opportunity_buffer.is_empty() || !execution_buffer.is_empty()) {
                         self.flush_buffers(&mut opportunity_buffer, &mut execution_buffer).await;
                         last_flush = std::time::Instant::now();
@@ -156,7 +164,11 @@ impl KafkaDbWriter {
             "alerts.arbitrage.opportunities" => {
                 match serde_json::from_str::<ArbitrageOpportunity>(payload) {
                     Ok(opportunity) => {
-                        debug!("📥 Received opportunity: {} ({})", &opportunity.signature[0..8], opportunity.profit_bps);
+                        debug!(
+                            "📥 Received opportunity: {} ({})",
+                            &opportunity.signature[0..8],
+                            opportunity.profit_bps
+                        );
                         opportunity_buffer.push(opportunity);
                     }
                     Err(e) => {
@@ -203,7 +215,11 @@ impl KafkaDbWriter {
                 // Write opportunities
                 for opportunity in opportunity_buffer.drain(..) {
                     if let Err(e) = self.write_opportunity(&mut tx, &opportunity).await {
-                        error!("❌ Failed to write opportunity {}: {}", &opportunity.signature[0..8], e);
+                        error!(
+                            "❌ Failed to write opportunity {}: {}",
+                            &opportunity.signature[0..8],
+                            e
+                        );
                         success = false;
                         break;
                     }
@@ -213,7 +229,11 @@ impl KafkaDbWriter {
                 if success {
                     for execution in execution_buffer.drain(..) {
                         if let Err(e) = self.write_execution(&mut tx, &execution).await {
-                            error!("❌ Failed to write execution {}: {}", &execution.opportunity_id[0..8], e);
+                            error!(
+                                "❌ Failed to write execution {}: {}",
+                                &execution.opportunity_id[0..8],
+                                e
+                            );
                             success = false;
                             break;
                         }
@@ -225,7 +245,10 @@ impl KafkaDbWriter {
                     match tx.commit().await {
                         Ok(_) => {
                             let elapsed_ms = start_time.elapsed().as_secs_f64() * 1000.0;
-                            info!("✅ Flushed {} events to DB in {:.2}ms", total_events, elapsed_ms);
+                            info!(
+                                "✅ Flushed {} events to DB in {:.2}ms",
+                                total_events, elapsed_ms
+                            );
                         }
                         Err(e) => {
                             error!("❌ Failed to commit transaction: {}", e);
@@ -320,8 +343,8 @@ async fn main() -> Result<()> {
 
     let database_url = std::env::var("DATABASE_URL")
         .unwrap_or_else(|_| "postgresql://mev:mevpassword@localhost:5433/mevdb".to_string());
-    let kafka_broker = std::env::var("KAFKA_BROKER")
-        .unwrap_or_else(|_| "localhost:29092".to_string());
+    let kafka_broker =
+        std::env::var("KAFKA_BROKER").unwrap_or_else(|_| "localhost:29092".to_string());
 
     info!("🚀 Starting MEVana Kafka-to-Database Writer Service");
     info!("📊 Database: {}", database_url);

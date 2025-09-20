@@ -1,10 +1,10 @@
 // crates/shared-core/src/lib.rs
 //! Shared utilities and types for MEVana-MCP components
 
-pub mod port_manager;
-pub mod wallet_safety;
 pub mod database_config;
 pub mod port_config;
+pub mod port_manager;
+pub mod wallet_safety;
 
 use serde::{Deserialize, Serialize};
 use std::fmt;

@@ -1,6 +1,6 @@
 use anyhow::{Context, Result};
 use serde::{Deserialize, Serialize};
-use shared_core::port_config::{PortConfig, get_service_port, get_health_check_url};
+use shared_core::port_config::{get_health_check_url, get_service_port, PortConfig};
 use std::collections::HashMap;
 use std::env;
 use std::time::Duration;

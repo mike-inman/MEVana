@@ -11,9 +11,9 @@ use tokio::sync::RwLock;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum WalletTier {
-    Hot,    // Active trading wallet - small balance, high activity
-    Warm,   // Reserve wallet - medium balance, medium activity  
-    Cold,   // Storage wallet - large balance, rare activity
+    Hot,  // Active trading wallet - small balance, high activity
+    Warm, // Reserve wallet - medium balance, medium activity
+    Cold, // Storage wallet - large balance, rare activity
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -125,30 +125,34 @@ impl LiveWalletManager {
         self.add_wallet(cold_wallet.clone(), cold_keypair).await?;
         info!("✅ Created cold storage wallet: {}", cold_wallet.pubkey);
 
-        info!("🎯 Live wallet system initialized with {} wallets", self.get_wallet_count().await);
+        info!(
+            "🎯 Live wallet system initialized with {} wallets",
+            self.get_wallet_count().await
+        );
         Ok(())
     }
 
     async fn add_wallet(&self, wallet: TradingWallet, keypair: Keypair) -> Result<()> {
         let mut wallets = self.wallets.write().await;
         let mut keypairs = self.keypairs.write().await;
-        
+
         wallets.insert(wallet.pubkey, wallet);
         keypairs.insert(keypair.pubkey(), keypair);
-        
+
         Ok(())
     }
 
     /// Select best wallet for trading based on balance, tier, and activity
     pub async fn select_trading_wallet(&self, required_amount: u64) -> Result<Pubkey> {
         let wallets = self.wallets.read().await;
-        
+
         // Try hot wallets first
         for (pubkey, wallet) in wallets.iter() {
-            if matches!(wallet.tier, WalletTier::Hot) 
+            if matches!(wallet.tier, WalletTier::Hot)
                 && wallet.is_active
                 && wallet.current_balance_lamports >= required_amount
-                && wallet.trades_today < self.config.max_trades_per_wallet_per_day {
+                && wallet.trades_today < self.config.max_trades_per_wallet_per_day
+            {
                 return Ok(*pubkey);
             }
         }
@@ -157,61 +161,69 @@ impl LiveWalletManager {
         for (pubkey, wallet) in wallets.iter() {
             if matches!(wallet.tier, WalletTier::Warm)
                 && wallet.is_active
-                && wallet.current_balance_lamports >= required_amount {
+                && wallet.current_balance_lamports >= required_amount
+            {
                 warn!("Using warm wallet for trade - hot wallets insufficient");
                 return Ok(*pubkey);
             }
         }
 
-        Err(anyhow::anyhow!("No suitable wallet found for amount: {} SOL", 
-            required_amount as f64 / 1_000_000_000.0))
+        Err(anyhow::anyhow!(
+            "No suitable wallet found for amount: {} SOL",
+            required_amount as f64 / 1_000_000_000.0
+        ))
     }
 
     /// Update wallet balance after transaction
     pub async fn update_wallet_balance(&self, pubkey: Pubkey, new_balance: u64) -> Result<()> {
         let mut wallets = self.wallets.write().await;
-        
+
         if let Some(wallet) = wallets.get_mut(&pubkey) {
             wallet.current_balance_lamports = new_balance;
             wallet.last_balance_check = chrono::Utc::now().timestamp() as u64;
-            
+
             // Check if balance exceeds tier limits
             let max_balance = match wallet.tier {
                 WalletTier::Hot => self.config.hot_wallet_max_balance,
                 WalletTier::Warm => self.config.warm_wallet_max_balance,
                 WalletTier::Cold => self.config.cold_wallet_max_balance,
             };
-            
+
             if new_balance > max_balance && self.config.auto_rebalance_enabled {
                 warn!("💰 Wallet {} balance ({:.4} SOL) exceeds tier limit ({:.4} SOL) - rebalancing needed",
                       pubkey, new_balance as f64 / 1_000_000_000.0, max_balance as f64 / 1_000_000_000.0);
                 // Note: Auto-rebalancing would be implemented here
             }
         }
-        
+
         Ok(())
     }
 
     /// Record a trade for tracking daily limits
     pub async fn record_trade(&self, pubkey: Pubkey, profit_lamports: i64) -> Result<()> {
         let mut wallets = self.wallets.write().await;
-        
+
         if let Some(wallet) = wallets.get_mut(&pubkey) {
             wallet.trades_today += 1;
             wallet.total_profit_lamports += profit_lamports;
-            
-            info!("📊 Wallet {} trade recorded: profit={:.4} SOL, daily_trades={}", 
-                  pubkey, profit_lamports as f64 / 1_000_000_000.0, wallet.trades_today);
+
+            info!(
+                "📊 Wallet {} trade recorded: profit={:.4} SOL, daily_trades={}",
+                pubkey,
+                profit_lamports as f64 / 1_000_000_000.0,
+                wallet.trades_today
+            );
         }
-        
+
         Ok(())
     }
 
     /// Get wallet for signing transactions
     pub async fn get_wallet_keypair(&self, pubkey: Pubkey) -> Result<Arc<Keypair>> {
         let keypairs = self.keypairs.read().await;
-        
-        keypairs.get(&pubkey)
+
+        keypairs
+            .get(&pubkey)
             .map(|kp| Arc::new(Keypair::from_bytes(&kp.to_bytes()).unwrap()))
             .ok_or_else(|| anyhow::anyhow!("Keypair not found for wallet: {}", pubkey))
     }
@@ -223,23 +235,27 @@ impl LiveWalletManager {
         }
 
         warn!("🚨 EMERGENCY EVACUATION TRIGGERED - Moving all funds to cold storage");
-        
+
         let wallets = self.wallets.read().await;
-        let cold_wallet = wallets.values()
+        let cold_wallet = wallets
+            .values()
             .find(|w| matches!(w.tier, WalletTier::Cold))
             .ok_or_else(|| anyhow::anyhow!("No cold wallet found"))?;
-        
+
         let _cold_pubkey = cold_wallet.pubkey;
-        
+
         // Move funds from all other wallets to cold storage
         for (pubkey, wallet) in wallets.iter() {
             if !matches!(wallet.tier, WalletTier::Cold) && wallet.current_balance_lamports > 0 {
-                warn!("🔄 Evacuating {:.4} SOL from {} to cold storage", 
-                      wallet.current_balance_lamports as f64 / 1_000_000_000.0, pubkey);
+                warn!(
+                    "🔄 Evacuating {:.4} SOL from {} to cold storage",
+                    wallet.current_balance_lamports as f64 / 1_000_000_000.0,
+                    pubkey
+                );
                 // Note: Actual transfer implementation would go here
             }
         }
-        
+
         info!("✅ Emergency evacuation completed");
         Ok(())
     }
@@ -287,7 +303,8 @@ impl LiveWalletManager {
     /// Export wallet addresses for funding (WITHOUT private keys)
     pub async fn export_wallet_addresses(&self) -> Vec<(Pubkey, WalletTier, u64)> {
         let wallets = self.wallets.read().await;
-        wallets.values()
+        wallets
+            .values()
             .map(|w| (w.pubkey, w.tier.clone(), w.max_balance_lamports))
             .collect()
     }

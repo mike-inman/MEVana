@@ -29,7 +29,7 @@ lazy_static::lazy_static! {
         "Total edges processed by edge assembler"
     ).unwrap();
     static ref POOLS_UPDATED: Counter = Counter::new(
-        "edge_assembler_pools_updated", 
+        "edge_assembler_pools_updated",
         "Total pool updates processed"
     ).unwrap();
 }
@@ -105,7 +105,9 @@ impl EdgeAssembler {
 
         // Register metrics
         let registry = prometheus::default_registry();
-        registry.register(Box::new(EDGES_PROCESSED.clone())).unwrap();
+        registry
+            .register(Box::new(EDGES_PROCESSED.clone()))
+            .unwrap();
         registry.register(Box::new(POOLS_UPDATED.clone())).unwrap();
 
         // Start metrics server

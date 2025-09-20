@@ -6,37 +6,28 @@ scrape_configs:
   # Infrastructure Services
   - job_name: 'prometheus'
     static_configs:
-      - targets: ['prometheus-service:9090']
+      - targets: ['localhost:9090']
 
-  - job_name: 'grafana'
-    static_configs:
-      - targets: ['grafana-service:3000']
-
-  - job_name: 'kafka-ui'
-    metrics_path: '/actuator/prometheus'
-    static_configs:
-      - targets: ['kafka-ui-service:8080']
-
-  # MEVana Services - Primary Trading Components
+  # MEVana Services - Running on host
   - job_name: 'hotpath-arb-engine'
     metrics_path: '/metrics'
     scrape_interval: 5s
     scrape_timeout: 3s
     static_configs:
-      - targets: ['mevana-hotpath-arb-engine-1:8088']
-
-  - job_name: 'normalizer-service'
-    metrics_path: '/metrics'
-    scrape_interval: 10s
-    scrape_timeout: 5s
-    static_configs:
-      - targets: ['mevana-normalizer:8085']
+      - targets: ['hotpath-arb-engine:8088']
 
   - job_name: 'discovery-service'
     metrics_path: '/metrics'
     scrape_interval: 15s
     scrape_timeout: 5s
     static_configs:
-      - targets: ['mevana-discovery:9102']
+      - targets: ['discovery-service:9102']
 
-  # Note: executor-service may not have metrics endpoint, check and add if needed
+  - job_name: 'executor-service'
+    metrics_path: '/metrics'
+    scrape_interval: 10s
+    scrape_timeout: 5s
+    static_configs:
+      - targets: ['executor-service:9904']
+
+  # Additional service scrape configs can be appended here as new components are containerized

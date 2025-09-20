@@ -142,8 +142,10 @@ services:
       - '--storage.tsdb.path=/prometheus'
       - '--web.enable-lifecycle'
     volumes:
-      - ./prometheus.core.yml:/etc/prometheus/prometheus.yml:ro
+      - ./prometheus.prod.yml:/etc/prometheus/prometheus.yml:ro
       - prometheus_data:/prometheus
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     healthcheck:
       test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:9090/-/healthy"]
       interval: 30s
@@ -155,7 +157,7 @@ services:
     restart: unless-stopped
 
   grafana:
-    image: grafana/grafana:latest
+    image: grafana/grafana:10.4.5
     container_name: grafana-service
     depends_on:
       prometheus:
@@ -163,9 +165,11 @@ services:
     environment:
       - GF_SECURITY_ADMIN_PASSWORD=admin123
       - GF_USERS_ALLOW_SIGN_UP=false
+      - GF_PLUGINS_ALLOW_LOADING_UNSIGNED_PLUGINS=grafana-metricsdrilldown-app,grafana-lokiexplore-app,grafana-pyroscope-app,grafana-exploretraces-app
+      - GF_LOG_LEVEL=info
     volumes:
       - grafana_data:/var/lib/grafana
-      - ./grafana/dashboards:/etc/grafana/provisioning/dashboards
+      - ./grafana/dashboards/curated:/etc/grafana/provisioning/dashboards
       - ./grafana/datasources:/etc/grafana/provisioning/datasources
     healthcheck:
       test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3000/api/health"]
@@ -178,11 +182,9 @@ services:
     networks: [mevana_net]
     restart: unless-stopped
 
-  hotpath-arb-engine:
-    image: ghcr.io/mike-inman/mevana-hotpath-arb-engine:${MEVANA_TAG:-dev}
+  mevana-hotpath:
+    image: mevana-hotpath:local
     container_name: mevana-hotpath
-    env_file:
-      - .env
     depends_on:
       kafka:
         condition: service_healthy
@@ -193,26 +195,27 @@ services:
     environment:
       - RUST_LOG=info
       - METRICS_PORT=8088
-      - KAFKA_BROKER=kafka-service:9092
-      - REDIS_URL=redis://redis-service:6379/0
-      - DATABASE_URL=postgresql://mev:mevpassword@postgres-service:5432/mevdb
-      - GEYSER_ENDPOINT=${ENDPOINT:-https://grpc.ny.shyft.to}
-      - X_TOKEN=${X_TOKEN}
+      - KAFKA_BROKER=kafka:9092
+      - REDIS_URL=redis://redis:6379/0
+      - DATABASE_URL=postgresql://mev:mevpassword@postgres:5432/mevdb
+      - GEYSER_ENDPOINT=https://grpc.ny.shyft.to
+      - X_TOKEN=efff2d23-97ae-4c5f-8b8b-9a6265001189
+      - PAPER_TRADING=true
     healthcheck:
       test: ["CMD", "curl", "-sf", "http://localhost:8088/metrics"]
       interval: 30s
       timeout: 10s
       retries: 5
       start_period: 40s
+    ports:
+      - "8088:8088"
     networks: [mevana_net]
     restart: unless-stopped
 
   # Add missing services that were running on server
-  normalizer-service:
-    image: ghcr.io/mike-inman/mevana-normalizer-service:${MEVANA_TAG:-dev}
+  mevana-normalizer:
+    image: mevana-normalizer:local
     container_name: mevana-normalizer
-    env_file:
-      - .env
     depends_on:
       kafka:
         condition: service_healthy
@@ -221,35 +224,38 @@ services:
     environment:
       - RUST_LOG=info
       - METRICS_PORT=8085
-      - KAFKA_BROKER=kafka-service:9092
-      - DATABASE_URL=postgresql://mev:mevpassword@postgres-service:5432/mevdb
+      - KAFKA_BROKER=kafka:9092
+      - DATABASE_URL=postgresql://mev:mevpassword@postgres:5432/mevdb
+    command: ["pipe", "--in-topic", "dex-transactions", "--broker", "kafka:9092"]
     healthcheck:
       test: ["CMD", "curl", "-sf", "http://localhost:8085/metrics"]
       interval: 30s
       timeout: 10s
       retries: 5
       start_period: 40s
+    ports:
+      - "8085:8085"
     networks: [mevana_net]
     restart: unless-stopped
 
-  discovery-service:
-    image: ghcr.io/mike-inman/mevana-discovery-service:${MEVANA_TAG:-dev}
+  mevana-discovery:
+    image: mevana-discovery:local
     container_name: mevana-discovery
-    env_file:
-      - .env
     depends_on:
       kafka:
         condition: service_healthy
     environment:
       - RUST_LOG=info
       - DISCOVERY_METRICS_PORT=9102
-      - KAFKA_BROKER=kafka-service:9092
+      - KAFKA_BROKER=kafka:9092
     healthcheck:
       test: ["CMD", "curl", "-sf", "http://localhost:9102/metrics"]
       interval: 30s
       timeout: 10s
       retries: 5
       start_period: 40s
+    ports:
+      - "9102:9102"
     networks: [mevana_net]
     restart: unless-stopped
 

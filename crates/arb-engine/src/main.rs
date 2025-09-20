@@ -8,7 +8,6 @@ use arb_engine::stats::{
     record_ingest_latency_ns, EDGE_DECODE_ERRORS, EDGE_PROCESS_ERRORS, EDGE_TOTAL,
 };
 use edge_assembler::edge::{edge_delta, ClmmState, ClobState, CpmmState, DlmmState, EdgeDelta};
-use metrics::counter;
 use metrics_exporter_prometheus::{PrometheusBuilder, PrometheusHandle};
 use rand::Rng;
 use rdkafka::config::ClientConfig;
@@ -146,7 +145,7 @@ async fn main() -> anyhow::Result<()> {
                         Ok(msg) => {
                     let ingest_start = Instant::now();
                     if let Some(payload) = msg.payload() {
-                        counter!("edge_messages_total");
+                        metrics::counter!("edge_messages_total").increment(1);
                         TOTAL_MSG.fetch_add(1, Ordering::Relaxed);
                         LAST_MSG_NS.store(std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_nanos() as u64, Ordering::Relaxed);
                         if kafka_debug {
@@ -157,7 +156,11 @@ async fn main() -> anyhow::Result<()> {
                             Ok(delta) => {
                                 if let Err(e) = engine_clone.process_edge_update(delta) {
                                     tracing::error!(error=?e, "edge_process_failed");
-                                    counter!("edge_rejected_total", "reason" => "process_error");
+                                    metrics::counter!(
+                                        "edge_rejected_total",
+                                        "reason" => "process_error"
+                                    )
+                                    .increment(1);
                                     EDGE_PROCESS_ERRORS
                                         .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
                                     msg_error = true;
@@ -165,7 +168,11 @@ async fn main() -> anyhow::Result<()> {
                                 EDGE_TOTAL.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
                             }
                             Err(reason) => {
-                                counter!("edge_decode_errors_total", "reason" => reason);
+                                metrics::counter!(
+                                    "edge_decode_errors_total",
+                                    "reason" => reason
+                                )
+                                .increment(1);
                                 EDGE_DECODE_ERRORS
                                     .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
                                 EDGE_TOTAL.fetch_add(1, std::sync::atomic::Ordering::Relaxed);

@@ -1,8 +1,4 @@
-use axum::{
-    extract::Request,
-    http::HeaderValue,
-    response::Response,
-};
+use axum::{extract::Request, http::HeaderValue, response::Response};
 use tower::{Layer, Service};
 use uuid::Uuid;
 
@@ -35,27 +31,29 @@ where
 {
     type Response = S::Response;
     type Error = S::Error;
-    type Future = std::pin::Pin<Box<dyn std::future::Future<Output = Result<Self::Response, Self::Error>> + Send>>;
+    type Future = std::pin::Pin<
+        Box<dyn std::future::Future<Output = Result<Self::Response, Self::Error>> + Send>,
+    >;
 
-    fn poll_ready(&mut self, cx: &mut std::task::Context<'_>) -> std::task::Poll<Result<(), Self::Error>> {
+    fn poll_ready(
+        &mut self,
+        cx: &mut std::task::Context<'_>,
+    ) -> std::task::Poll<Result<(), Self::Error>> {
         self.inner.poll_ready(cx)
     }
 
     fn call(&mut self, mut req: Request) -> Self::Future {
         let request_id = Uuid::new_v4().to_string();
-        req.headers_mut().insert(
-            "x-request-id",
-            HeaderValue::from_str(&request_id).unwrap(),
-        );
+        req.headers_mut()
+            .insert("x-request-id", HeaderValue::from_str(&request_id).unwrap());
 
         let future = self.inner.call(req);
-        
+
         Box::pin(async move {
             let mut response = future.await?;
-            response.headers_mut().insert(
-                "x-request-id",
-                HeaderValue::from_str(&request_id).unwrap(),
-            );
+            response
+                .headers_mut()
+                .insert("x-request-id", HeaderValue::from_str(&request_id).unwrap());
             Ok(response)
         })
     }

@@ -17,7 +17,6 @@ use crate::stats::{AVG_ADJACENCY, EDGE_PAIR_COUNT, MAX_EDGE_FACTOR, TOKEN_COUNT}
 use anyhow::Result;
 use dashmap::DashMap;
 use edge_assembler::edge::EdgeDelta; // bring EdgeDelta into scope
-use metrics::counter;
 use once_cell::sync::Lazy;
 use prost::Message;
 use std::collections::BTreeMap;
@@ -505,7 +504,7 @@ impl EdgeArbitrageDetector {
                     use crate::stats::SIGNALS_EMITTED;
                     SIGNALS_EMITTED.fetch_add(1, Ordering::Relaxed);
                     record_recent_signal(sig.clone());
-                    counter!("arb_signals_total", "path"=>"edges");
+                    metrics::counter!("arb_signals_total", "path" => "edges").increment(1);
                     record_profit(sig.profit_bps);
                     record_signal_profit_bps(sig.profit_bps);
                     let now_ns = SystemTime::now()
@@ -697,7 +696,7 @@ impl EdgeArbitrageDetector {
                 use crate::stats::SIGNALS_EMITTED;
                 SIGNALS_EMITTED.fetch_add(1, Ordering::Relaxed);
                 record_recent_signal(sig.clone());
-                counter!("arb_signals_total", "path"=>"edges3");
+                metrics::counter!("arb_signals_total", "path" => "edges3").increment(1);
                 record_profit(sig.profit_bps);
                 record_signal_profit_bps(sig.profit_bps);
                 let now_ns = SystemTime::now()
@@ -1125,7 +1124,7 @@ impl EdgeArbitrageDetector {
                 use crate::stats::SIGNALS_EMITTED;
                 SIGNALS_EMITTED.fetch_add(1, Ordering::Relaxed);
                 record_recent_signal(sig.clone());
-                counter!("arb_signals_total", "path" => "edges3");
+                metrics::counter!("arb_signals_total", "path" => "edges3").increment(1);
                 record_profit(sig.profit_bps);
                 record_signal_profit_bps(sig.profit_bps);
                 let now_ns = SystemTime::now()
@@ -1597,21 +1596,33 @@ impl EdgeConsumer {
             match self.consumer.recv().await {
                 Ok(message) => {
                     if let Some(payload) = message.payload() {
-                        counter!("edge_messages_total");
+                        metrics::counter!("edge_messages_total").increment(1);
                         match decode_and_validate_edge(payload) {
                             Ok(ed) => {
                                 if let Err(e) = self.detector.process_edge_update(ed) {
                                     eprintln!("❌ Error processing edge: {}", e);
-                                    counter!("edge_rejected_total", "reason" => "process_error");
+                                    metrics::counter!(
+                                        "edge_rejected_total",
+                                        "reason" => "process_error"
+                                    )
+                                    .increment(1);
                                 }
                             }
                             Err(reason) => {
-                                counter!("edge_decode_errors_total", "reason" => reason);
+                                metrics::counter!(
+                                    "edge_decode_errors_total",
+                                    "reason" => reason
+                                )
+                                .increment(1);
                             }
                         }
                     } else {
                         // empty payload
-                        counter!("edge_rejected_total", "reason" => "empty_payload");
+                        metrics::counter!(
+                            "edge_rejected_total",
+                            "reason" => "empty_payload"
+                        )
+                        .increment(1);
                     }
                     if let Err(e) = self
                         .consumer

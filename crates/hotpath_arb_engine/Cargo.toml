@@ -22,7 +22,7 @@ rustls = { version = "0.23", features = ["ring"] }
 bs58 = { workspace = true }
 
 # Metrics and HTTP API
-metrics = "0.22"
+metrics = "0.23"
 metrics-exporter-prometheus = "0.15"
 prometheus = "0.13"
 axum = "0.7"
@@ -68,6 +68,9 @@ fastrand = "2.0"
 once_cell = "1.21.3"
 
 # Flash loan protocol integrations - using existing Solana SDK
+
+[dev-dependencies]
+reqwest = { version = "0.11", features = ["json"] }
 
 [[bin]]
 name = "hotpath_arb_engine"

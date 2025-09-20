@@ -1,17 +1,17 @@
 use axum::{
     extract::{Query, State},
-    http::{StatusCode, Method},
+    http::{Method, StatusCode},
     response::Json,
     routing::get,
     Router,
 };
-use tower_http::cors::{CorsLayer, Any};
+use dashmap::DashMap;
+use log::{debug, error, info};
+use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::Arc;
-use serde::{Deserialize, Serialize};
-use tokio::time::{Duration, interval};
-use log::{info, error, debug};
-use dashmap::DashMap;
+use tokio::time::{interval, Duration};
+use tower_http::cors::{Any, CorsLayer};
 use utoipa::{OpenApi, ToSchema};
 use utoipa_swagger_ui::SwaggerUi;
 
@@ -101,18 +101,19 @@ pub struct AppState {
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
     env_logger::init();
-    
+
     info!("🚀 Starting Monitoring Service for HotPath Arbitrage Engine");
-    
+
     // Redis connection for metrics sharing
-    let redis_url = std::env::var("REDIS_URL").unwrap_or_else(|_| "redis://localhost:6379".to_string());
+    let redis_url =
+        std::env::var("REDIS_URL").unwrap_or_else(|_| "redis://localhost:6379".to_string());
     let redis_client = redis::Client::open(redis_url)?;
-    
+
     // Test Redis connection
     let mut redis_conn = redis_client.get_connection()?;
     redis::cmd("PING").execute(&mut redis_conn);
     info!("✅ Connected to Redis for metrics sharing");
-    
+
     // Database connection for writing discarded arbitrage events
     #[cfg(feature = "database")]
     let db_pool = {
@@ -130,20 +131,20 @@ async fn main() -> anyhow::Result<()> {
             }
         }
     };
-    
+
     let state = AppState {
         redis_client,
         metrics_cache: Arc::new(DashMap::new()),
         #[cfg(feature = "database")]
         db_pool,
     };
-    
+
     // Start background metrics collector
     let metrics_state = state.clone();
     tokio::spawn(async move {
         metrics_collector_task(metrics_state).await;
     });
-    
+
     // Build router with CORS and Swagger UI
     let app = Router::new()
         .merge(SwaggerUi::new("/swagger-ui").url("/api-docs/openapi.json", ApiDoc::openapi()))
@@ -159,14 +160,14 @@ async fn main() -> anyhow::Result<()> {
             CorsLayer::new()
                 .allow_origin(Any)
                 .allow_methods([Method::GET, Method::POST])
-                .allow_headers(Any)
+                .allow_headers(Any),
         )
         .with_state(state);
-    
+
     let port = std::env::var("MONITORING_PORT")
         .unwrap_or_else(|_| "8090".to_string())
         .parse::<u16>()?;
-    
+
     let listener = tokio::net::TcpListener::bind(format!("0.0.0.0:{}", port)).await?;
     info!("🌐 Monitoring Service listening on http://0.0.0.0:{}", port);
     info!("📊 API Endpoints available:");
@@ -177,31 +178,34 @@ async fn main() -> anyhow::Result<()> {
     info!("  - GET /api/arbitrage/performance - Performance metrics");
     info!("  - GET /api/venues - Venue statistics");
     info!("  - GET /api/system/status - System status");
-    
+
     axum::serve(listener, app).await?;
-    
+
     Ok(())
 }
 
 async fn metrics_collector_task(state: AppState) {
     info!("📈 Starting metrics collector task");
     let mut interval = interval(Duration::from_secs(1));
-    
+
     loop {
         interval.tick().await;
-        
+
         // DIRECT QUEUE CONSUMPTION - Get qualified arbitrage opportunities from shared memory
         let detected_events = consume_detected_arbitrage_events(100);
-        
+
         if !detected_events.is_empty() {
-            info!("⚡ CONSUMING {} qualified arbitrage opportunities from shared memory queue", detected_events.len());
-            
+            info!(
+                "⚡ CONSUMING {} qualified arbitrage opportunities from shared memory queue",
+                detected_events.len()
+            );
+
             // Write detected opportunities to database
             if let Err(e) = process_detected_events(&state, detected_events).await {
                 error!("❌ Failed to process detected opportunities: {}", e);
             }
         }
-        
+
         match collect_metrics_from_redis(&state).await {
             Ok(_) => debug!("✅ Metrics collected from Redis"),
             Err(e) => error!("❌ Failed to collect metrics: {}", e),
@@ -211,16 +215,16 @@ async fn metrics_collector_task(state: AppState) {
 
 async fn collect_metrics_from_redis(state: &AppState) -> anyhow::Result<()> {
     let mut conn = state.redis_client.get_connection()?;
-    
+
     // Collect various metrics from Redis keys that hotpath_arb_engine publishes
     let keys = [
         "hotpath:stats:arbitrage",
         "hotpath:stats:arbitrage:live",
-        "hotpath:stats:performance", 
+        "hotpath:stats:performance",
         "hotpath:stats:venues",
-        "hotpath:stats:system"
+        "hotpath:stats:system",
     ];
-    
+
     for key in keys {
         if let Ok(value) = redis::cmd("GET").arg(key).query::<String>(&mut conn) {
             if let Ok(json_value) = serde_json::from_str::<serde_json::Value>(&value) {
@@ -228,7 +232,7 @@ async fn collect_metrics_from_redis(state: &AppState) -> anyhow::Result<()> {
             }
         }
     }
-    
+
     Ok(())
 }
 
@@ -276,7 +280,7 @@ async fn live_arbitrage_stats(State(state): State<AppState>) -> Json<ArbitrageSt
             return Json(stats);
         }
     }
-    
+
     // Fallback to Redis cache - try both keys
     for key in ["hotpath:stats:arbitrage", "hotpath:stats:arbitrage:live"] {
         if let Some(stats) = state.metrics_cache.get(key) {
@@ -285,7 +289,7 @@ async fn live_arbitrage_stats(State(state): State<AppState>) -> Json<ArbitrageSt
             }
         }
     }
-    
+
     // Last resort: empty stats indicating no data yet
     Json(ArbitrageStats {
         opportunities_detected: 0,
@@ -313,7 +317,7 @@ async fn arbitrage_summary(State(state): State<AppState>) -> Json<serde_json::Va
             return Json(summary);
         }
     }
-    
+
     // Fallback: empty summary indicating no data yet
     Json(serde_json::json!({
         "period": "24h",
@@ -343,14 +347,14 @@ async fn performance_metrics(State(state): State<AppState>) -> Json<PerformanceM
             return Json(perf);
         }
     }
-    
+
     // Fallback to Redis cache
     if let Some(perf) = state.metrics_cache.get("hotpath:stats:performance") {
         if let Ok(parsed) = serde_json::from_value::<PerformanceMetrics>(perf.clone()) {
             return Json(parsed);
         }
     }
-    
+
     // Default: no performance data yet
     Json(PerformanceMetrics {
         detection_latency_p50_us: 0,
@@ -378,7 +382,7 @@ async fn venue_stats(State(state): State<AppState>) -> Json<Vec<VenueStats>> {
             return Json(venues);
         }
     }
-    
+
     // Fallback: empty list indicating no venue data yet
     Json(vec![])
 }
@@ -397,14 +401,15 @@ async fn venue_stats(State(state): State<AppState>) -> Json<Vec<VenueStats>> {
 )]
 async fn get_all_arbitrage_records(
     State(state): State<AppState>,
-    Query(params): Query<HashMap<String, String>>
+    Query(params): Query<HashMap<String, String>>,
 ) -> Result<Json<serde_json::Value>, StatusCode> {
     // Get limit from query params (default 1000, max 10000)
-    let limit = params.get("limit")
+    let limit = params
+        .get("limit")
         .and_then(|l| l.parse::<i64>().ok())
         .unwrap_or(1000)
         .min(10000);
-    
+
     #[cfg(feature = "database")]
     if let Some(db_pool) = &state.db_pool {
         match query_all_arbitrage_records(db_pool, limit).await {
@@ -415,7 +420,7 @@ async fn get_all_arbitrage_records(
             }
         }
     }
-    
+
     // No database configured
     Ok(Json(serde_json::json!({
         "error": "Database not configured",
@@ -437,7 +442,7 @@ async fn system_status(State(state): State<AppState>) -> Json<LiveMetrics> {
             return Json(parsed);
         }
     }
-    
+
     // Mock system status
     Json(LiveMetrics {
         current_slot: 365_140_000,
@@ -451,14 +456,17 @@ async fn system_status(State(state): State<AppState>) -> Json<LiveMetrics> {
 
 async fn process_detected_events(
     state: &AppState,
-    events: Vec<hotpath_arb_engine::orderbook_tracker::ArbitrageEvent>
+    events: Vec<hotpath_arb_engine::orderbook_tracker::ArbitrageEvent>,
 ) -> anyhow::Result<()> {
     if events.is_empty() {
         return Ok(());
     }
-    
-    info!("💾 WRITING {} events to database and Redis cache", events.len());
-    
+
+    info!(
+        "💾 WRITING {} events to database and Redis cache",
+        events.len()
+    );
+
     // Write to database (existing arbitrage_opportunities table)
     #[cfg(feature = "database")]
     if let Some(db_pool) = &state.db_pool {
@@ -483,25 +491,38 @@ async fn process_detected_events(
             .bind(event.execution_time_us as i64)
             .bind("arbitrage-detected")
             .execute(db_pool).await;
-            
+
             if let Err(e) = result {
-                error!("❌ Failed to insert arbitrage opportunity {}: {}", event.opportunity_id, e);
+                error!(
+                    "❌ Failed to insert arbitrage opportunity {}: {}",
+                    event.opportunity_id, e
+                );
             } else {
-                info!("✅ DB INSERT: {} {}bps {}->{} (slot: {})", 
-                    event.opportunity_id, event.profit_bps, 
-                    event.venue_sell, event.venue_buy, event.slot);
+                info!(
+                    "✅ DB INSERT: {} {}bps {}->{} (slot: {})",
+                    event.opportunity_id,
+                    event.profit_bps,
+                    event.venue_sell,
+                    event.venue_buy,
+                    event.slot
+                );
             }
         }
     }
-    
+
     // Update Redis with aggregated metrics
     let mut redis_conn = state.redis_client.get_connection()?;
-    
+
     // Update arbitrage stats in Redis
     let total_opportunities = events.len() as u64;
-    let avg_profit: f64 = events.iter().map(|e| e.profit_bps as f64).sum::<f64>() / total_opportunities as f64;
-    let avg_detection_time: f64 = events.iter().map(|e| e.execution_time_us as f64).sum::<f64>() / total_opportunities as f64;
-    
+    let avg_profit: f64 =
+        events.iter().map(|e| e.profit_bps as f64).sum::<f64>() / total_opportunities as f64;
+    let avg_detection_time: f64 = events
+        .iter()
+        .map(|e| e.execution_time_us as f64)
+        .sum::<f64>()
+        / total_opportunities as f64;
+
     let arbitrage_stats = serde_json::json!({
         "opportunities_detected": total_opportunities,
         "opportunities_executed": events.iter().filter(|e| e.success).count(),
@@ -511,26 +532,29 @@ async fn process_detected_events(
         "last_updated": chrono::Utc::now(),
         "timestamp": chrono::Utc::now().timestamp()
     });
-    
+
     // Write to both Redis keys for compatibility
     let stats_json = arbitrage_stats.to_string();
-    
+
     redis::cmd("SET")
         .arg("hotpath:stats:arbitrage")
         .arg(&stats_json)
         .arg("EX")
         .arg(300) // 5 minute expiry
         .execute(&mut redis_conn);
-    
+
     redis::cmd("SET")
         .arg("hotpath:stats:arbitrage:live")
         .arg(&stats_json)
         .arg("EX")
         .arg(300) // 5 minute expiry
         .execute(&mut redis_conn);
-    
-    debug!("✅ Updated Redis with live arbitrage stats from {} events", total_opportunities);
-    
+
+    debug!(
+        "✅ Updated Redis with live arbitrage stats from {} events",
+        total_opportunities
+    );
+
     Ok(())
 }
 
@@ -600,7 +624,7 @@ async fn query_24h_summary(db_pool: &sqlx::PgPool) -> anyhow::Result<serde_json:
         GROUP BY venue_sell, venue_buy
         ORDER BY total_profit_bps DESC
         LIMIT 5
-        "#
+        "#,
     )
     .fetch_all(db_pool)
     .await?;
@@ -608,14 +632,17 @@ async fn query_24h_summary(db_pool: &sqlx::PgPool) -> anyhow::Result<serde_json:
     let total_profit_bps = summary_row.get::<i64, _>("total_profit_bps");
     let total_profit_sol = total_profit_bps as f64 / 10000.0; // Convert bps to SOL estimate
 
-    let top_venues: Vec<serde_json::Value> = venue_rows.iter().map(|row| {
-        let venue_profit_bps = row.get::<i64, _>("total_profit_bps");
-        serde_json::json!({
-            "name": row.get::<String, _>("venue_pair"),
-            "profit_sol": venue_profit_bps as f64 / 10000.0,
-            "trades": row.get::<i64, _>("trades")
+    let top_venues: Vec<serde_json::Value> = venue_rows
+        .iter()
+        .map(|row| {
+            let venue_profit_bps = row.get::<i64, _>("total_profit_bps");
+            serde_json::json!({
+                "name": row.get::<String, _>("venue_pair"),
+                "profit_sol": venue_profit_bps as f64 / 10000.0,
+                "trades": row.get::<i64, _>("trades")
+            })
         })
-    }).collect();
+        .collect();
 
     Ok(serde_json::json!({
         "period": "24h",
@@ -651,7 +678,7 @@ async fn query_performance_metrics(db_pool: &sqlx::PgPool) -> anyhow::Result<Per
         detection_latency_p99_us: row.get::<f64, _>("p99_detection") as u64,
         // For now, use mock execution data until we have execution_results table populated
         execution_latency_p50_ms: 45,
-        execution_latency_p95_ms: 89, 
+        execution_latency_p95_ms: 89,
         execution_latency_p99_ms: 125,
     })
 }
@@ -680,21 +707,25 @@ async fn query_venue_stats(db_pool: &sqlx::PgPool) -> anyhow::Result<Vec<VenueSt
     .fetch_all(db_pool)
     .await?;
 
-    let venues: Vec<VenueStats> = rows.iter().map(|row| {
-        VenueStats {
+    let venues: Vec<VenueStats> = rows
+        .iter()
+        .map(|row| VenueStats {
             venue: row.get::<String, _>("venue"),
             volume_24h: row.get::<f64, _>("volume_estimate"),
             opportunities_count: row.get::<i64, _>("opportunities_count") as u64,
             avg_profit_bps: row.get::<f64, _>("avg_profit_bps") as i32,
             success_rate: row.get::<f64, _>("success_rate"),
-        }
-    }).collect();
+        })
+        .collect();
 
     Ok(venues)
 }
 
 #[cfg(feature = "database")]
-async fn query_all_arbitrage_records(db_pool: &sqlx::PgPool, limit: i64) -> anyhow::Result<serde_json::Value> {
+async fn query_all_arbitrage_records(
+    db_pool: &sqlx::PgPool,
+    limit: i64,
+) -> anyhow::Result<serde_json::Value> {
     // Query all arbitrage records with limit
     let rows = sqlx::query(
         r#"
@@ -713,28 +744,31 @@ async fn query_all_arbitrage_records(db_pool: &sqlx::PgPool, limit: i64) -> anyh
         FROM arbitrage_opportunities 
         ORDER BY timestamp DESC
         LIMIT $1
-        "#
+        "#,
     )
     .bind(limit)
     .fetch_all(db_pool)
     .await?;
-    
-    let records: Vec<serde_json::Value> = rows.iter().map(|row| {
-        serde_json::json!({
-            "opportunity_id": row.get::<String, _>("opportunity_id"),
-            "timestamp": row.get::<chrono::DateTime<chrono::Utc>, _>("timestamp"),
-            "slot": row.get::<i64, _>("slot"),
-            "venue_sell": row.get::<String, _>("venue_sell"),
-            "venue_buy": row.get::<String, _>("venue_buy"),
-            "token_pair": row.get::<String, _>("token_pair"),
-            "profit_bps": row.get::<i32, _>("profit_bps"),
-            "amount_in": row.get::<f64, _>("amount_in"),
-            "expected_amount_out": row.get::<f64, _>("expected_amount_out"),
-            "detection_time_us": row.get::<i64, _>("detection_time_us"),
-            "strategy_type": row.get::<String, _>("strategy_type")
+
+    let records: Vec<serde_json::Value> = rows
+        .iter()
+        .map(|row| {
+            serde_json::json!({
+                "opportunity_id": row.get::<String, _>("opportunity_id"),
+                "timestamp": row.get::<chrono::DateTime<chrono::Utc>, _>("timestamp"),
+                "slot": row.get::<i64, _>("slot"),
+                "venue_sell": row.get::<String, _>("venue_sell"),
+                "venue_buy": row.get::<String, _>("venue_buy"),
+                "token_pair": row.get::<String, _>("token_pair"),
+                "profit_bps": row.get::<i32, _>("profit_bps"),
+                "amount_in": row.get::<f64, _>("amount_in"),
+                "expected_amount_out": row.get::<f64, _>("expected_amount_out"),
+                "detection_time_us": row.get::<i64, _>("detection_time_us"),
+                "strategy_type": row.get::<String, _>("strategy_type")
+            })
         })
-    }).collect();
-    
+        .collect();
+
     Ok(serde_json::json!({
         "total": records.len(),
         "limit": limit,

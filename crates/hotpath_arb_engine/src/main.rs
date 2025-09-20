@@ -4,9 +4,9 @@ use clap::Parser;
 use dashmap::DashMap;
 use futures::StreamExt;
 use log::{debug, error, info, warn};
-use metrics::{counter, gauge, histogram};
-use once_cell::sync::Lazy;
+use once_cell::sync::{Lazy, OnceCell};
 use serde::{Deserialize, Serialize};
+use serde_json::json;
 use shared_core::port_manager::get_port_with_fallback;
 use std::collections::{HashMap, VecDeque};
 use std::sync::{
@@ -69,7 +69,6 @@ use event_bus::{EventType, TradingEvent, EVENT_BUS};
 use wallet_manager::generate_demo_wallets;
 use wallet_security::{SecurityPolicy, WalletSecurityManager};
 
-
 // ORDERBOOK HISTORY SYSTEM - Off-hotpath database tracking
 use async_history_buffer::{
     create_arbitrage_opportunity, create_execution_result, AsyncHistoryBuffer,
@@ -112,7 +111,9 @@ use property_store::{get_property_store, PropertySource, PropertyValue, Validati
 
 // Import WebSocket broadcasting for real-time UI updates
 mod websocket_broadcaster;
-use websocket_broadcaster::{create_websocket_broadcaster, websocket_handler, WebSocketBroadcaster};
+use websocket_broadcaster::{
+    create_websocket_broadcaster, websocket_handler, WebSocketBroadcaster,
+};
 
 /// Emergency controls for system safety - can instantly stop/control trading
 pub struct EmergencyControls {
@@ -132,14 +133,18 @@ pub enum SystemHealthStatus {
 }
 
 /// Global emergency controls - monitors system health and can trigger emergency stops
-static EMERGENCY_CONTROLS: Lazy<EmergencyControls> = Lazy::new(|| {
-    EmergencyControls {
-        last_safety_check: Instant::now(),
-        consecutive_failures: AtomicU32::new(0),
-        last_circuit_breaker_trigger: AtomicU64::new(0),
-        system_health_status: Arc::new(Mutex::new(SystemHealthStatus::Healthy)),
-    }
+static EMERGENCY_CONTROLS: Lazy<EmergencyControls> = Lazy::new(|| EmergencyControls {
+    last_safety_check: Instant::now(),
+    consecutive_failures: AtomicU32::new(0),
+    last_circuit_breaker_trigger: AtomicU64::new(0),
+    system_health_status: Arc::new(Mutex::new(SystemHealthStatus::Healthy)),
 });
+
+/// Service boot timestamp for health/uptime reporting
+static SERVICE_START_TIME: Lazy<Instant> = Lazy::new(Instant::now);
+
+/// Optional global database pool for readiness diagnostics
+static DATABASE_POOL: OnceCell<Arc<PgPool>> = OnceCell::new();
 
 /// Check if live trading is enabled and safe to proceed
 /// This is the MASTER SAFETY GATE - everything flows through here
@@ -147,7 +152,8 @@ fn is_trading_enabled_and_safe() -> bool {
     let property_store = get_property_store();
 
     // LAYER 1: Check enable_live_execution flag
-    let live_execution_enabled = property_store.get_atomic_bool("enable_live_execution")
+    let live_execution_enabled = property_store
+        .get_atomic_bool("enable_live_execution")
         .unwrap_or(false);
 
     if !live_execution_enabled {
@@ -155,15 +161,15 @@ fn is_trading_enabled_and_safe() -> bool {
     }
 
     // LAYER 2: Check dry_run flag
-    let dry_run = property_store.get_atomic_bool("dry_run")
-        .unwrap_or(true);
+    let dry_run = property_store.get_atomic_bool("dry_run").unwrap_or(true);
 
     if dry_run {
         return false; // In dry run mode
     }
 
     // LAYER 3: Check simulation_mode flag
-    let simulation_mode = property_store.get_atomic_bool("simulation_mode")
+    let simulation_mode = property_store
+        .get_atomic_bool("simulation_mode")
         .unwrap_or(true);
 
     if simulation_mode {
@@ -171,17 +177,23 @@ fn is_trading_enabled_and_safe() -> bool {
     }
 
     // LAYER 4: Check circuit breaker
-    let circuit_breaker_enabled = property_store.get_atomic_bool("circuit_breaker_enabled")
+    let circuit_breaker_enabled = property_store
+        .get_atomic_bool("circuit_breaker_enabled")
         .unwrap_or(true);
 
     if circuit_breaker_enabled {
-        let consecutive_failures = EMERGENCY_CONTROLS.consecutive_failures.load(Ordering::Relaxed);
-        let max_failures = property_store.get_atomic_u32("max_consecutive_failures")
+        let consecutive_failures = EMERGENCY_CONTROLS
+            .consecutive_failures
+            .load(Ordering::Relaxed);
+        let max_failures = property_store
+            .get_atomic_u32("max_consecutive_failures")
             .unwrap_or(3);
 
         if consecutive_failures >= max_failures {
-            warn!("🚨 Circuit breaker ACTIVE: {} consecutive failures (max: {})",
-                  consecutive_failures, max_failures);
+            warn!(
+                "🚨 Circuit breaker ACTIVE: {} consecutive failures (max: {})",
+                consecutive_failures, max_failures
+            );
             return false; // Circuit breaker triggered
         }
     }
@@ -206,23 +218,38 @@ fn is_trading_enabled_and_safe() -> bool {
 
 /// Record execution failure for circuit breaker tracking
 fn record_execution_failure(reason: &str) {
-    let consecutive_failures = EMERGENCY_CONTROLS.consecutive_failures.fetch_add(1, Ordering::Relaxed) + 1;
+    let consecutive_failures = EMERGENCY_CONTROLS
+        .consecutive_failures
+        .fetch_add(1, Ordering::Relaxed)
+        + 1;
 
     warn!("📊 Execution failure #{}: {}", consecutive_failures, reason);
 
-    let max_failures = get_property_store().get_atomic_u32("max_consecutive_failures")
+    let max_failures = get_property_store()
+        .get_atomic_u32("max_consecutive_failures")
         .unwrap_or(3);
 
     if consecutive_failures >= max_failures {
-        let now = SystemTime::now().duration_since(UNIX_EPOCH).unwrap_or_default().as_millis() as u64;
-        EMERGENCY_CONTROLS.last_circuit_breaker_trigger.store(now, Ordering::Relaxed);
+        let now = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_millis() as u64;
+        EMERGENCY_CONTROLS
+            .last_circuit_breaker_trigger
+            .store(now, Ordering::Relaxed);
 
-        error!("🚨 CIRCUIT BREAKER TRIGGERED: {} consecutive failures", consecutive_failures);
+        error!(
+            "🚨 CIRCUIT BREAKER TRIGGERED: {} consecutive failures",
+            consecutive_failures
+        );
 
         // Update system health status
         if let Ok(mut health) = EMERGENCY_CONTROLS.system_health_status.lock() {
             *health = SystemHealthStatus::Critical {
-                reason: format!("Circuit breaker triggered after {} failures", consecutive_failures)
+                reason: format!(
+                    "Circuit breaker triggered after {} failures",
+                    consecutive_failures
+                ),
             };
         }
     }
@@ -230,10 +257,15 @@ fn record_execution_failure(reason: &str) {
 
 /// Record execution success for circuit breaker reset
 fn record_execution_success() {
-    let old_failures = EMERGENCY_CONTROLS.consecutive_failures.swap(0, Ordering::Relaxed);
+    let old_failures = EMERGENCY_CONTROLS
+        .consecutive_failures
+        .swap(0, Ordering::Relaxed);
 
     if old_failures > 0 {
-        info!("✅ Circuit breaker RESET: Successful execution after {} failures", old_failures);
+        info!(
+            "✅ Circuit breaker RESET: Successful execution after {} failures",
+            old_failures
+        );
 
         // Update system health status back to healthy
         if let Ok(mut health) = EMERGENCY_CONTROLS.system_health_status.lock() {
@@ -1243,8 +1275,8 @@ impl LiveTradingEngine {
             self.total_fees_paid
                 .fetch_add(total_costs, Ordering::Relaxed);
 
-            counter!("live_trades_successful_total").increment(1);
-            gauge!("live_trade_profit_lamports").set(net_profit as f64);
+            metrics::counter!("live_trades_successful_total").increment(1);
+            metrics::gauge!("live_trade_profit_lamports").set(net_profit as f64);
 
             info!(
                 "✅ {} SUCCESS: {} - Net Profit: {} lamports, Total Costs: {} lamports, Time: {}ms",
@@ -1256,7 +1288,7 @@ impl LiveTradingEngine {
             );
         } else {
             self.failed_trades.fetch_add(1, Ordering::Relaxed);
-            counter!("live_trades_failed_total").increment(1);
+            metrics::counter!("live_trades_failed_total").increment(1);
             warn!(
                 "❌ {} FAILED: {} - Insufficient net profit: {} lamports (need > {})",
                 if paper_trading { "PAPER" } else { "LIVE" },
@@ -1266,7 +1298,7 @@ impl LiveTradingEngine {
             );
         }
 
-        histogram!("live_trade_execution_time_ms").record(execution_time_ms as f64);
+        metrics::histogram!("live_trade_execution_time_ms").record(execution_time_ms as f64);
 
         Ok(success)
     }
@@ -1400,7 +1432,7 @@ impl HotPathArbitrageEngine {
                 PERFORMANCE_ANALYTICS.record_execution(execution_time_us, success);
 
                 if success {
-                    counter!("lethal_executions_successful_total").increment(1);
+                    metrics::counter!("lethal_executions_successful_total").increment(1);
                     info!(
                         "✅ LETHAL EXECUTION SUCCESS: opportunity={} time={}ms profit_captured={}bps",
                         opportunity.opportunity_id, execution_time_ms, opportunity.profit_bps
@@ -1420,14 +1452,14 @@ impl HotPathArbitrageEngine {
                         opportunity.opportunity_id
                     );
                 } else {
-                    counter!("lethal_executions_failed_total").increment(1);
+                    metrics::counter!("lethal_executions_failed_total").increment(1);
                     warn!(
                         "❌ LETHAL EXECUTION FAILED: opportunity={} time={}ms reason=simulated_failure",
                         opportunity.opportunity_id, execution_time_ms
                     );
                 }
 
-                histogram!("lethal_execution_time_ms").record(execution_time_ms as f64);
+                metrics::histogram!("lethal_execution_time_ms").record(execution_time_ms as f64);
             }
         });
 
@@ -1655,8 +1687,8 @@ impl HotPathArbitrageEngine {
                         );
 
                         // Update internal statistics
-                        counter!("successful_trades_total").increment(1);
-                        histogram!("trade_profit_lamports").record(profit as f64);
+                        metrics::counter!("successful_trades_total").increment(1);
+                        metrics::histogram!("trade_profit_lamports").record(profit as f64);
 
                         // Provide AI learning feedback for successful execution
                         self.provide_ai_learning_feedback(
@@ -1675,7 +1707,7 @@ impl HotPathArbitrageEngine {
                             "❌ Trade execution failed: status={:?}",
                             result.final_status
                         );
-                        counter!("failed_trades_total").increment(1);
+                        metrics::counter!("failed_trades_total").increment(1);
 
                         // Provide AI learning feedback for failed execution
                         self.provide_ai_learning_feedback(
@@ -1694,7 +1726,7 @@ impl HotPathArbitrageEngine {
                             "⏳ Trade execution incomplete: status={:?}",
                             result.final_status
                         );
-                        counter!("incomplete_trades_total").increment(1);
+                        metrics::counter!("incomplete_trades_total").increment(1);
 
                         // Provide AI learning feedback for incomplete execution
                         self.provide_ai_learning_feedback(
@@ -1712,7 +1744,7 @@ impl HotPathArbitrageEngine {
             }
             Err(e) => {
                 error!("❌ Trade execution error: {}", e);
-                counter!("execution_errors_total").increment(1);
+                metrics::counter!("execution_errors_total").increment(1);
 
                 // Provide AI learning feedback for execution error
                 self.provide_ai_learning_feedback(
@@ -2384,8 +2416,9 @@ impl HotPathArbitrageEngine {
         );
 
         // Record metrics
-        counter!("hotpath_transactions_processed_total").increment(1);
-        histogram!("hotpath_processing_time_us").record(start_time.elapsed().as_micros() as f64);
+        metrics::counter!("hotpath_transactions_processed_total").increment(1);
+        metrics::histogram!("hotpath_processing_time_us")
+            .record(start_time.elapsed().as_micros() as f64);
 
         self.arbitrage_signals_total.fetch_add(1, Ordering::Relaxed);
 
@@ -2442,7 +2475,9 @@ impl HotPathArbitrageEngine {
 
                 // ⚠️ MASTER SAFETY GATE: Check if trading is enabled and safe
                 if !is_trading_enabled_and_safe() {
-                    info!("🛡️ Trading safety gate BLOCKED execution: Live trading disabled or unsafe");
+                    info!(
+                        "🛡️ Trading safety gate BLOCKED execution: Live trading disabled or unsafe"
+                    );
                     // Still count as processed for metrics, but don't execute
                     return Ok(None);
                 }
@@ -2625,7 +2660,7 @@ impl HotPathArbitrageEngine {
 
         // STRATEGY 1: Multi-venue atomic arbitrage (within same tx) - NOW DETECTS SINGLE VENUE TOO
         if venues_involved.len() >= 1 {
-            counter!("hotpath_multi_venue_transactions").increment(1);
+            metrics::counter!("hotpath_multi_venue_transactions").increment(1);
             log::info!(
                 "🎯 OPPORTUNITY: Detected potential arbitrage with {} venues",
                 venues_involved.len()
@@ -2675,7 +2710,7 @@ impl HotPathArbitrageEngine {
 
             // Check for large trades that create price impact opportunities
             if self.detect_price_impact_opportunity(venue, transaction_update)? {
-                counter!("hotpath_price_impact_opportunities").increment(1);
+                metrics::counter!("hotpath_price_impact_opportunities").increment(1);
 
                 // Calculate real profit instead of hardcoded value
                 let (profit_bps, (token_a, token_b)) = self
@@ -2705,7 +2740,7 @@ impl HotPathArbitrageEngine {
         let cross_stream_opportunity =
             self.detect_cross_stream_arbitrage(&venues_involved, transaction_update)?;
         if cross_stream_opportunity.is_some() {
-            counter!("hotpath_cross_stream_arbitrage").increment(1);
+            metrics::counter!("hotpath_cross_stream_arbitrage").increment(1);
             self.arbitrage_opportunities_found
                 .fetch_add(1, Ordering::Relaxed);
             return Ok(cross_stream_opportunity);
@@ -2732,7 +2767,7 @@ impl HotPathArbitrageEngine {
             // Large trades typically involve many accounts (token accounts, pool accounts, etc.)
             // LOWERED REQUIREMENTS: Normal swaps have 8-12 accounts, so catch anything with 6+
             if account_count > 6 {
-                counter!("hotpath_large_account_transactions").increment(1);
+                metrics::counter!("hotpath_large_account_transactions").increment(1);
 
                 // Additional checks based on venue type - MUCH LOWER THRESHOLDS
                 match venue {
@@ -3303,7 +3338,9 @@ async fn create_geyser_client(
 }
 
 // Create consolidated subscription for all streams sharing the same endpoint
-async fn create_consolidated_geyser_subscription(configs: &[StreamConfig]) -> Result<SubscribeRequest> {
+async fn create_consolidated_geyser_subscription(
+    configs: &[StreamConfig],
+) -> Result<SubscribeRequest> {
     // Collect all program IDs from all streams sharing the same endpoint
     let mut all_program_ids = std::collections::HashSet::new();
     for config in configs {
@@ -3405,7 +3442,10 @@ async fn process_consolidated_geyser_stream(
 
     info!(
         "✅ Consolidated stream: Subscription request created for {} program IDs",
-        stream_configs.iter().map(|c| c.program_ids.len()).sum::<usize>()
+        stream_configs
+            .iter()
+            .map(|c| c.program_ids.len())
+            .sum::<usize>()
     );
 
     // Subscribe to consolidated stream
@@ -3439,7 +3479,9 @@ async fn process_consolidated_geyser_stream(
                     // Route message to appropriate internal stream pipelines
                     for config in &stream_configs {
                         // Check if this transaction matches this stream's program IDs
-                        let matches_stream = program_ids.iter().any(|pid| config.program_ids.contains(pid));
+                        let matches_stream = program_ids
+                            .iter()
+                            .any(|pid| config.program_ids.contains(pid));
 
                         if matches_stream {
                             println!("📥 Stream {} received message", config.id);
@@ -3454,7 +3496,10 @@ async fn process_consolidated_geyser_stream(
                                 .process_transaction_hot_path(&transaction_update)
                                 .await
                                 .unwrap_or_else(|e| {
-                                    error!("Stream {} hot path arbitrage detection failed: {}", config.id, e);
+                                    error!(
+                                        "Stream {} hot path arbitrage detection failed: {}",
+                                        config.id, e
+                                    );
                                     None
                                 });
 
@@ -3472,26 +3517,34 @@ async fn process_consolidated_geyser_stream(
                                 // Record in history buffer if available
                                 if let Some(ref buffer) = history_buffer {
                                     // Convert main.rs ArbitrageOpportunity to async_history_buffer ArbitrageOpportunity
-                                    let buffer_opportunity = crate::async_history_buffer::create_arbitrage_opportunity(
-                                        &format!("{}_{}", opportunity.signature, opportunity.slot),
-                                        opportunity.slot,
-                                        opportunity.timestamp.timestamp_nanos_opt().unwrap_or(0) as u64,
-                                        &opportunity.venue_a,
-                                        &opportunity.venue_b,
-                                        &format!("{}_{}", opportunity.token_a, opportunity.token_b),
-                                        opportunity.profit_bps as i32,
-                                        1000.0, // Default amount_in
-                                        1000.0 + (opportunity.profit_bps as f64 * 10.0), // Estimated amount_out
-                                        arbitrage_latency_us as u64,
-                                        &opportunity.strategy,
-                                        serde_json::json!({
-                                            "signature": opportunity.signature,
-                                            "venue_a": opportunity.venue_a,
-                                            "venue_b": opportunity.venue_b,
-                                            "token_a": opportunity.token_a,
-                                            "token_b": opportunity.token_b
-                                        }),
-                                    );
+                                    let buffer_opportunity =
+                                        crate::async_history_buffer::create_arbitrage_opportunity(
+                                            &format!(
+                                                "{}_{}",
+                                                opportunity.signature, opportunity.slot
+                                            ),
+                                            opportunity.slot,
+                                            opportunity.timestamp.timestamp_nanos_opt().unwrap_or(0)
+                                                as u64,
+                                            &opportunity.venue_a,
+                                            &opportunity.venue_b,
+                                            &format!(
+                                                "{}_{}",
+                                                opportunity.token_a, opportunity.token_b
+                                            ),
+                                            opportunity.profit_bps as i32,
+                                            1000.0, // Default amount_in
+                                            1000.0 + (opportunity.profit_bps as f64 * 10.0), // Estimated amount_out
+                                            arbitrage_latency_us as u64,
+                                            &opportunity.strategy,
+                                            serde_json::json!({
+                                                "signature": opportunity.signature,
+                                                "venue_a": opportunity.venue_a,
+                                                "venue_b": opportunity.venue_b,
+                                                "token_a": opportunity.token_a,
+                                                "token_b": opportunity.token_b
+                                            }),
+                                        );
                                     buffer.record_opportunity(buffer_opportunity);
                                 }
 
@@ -3499,7 +3552,9 @@ async fn process_consolidated_geyser_stream(
                                 if let Some(counter) = STREAM_COUNTERS.get(&config.id) {
                                     counter.fetch_add(1, Ordering::Relaxed);
                                 }
-                                if let Some(rate_counter) = STREAM_PARSED_RATE_COUNTERS.get(&config.id) {
+                                if let Some(rate_counter) =
+                                    STREAM_PARSED_RATE_COUNTERS.get(&config.id)
+                                {
                                     rate_counter.increment();
                                 }
                             }
@@ -3508,7 +3563,11 @@ async fn process_consolidated_geyser_stream(
                             if let Some(rate_counter) = STREAM_RATE_COUNTERS.get(&config.id) {
                                 rate_counter.increment();
                             }
-                            counter!("geyser_transactions_processed_total", "stream_id" => config.id.to_string()).increment(1);
+                            metrics::counter!(
+                                "geyser_transactions_processed_total",
+                                "stream_id" => config.id.to_string()
+                            )
+                            .increment(1);
                         }
                     }
                 }
@@ -3647,7 +3706,7 @@ async fn run_stream_with_retry(
                             opportunity.token_a,
                             arbitrage_time_us
                         );
-                        counter!("hotpath_arbitrage_opportunities_total").increment(1);
+                        metrics::counter!("hotpath_arbitrage_opportunities_total").increment(1);
 
                         // PERFORMANCE ANALYTICS - Record arbitrage opportunity detection
                         PERFORMANCE_ANALYTICS.record_arbitrage_opportunity(
@@ -3711,9 +3770,9 @@ async fn run_stream_with_retry(
                     }
 
                     // Record metrics
-                    histogram!("geyser_transaction_processing_time_us")
+                    metrics::histogram!("geyser_transaction_processing_time_us")
                         .record(processing_time_us as f64);
-                    counter!("geyser_transactions_processed_total").increment(1);
+                    metrics::counter!("geyser_transactions_processed_total").increment(1);
 
                     if let Some(counter) = STREAM_COUNTERS.get(&stream_id) {
                         counter.fetch_add(1, Ordering::Relaxed);
@@ -3812,7 +3871,7 @@ async fn run_stream_with_retry(
 
                     match processing_result {
                         Ok(Some(metrics)) => {
-                            counter!("geyser_transactions_successful_total").increment(1);
+                            metrics::counter!("geyser_transactions_successful_total").increment(1);
                             println!(
                                 "✅ Stream {} SUCCESS: {} tx {} ({}μs)",
                                 stream_id,
@@ -3840,10 +3899,10 @@ async fn run_stream_with_retry(
                             }
                         }
                         Ok(None) => {
-                            counter!("geyser_transactions_filtered_total").increment(1);
+                            metrics::counter!("geyser_transactions_filtered_total").increment(1);
                         }
                         Err(e) => {
-                            counter!("geyser_transactions_failed_total").increment(1);
+                            metrics::counter!("geyser_transactions_failed_total").increment(1);
                             error!(
                                 "Failed to process transaction on stream {}: {}",
                                 stream_id, e
@@ -3853,7 +3912,7 @@ async fn run_stream_with_retry(
                 }
             }
             Err(e) => {
-                counter!("geyser_stream_errors_total").increment(1);
+                metrics::counter!("geyser_stream_errors_total").increment(1);
                 error!("Stream {} gRPC error: {}", stream_id, e);
                 return Err(e.into());
             }
@@ -3992,7 +4051,10 @@ async fn start_auxiliary_api_server(port: u16, config_state: Option<SharedConfig
     };
 
     let bind_addr = format!("0.0.0.0:{}", port);
-    info!("🔧 Starting auxiliary API server with WebSocket support on {}", bind_addr);
+    info!(
+        "🔧 Starting auxiliary API server with WebSocket support on {}",
+        bind_addr
+    );
 
     // Initialize WebSocket broadcaster for real-time property updates
     let websocket_broadcaster = create_websocket_broadcaster().await;
@@ -4008,6 +4070,9 @@ async fn start_auxiliary_api_server(port: u16, config_state: Option<SharedConfig
         .route("/wallet/audit", get(serve_wallet_security_audit))
         .route("/wallet/generate", post(generate_wallet_endpoint))
         .route("/wallet/list", get(list_wallets_endpoint))
+        .route("/health/live", get(serve_health_live))
+        .route("/health/ready", get(serve_health_ready))
+        .route("/health/summary", get(serve_health_summary))
         // WEBSOCKET REAL-TIME CONTROL PANEL
         .route("/ws/properties", get(websocket_handler))
         .route("/properties/all", get(serve_all_properties))
@@ -4033,6 +4098,228 @@ async fn serve_performance_report() -> String {
 /// Serve performance metrics as JSON
 async fn serve_performance_json() -> axum::Json<PerformanceMetrics> {
     axum::Json(PERFORMANCE_ANALYTICS.get_metrics_snapshot())
+}
+
+/// Simple liveness probe: confirms process is running and reports uptime
+async fn serve_health_live() -> (axum::http::StatusCode, axum::Json<serde_json::Value>) {
+    let uptime_seconds = SERVICE_START_TIME.elapsed().as_secs();
+
+    (
+        axum::http::StatusCode::OK,
+        axum::Json(json!({
+            "service": "hotpath_arb_engine",
+            "status": "live",
+            "uptime_seconds": uptime_seconds,
+            "timestamp": chrono::Utc::now().to_rfc3339(),
+        })),
+    )
+}
+
+/// Readiness probe: validates data streams and core dependencies
+async fn serve_health_ready() -> (axum::http::StatusCode, axum::Json<serde_json::Value>) {
+    let (streams_ok, stream_details) = evaluate_stream_health();
+    let (database_ok, database_details) = evaluate_database_health().await;
+    let (system_ok, system_details) = evaluate_system_health();
+
+    let overall_ready = streams_ok && database_ok && system_ok;
+
+    let status_code = if overall_ready {
+        axum::http::StatusCode::OK
+    } else {
+        axum::http::StatusCode::SERVICE_UNAVAILABLE
+    };
+
+    let status_label = if overall_ready { "ready" } else { "degraded" };
+
+    (
+        status_code,
+        axum::Json(json!({
+            "service": "hotpath_arb_engine",
+            "status": status_label,
+            "timestamp": chrono::Utc::now().to_rfc3339(),
+            "checks": [
+                json!({
+                    "component": "geyser_streams",
+                    "status": status_string(streams_ok),
+                    "details": stream_details,
+                }),
+                json!({
+                    "component": "database",
+                    "status": status_string(database_ok),
+                    "details": database_details,
+                }),
+                json!({
+                    "component": "system_health",
+                    "status": system_details["status"].as_str().unwrap_or("unknown"),
+                    "details": system_details,
+                }),
+            ],
+        })),
+    )
+}
+
+/// Detailed summary for dashboards and operator breadcrumbs
+async fn serve_health_summary() -> axum::Json<serde_json::Value> {
+    let (streams_ok, stream_details) = evaluate_stream_health();
+    let (database_ok, database_details) = evaluate_database_health().await;
+    let (system_ok, system_details) = evaluate_system_health();
+
+    let property_store = get_property_store();
+    let live_execution = property_store
+        .get_atomic_bool("enable_live_execution")
+        .unwrap_or(false);
+    let dry_run = property_store.get_atomic_bool("dry_run").unwrap_or(true);
+    let simulation_mode = property_store
+        .get_atomic_bool("simulation_mode")
+        .unwrap_or(true);
+
+    let overall_ready = streams_ok && database_ok && system_ok;
+
+    axum::Json(json!({
+        "service": "hotpath_arb_engine",
+        "status": if overall_ready { "healthy" } else { "attention" },
+        "timestamp": chrono::Utc::now().to_rfc3339(),
+        "uptime_seconds": SERVICE_START_TIME.elapsed().as_secs(),
+        "safety": {
+            "enable_live_execution": live_execution,
+            "dry_run": dry_run,
+            "simulation_mode": simulation_mode,
+        },
+        "checks": [
+            json!({
+                "component": "geyser_streams",
+                "status": status_string(streams_ok),
+                "details": stream_details,
+            }),
+            json!({
+                "component": "database",
+                "status": status_string(database_ok),
+                "details": database_details,
+            }),
+            json!({
+                "component": "system_health",
+                "status": system_details["status"].as_str().unwrap_or("unknown"),
+                "details": system_details,
+            }),
+        ],
+        "breadcrumbs": [
+            "New /health/* endpoints added on port metrics+1 (default 8089). Wire into docker-compose healthchecks.",
+            "Next helper: integrate readiness endpoint with Prometheus alerting and validate geyser stream lag dashboards.",
+        ],
+    }))
+}
+
+fn status_string(is_ok: bool) -> &'static str {
+    if is_ok {
+        "healthy"
+    } else {
+        "degraded"
+    }
+}
+
+fn evaluate_stream_health() -> (bool, serde_json::Value) {
+    let now = chrono::Utc::now().timestamp() as u64;
+    let mut entries = Vec::new();
+    let mut all_healthy = true;
+
+    if STREAM_HEALTH.is_empty() {
+        all_healthy = false; // No streams registered yet
+    }
+
+    for entry in STREAM_HEALTH.iter() {
+        let stream_id = *entry.key();
+        let last_seen = entry.value().load(Ordering::Relaxed);
+
+        let (status, seconds_since_last) = if last_seen == 0 {
+            all_healthy = false;
+            ("initializing", None)
+        } else {
+            let delta = now.saturating_sub(last_seen);
+            let healthy = delta <= 30;
+            if !healthy {
+                all_healthy = false;
+            }
+            (if healthy { "healthy" } else { "stale" }, Some(delta))
+        };
+
+        entries.push(json!({
+            "stream_id": stream_id,
+            "last_seen_epoch": last_seen,
+            "seconds_since_last": seconds_since_last,
+            "status": status,
+        }));
+    }
+
+    (all_healthy, serde_json::Value::Array(entries))
+}
+
+async fn evaluate_database_health() -> (bool, serde_json::Value) {
+    if let Some(pool) = DATABASE_POOL.get() {
+        match sqlx::query_scalar::<_, i64>("SELECT 1")
+            .fetch_one(pool.as_ref())
+            .await
+        {
+            Ok(_) => (true, json!({ "status": "healthy" })),
+            Err(err) => (
+                false,
+                json!({
+                    "status": "degraded",
+                    "error": err.to_string(),
+                }),
+            ),
+        }
+    } else {
+        (
+            true,
+            json!({
+                "status": "skipped",
+                "reason": "database_pool_not_configured",
+            }),
+        )
+    }
+}
+
+fn evaluate_system_health() -> (bool, serde_json::Value) {
+    let status = match EMERGENCY_CONTROLS.system_health_status.lock() {
+        Ok(guard) => guard.clone(),
+        Err(poisoned) => poisoned.into_inner().clone(),
+    };
+
+    let (healthy, label, reason) = match status {
+        SystemHealthStatus::Healthy => (true, "healthy", None),
+        SystemHealthStatus::Degraded { reason } => (true, "degraded", Some(reason)),
+        SystemHealthStatus::Critical { reason } => (false, "critical", Some(reason)),
+        SystemHealthStatus::EmergencyStop { reason } => (false, "emergency_stop", Some(reason)),
+    };
+
+    let last_trigger_epoch = EMERGENCY_CONTROLS
+        .last_circuit_breaker_trigger
+        .load(Ordering::Relaxed);
+    let seconds_since_last_trigger = if last_trigger_epoch == 0 {
+        None
+    } else {
+        Some(
+            chrono::Utc::now()
+                .timestamp()
+                .saturating_sub(last_trigger_epoch as i64)
+                .max(0) as u64,
+        )
+    };
+
+    let details = json!({
+        "status": label,
+        "reason": reason,
+        "consecutive_failures": EMERGENCY_CONTROLS
+            .consecutive_failures
+            .load(Ordering::Relaxed),
+        "seconds_since_last_safety_check": EMERGENCY_CONTROLS
+            .last_safety_check
+            .elapsed()
+            .as_secs(),
+        "seconds_since_last_circuit_breaker": seconds_since_last_trigger,
+    });
+
+    (healthy, details)
 }
 
 /// Serve AI engine configuration  
@@ -4276,20 +4563,32 @@ async fn update_hot_path_config(update: ConfigUpdate) {
     match update.parameter.as_str() {
         "min_profit_bps" => {
             if let Some(val) = update.value.as_i64() {
-                let _ = store.set_atomic_i32("min_profit_bps", val as i32, PropertySource::DatabaseLoad);
+                let _ = store.set_atomic_i32(
+                    "min_profit_bps",
+                    val as i32,
+                    PropertySource::DatabaseLoad,
+                );
                 info!("🔥 HOT_PATH_CONFIG updated: min_profit_bps = {} bps", val);
             }
         }
         "max_profit_bps" => {
             if let Some(val) = update.value.as_i64() {
-                let _ = store.set_atomic_i32("max_profit_bps", val as i32, PropertySource::DatabaseLoad);
+                let _ = store.set_atomic_i32(
+                    "max_profit_bps",
+                    val as i32,
+                    PropertySource::DatabaseLoad,
+                );
                 info!("🔥 HOT_PATH_CONFIG updated: max_profit_bps = {} bps", val);
             }
         }
         "min_net_profit_sol" => {
             if let Some(val) = update.value.as_f64() {
                 let lamports = (val * 1_000_000_000.0) as u64;
-                let _ = store.set_atomic_u64("min_net_profit_lamports", lamports, PropertySource::DatabaseLoad);
+                let _ = store.set_atomic_u64(
+                    "min_net_profit_lamports",
+                    lamports,
+                    PropertySource::DatabaseLoad,
+                );
                 info!(
                     "🔥 HOT_PATH_CONFIG updated: min_net_profit_sol = {} SOL ({} lamports)",
                     val, lamports
@@ -4298,19 +4597,31 @@ async fn update_hot_path_config(update: ConfigUpdate) {
         }
         "min_venue_success_rate" => {
             if let Some(val) = update.value.as_f64() {
-                let _ = store.set_atomic_f64("min_venue_success_rate", val, PropertySource::DatabaseLoad);
-                info!("🔥 HOT_PATH_CONFIG updated: min_venue_success_rate = {}%", val * 100.0);
+                let _ = store.set_atomic_f64(
+                    "min_venue_success_rate",
+                    val,
+                    PropertySource::DatabaseLoad,
+                );
+                info!(
+                    "🔥 HOT_PATH_CONFIG updated: min_venue_success_rate = {}%",
+                    val * 100.0
+                );
             }
         }
         "max_gas_budget_pct" => {
             if let Some(val) = update.value.as_f64() {
-                let _ = store.set_atomic_f64("max_gas_budget_pct", val, PropertySource::DatabaseLoad);
+                let _ =
+                    store.set_atomic_f64("max_gas_budget_pct", val, PropertySource::DatabaseLoad);
                 info!("🔥 HOT_PATH_CONFIG updated: max_gas_budget_pct = {}%", val);
             }
         }
         "max_concurrent_opportunities" => {
             if let Some(val) = update.value.as_i64() {
-                let _ = store.set_atomic_u32("max_concurrent_opportunities", val as u32, PropertySource::DatabaseLoad);
+                let _ = store.set_atomic_u32(
+                    "max_concurrent_opportunities",
+                    val as u32,
+                    PropertySource::DatabaseLoad,
+                );
                 info!(
                     "🔥 HOT_PATH_CONFIG updated: max_concurrent_opportunities = {}",
                     val
@@ -4319,7 +4630,11 @@ async fn update_hot_path_config(update: ConfigUpdate) {
         }
         "competition_lookback_ms" => {
             if let Some(val) = update.value.as_i64() {
-                let _ = store.set_atomic_u64("competition_lookback_ms", val as u64, PropertySource::DatabaseLoad);
+                let _ = store.set_atomic_u64(
+                    "competition_lookback_ms",
+                    val as u64,
+                    PropertySource::DatabaseLoad,
+                );
                 info!(
                     "🔥 HOT_PATH_CONFIG updated: competition_lookback_ms = {} ms",
                     val
@@ -4334,7 +4649,11 @@ async fn update_hot_path_config(update: ConfigUpdate) {
         }
         "min_samples_for_learning" => {
             if let Some(val) = update.value.as_i64() {
-                let _ = store.set_atomic_u64("min_samples_for_learning", val as u64, PropertySource::DatabaseLoad);
+                let _ = store.set_atomic_u64(
+                    "min_samples_for_learning",
+                    val as u64,
+                    PropertySource::DatabaseLoad,
+                );
                 info!(
                     "🔥 HOT_PATH_CONFIG updated: min_samples_for_learning = {}",
                     val
@@ -4411,7 +4730,6 @@ async fn main() -> Result<()> {
         args.x_token = token;
     }
 
-
     // Use smart port management instead of hardcoded ports
     let (allocated_port, port_message) = get_port_with_fallback(
         "hotpath_arb_engine",
@@ -4451,7 +4769,9 @@ async fn main() -> Result<()> {
         match PgPool::connect(db_url).await {
             Ok(pool) => {
                 info!("🔗 Connected to PostgreSQL for real-time config updates");
-                SharedConfigState::new_with_database(smart_filter, Arc::new(pool)).await
+                let pool_arc = Arc::new(pool);
+                let _ = DATABASE_POOL.set(pool_arc.clone());
+                SharedConfigState::new_with_database(smart_filter, pool_arc).await
             }
             Err(e) => {
                 warn!("⚠️ Failed to connect to database for config updates: {} - Using basic config state", e);
@@ -4472,13 +4792,15 @@ async fn main() -> Result<()> {
 
     use metrics_exporter_prometheus::PrometheusBuilder;
     let _prometheus_handle = PrometheusBuilder::new()
-        .with_http_listener(format!("0.0.0.0:{}", args.metrics_port).parse::<std::net::SocketAddr>().unwrap())
+        .with_http_listener(
+            format!("0.0.0.0:{}", args.metrics_port)
+                .parse::<std::net::SocketAddr>()
+                .unwrap(),
+        )
         .install()
         .expect("Failed to install Prometheus metrics exporter");
 
-    info!(
-        "✅ Prometheus metrics exporter installed - standard /metrics endpoint active"
-    );
+    info!("✅ Prometheus metrics exporter installed - standard /metrics endpoint active");
 
     // Start auxiliary API server on metrics_port + 1 for other endpoints
     let api_port = args.metrics_port + 1;
@@ -4668,8 +4990,10 @@ async fn main() -> Result<()> {
     );
 
     // Check if all streams use the same endpoint for connection consolidation
-    let all_same_endpoint = stream_configs.len() > 1 &&
-        stream_configs.iter().all(|config| config.endpoint == stream_configs[0].endpoint);
+    let all_same_endpoint = stream_configs.len() > 1
+        && stream_configs
+            .iter()
+            .all(|config| config.endpoint == stream_configs[0].endpoint);
 
     if all_same_endpoint {
         info!(
@@ -4680,7 +5004,7 @@ async fn main() -> Result<()> {
 
         // Single consolidated connection with internal message routing
         let consolidated_config = StreamConfig {
-            id: 0,  // Special consolidated ID
+            id: 0, // Special consolidated ID
             name: "Consolidated Connection".to_string(),
             program_ids: vec![], // Unused for consolidated
             endpoint: stream_configs[0].endpoint.clone(),
@@ -4691,8 +5015,17 @@ async fn main() -> Result<()> {
         let stream_configs_clone = stream_configs.clone();
 
         tokio::spawn(async move {
-            info!("🎯 Starting consolidated Geyser stream with {} internal processing pipelines", stream_configs_clone.len());
-            if let Err(e) = process_consolidated_geyser_stream(consolidated_config, stream_configs_clone, history_buffer_clone).await {
+            info!(
+                "🎯 Starting consolidated Geyser stream with {} internal processing pipelines",
+                stream_configs_clone.len()
+            );
+            if let Err(e) = process_consolidated_geyser_stream(
+                consolidated_config,
+                stream_configs_clone,
+                history_buffer_clone,
+            )
+            .await
+            {
                 error!("❌ Consolidated stream terminated with error: {}", e);
             } else {
                 info!("✅ Consolidated stream completed successfully");
@@ -4700,29 +5033,30 @@ async fn main() -> Result<()> {
         })
         .await
         .map_err(|e| anyhow::anyhow!("Join error: {}", e))?;
-
     } else {
         info!("🔀 Streams use different endpoints - using individual connections");
 
         let stream_handles: Vec<_> = stream_configs
             .into_iter()
             .map(|config| {
-            let history_buffer_clone = history_buffer.clone();
-            info!(
-                "🔄 Spawning tokio task for Stream {}: {}",
-                config.id, config.name
-            );
-            tokio::spawn(async move {
+                let history_buffer_clone = history_buffer.clone();
                 info!(
-                    "🎯 Stream {} task started - calling process_geyser_stream",
-                    config.id
+                    "🔄 Spawning tokio task for Stream {}: {}",
+                    config.id, config.name
                 );
-                if let Err(e) = process_geyser_stream(config.clone(), history_buffer_clone).await {
-                    error!("❌ Stream {} terminated with error: {}", config.id, e);
-                } else {
-                    info!("✅ Stream {} completed normally", config.id);
-                }
-            })
+                tokio::spawn(async move {
+                    info!(
+                        "🎯 Stream {} task started - calling process_geyser_stream",
+                        config.id
+                    );
+                    if let Err(e) =
+                        process_geyser_stream(config.clone(), history_buffer_clone).await
+                    {
+                        error!("❌ Stream {} terminated with error: {}", config.id, e);
+                    } else {
+                        info!("✅ Stream {} completed normally", config.id);
+                    }
+                })
             })
             .collect();
 
@@ -4770,7 +5104,8 @@ async fn main() -> Result<()> {
 }
 
 /// Serve all current property values as JSON
-async fn serve_all_properties() -> axum::Json<std::collections::HashMap<String, crate::property_store::PropertyValue>> {
+async fn serve_all_properties(
+) -> axum::Json<std::collections::HashMap<String, crate::property_store::PropertyValue>> {
     use crate::property_store::get_property_store;
 
     let properties = get_property_store().get_all_properties().await;

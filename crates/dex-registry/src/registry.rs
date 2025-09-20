@@ -30,13 +30,8 @@ impl DexRegistry {
         config.validate()?;
 
         // Initialize database
-        let database = Arc::new(
-            Database::new(
-                &config.database_url,
-                config.connection_pool_size,
-            )
-            .await?,
-        );
+        let database =
+            Arc::new(Database::new(&config.database_url, config.connection_pool_size).await?);
 
         // Initialize cache
         let mut cache = RegistryCache::new(&config.redis_url, config.cache_ttl_seconds).await?;

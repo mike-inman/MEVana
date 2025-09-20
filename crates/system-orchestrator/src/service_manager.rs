@@ -64,8 +64,11 @@ impl ServiceManager {
 
         let mut services = self.services.write().await;
         services.insert(config.name.clone(), service);
-        
-        info!("📝 Registered service: {} (tier: {:?})", config.name, config.tier);
+
+        info!(
+            "📝 Registered service: {} (tier: {:?})",
+            config.name, config.tier
+        );
         Ok(())
     }
 
@@ -94,17 +97,25 @@ impl ServiceManager {
         // Get service config
         let config = {
             let services = self.services.read().await;
-            services.get(service_name)
+            services
+                .get(service_name)
                 .ok_or_else(|| anyhow::anyhow!("Service '{}' not found", service_name))?
-                .config.clone()
+                .config
+                .clone()
         };
 
         // Apply startup delay (unless skipped)
         if !skip_delay && !config.startup_delay.is_zero() {
-            info!("⏳ Applying startup delay for '{}': {:?}", service_name, config.startup_delay);
+            info!(
+                "⏳ Applying startup delay for '{}': {:?}",
+                service_name, config.startup_delay
+            );
             tokio::time::sleep(config.startup_delay).await;
         } else if skip_delay && !config.startup_delay.is_zero() {
-            info!("⚡ Skipping startup delay for '{}' (infrastructure already healthy)", service_name);
+            info!(
+                "⚡ Skipping startup delay for '{}' (infrastructure already healthy)",
+                service_name
+            );
         }
 
         // Start the process
@@ -125,7 +136,7 @@ impl ServiceManager {
             }
             Err(e) => {
                 error!("❌ Failed to start service '{}': {}", service_name, e);
-                
+
                 // Update service status to Crashed
                 let mut services = self.services.write().await;
                 if let Some(service) = services.get_mut(service_name) {
@@ -139,27 +150,27 @@ impl ServiceManager {
 
     async fn spawn_service_process(&self, config: &ServiceConfig) -> Result<Child> {
         let mut cmd = Command::new(&config.command);
-        
+
         // Set arguments
         cmd.args(&config.args);
-        
+
         // Set environment variables
         for (key, value) in &config.env {
             cmd.env(key, value);
         }
-        
+
         // Set working directory
         if let Some(working_dir) = &config.working_dir {
             cmd.current_dir(working_dir);
         }
-        
+
         // Configure stdio
         cmd.stdin(Stdio::null())
-           .stdout(Stdio::piped())
-           .stderr(Stdio::piped());
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped());
 
         debug!("🔧 Spawning process: {} {:?}", config.command, config.args);
-        
+
         cmd.spawn()
             .with_context(|| format!("Failed to spawn process for service '{}'", config.name))
     }
@@ -183,7 +194,10 @@ impl ServiceManager {
                 Err(e) => warn!("⚠️  Error stopping service '{}': {}", service_name, e),
             }
         } else {
-            warn!("⚠️  No running process found for service '{}'", service_name);
+            warn!(
+                "⚠️  No running process found for service '{}'",
+                service_name
+            );
         }
 
         // Update service status
@@ -204,10 +218,13 @@ impl ServiceManager {
             if let Some(service) = services.get_mut(service_name) {
                 service.restart_count += 1;
                 service.last_restart = Some(Instant::now());
-                
-                if service.restart_count > 3 { // max_restart_attempts from config
-                    error!("❌ Service '{}' has exceeded maximum restart attempts ({})", 
-                           service_name, service.restart_count);
+
+                if service.restart_count > 3 {
+                    // max_restart_attempts from config
+                    error!(
+                        "❌ Service '{}' has exceeded maximum restart attempts ({})",
+                        service_name, service.restart_count
+                    );
                     false
                 } else {
                     true
@@ -218,17 +235,20 @@ impl ServiceManager {
         };
 
         if !should_restart {
-            return Err(anyhow::anyhow!("Service '{}' restart limit exceeded", service_name));
+            return Err(anyhow::anyhow!(
+                "Service '{}' restart limit exceeded",
+                service_name
+            ));
         }
 
         // Stop then start the service
         self.stop_service(service_name).await?;
-        
+
         // Wait a bit before restarting
         tokio::time::sleep(Duration::from_secs(5)).await;
-        
+
         self.start_service(service_name).await?;
-        
+
         info!("✅ Service '{}' restarted successfully", service_name);
         Ok(())
     }
@@ -236,13 +256,15 @@ impl ServiceManager {
     pub async fn check_service_health(&self, service_name: &str) -> Result<HealthStatus> {
         let config = {
             let services = self.services.read().await;
-            services.get(service_name)
+            services
+                .get(service_name)
                 .ok_or_else(|| anyhow::anyhow!("Service '{}' not found", service_name))?
-                .config.clone()
+                .config
+                .clone()
         };
 
         let health_status = self.health_checker.check_service_health(&config).await;
-        
+
         // Update service status based on health check
         let mut services = self.services.write().await;
         if let Some(service) = services.get_mut(service_name) {
@@ -256,15 +278,23 @@ impl ServiceManager {
         Ok(health_status)
     }
 
-    pub async fn wait_for_service_healthy(&self, service_name: &str, max_wait: Duration) -> Result<()> {
+    pub async fn wait_for_service_healthy(
+        &self,
+        service_name: &str,
+        max_wait: Duration,
+    ) -> Result<()> {
         let config = {
             let services = self.services.read().await;
-            services.get(service_name)
+            services
+                .get(service_name)
                 .ok_or_else(|| anyhow::anyhow!("Service '{}' not found", service_name))?
-                .config.clone()
+                .config
+                .clone()
         };
 
-        self.health_checker.wait_for_service_healthy(&config, max_wait).await
+        self.health_checker
+            .wait_for_service_healthy(&config, max_wait)
+            .await
     }
 
     pub async fn get_service_status(&self, service_name: &str) -> Option<ServiceStatus> {
@@ -279,10 +309,10 @@ impl ServiceManager {
 
     pub async fn monitor_processes(&self) {
         let mut interval = tokio::time::interval(Duration::from_secs(10));
-        
+
         loop {
             interval.tick().await;
-            
+
             let service_names: Vec<String> = {
                 let processes = self.processes.read().await;
                 processes.keys().cloned().collect()
@@ -301,7 +331,10 @@ impl ServiceManager {
                             }
                             Ok(None) => true, // Still running
                             Err(e) => {
-                                warn!("⚠️  Error checking process status for '{}': {}", service_name, e);
+                                warn!(
+                                    "⚠️  Error checking process status for '{}': {}",
+                                    service_name, e
+                                );
                                 false
                             }
                         }
@@ -311,23 +344,33 @@ impl ServiceManager {
                 };
 
                 if !is_running {
-                    warn!("⚠️  Process for service '{}' has stopped unexpectedly", service_name);
-                    
+                    warn!(
+                        "⚠️  Process for service '{}' has stopped unexpectedly",
+                        service_name
+                    );
+
                     // Update service status
                     let mut services = self.services.write().await;
                     if let Some(service) = services.get_mut(&service_name) {
                         service.status = ServiceStatus::Crashed;
-                        
+
                         // Log the crash to central error log
-                        self.log_service_crash(&service_name, &format!("Service process terminated unexpectedly")).await;
-                        
+                        self.log_service_crash(
+                            &service_name,
+                            &format!("Service process terminated unexpectedly"),
+                        )
+                        .await;
+
                         if service.config.critical {
                             error!("❌ Critical service '{}' has crashed", service_name);
-                            
+
                             // Attempt to restart critical services
                             drop(services); // Release the lock
                             if let Err(e) = self.restart_service(&service_name).await {
-                                error!("❌ Failed to restart critical service '{}': {}", service_name, e);
+                                error!(
+                                    "❌ Failed to restart critical service '{}': {}",
+                                    service_name, e
+                                );
                             }
                         } else {
                             service.status = ServiceStatus::Stopped;
@@ -351,7 +394,7 @@ impl ServiceManager {
             let services = self.services.read().await;
             services.values().cloned().collect()
         };
-        
+
         // Sort by tier in reverse order for shutdown
         services_by_tier.sort_by(|a, b| b.config.tier.cmp(&a.config.tier));
 
@@ -364,15 +407,15 @@ impl ServiceManager {
         info!("✅ All services shutdown completed");
         Ok(())
     }
-    
+
     /// Log service crash to central error log for monitoring
     async fn log_service_crash(&self, service_name: &str, error_msg: &str) {
         let timestamp = chrono::Utc::now().format("%Y-%m-%d %H:%M:%S UTC");
         let log_entry = format!(
-            "[{}] SERVICE_CRASH: {} - {}\n", 
+            "[{}] SERVICE_CRASH: {} - {}\n",
             timestamp, service_name, error_msg
         );
-        
+
         // Write to central error log file
         match OpenOptions::new()
             .create(true)
@@ -389,7 +432,7 @@ impl ServiceManager {
                 error!("Failed to open error log file: {}", e);
             }
         }
-        
+
         // Also log to console
         warn!("⚠️ SERVICE CRASH: {} - {}", service_name, error_msg);
     }

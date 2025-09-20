@@ -11,7 +11,6 @@ use crate::hotpath::SignalTx;
 use crate::models::{ArbSignal, Pair, Quote};
 use crate::stats::record_profit;
 use edge_assembler::edge::EdgeDelta;
-use metrics::counter;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -156,7 +155,11 @@ impl FastEngine {
 
                             if out_clone.try_send(adjusted_signal.clone()) {
                                 record_recent_signal(adjusted_signal.clone());
-                                counter!("arb_signals_total", "path" => "quotes_risk_approved");
+                                metrics::counter!(
+                                    "arb_signals_total",
+                                    "path" => "quotes_risk_approved"
+                                )
+                                .increment(1);
                                 record_profit(adjusted_signal.profit_bps);
 
                                 // Update position tracking
@@ -169,7 +172,11 @@ impl FastEngine {
                             }
                         }
                         crate::fringe_risk_manager::TradeApproval::Rejected { reasons } => {
-                            counter!("arb_signals_rejected_total", "reason" => "fringe_risk");
+                            metrics::counter!(
+                                "arb_signals_rejected_total",
+                                "reason" => "fringe_risk"
+                            )
+                            .increment(1);
                             tracing::debug!("🛡️ Trade rejected by risk manager: {:?}", reasons);
                         }
                     }
@@ -177,7 +184,8 @@ impl FastEngine {
                     // Fallback: send original signal if risk check fails
                     if out_clone.try_send(signal_clone.clone()) {
                         record_recent_signal(signal_clone.clone());
-                        counter!("arb_signals_total", "path" => "quotes_fallback");
+                        metrics::counter!("arb_signals_total", "path" => "quotes_fallback")
+                            .increment(1);
                         record_profit(signal_clone.profit_bps);
                     }
                 }

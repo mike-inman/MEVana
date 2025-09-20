@@ -79,20 +79,24 @@ pub struct ReporterService {
 }
 
 impl ReporterService {
-    pub fn new(rx: mpsc::Receiver<TradingEvent>, config: ReporterConfig, db_pool: Option<PgPool>) -> Self {
+    pub fn new(
+        rx: mpsc::Receiver<TradingEvent>,
+        config: ReporterConfig,
+        db_pool: Option<PgPool>,
+    ) -> Self {
         // Initialize Kafka producer if enabled
         let kafka_producer = if config.enable_kafka {
             match rdkafka::config::ClientConfig::new()
                 .set("bootstrap.servers", &config.kafka_broker)
-                .set("acks", "0")                           // Fire-and-forget (no ack wait)
-                .set("linger.ms", "1")                     // Batch quickly for throughput
-                .set("batch.size", "65536")                // 64KB batches
-                .set("buffer.memory", "67108864")          // 64MB buffer
-                .set("max.block.ms", "0")                  // Never block producer
-                .set("delivery.timeout.ms", "1000")        // Quick timeout
-                .set("compression.type", "snappy")         // Fast compression
-                .set("retries", "0")                       // No retries for speed
-                .set("enable.idempotence", "false")        // Disable for max speed
+                .set("acks", "0") // Fire-and-forget (no ack wait)
+                .set("linger.ms", "1") // Batch quickly for throughput
+                .set("batch.size", "65536") // 64KB batches
+                .set("buffer.memory", "67108864") // 64MB buffer
+                .set("max.block.ms", "0") // Never block producer
+                .set("delivery.timeout.ms", "1000") // Quick timeout
+                .set("compression.type", "snappy") // Fast compression
+                .set("retries", "0") // No retries for speed
+                .set("enable.idempotence", "false") // Disable for max speed
                 .create()
             {
                 Ok(producer) => {
@@ -167,7 +171,7 @@ impl ReporterService {
 
         if let Some(file) = &mut self.file_handle {
             use tokio::io::AsyncWriteExt;
-            
+
             for event in events {
                 // Only log trade executions to the file
                 if matches!(event.event_type, EventType::TradeExecution) {
@@ -176,23 +180,32 @@ impl ReporterService {
                             if let Some(trade_details) = map.get("trade_details") {
                                 format!("{}\n", trade_details.as_str().unwrap_or_default())
                             } else {
-                                format!("{}\n", serde_json::to_string(&event.data).unwrap_or_default())
+                                format!(
+                                    "{}\n",
+                                    serde_json::to_string(&event.data).unwrap_or_default()
+                                )
                             }
                         }
-                        _ => format!("{}\n", serde_json::to_string(&event.data).unwrap_or_default()),
+                        _ => format!(
+                            "{}\n",
+                            serde_json::to_string(&event.data).unwrap_or_default()
+                        ),
                     };
-                    
+
                     file.write_all(log_line.as_bytes()).await?;
                 }
             }
-            
+
             file.flush().await?;
         }
 
         Ok(())
     }
 
-    async fn publish_to_kafka(&self, events: &[TradingEvent]) -> Result<(), rdkafka::error::KafkaError> {
+    async fn publish_to_kafka(
+        &self,
+        events: &[TradingEvent],
+    ) -> Result<(), rdkafka::error::KafkaError> {
         if !self.config.enable_kafka || self.kafka_producer.is_none() {
             return Ok(());
         }
@@ -201,20 +214,29 @@ impl ReporterService {
 
         for event in events {
             // Only publish arbitrage opportunities to Kafka
-            if matches!(event.event_type, EventType::ArbitrageDetected | EventType::ArbitrageRejected) {
+            if matches!(
+                event.event_type,
+                EventType::ArbitrageDetected | EventType::ArbitrageRejected
+            ) {
                 let payload = serde_json::to_string(&event.data).unwrap_or_default();
                 let record = rdkafka::producer::FutureRecord::to(&self.config.kafka_topic)
                     .key(&event.signature)
                     .payload(&payload);
-                
+
                 match producer.send(record, Duration::ZERO).await {
                     Ok(delivery_result) => {
-                        debug!("📤 Published opportunity {} to Kafka: {:?}", 
-                               &event.signature[0..8], delivery_result);
+                        debug!(
+                            "📤 Published opportunity {} to Kafka: {:?}",
+                            &event.signature[0..8],
+                            delivery_result
+                        );
                     }
                     Err((kafka_error, _)) => {
-                        warn!("⚠️ Failed to publish opportunity {} to Kafka: {}", 
-                              &event.signature[0..8], kafka_error);
+                        warn!(
+                            "⚠️ Failed to publish opportunity {} to Kafka: {}",
+                            &event.signature[0..8],
+                            kafka_error
+                        );
                         return Err(kafka_error);
                     }
                 }
@@ -240,7 +262,7 @@ impl ReporterService {
         };
 
         use redis::AsyncCommands;
-        
+
         for event in events {
             let json = serde_json::to_string(&event.data).unwrap_or_default();
             let key = match event.event_type {
@@ -251,7 +273,7 @@ impl ReporterService {
                 EventType::SystemHealth => "system:health",
                 EventType::AiPrediction => "ai:predictions",
             };
-            
+
             let _: Result<(), _> = conn.lpush(key, json).await;
         }
 
@@ -265,8 +287,14 @@ impl ReporterService {
         };
 
         // Filter arbitrage events for batching
-        let arb_events: Vec<&TradingEvent> = events.iter()
-            .filter(|event| matches!(event.event_type, EventType::ArbitrageDetected | EventType::ArbitrageRejected))
+        let arb_events: Vec<&TradingEvent> = events
+            .iter()
+            .filter(|event| {
+                matches!(
+                    event.event_type,
+                    EventType::ArbitrageDetected | EventType::ArbitrageRejected
+                )
+            })
             .collect();
 
         if arb_events.is_empty() {
@@ -279,33 +307,55 @@ impl ReporterService {
 
         for event in arb_events {
             let data = &event.data;
-            
+
             // Extract data from the event JSON for database insertion
             let opportunity_id = data.get("signature").and_then(|v| v.as_str()).unwrap_or("");
             let slot = data.get("slot").and_then(|v| v.as_u64()).unwrap_or(0) as i64;
-            let venue_sell = data.get("venues").and_then(|v| v.as_array()).and_then(|arr| arr.get(0)).and_then(|v| v.as_str()).unwrap_or("");
-            let venue_buy = data.get("venues").and_then(|v| v.as_array()).and_then(|arr| arr.get(1)).and_then(|v| v.as_str()).unwrap_or("");
-            let token_pair = data.get("token_pair").and_then(|v| v.as_str()).unwrap_or("");
+            let venue_sell = data
+                .get("venues")
+                .and_then(|v| v.as_array())
+                .and_then(|arr| arr.get(0))
+                .and_then(|v| v.as_str())
+                .unwrap_or("");
+            let venue_buy = data
+                .get("venues")
+                .and_then(|v| v.as_array())
+                .and_then(|arr| arr.get(1))
+                .and_then(|v| v.as_str())
+                .unwrap_or("");
+            let token_pair = data
+                .get("token_pair")
+                .and_then(|v| v.as_str())
+                .unwrap_or("");
             let profit_bps = data.get("profit_bps").and_then(|v| v.as_i64()).unwrap_or(0) as i32;
-            let amount_in = data.get("amount_in").and_then(|v| v.as_f64()).unwrap_or(1.0);
-            let expected_amount_out = data.get("estimated_profit_sol").and_then(|v| v.as_f64()).unwrap_or(0.0);
+            let amount_in = data
+                .get("amount_in")
+                .and_then(|v| v.as_f64())
+                .unwrap_or(1.0);
+            let expected_amount_out = data
+                .get("estimated_profit_sol")
+                .and_then(|v| v.as_f64())
+                .unwrap_or(0.0);
             let price_impact_pct = data.get("price_impact_pct").and_then(|v| v.as_f64());
             let detection_time_us = event.processing_time_us.unwrap_or(0) as i64;
             let strategy_type = "hotpath";
-            
+
             // Create raw_opportunity JSON with timestamp and status
             let mut raw_opp = data.clone();
             raw_opp["timestamp"] = serde_json::Value::String(event.timestamp.to_rfc3339());
             if matches!(event.event_type, EventType::ArbitrageRejected) {
                 raw_opp["status"] = serde_json::Value::String("rejected".to_string());
-                raw_opp["rejection_reason"] = data.get("rejection_reason").cloned().unwrap_or(serde_json::Value::Null);
+                raw_opp["rejection_reason"] = data
+                    .get("rejection_reason")
+                    .cloned()
+                    .unwrap_or(serde_json::Value::Null);
             } else {
                 raw_opp["status"] = serde_json::Value::String("detected".to_string());
             }
 
             // Insert into database using the same schema as async_history_buffer
             let timestamp_ns = event.timestamp.timestamp_nanos_opt().unwrap_or(0) as f64;
-            
+
             match sqlx::query(
                 r#"
                 INSERT INTO arbitrage_opportunities 
@@ -344,7 +394,10 @@ impl ReporterService {
         // Commit the transaction
         match tx.commit().await {
             Ok(_) => {
-                debug!("✅ Successfully batched {} arbitrage opportunities to database", inserted_count);
+                debug!(
+                    "✅ Successfully batched {} arbitrage opportunities to database",
+                    inserted_count
+                );
                 Ok(())
             }
             Err(e) => {
@@ -361,10 +414,11 @@ impl ReporterService {
                 warn!("⚠️ Failed to open log file: {}", e);
             }
         }
-        
+
         info!("🔄 Event Bus Reporter service started");
 
-        let mut interval = tokio::time::interval(Duration::from_millis(self.config.flush_interval_ms));
+        let mut interval =
+            tokio::time::interval(Duration::from_millis(self.config.flush_interval_ms));
         let mut events = Vec::with_capacity(self.config.batch_size);
 
         loop {
@@ -380,7 +434,7 @@ impl ReporterService {
                     match event_opt {
                         Some(event) => {
                             events.push(event);
-                            
+
                             // Process immediately if we hit batch size
                             if events.len() >= self.config.batch_size {
                                 self.process_events(&events).await;
@@ -451,7 +505,7 @@ impl EventBus {
     pub fn new(config: ReporterConfig) -> Self {
         let (tx, rx) = mpsc::channel(10000); // Buffer size for high throughput
         let reporter = ReporterService::new(rx, config.clone(), None);
-        
+
         // Spawn the reporter service
         let handle = tokio::spawn(async move {
             reporter.run().await;
@@ -467,7 +521,7 @@ impl EventBus {
     pub fn with_database_pool(config: ReporterConfig, db_pool: PgPool) -> Self {
         let (tx, rx) = mpsc::channel(10000); // Buffer size for high throughput
         let reporter = ReporterService::new(rx, config.clone(), Some(db_pool));
-        
+
         // Spawn the reporter service
         let handle = tokio::spawn(async move {
             reporter.run().await;
@@ -479,7 +533,7 @@ impl EventBus {
             _service_handle: Some(handle),
         }
     }
-    
+
     /// Set database pool for direct database writes (replaces unreliable API calls)
     /// Note: This method is deprecated. Use EventBus::with_database_pool() constructor instead
     /// for proper database integration during initialization.
@@ -490,7 +544,10 @@ impl EventBus {
     /// INTERNAL: Set the centralized database pool from main application
     /// This is used by the global EVENT_BUS singleton to receive the shared database pool
     /// from the main application to prevent duplicate database connections.
-    pub fn set_shared_database_pool(&self, db_pool: Arc<PgPool>) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    pub fn set_shared_database_pool(
+        &self,
+        db_pool: Arc<PgPool>,
+    ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         warn!("⚠️ EventBus::set_shared_database_pool not yet implemented - EventBus will use API fallback for now");
         warn!("🔧 TODO: Implement runtime database pool injection for existing EventBus instance");
         Ok(())
@@ -499,8 +556,13 @@ impl EventBus {
     pub fn sender(&self) -> mpsc::Sender<TradingEvent> {
         self.sender.clone()
     }
-    
-    pub async fn send_trade_execution(&self, trade_id: &str, trade_details: String, processing_time_us: u64) {
+
+    pub async fn send_trade_execution(
+        &self,
+        trade_id: &str,
+        trade_details: String,
+        processing_time_us: u64,
+    ) {
         // Sample events based on configuration
         if fastrand::f64() > self.config.sampling_rate {
             return;
@@ -521,11 +583,11 @@ impl EventBus {
         debug!("📤 Sending trade execution event: {}", trade_id);
         let _ = self.sender.send(event).await;
     }
-    
+
     pub async fn send_arbitrage_detected(
-        &self, 
-        signature: &str, 
-        venues: &[String], 
+        &self,
+        signature: &str,
+        venues: &[String],
         profit_bps: u64,
         token_pair: &str,
         estimated_profit: f64,
@@ -558,11 +620,11 @@ impl EventBus {
         debug!("📤 Sending arbitrage detected event: {}", signature);
         let _ = self.sender.send(event).await;
     }
-    
+
     pub async fn send_arbitrage_rejected(
-        &self, 
-        signature: &str, 
-        venues: &[String], 
+        &self,
+        signature: &str,
+        venues: &[String],
         profit_bps: u64,
         token_pair: &str,
         estimated_profit: f64,
@@ -606,7 +668,7 @@ lazy_static::lazy_static! {
             Ok(json) => serde_json::from_str(&json).unwrap_or_default(),
             Err(_) => ReporterConfig::default(),
         };
-        
+
         // Initialize WITHOUT database pool to prevent duplicate connections
         // The main application will provide the centralized database pool via set_shared_database_pool()
         info!("📡 EventBus initialized without database pool (will use centralized pool from main)");

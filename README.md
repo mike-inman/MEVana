@@ -1,5 +1,7 @@
 # MEVana - Solana AI Trading Platform
 
+Last updated: 2025-09-18
+
 - [ AI and Contributor Quick Start ]
 - Read rules: AGENTS.md (assistant guidelines), CONTRIBUTING.md (repo conventions)
 - Start here: docs/DOCUMENTATION_INDEX.md (critical ops + quick links)
@@ -34,6 +36,18 @@ cd MEVana
 # Manual Setup (if needed)
 cargo build --workspace
 cd infrastructure && docker-compose up -d
+
+# Run the core hotpath engine (primary executable)
+METRICS_PORT=8088 \
+WS_BIND=0.0.0.0:8085 \
+RUST_LOG=info \
+cargo run -p hotpath_arb_engine --bin hotpath_arb_engine
+
+# Run the full containerized stack (mirrors production compose)
+docker compose -f infrastructure/docker-compose.core.yml up -d --build
+
+# Or use the helper script (respects existing env overrides)
+./scripts/development/run_hotpath.sh
 ```
 
 ## 🎯 **PRODUCTION DOCUMENTATION** 

@@ -77,21 +77,21 @@ impl PortConfig {
         // Try to load from config file
         let config_path = Path::new("config/ports.toml");
         let mut config = if config_path.exists() {
-            let config_str = std::fs::read_to_string(config_path)
-                .context("Failed to read config/ports.toml")?;
+            let config_str =
+                std::fs::read_to_string(config_path).context("Failed to read config/ports.toml")?;
             toml::from_str::<PortConfig>(&config_str)
                 .context("Failed to parse config/ports.toml")?
         } else {
             // Fallback to default configuration
             Self::default_config()
         };
-        
+
         // Apply environment variable overrides
         config.apply_environment_overrides()?;
-        
+
         Ok(config)
     }
-    
+
     fn default_config() -> Self {
         Self {
             infrastructure: InfrastructurePorts {
@@ -115,7 +115,7 @@ impl PortConfig {
                 arb_engine_metrics: 9903,
                 executor_service: 9904,
                 hotpath_arb_engine: 8088,
-                hotpath_metrics: 8087,  // Fixed: Different port than hotpath_arb_engine
+                hotpath_metrics: 8087, // Fixed: Different port than hotpath_arb_engine
                 api_service: 8092,
                 monitoring_service: 8091,
             },
@@ -142,51 +142,56 @@ impl PortConfig {
             },
         }
     }
-    
+
     fn apply_environment_overrides(&mut self) -> Result<()> {
         // Standard MEVANA_* environment variables
         if let Ok(port) = env::var("MEVANA_HOTPATH_METRICS_PORT") {
-            self.trading_services.hotpath_arb_engine = port.parse()
+            self.trading_services.hotpath_arb_engine = port
+                .parse()
                 .context("Invalid MEVANA_HOTPATH_METRICS_PORT")?;
         }
-        
+
         if let Ok(port) = env::var("MEVANA_ARB_ENGINE_API_PORT") {
-            self.trading_services.arb_engine_api = port.parse()
-                .context("Invalid MEVANA_ARB_ENGINE_API_PORT")?;
+            self.trading_services.arb_engine_api =
+                port.parse().context("Invalid MEVANA_ARB_ENGINE_API_PORT")?;
         }
-        
+
         if let Ok(port) = env::var("MEVANA_API_SERVICE_HTTP_PORT") {
-            self.trading_services.api_service = port.parse()
+            self.trading_services.api_service = port
+                .parse()
                 .context("Invalid MEVANA_API_SERVICE_HTTP_PORT")?;
         }
-        
+
         if let Ok(port) = env::var("MEVANA_NORMALIZER_METRICS_PORT") {
-            self.trading_services.normalizer_service = port.parse()
+            self.trading_services.normalizer_service = port
+                .parse()
                 .context("Invalid MEVANA_NORMALIZER_METRICS_PORT")?;
         }
-        
+
         if let Ok(port) = env::var("MEVANA_EDGE_ASSEMBLER_METRICS_PORT") {
-            self.trading_services.edge_assembler = port.parse()
+            self.trading_services.edge_assembler = port
+                .parse()
                 .context("Invalid MEVANA_EDGE_ASSEMBLER_METRICS_PORT")?;
         }
-        
+
         if let Ok(port) = env::var("MEVANA_EXECUTOR_METRICS_PORT") {
-            self.trading_services.executor_service = port.parse()
+            self.trading_services.executor_service = port
+                .parse()
                 .context("Invalid MEVANA_EXECUTOR_METRICS_PORT")?;
         }
-        
+
         // Legacy environment variables for backwards compatibility
         if let Ok(port) = env::var("METRICS_PORT") {
             // Used by hotpath_arb_engine - only override if MEVANA_* not set
             if env::var("MEVANA_HOTPATH_METRICS_PORT").is_err() {
-                self.trading_services.hotpath_arb_engine = port.parse()
-                    .context("Invalid METRICS_PORT")?;
+                self.trading_services.hotpath_arb_engine =
+                    port.parse().context("Invalid METRICS_PORT")?;
             }
         }
-        
+
         Ok(())
     }
-    
+
     /// Get port for a specific service by name
     pub fn get_port(&self, service_name: &str) -> Option<u16> {
         match service_name {
@@ -198,13 +203,13 @@ impl PortConfig {
             "edge_assembler" => Some(self.trading_services.edge_assembler),
             "executor_service" => Some(self.trading_services.executor_service),
             "monitoring_service" => Some(self.trading_services.monitoring_service),
-            
+
             // Supporting services
             "discovery_service" => Some(self.supporting_services.discovery_service),
             "token_registry_service" => Some(self.supporting_services.token_registry_service),
             "wallet_vault" => Some(self.supporting_services.wallet_vault),
             "system_orchestrator" => Some(self.supporting_services.system_orchestrator),
-            
+
             // Infrastructure
             "kafka" => Some(self.infrastructure.kafka_internal),
             "kafka_external" => Some(self.infrastructure.kafka_external),
@@ -212,31 +217,31 @@ impl PortConfig {
             "postgres" => Some(self.infrastructure.postgres_external),
             "prometheus" => Some(self.infrastructure.prometheus),
             "grafana" => Some(self.infrastructure.grafana),
-            
+
             _ => None,
         }
     }
-    
+
     /// Get health check URL for a service
     pub fn get_health_check_url(&self, service_name: &str) -> Option<String> {
         let port = self.get_port(service_name)?;
-        
+
         let path = match service_name {
             "hotpath_arb_engine" => "/performance",
-            "arb_engine" => "/metrics", 
+            "arb_engine" => "/metrics",
             "prometheus" => "/-/healthy",
             "grafana" => "/api/health",
             _ => "/health",
         };
-        
+
         Some(format!("http://localhost:{}{}", port, path))
     }
-    
+
     /// Validate that no ports conflict
     pub fn validate_no_conflicts(&self) -> Result<()> {
         let mut used_ports = HashMap::new();
         let mut conflicts = Vec::new();
-        
+
         // Collect all ports with their service names
         let ports_to_check = vec![
             ("zookeeper", self.infrastructure.zookeeper),
@@ -249,64 +254,112 @@ impl PortConfig {
             ("kafka_ui", self.infrastructure.kafka_ui),
             ("redis_ui_external", self.infrastructure.redis_ui_external),
             ("adminer", self.infrastructure.adminer),
-            ("normalizer_service", self.trading_services.normalizer_service),
+            (
+                "normalizer_service",
+                self.trading_services.normalizer_service,
+            ),
             ("edge_assembler", self.trading_services.edge_assembler),
             ("arb_engine_api", self.trading_services.arb_engine_api),
             ("executor_service", self.trading_services.executor_service),
-            ("hotpath_arb_engine", self.trading_services.hotpath_arb_engine),
+            (
+                "hotpath_arb_engine",
+                self.trading_services.hotpath_arb_engine,
+            ),
             ("api_service", self.trading_services.api_service),
-            ("monitoring_service", self.trading_services.monitoring_service),
-            ("discovery_service", self.supporting_services.discovery_service),
-            ("token_registry_service", self.supporting_services.token_registry_service),
+            (
+                "monitoring_service",
+                self.trading_services.monitoring_service,
+            ),
+            (
+                "discovery_service",
+                self.supporting_services.discovery_service,
+            ),
+            (
+                "token_registry_service",
+                self.supporting_services.token_registry_service,
+            ),
             ("wallet_vault", self.supporting_services.wallet_vault),
         ];
-        
+
         for (service, port) in ports_to_check {
             if let Some(existing_service) = used_ports.get(&port) {
-                conflicts.push(format!("Port {} used by both {} and {}", port, existing_service, service));
+                conflicts.push(format!(
+                    "Port {} used by both {} and {}",
+                    port, existing_service, service
+                ));
             } else {
                 used_ports.insert(port, service);
             }
         }
-        
+
         if !conflicts.is_empty() {
-            return Err(anyhow::anyhow!("Port conflicts detected:\n{}", conflicts.join("\n")));
+            return Err(anyhow::anyhow!(
+                "Port conflicts detected:\n{}",
+                conflicts.join("\n")
+            ));
         }
-        
+
         Ok(())
     }
-    
+
     /// Generate environment variables for docker-compose
     pub fn to_environment_map(&self) -> HashMap<String, String> {
         let mut env_vars = HashMap::new();
-        
+
         // Infrastructure services
-        env_vars.insert("KAFKA_PORT".to_string(), self.infrastructure.kafka_internal.to_string());
-        env_vars.insert("REDIS_PORT".to_string(), self.infrastructure.redis.to_string());
-        env_vars.insert("POSTGRES_PORT".to_string(), self.infrastructure.postgres_external.to_string());
-        
+        env_vars.insert(
+            "KAFKA_PORT".to_string(),
+            self.infrastructure.kafka_internal.to_string(),
+        );
+        env_vars.insert(
+            "REDIS_PORT".to_string(),
+            self.infrastructure.redis.to_string(),
+        );
+        env_vars.insert(
+            "POSTGRES_PORT".to_string(),
+            self.infrastructure.postgres_external.to_string(),
+        );
+
         // Trading services
-        env_vars.insert("HOTPATH_METRICS_PORT".to_string(), self.trading_services.hotpath_arb_engine.to_string());
-        env_vars.insert("ARB_ENGINE_PORT".to_string(), self.trading_services.arb_engine_api.to_string());
-        env_vars.insert("API_SERVICE_PORT".to_string(), self.trading_services.api_service.to_string());
-        env_vars.insert("NORMALIZER_PORT".to_string(), self.trading_services.normalizer_service.to_string());
-        env_vars.insert("EDGE_ASSEMBLER_PORT".to_string(), self.trading_services.edge_assembler.to_string());
-        env_vars.insert("EXECUTOR_PORT".to_string(), self.trading_services.executor_service.to_string());
-        
+        env_vars.insert(
+            "HOTPATH_METRICS_PORT".to_string(),
+            self.trading_services.hotpath_arb_engine.to_string(),
+        );
+        env_vars.insert(
+            "ARB_ENGINE_PORT".to_string(),
+            self.trading_services.arb_engine_api.to_string(),
+        );
+        env_vars.insert(
+            "API_SERVICE_PORT".to_string(),
+            self.trading_services.api_service.to_string(),
+        );
+        env_vars.insert(
+            "NORMALIZER_PORT".to_string(),
+            self.trading_services.normalizer_service.to_string(),
+        );
+        env_vars.insert(
+            "EDGE_ASSEMBLER_PORT".to_string(),
+            self.trading_services.edge_assembler.to_string(),
+        );
+        env_vars.insert(
+            "EXECUTOR_PORT".to_string(),
+            self.trading_services.executor_service.to_string(),
+        );
+
         env_vars
     }
-    
+
     /// Generate .env file content
     pub fn to_env_file(&self) -> String {
         let env_map = self.to_environment_map();
         let mut content = String::new();
         content.push_str("# MEVana Port Configuration - Auto-generated\n");
         content.push_str(&format!("# Generated at: {}\n\n", chrono::Utc::now()));
-        
+
         for (key, value) in env_map.iter() {
             content.push_str(&format!("{}={}\n", key, value));
         }
-        
+
         content
     }
 }
@@ -330,27 +383,29 @@ pub fn get_health_check_url(service_name: &str) -> Option<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    
+
     #[test]
     fn test_port_config_loading() {
         let config = PortConfig::load().expect("Should load config");
         assert_eq!(config.trading_services.hotpath_arb_engine, 8088);
         assert_eq!(config.infrastructure.kafka_internal, 9092);
     }
-    
+
     #[test]
     fn test_no_port_conflicts() {
         let config = PortConfig::load().expect("Should load config");
-        config.validate_no_conflicts().expect("Should have no conflicts");
+        config
+            .validate_no_conflicts()
+            .expect("Should have no conflicts");
     }
-    
+
     #[test]
     fn test_service_port_lookup() {
         let config = PortConfig::load().expect("Should load config");
         assert_eq!(config.get_port("hotpath_arb_engine"), Some(8088));
         assert_eq!(config.get_port("nonexistent"), None);
     }
-    
+
     #[test]
     fn test_health_check_urls() {
         let config = PortConfig::load().expect("Should load config");

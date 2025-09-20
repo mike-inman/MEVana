@@ -125,8 +125,12 @@ async fn run_pipe(
 
     // Register metrics
     let registry = prometheus::default_registry();
-    registry.register(Box::new(TRANSACTIONS_PROCESSED.clone())).unwrap();
-    registry.register(Box::new(SWAPS_EXTRACTED.clone())).unwrap();
+    registry
+        .register(Box::new(TRANSACTIONS_PROCESSED.clone()))
+        .unwrap();
+    registry
+        .register(Box::new(SWAPS_EXTRACTED.clone()))
+        .unwrap();
 
     // Start metrics server
     tokio::spawn(async move {
@@ -314,11 +318,13 @@ lazy_static! {
     static ref TRANSACTIONS_PROCESSED: Counter = Counter::new(
         "normalizer_transactions_processed",
         "Total transactions processed by normalizer"
-    ).unwrap();
+    )
+    .unwrap();
     static ref SWAPS_EXTRACTED: Counter = Counter::new(
-        "normalizer_swaps_extracted", 
+        "normalizer_swaps_extracted",
         "Total swaps extracted by normalizer"
-    ).unwrap();
+    )
+    .unwrap();
 }
 
 // ---------------- small helper: map normalized -> wire ----------------

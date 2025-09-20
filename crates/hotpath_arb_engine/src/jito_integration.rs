@@ -1,5 +1,5 @@
 use anyhow::Result;
-use log::{info, warn, error};
+use log::{error, info, warn};
 use serde::{Deserialize, Serialize};
 use solana_sdk::{
     pubkey::Pubkey,
@@ -92,7 +92,9 @@ impl JitoIntegration {
         };
 
         if config.enabled && auth_keypair.is_none() {
-            return Err(anyhow::anyhow!("Jito enabled but no valid auth keypair found"));
+            return Err(anyhow::anyhow!(
+                "Jito enabled but no valid auth keypair found"
+            ));
         }
 
         Ok(Self {
@@ -115,17 +117,24 @@ impl JitoIntegration {
             return Err(anyhow::anyhow!("Jito integration is disabled"));
         }
 
-        let _auth_keypair = self.auth_keypair.as_ref()
+        let _auth_keypair = self
+            .auth_keypair
+            .as_ref()
             .ok_or_else(|| anyhow::anyhow!("No Jito auth keypair available"))?;
 
         let tip = tip_lamports.unwrap_or(self.config.tip_lamports);
         let bundle_id = uuid::Uuid::new_v4().to_string();
 
-        info!("📦 Submitting Jito bundle {} with {} transactions, tip: {} lamports", 
-              bundle_id, transactions.len(), tip);
+        info!(
+            "📦 Submitting Jito bundle {} with {} transactions, tip: {} lamports",
+            bundle_id,
+            transactions.len(),
+            tip
+        );
 
         // Convert transactions to base58 for Jito API
-        let tx_strings: Vec<String> = transactions.iter()
+        let tx_strings: Vec<String> = transactions
+            .iter()
             .map(|tx| bs58::encode(bincode::serialize(tx).unwrap()).into_string())
             .collect();
 
@@ -143,7 +152,7 @@ impl JitoIntegration {
         {
             let mut history = self.bundle_history.write().await;
             history.push(bundle.clone());
-            
+
             // Keep only last 1000 bundles
             if history.len() > 1000 {
                 history.drain(0..100);
@@ -154,9 +163,13 @@ impl JitoIntegration {
         // In production, this would make HTTP request to Jito block engine
         match self.simulate_jito_submission(&bundle).await {
             Ok(result) => {
-                info!("✅ Jito bundle {} submitted successfully: {}", bundle_id, result);
-                self.update_bundle_status(bundle_id.clone(), JitoBundleStatus::Submitted).await;
-                
+                info!(
+                    "✅ Jito bundle {} submitted successfully: {}",
+                    bundle_id, result
+                );
+                self.update_bundle_status(bundle_id.clone(), JitoBundleStatus::Submitted)
+                    .await;
+
                 // Update metrics
                 {
                     let mut total = self.total_bundles.write().await;
@@ -167,7 +180,8 @@ impl JitoIntegration {
             }
             Err(e) => {
                 error!("❌ Jito bundle {} submission failed: {}", bundle_id, e);
-                self.update_bundle_status(bundle_id.clone(), JitoBundleStatus::Failed).await;
+                self.update_bundle_status(bundle_id.clone(), JitoBundleStatus::Failed)
+                    .await;
                 Err(e)
             }
         }
@@ -187,10 +201,10 @@ impl JitoIntegration {
     pub async fn get_bundle_stats(&self) -> String {
         let total = *self.total_bundles.read().await;
         let successful = *self.successful_bundles.read().await;
-        let success_rate = if total > 0 { 
-            successful as f64 / total as f64 * 100.0 
-        } else { 
-            0.0 
+        let success_rate = if total > 0 {
+            successful as f64 / total as f64 * 100.0
+        } else {
+            0.0
         };
 
         format!(
@@ -204,7 +218,11 @@ impl JitoIntegration {
             successful,
             success_rate,
             self.config.tip_lamports,
-            if self.is_ready() { "Ready" } else { "Not Ready" }
+            if self.is_ready() {
+                "Ready"
+            } else {
+                "Not Ready"
+            }
         )
     }
 
@@ -224,14 +242,14 @@ impl JitoIntegration {
     /// Update bundle status in history
     async fn update_bundle_status(&self, bundle_id: String, status: JitoBundleStatus) {
         let mut history = self.bundle_history.write().await;
-        
+
         if let Some(bundle) = history.iter_mut().find(|b| b.bundle_id == bundle_id) {
             bundle.status = status.clone();
-            
+
             if matches!(status, JitoBundleStatus::Landed) {
                 let mut successful = self.successful_bundles.write().await;
                 *successful += 1;
-                
+
                 // Update success rate
                 let total = *self.total_bundles.read().await;
                 if total > 0 {
@@ -271,11 +289,8 @@ impl JitoIntegration {
             .parse::<Pubkey>()
             .map_err(|e| anyhow::anyhow!("Invalid tip account: {}", e))?;
 
-        let instruction = solana_sdk::system_instruction::transfer(
-            &payer.pubkey(),
-            &tip_account,
-            tip_amount,
-        );
+        let instruction =
+            solana_sdk::system_instruction::transfer(&payer.pubkey(), &tip_account, tip_amount);
 
         let mut transaction = Transaction::new_unsigned(solana_sdk::message::Message::new(
             &[instruction],

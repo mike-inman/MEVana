@@ -1,0 +1,14 @@
+FROM debian:bookworm-slim
+
+RUN apt-get update && apt-get install -y \
+    ca-certificates \
+    curl \
+    && rm -rf /var/lib/apt/lists/*
+
+COPY target/debug/hotpath_arb_engine /usr/local/bin/hotpath_arb_engine
+RUN chmod +x /usr/local/bin/hotpath_arb_engine
+
+EXPOSE 8088
+EXPOSE 8089
+
+ENTRYPOINT ["/usr/local/bin/hotpath_arb_engine"]

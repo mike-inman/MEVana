@@ -46,8 +46,9 @@ impl RegistryConfig {
     pub fn load() -> Result<Self> {
         Ok(Self {
             // Database configuration
-            database_url: env::var("DATABASE_URL")
-                .unwrap_or_else(|_| "postgresql://mev:mevpassword@localhost:5433/mevdb".to_string()),
+            database_url: env::var("DATABASE_URL").unwrap_or_else(|_| {
+                "postgresql://mev:mevpassword@localhost:5433/mevdb".to_string()
+            }),
             redis_url: env::var("REDIS_URL")
                 .unwrap_or_else(|_| "redis://localhost:6379".to_string()),
             connection_pool_size: env::var("CONNECTION_POOL_SIZE")

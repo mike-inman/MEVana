@@ -1,12 +1,12 @@
 use anyhow::Result;
-use log::{info, warn, debug, error};
+use log::{debug, error, info, warn};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::Arc;
-use tokio::sync::{RwLock, mpsc};
+use tokio::sync::{mpsc, RwLock};
 use uuid::Uuid;
 
-use crate::ai_strategy_engine::{MarketCondition, AIStrategyEngine, ExecutionStrategy};
+use crate::ai_strategy_engine::{AIStrategyEngine, ExecutionStrategy, MarketCondition};
 use crate::orderbook_tracker::ArbitrageEvent;
 
 /// Real-time market intelligence system that feeds the AI
@@ -18,12 +18,12 @@ pub struct MarketIntelligence {
     whale_detector: Arc<RwLock<WhaleDetector>>,
     news_analyzer: Arc<RwLock<NewsAnalyzer>>,
     defi_monitor: Arc<RwLock<DeFiProtocolMonitor>>,
-    
+
     // Analysis engines
     volatility_analyzer: Arc<VolatilityAnalyzer>,
     trend_detector: Arc<TrendDetector>,
     liquidity_monitor: Arc<LiquidityMonitor>,
-    
+
     // Communication with AI
     ai_engine: Arc<AIStrategyEngine>,
     market_updates: mpsc::UnboundedSender<MarketUpdate>,
@@ -71,7 +71,7 @@ pub enum VolumeTrend {
     Increasing(f64), // percentage increase
     Decreasing(f64), // percentage decrease
     Stable,
-    Spiking(f64),   // sudden spike percentage
+    Spiking(f64), // sudden spike percentage
 }
 
 #[derive(Debug, Clone)]
@@ -103,12 +103,12 @@ pub struct WhaleProfile {
 
 #[derive(Debug, Clone)]
 pub enum TradingPattern {
-    Accumulator,     // Steadily buying
-    Distributor,     // Steadily selling
-    Arbitrageur,     // Fast buy/sell cycles
-    Hodler,         // Rarely trades
-    MarketMaker,    // Provides liquidity
-    Liquidated,     // Forced selling
+    Accumulator, // Steadily buying
+    Distributor, // Steadily selling
+    Arbitrageur, // Fast buy/sell cycles
+    Hodler,      // Rarely trades
+    MarketMaker, // Provides liquidity
+    Liquidated,  // Forced selling
 }
 
 #[derive(Debug, Clone)]
@@ -214,10 +214,10 @@ pub enum ImpactType {
 
 #[derive(Debug, Clone)]
 pub enum TimeHorizon {
-    Immediate,     // <1 hour
-    ShortTerm,     // 1-24 hours
-    MediumTerm,    // 1-7 days
-    LongTerm,      // >7 days
+    Immediate,  // <1 hour
+    ShortTerm,  // 1-24 hours
+    MediumTerm, // 1-7 days
+    LongTerm,   // >7 days
 }
 
 #[derive(Debug, Clone)]
@@ -280,11 +280,11 @@ pub struct TrendDetector {
 #[derive(Debug, Clone)]
 pub struct TrendAnalysis {
     pub token: String,
-    pub short_term_trend: Trend, // 5-15 minutes
+    pub short_term_trend: Trend,  // 5-15 minutes
     pub medium_term_trend: Trend, // 1-4 hours
-    pub long_term_trend: Trend,  // 24+ hours
-    pub trend_strength: f64,     // 0.0-1.0
-    pub trend_confidence: f64,   // 0.0-1.0
+    pub long_term_trend: Trend,   // 24+ hours
+    pub trend_strength: f64,      // 0.0-1.0
+    pub trend_confidence: f64,    // 0.0-1.0
 }
 
 #[derive(Debug, Clone)]
@@ -298,9 +298,9 @@ pub enum Trend {
 
 #[derive(Debug, Clone)]
 pub struct MomentumIndicators {
-    pub rsi: f64,          // Relative Strength Index
-    pub macd: f64,         // Moving Average Convergence Divergence
-    pub momentum: f64,     // Price momentum
+    pub rsi: f64,             // Relative Strength Index
+    pub macd: f64,            // Moving Average Convergence Divergence
+    pub momentum: f64,        // Price momentum
     pub volume_momentum: f64, // Volume momentum
 }
 
@@ -317,7 +317,7 @@ pub struct LiquidityMetrics {
     pub bid_depth: f64,
     pub ask_depth: f64,
     pub spread_bps: u32,
-    pub liquidity_score: f64, // 0.0-1.0
+    pub liquidity_score: f64,               // 0.0-1.0
     pub slippage_impact: HashMap<f64, f64>, // trade_size -> slippage
 }
 
@@ -355,19 +355,19 @@ pub struct MarketUpdate {
 
 #[derive(Debug, Clone)]
 pub enum MarketUpdateType {
-    VolatilitySpike(String),      // token
+    VolatilitySpike(String), // token
     WhaleMovement(WhaleMovement),
-    LiquidityChange(String),      // venue_token
+    LiquidityChange(String), // venue_token
     NewsEvent(NewsEvent),
-    ProtocolEvent(String),        // protocol
-    TrendChange(String),          // token
+    ProtocolEvent(String), // protocol
+    TrendChange(String),   // token
     VolumeSpike(VolumeSpike),
 }
 
 impl MarketIntelligence {
     pub async fn new(ai_engine: Arc<AIStrategyEngine>) -> Result<Self> {
         let (market_sender, mut market_receiver) = mpsc::unbounded_channel();
-        
+
         let intelligence = Self {
             price_feeds: Arc::new(RwLock::new(HashMap::new())),
             volume_tracker: Arc::new(RwLock::new(VolumeTracker {
@@ -413,52 +413,71 @@ impl MarketIntelligence {
             ai_engine,
             market_updates: market_sender,
         };
-        
+
         // Start background analysis
         let intelligence_clone = intelligence.clone();
         tokio::spawn(async move {
-            intelligence_clone.process_market_updates(market_receiver).await;
+            intelligence_clone
+                .process_market_updates(market_receiver)
+                .await;
         });
-        
+
         // Start real-time monitoring
         let intelligence_clone = intelligence.clone();
         tokio::spawn(async move {
             intelligence_clone.monitor_market_conditions().await;
         });
-        
+
         info!("🧠 Market Intelligence system initialized");
         Ok(intelligence)
     }
-    
+
     /// Analyze arbitrage event and determine market conditions
-    pub async fn analyze_arbitrage_event(&self, event: &ArbitrageEvent) -> Result<Vec<MarketCondition>> {
+    pub async fn analyze_arbitrage_event(
+        &self,
+        event: &ArbitrageEvent,
+    ) -> Result<Vec<MarketCondition>> {
         let mut conditions = Vec::new();
-        
+
         // 1. Check volatility
-        if let Some(volatility) = self.calculate_volatility(&event.token_pair, &event.token_pair).await? {
-            if volatility > 0.05 { // 5% volatility threshold
-                conditions.push(MarketCondition::HighVolatility { threshold: volatility });
+        if let Some(volatility) = self
+            .calculate_volatility(&event.token_pair, &event.token_pair)
+            .await?
+        {
+            if volatility > 0.05 {
+                // 5% volatility threshold
+                conditions.push(MarketCondition::HighVolatility {
+                    threshold: volatility,
+                });
                 info!("🌪️ High volatility detected: {:.2}%", volatility * 100.0);
             }
         }
-        
+
         // 2. Check liquidity
-        if let Some(liquidity_depth) = self.check_liquidity_depth(&event.venue_sell, &event.venue_buy).await? {
-            if liquidity_depth < 10000.0 { // $10k threshold
-                conditions.push(MarketCondition::LowLiquidity { depth_threshold: liquidity_depth });
+        if let Some(liquidity_depth) = self
+            .check_liquidity_depth(&event.venue_sell, &event.venue_buy)
+            .await?
+        {
+            if liquidity_depth < 10000.0 {
+                // $10k threshold
+                conditions.push(MarketCondition::LowLiquidity {
+                    depth_threshold: liquidity_depth,
+                });
                 warn!("💧 Low liquidity detected: ${:.0}", liquidity_depth);
             }
         }
-        
+
         // 3. Check for whale movements
         if let Some(whale_movement) = self.detect_recent_whale_activity(&event.token_pair).await? {
-            conditions.push(MarketCondition::WhaleMovement { 
-                size_threshold: whale_movement.amount 
+            conditions.push(MarketCondition::WhaleMovement {
+                size_threshold: whale_movement.amount,
             });
-            info!("🐋 Whale movement detected: {:.2} {} tokens", 
-                  whale_movement.amount, whale_movement.token);
+            info!(
+                "🐋 Whale movement detected: {:.2} {} tokens",
+                whale_movement.amount, whale_movement.token
+            );
         }
-        
+
         // 4. Check trends
         if let Some(trend) = self.analyze_trend(&event.token_pair).await? {
             match trend {
@@ -471,69 +490,79 @@ impl MarketIntelligence {
                 _ => {}
             }
         }
-        
+
         // 5. Check volume spikes
-        if let Some(volume_spike) = self.check_volume_spike(&event.venue_sell, &event.token_pair).await? {
-            info!("📈 Volume spike detected: {:.0}% increase", volume_spike.spike_percentage);
+        if let Some(volume_spike) = self
+            .check_volume_spike(&event.venue_sell, &event.token_pair)
+            .await?
+        {
+            info!(
+                "📈 Volume spike detected: {:.0}% increase",
+                volume_spike.spike_percentage
+            );
         }
-        
+
         // 6. Check DeFi protocol events
         if let Some(protocol_event) = self.check_protocol_events(&event.token_pair).await? {
-            conditions.push(MarketCondition::DeFiProtocolEvent { 
-                protocol: protocol_event.protocol, 
-                event_type: format!("{:?}", protocol_event.update_type)
+            conditions.push(MarketCondition::DeFiProtocolEvent {
+                protocol: protocol_event.protocol,
+                event_type: format!("{:?}", protocol_event.update_type),
             });
         }
-        
+
         // 7. News sentiment analysis
         if let Some(news_impact) = self.analyze_news_impact(&event.token_pair).await? {
-            conditions.push(MarketCondition::NewsEvent { impact_score: news_impact });
+            conditions.push(MarketCondition::NewsEvent {
+                impact_score: news_impact,
+            });
         }
-        
+
         // Update AI with new conditions
         if !conditions.is_empty() {
-            self.ai_engine.update_market_conditions(conditions.clone()).await;
+            self.ai_engine
+                .update_market_conditions(conditions.clone())
+                .await;
         }
-        
+
         Ok(conditions)
     }
-    
+
     /// Start real-time monitoring of all market conditions
     async fn monitor_market_conditions(&self) {
         let mut interval = tokio::time::interval(tokio::time::Duration::from_secs(10)); // Every 10 seconds
-        
+
         loop {
             interval.tick().await;
-            
+
             // Monitor key metrics
             if let Err(e) = self.update_price_feeds().await {
                 error!("Failed to update price feeds: {}", e);
             }
-            
+
             if let Err(e) = self.monitor_whale_activity().await {
                 error!("Failed to monitor whale activity: {}", e);
             }
-            
+
             if let Err(e) = self.analyze_volume_patterns().await {
                 error!("Failed to analyze volume patterns: {}", e);
             }
-            
+
             if let Err(e) = self.check_protocol_health().await {
                 error!("Failed to check protocol health: {}", e);
             }
-            
+
             if let Err(e) = self.update_liquidity_metrics().await {
                 error!("Failed to update liquidity metrics: {}", e);
             }
         }
     }
-    
+
     // Implementation methods...
-    
+
     async fn calculate_volatility(&self, token_a: &str, token_b: &str) -> Result<Option<f64>> {
         // Calculate volatility based on recent price movements
         let analyzer = &self.volatility_analyzer;
-        
+
         if let Some(metrics) = analyzer.volatility_data.get(token_a) {
             Ok(Some(metrics.current_volatility))
         } else {
@@ -541,121 +570,122 @@ impl MarketIntelligence {
             Ok(Some(0.03)) // Placeholder
         }
     }
-    
+
     async fn check_liquidity_depth(&self, venue_a: &str, venue_b: &str) -> Result<Option<f64>> {
         let monitor = &self.liquidity_monitor;
         let liquidity_key = format!("{}_{}", venue_a, "SOL/USDC"); // Simplified
-        
+
         if let Some(metrics) = monitor.liquidity_data.get(&liquidity_key) {
             Ok(Some(metrics.bid_depth + metrics.ask_depth))
         } else {
             Ok(Some(50000.0)) // Placeholder
         }
     }
-    
+
     async fn detect_recent_whale_activity(&self, token: &str) -> Result<Option<WhaleMovement>> {
         let detector = self.whale_detector.read().await;
-        
+
         // Check for recent whale movements in the last 5 minutes
         let cutoff_time = chrono::Utc::now().timestamp() as u64 - 300; // 5 minutes ago
-        
+
         for movement in &detector.recent_movements {
             if movement.token == token && movement.timestamp > cutoff_time {
                 return Ok(Some(movement.clone()));
             }
         }
-        
+
         Ok(None)
     }
-    
+
     async fn analyze_trend(&self, token: &str) -> Result<Option<Trend>> {
         let detector = &self.trend_detector;
-        
+
         if let Some(analysis) = detector.trend_data.get(token) {
             Ok(Some(analysis.short_term_trend.clone()))
         } else {
             Ok(None)
         }
     }
-    
+
     async fn check_volume_spike(&self, venue: &str, token: &str) -> Result<Option<VolumeSpike>> {
         let tracker = self.volume_tracker.read().await;
-        
+
         // Check for recent volume spikes
         let cutoff_time = chrono::Utc::now().timestamp() as u64 - 60; // Last minute
-        
+
         for spike in &tracker.volume_spikes {
             if spike.venue == venue && spike.token == token && spike.timestamp > cutoff_time {
                 return Ok(Some(spike.clone()));
             }
         }
-        
+
         Ok(None)
     }
-    
+
     async fn check_protocol_events(&self, token: &str) -> Result<Option<ProtocolUpdate>> {
         let monitor = self.defi_monitor.read().await;
-        
+
         // Check for recent protocol updates affecting this token
         let cutoff_time = chrono::Utc::now().timestamp() as u64 - 3600; // Last hour
-        
+
         for update in &monitor.protocol_updates {
-            if update.tokens_affected.contains(&token.to_string()) && 
-               update.go_live_timestamp > cutoff_time {
+            if update.tokens_affected.contains(&token.to_string())
+                && update.go_live_timestamp > cutoff_time
+            {
                 return Ok(Some(update.clone()));
             }
         }
-        
+
         Ok(None)
     }
-    
+
     async fn analyze_news_impact(&self, token: &str) -> Result<Option<f64>> {
         let analyzer = self.news_analyzer.read().await;
-        
+
         // Check recent news events mentioning this token
         let cutoff_time = chrono::Utc::now().timestamp() as u64 - 3600; // Last hour
-        
+
         for event in &analyzer.news_events {
-            if event.tokens_mentioned.contains(&token.to_string()) && 
-               event.timestamp > cutoff_time {
+            if event.tokens_mentioned.contains(&token.to_string()) && event.timestamp > cutoff_time
+            {
                 return Ok(Some(event.impact_prediction));
             }
         }
-        
+
         Ok(None)
     }
-    
+
     async fn update_price_feeds(&self) -> Result<()> {
         // Update price feeds from various sources
         // This would integrate with real price APIs
         debug!("📊 Updating price feeds");
         Ok(())
     }
-    
+
     async fn monitor_whale_activity(&self) -> Result<()> {
         // Monitor known whale addresses for large transactions
         debug!("🐋 Monitoring whale activity");
         Ok(())
     }
-    
+
     async fn analyze_volume_patterns(&self) -> Result<()> {
         // Analyze volume patterns across venues
         debug!("📈 Analyzing volume patterns");
         Ok(())
     }
-    
+
     async fn check_protocol_health(&self) -> Result<()> {
         // Check health of DeFi protocols
         debug!("🏥 Checking protocol health");
         Ok(())
     }
-    
+
     async fn update_liquidity_metrics(&self) -> Result<()> {
         // Update liquidity metrics across venues
         debug!("💧 Updating liquidity metrics");
         Ok(())
     }
-    
+
     async fn process_market_updates(&self, mut receiver: mpsc::UnboundedReceiver<MarketUpdate>) {
         while let Some(update) = receiver.recv().await {
             match update.update_type {
@@ -663,13 +693,22 @@ impl MarketIntelligence {
                     info!("🌪️ Volatility spike detected for {}", token);
                 }
                 MarketUpdateType::WhaleMovement(movement) => {
-                    info!("🐋 Whale movement: {} {} {}", 
-                          movement.amount, movement.token, 
-                          if matches!(movement.direction, TradeDirection::Buy) { "bought" } else { "sold" });
+                    info!(
+                        "🐋 Whale movement: {} {} {}",
+                        movement.amount,
+                        movement.token,
+                        if matches!(movement.direction, TradeDirection::Buy) {
+                            "bought"
+                        } else {
+                            "sold"
+                        }
+                    );
                 }
                 MarketUpdateType::VolumeSpike(spike) => {
-                    info!("📈 Volume spike: {} on {} (+{:.1}%)", 
-                          spike.token, spike.venue, spike.spike_percentage);
+                    info!(
+                        "📈 Volume spike: {} on {} (+{:.1}%)",
+                        spike.token, spike.venue, spike.spike_percentage
+                    );
                 }
                 _ => {}
             }

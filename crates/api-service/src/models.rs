@@ -1,6 +1,6 @@
-use chrono::{DateTime, Utc, NaiveDate};
+use chrono::{DateTime, NaiveDate, Utc};
 use serde::{Deserialize, Serialize};
-use utoipa::{ToSchema, IntoParams};
+use utoipa::{IntoParams, ToSchema};
 use uuid::Uuid;
 
 // ============================================================================
@@ -299,7 +299,7 @@ impl<T> ApiResponse<T> {
             timestamp: Utc::now(),
         }
     }
-    
+
     pub fn error(message: String) -> Self {
         ApiResponse {
             success: false,
@@ -452,7 +452,7 @@ impl ErrorResponse {
             timestamp: Utc::now(),
         }
     }
-    
+
     pub fn with_details(code: &str, message: &str, details: serde_json::Value) -> Self {
         ErrorResponse {
             code: code.to_string(),

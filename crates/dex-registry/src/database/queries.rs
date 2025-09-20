@@ -222,10 +222,7 @@ pub async fn enqueue_discovery(pool: &PgPool, discovery: &DiscoveryQueue) -> Res
     Ok(())
 }
 
-pub async fn dequeue_discovery(
-    pool: &PgPool,
-    batch_size: usize,
-) -> Result<Vec<DiscoveryQueue>> {
+pub async fn dequeue_discovery(pool: &PgPool, batch_size: usize) -> Result<Vec<DiscoveryQueue>> {
     // First, mark items as processing
     sqlx::query(
         r#"

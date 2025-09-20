@@ -1,26 +1,21 @@
-# VCS
+# Version control metadata
 .git
 
-# Rust build artifacts
-**/target/**
-**/*.rs.bk
+# Rust build artifacts (keep source + manifests for Docker builds)
+target
+**/target
 
-# Node/JS
-**/node_modules/**
-ui-web/node_modules/**
+# Ignore IDE clutter
+.idea
+.vscode
+
+# Node
+**/node_modules/
 
 # Logs & temp
 **/*.log
-infra/logs/**
-infrastructure/logs/**
-infra/**/logs/**
-
-# Large media (not needed for service builds)
-**/*.png
-**/*.jpg
-**/*.jpeg
-**/*.svg
-**/*.pdf
+infra/logs/
+infrastructure/logs/
 
 # OS files
 .DS_Store

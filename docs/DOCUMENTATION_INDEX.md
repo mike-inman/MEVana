@@ -32,6 +32,7 @@ Quick Links
 | **[STARTUP_PROGRESS.md](./STARTUP_PROGRESS.md)** | Complete system startup guide and troubleshooting | ✅ Current | 2025-09-09 |
 | **[SHUTDOWN_PROCEDURES.md](./SHUTDOWN_PROCEDURES.md)** | Production shutdown procedures with safety checks | ✅ Current | 2025-09-09 |
 | **[PORT_MAPPING.md](./PORT_MAPPING.md)** | Complete port allocation with production strategies | ✅ Current | 2025-09-09 |
+| **[operations/LOCAL_STACK_OVERVIEW.md](./operations/LOCAL_STACK_OVERVIEW.md)** | Local stack architecture and workflow mirror | ✅ Current | 2025-09-18 |
 | **[PRODUCTION_LESSONS_LEARNED.md](./operations/PRODUCTION_LESSONS_LEARNED.md)** | Critical findings from shutdown testing | ✅ Current | 2025-09-09 |
 
 ### **Configuration Management**

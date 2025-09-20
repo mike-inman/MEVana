@@ -1,16 +1,16 @@
+use crate::database::DatabaseService;
 use anyhow::Result;
 use chrono::{DateTime, Utc};
 use futures::StreamExt;
 use log::{debug, error, info, warn};
 use rdkafka::{
-    consumer::{StreamConsumer, Consumer},
     config::ClientConfig,
+    consumer::{Consumer, StreamConsumer},
     message::Message,
 };
 use serde::{Deserialize, Serialize};
 use std::time::Duration;
 use uuid::Uuid;
-use crate::database::DatabaseService;
 
 /// Arbitrage opportunity from Kafka - matches the format published by hotpath engine
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -65,19 +65,19 @@ impl ArbitrageKafkaConsumer {
 
         consumer.subscribe(&["alerts.arbitrage.opportunities"])?;
 
-        info!("✅ Kafka consumer initialized for arbitrage opportunities (broker: {})", kafka_broker);
+        info!(
+            "✅ Kafka consumer initialized for arbitrage opportunities (broker: {})",
+            kafka_broker
+        );
 
-        Ok(Self {
-            consumer,
-            database,
-        })
+        Ok(Self { consumer, database })
     }
 
     pub async fn start_consuming(&self) -> Result<()> {
         info!("🚀 Starting Kafka consumer for arbitrage opportunities...");
-        
+
         let mut stream = self.consumer.stream();
-        
+
         while let Some(message) = stream.next().await {
             match message {
                 Ok(borrowed_message) => {
@@ -114,35 +114,44 @@ impl ArbitrageKafkaConsumer {
     async fn process_opportunity_message(&self, payload: &[u8]) -> Result<bool> {
         let message_str = std::str::from_utf8(payload)?;
         let kafka_opportunity: KafkaArbitrageOpportunity = serde_json::from_str(message_str)?;
-        
-        debug!("📨 Received arbitrage opportunity: {} (profit: {}bps, confidence: {:.2})", 
-               kafka_opportunity.signature, kafka_opportunity.profit_bps, kafka_opportunity.confidence_score);
+
+        debug!(
+            "📨 Received arbitrage opportunity: {} (profit: {}bps, confidence: {:.2})",
+            kafka_opportunity.signature,
+            kafka_opportunity.profit_bps,
+            kafka_opportunity.confidence_score
+        );
 
         // Parse timestamp
-        let timestamp = DateTime::parse_from_rfc3339(&kafka_opportunity.timestamp)?
-            .with_timezone(&Utc);
+        let timestamp =
+            DateTime::parse_from_rfc3339(&kafka_opportunity.timestamp)?.with_timezone(&Utc);
 
         // Insert into database using DatabaseService
-        let inserted = self.database.insert_arbitrage_opportunity_from_kafka(
-            &kafka_opportunity.signature,
-            &kafka_opportunity.venue_a,
-            &kafka_opportunity.venue_b,
-            &kafka_opportunity.token_a,
-            &kafka_opportunity.token_b,
-            kafka_opportunity.profit_bps,
-            kafka_opportunity.slot as i64,
-            kafka_opportunity.estimated_net_profit_sol,
-            kafka_opportunity.confidence_score,
-            timestamp,
-            &kafka_opportunity.strategy,
-        ).await?;
+        let inserted = self
+            .database
+            .insert_arbitrage_opportunity_from_kafka(
+                &kafka_opportunity.signature,
+                &kafka_opportunity.venue_a,
+                &kafka_opportunity.venue_b,
+                &kafka_opportunity.token_a,
+                &kafka_opportunity.token_b,
+                kafka_opportunity.profit_bps,
+                kafka_opportunity.slot as i64,
+                kafka_opportunity.estimated_net_profit_sol,
+                kafka_opportunity.confidence_score,
+                timestamp,
+                &kafka_opportunity.strategy,
+            )
+            .await?;
 
         if !inserted {
             return Ok(false); // Already exists, skip
         }
 
-        info!("💾 Persisted arbitrage opportunity: {} ({}bps profit, strategy: {})", 
-              kafka_opportunity.signature, kafka_opportunity.profit_bps, kafka_opportunity.strategy);
+        info!(
+            "💾 Persisted arbitrage opportunity: {} ({}bps profit, strategy: {})",
+            kafka_opportunity.signature, kafka_opportunity.profit_bps, kafka_opportunity.strategy
+        );
 
         Ok(true)
     }

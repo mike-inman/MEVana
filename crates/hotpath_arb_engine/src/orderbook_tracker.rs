@@ -1,11 +1,11 @@
+use crossbeam::queue::SegQueue;
+use lazy_static::lazy_static;
+use log::{debug, info, warn};
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, VecDeque};
 use std::sync::Arc;
 use std::time::{SystemTime, UNIX_EPOCH};
 use tokio::sync::RwLock;
-use log::{debug, info, warn};
-use crossbeam::queue::SegQueue;
-use lazy_static::lazy_static;
 
 // DETECTION QUEUES - Global lock-free queues for qualified arbitrage opportunities
 // ARBITRAGE_DETECTED: Profitable opportunities found by detection engine
@@ -94,7 +94,7 @@ pub struct OrderbookTracker {
     orderbook_history: Arc<RwLock<VecDeque<OrderbookSnapshot>>>,
     arbitrage_history: Arc<RwLock<VecDeque<ArbitrageEvent>>>,
     market_stats: Arc<RwLock<MarketStats>>,
-    
+
     // Configuration
     max_orderbook_entries: usize,
     max_arbitrage_entries: usize,
@@ -103,8 +103,12 @@ pub struct OrderbookTracker {
 impl OrderbookTracker {
     pub fn new(max_orderbook_entries: usize, max_arbitrage_entries: usize) -> Self {
         Self {
-            orderbook_history: Arc::new(RwLock::new(VecDeque::with_capacity(max_orderbook_entries))),
-            arbitrage_history: Arc::new(RwLock::new(VecDeque::with_capacity(max_arbitrage_entries))),
+            orderbook_history: Arc::new(RwLock::new(VecDeque::with_capacity(
+                max_orderbook_entries,
+            ))),
+            arbitrage_history: Arc::new(RwLock::new(VecDeque::with_capacity(
+                max_arbitrage_entries,
+            ))),
             market_stats: Arc::new(RwLock::new(MarketStats {
                 total_opportunities: 0,
                 profitable_opportunities: 0,
@@ -122,12 +126,12 @@ impl OrderbookTracker {
     /// Record orderbook snapshot
     pub async fn record_orderbook(&self, snapshot: OrderbookSnapshot) {
         let mut history = self.orderbook_history.write().await;
-        
+
         // Remove oldest if at capacity
         if history.len() >= self.max_orderbook_entries {
             history.pop_front();
         }
-        
+
         debug!(
             "📊 Recorded orderbook: {} {} @ {} (spread: {}bps)",
             snapshot.venue,
@@ -135,7 +139,7 @@ impl OrderbookTracker {
             snapshot.mid_price.unwrap_or(0.0),
             snapshot.spread_bps.unwrap_or(0)
         );
-        
+
         history.push_back(snapshot);
     }
 
@@ -143,7 +147,7 @@ impl OrderbookTracker {
     pub async fn record_arbitrage(&self, event: ArbitrageEvent) {
         let mut arb_history = self.arbitrage_history.write().await;
         let mut stats = self.market_stats.write().await;
-        
+
         // Remove oldest if at capacity - CAPTURE TO DETECTION QUEUE FOR EXECUTION
         if arb_history.len() >= self.max_arbitrage_entries {
             if let Some(detected_event) = arb_history.pop_front() {
@@ -160,39 +164,46 @@ impl OrderbookTracker {
                 ARBITRAGE_DETECTED.push(detected_event);
             }
         }
-        
+
         // Update statistics
         stats.total_opportunities += 1;
         if event.profit_bps > 0 {
             stats.profitable_opportunities += 1;
             stats.total_profit_bps += event.profit_bps as i64;
         }
-        
+
         // Recalculate averages
         if stats.profitable_opportunities > 0 {
-            stats.average_profit_bps = stats.total_profit_bps as f64 / stats.profitable_opportunities as f64;
+            stats.average_profit_bps =
+                stats.total_profit_bps as f64 / stats.profitable_opportunities as f64;
         }
-        
-        let success_count = arb_history.iter().filter(|e| e.success).count() + (if event.success { 1 } else { 0 });
+
+        let success_count =
+            arb_history.iter().filter(|e| e.success).count() + (if event.success { 1 } else { 0 });
         stats.success_rate = success_count as f64 / (arb_history.len() + 1) as f64 * 100.0;
-        
-        let total_execution_time: u64 = arb_history.iter().map(|e| e.execution_time_us).sum::<u64>() + event.execution_time_us;
-        stats.average_execution_time_us = total_execution_time as f64 / (arb_history.len() + 1) as f64;
-        
+
+        let total_execution_time: u64 =
+            arb_history.iter().map(|e| e.execution_time_us).sum::<u64>() + event.execution_time_us;
+        stats.average_execution_time_us =
+            total_execution_time as f64 / (arb_history.len() + 1) as f64;
+
         // Update venue performance
         let venue_key = format!("{}->{}", event.venue_sell, event.venue_buy);
-        let venue_stats = stats.venue_performance.entry(venue_key).or_insert(VenueStats {
-            opportunities: 0,
-            profit_bps: 0,
-            average_execution_us: 0.0,
-            success_rate: 0.0,
-        });
-        
+        let venue_stats = stats
+            .venue_performance
+            .entry(venue_key)
+            .or_insert(VenueStats {
+                opportunities: 0,
+                profit_bps: 0,
+                average_execution_us: 0.0,
+                success_rate: 0.0,
+            });
+
         venue_stats.opportunities += 1;
         if event.profit_bps > 0 {
             venue_stats.profit_bps += event.profit_bps as i64;
         }
-        
+
         info!(
             "🎯 RECORDED ARBITRAGE: {} {}bps {}->{} ({}μs) {} | History: {}/{} entries",
             event.opportunity_id,
@@ -204,7 +215,7 @@ impl OrderbookTracker {
             arb_history.len() + 1,
             self.max_arbitrage_entries
         );
-        
+
         arb_history.push_back(event);
     }
 
@@ -228,17 +239,28 @@ impl OrderbookTracker {
     }
 
     /// Get orderbook for specific venue/market
-    pub async fn get_latest_orderbook(&self, venue: &str, market: &str) -> Option<OrderbookSnapshot> {
+    pub async fn get_latest_orderbook(
+        &self,
+        venue: &str,
+        market: &str,
+    ) -> Option<OrderbookSnapshot> {
         let history = self.orderbook_history.read().await;
-        history.iter().rev()
+        history
+            .iter()
+            .rev()
             .find(|snapshot| snapshot.venue == venue && snapshot.market == market)
             .cloned()
     }
 
     /// Get arbitrage opportunities by venue pair
-    pub async fn get_arbitrage_by_venues(&self, venue_sell: &str, venue_buy: &str) -> Vec<ArbitrageEvent> {
+    pub async fn get_arbitrage_by_venues(
+        &self,
+        venue_sell: &str,
+        venue_buy: &str,
+    ) -> Vec<ArbitrageEvent> {
         let history = self.arbitrage_history.read().await;
-        history.iter()
+        history
+            .iter()
             .filter(|event| event.venue_sell == venue_sell && event.venue_buy == venue_buy)
             .cloned()
             .collect()
@@ -290,7 +312,7 @@ pub fn create_orderbook_snapshot(
     // Calculate mid price and spread
     let best_bid = bid_levels.first().map(|l| l.price);
     let best_ask = ask_levels.first().map(|l| l.price);
-    
+
     let (mid_price, spread_bps) = match (best_bid, best_ask) {
         (Some(bid), Some(ask)) => {
             let mid = (bid + ask) / 2.0;
@@ -400,7 +422,7 @@ pub fn consume_detected_arbitrage_events(batch_size: usize) -> Vec<ArbitrageEven
             break;
         }
     }
-    
+
     if !events.is_empty() {
         info!(
             "⚡ CONSUMED {} detected arbitrage opportunities (queue had {} remaining)",
@@ -408,7 +430,7 @@ pub fn consume_detected_arbitrage_events(batch_size: usize) -> Vec<ArbitrageEven
             ARBITRAGE_DETECTED.len()
         );
     }
-    
+
     events
 }
 
@@ -423,7 +445,7 @@ pub fn consume_execution_results(batch_size: usize) -> Vec<ExecutionResult> {
             break;
         }
     }
-    
+
     if !results.is_empty() {
         info!(
             "📊 CONSUMED {} execution results for analysis (queue had {} remaining)",
@@ -431,6 +453,6 @@ pub fn consume_execution_results(batch_size: usize) -> Vec<ExecutionResult> {
             EXECUTION_RESULTS.len()
         );
     }
-    
+
     results
 }

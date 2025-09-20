@@ -1,21 +1,19 @@
 use anyhow::Result;
 use log::{info, warn};
 use serde::{Deserialize, Serialize};
+use solana_sdk::{
+    instruction::Instruction,
+    pubkey::Pubkey,
+    signature::{Keypair, Signer},
+};
 use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::RwLock;
-use solana_sdk::{
-    pubkey::Pubkey,
-    instruction::Instruction,
-    signature::{Keypair, Signer},
-};
 
 use crate::live_trading_config::LiveTradingConfig;
 use crate::marginfi_instructions::{
-    create_marginfi_flash_loan_instruction,
-    create_marginfi_flash_loan_repay_instruction,
-    calculate_marginfi_flash_loan_fee,
-    validate_marginfi_flash_loan_preconditions,
+    calculate_marginfi_flash_loan_fee, create_marginfi_flash_loan_instruction,
+    create_marginfi_flash_loan_repay_instruction, validate_marginfi_flash_loan_preconditions,
 };
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Hash)]
@@ -111,39 +109,57 @@ impl HotpathFlashLoanManager {
 
         let amount_lamports = (amount_sol * 1_000_000_000.0) as u64;
         if amount_lamports > (self.config.max_flash_loan_amount_sol * 1_000_000_000.0) as u64 {
-            warn!("Flash loan amount {:.6} SOL exceeds max {:.6} SOL", 
-                  amount_sol, self.config.max_flash_loan_amount_sol);
+            warn!(
+                "Flash loan amount {:.6} SOL exceeds max {:.6} SOL",
+                amount_sol, self.config.max_flash_loan_amount_sol
+            );
             return Ok(None);
         }
 
         // Get preferred provider from config
-        let preferred_provider = FlashLoanProvider::from_string(&self.config.preferred_flash_loan_provider);
-        
+        let preferred_provider =
+            FlashLoanProvider::from_string(&self.config.preferred_flash_loan_provider);
+
         if let Some(provider) = preferred_provider {
-            let quote = self.simulate_flash_loan_quote(provider, *token_mint, amount_lamports).await;
+            let quote = self
+                .simulate_flash_loan_quote(provider, *token_mint, amount_lamports)
+                .await;
             if quote.is_available {
-                info!("Flash loan available: {} via {:?}, fee: {} bps", 
-                      amount_sol, provider, quote.fee_bps);
+                info!(
+                    "Flash loan available: {} via {:?}, fee: {} bps",
+                    amount_sol, provider, quote.fee_bps
+                );
                 return Ok(Some(quote));
             }
         }
 
         // Fallback to other providers
-        for provider in [FlashLoanProvider::Marginfi, FlashLoanProvider::Solend, 
-                        FlashLoanProvider::PortFinance, FlashLoanProvider::JetProtocol] {
+        for provider in [
+            FlashLoanProvider::Marginfi,
+            FlashLoanProvider::Solend,
+            FlashLoanProvider::PortFinance,
+            FlashLoanProvider::JetProtocol,
+        ] {
             if Some(provider) == preferred_provider {
                 continue; // Already tried
             }
-            
-            let quote = self.simulate_flash_loan_quote(provider, *token_mint, amount_lamports).await;
+
+            let quote = self
+                .simulate_flash_loan_quote(provider, *token_mint, amount_lamports)
+                .await;
             if quote.is_available {
-                info!("Flash loan fallback: {} via {:?}, fee: {} bps", 
-                      amount_sol, provider, quote.fee_bps);
+                info!(
+                    "Flash loan fallback: {} via {:?}, fee: {} bps",
+                    amount_sol, provider, quote.fee_bps
+                );
                 return Ok(Some(quote));
             }
         }
 
-        warn!("No flash loan providers available for {:.6} SOL", amount_sol);
+        warn!(
+            "No flash loan providers available for {:.6} SOL",
+            amount_sol
+        );
         Ok(None)
     }
 
@@ -176,7 +192,7 @@ impl HotpathFlashLoanManager {
     ) -> FlashLoanQuote {
         // Simulate availability (90% success rate)
         let is_available = fastrand::f64() < 0.90;
-        
+
         let fee_bps = provider.typical_fee_bps();
         let estimated_cost_lamports = match provider {
             FlashLoanProvider::Marginfi => calculate_marginfi_flash_loan_fee(amount_lamports),
@@ -199,9 +215,11 @@ impl HotpathFlashLoanManager {
         quote: &FlashLoanQuote,
         payer: &Keypair,
     ) -> Result<Vec<Instruction>> {
-        info!("Creating flash loan instructions for {:?}, amount: {} lamports", 
-              quote.provider, quote.available_amount);
-        
+        info!(
+            "Creating flash loan instructions for {:?}, amount: {} lamports",
+            quote.provider, quote.available_amount
+        );
+
         match quote.provider {
             FlashLoanProvider::Marginfi => {
                 // Validate preconditions
@@ -209,18 +227,21 @@ impl HotpathFlashLoanManager {
                     quote.available_amount,
                     (self.config.max_flash_loan_amount_sol * 1_000_000_000.0) as u64,
                 )?;
-                
+
                 // Create real Marginfi flash loan instruction
                 let instruction = create_marginfi_flash_loan_instruction(
                     &payer.pubkey(),
                     quote.available_amount,
                 )?;
-                
+
                 Ok(vec![instruction])
             }
             _ => {
                 // For other providers, implement similar real protocol calls
-                warn!("Provider {:?} not yet implemented with real instructions", quote.provider);
+                warn!(
+                    "Provider {:?} not yet implemented with real instructions",
+                    quote.provider
+                );
                 Ok(vec![])
             }
         }
@@ -233,23 +254,26 @@ impl HotpathFlashLoanManager {
         payer: &Keypair,
     ) -> Result<Vec<Instruction>> {
         let repay_amount = quote.available_amount + quote.estimated_cost_lamports;
-        
-        info!("Creating repay instructions for {:?}, repay amount: {} lamports", 
-              quote.provider, repay_amount);
-        
+
+        info!(
+            "Creating repay instructions for {:?}, repay amount: {} lamports",
+            quote.provider, repay_amount
+        );
+
         match quote.provider {
             FlashLoanProvider::Marginfi => {
                 // Create real Marginfi flash loan repay instruction
-                let instruction = create_marginfi_flash_loan_repay_instruction(
-                    &payer.pubkey(),
-                    repay_amount,
-                )?;
-                
+                let instruction =
+                    create_marginfi_flash_loan_repay_instruction(&payer.pubkey(), repay_amount)?;
+
                 Ok(vec![instruction])
             }
             _ => {
                 // For other providers, implement similar real protocol calls
-                warn!("Provider {:?} repay not yet implemented with real instructions", quote.provider);
+                warn!(
+                    "Provider {:?} repay not yet implemented with real instructions",
+                    quote.provider
+                );
                 Ok(vec![])
             }
         }
@@ -259,16 +283,20 @@ impl HotpathFlashLoanManager {
     pub async fn record_flash_loan_result(&self, provider: FlashLoanProvider, success: bool) {
         let mut performance = self.provider_performance.write().await;
         let current_rate = performance.get(&provider).copied().unwrap_or(0.5);
-        
+
         // Simple exponential moving average
         let new_rate = if success {
             current_rate * 0.9 + 0.1
         } else {
             current_rate * 0.9
         };
-        
+
         performance.insert(provider, new_rate);
-        info!("Updated {:?} performance: {:.2}%", provider, new_rate * 100.0);
+        info!(
+            "Updated {:?} performance: {:.2}%",
+            provider,
+            new_rate * 100.0
+        );
     }
 
     /// Get flash loan statistics
@@ -285,11 +313,19 @@ impl HotpathFlashLoanManager {
             self.config.preferred_flash_loan_provider
         );
 
-        for provider in [FlashLoanProvider::Marginfi, FlashLoanProvider::Solend,
-                        FlashLoanProvider::PortFinance, FlashLoanProvider::JetProtocol] {
+        for provider in [
+            FlashLoanProvider::Marginfi,
+            FlashLoanProvider::Solend,
+            FlashLoanProvider::PortFinance,
+            FlashLoanProvider::JetProtocol,
+        ] {
             let rate = performance.get(&provider).copied().unwrap_or(0.0);
-            stats.push_str(&format!("  {:?}: {:.1}% success, {} bps fee\n", 
-                                   provider, rate * 100.0, provider.typical_fee_bps()));
+            stats.push_str(&format!(
+                "  {:?}: {:.1}% success, {} bps fee\n",
+                provider,
+                rate * 100.0,
+                provider.typical_fee_bps()
+            ));
         }
 
         stats

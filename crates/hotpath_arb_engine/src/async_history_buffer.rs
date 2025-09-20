@@ -1,9 +1,9 @@
+use log::{debug, error, info, warn};
 use serde::{Deserialize, Serialize};
+use sqlx::PgPool;
 use std::sync::Arc;
 use tokio::sync::mpsc;
 use tokio::time::{interval, Duration, Instant};
-use log::{debug, error, info, warn};
-use sqlx::PgPool;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct OrderbookSnapshot {
@@ -64,7 +64,7 @@ pub enum HistoryEvent {
 }
 
 /// Ultra-fast async buffer for off-hotpath database writes
-/// 
+///
 /// Design principles:
 /// 1. ZERO hotpath blocking - all writes are async
 /// 2. Circular buffer with batch writes for efficiency  
@@ -77,7 +77,7 @@ pub struct AsyncHistoryBuffer {
 
 impl AsyncHistoryBuffer {
     /// Create new async history buffer
-    /// 
+    ///
     /// buffer_size: Max events before forced flush (default: 10000)
     /// flush_interval_ms: Auto-flush interval (default: 5000ms)
     /// batch_size: DB batch write size (default: 1000)
@@ -92,7 +92,7 @@ impl AsyncHistoryBuffer {
         let batch_size = batch_size.unwrap_or(1000);
 
         let (sender, receiver) = mpsc::unbounded_channel();
-        
+
         // Spawn background worker task
         let handle = tokio::spawn(async move {
             let worker = HistoryBufferWorker {
@@ -106,7 +106,7 @@ impl AsyncHistoryBuffer {
                 total_events: 0,
                 flush_count: 0,
             };
-            
+
             worker.run().await;
         });
 
@@ -127,7 +127,9 @@ impl AsyncHistoryBuffer {
     /// Record arbitrage opportunity (NON-BLOCKING)  
     #[inline(always)]
     pub fn record_opportunity(&self, opportunity: ArbitrageOpportunity) {
-        let _ = self.sender.send(HistoryEvent::ArbitrageOpportunity(opportunity));
+        let _ = self
+            .sender
+            .send(HistoryEvent::ArbitrageOpportunity(opportunity));
     }
 
     /// Record execution result (NON-BLOCKING)
@@ -157,11 +159,13 @@ struct HistoryBufferWorker {
 
 impl HistoryBufferWorker {
     async fn run(mut self) {
-        info!("🚀 AsyncHistoryBuffer worker started (buffer_size={}, batch_size={})", 
-               self.buffer_size, self.batch_size);
-        
+        info!(
+            "🚀 AsyncHistoryBuffer worker started (buffer_size={}, batch_size={})",
+            self.buffer_size, self.batch_size
+        );
+
         let mut flush_timer = interval(self.flush_interval);
-        
+
         loop {
             tokio::select! {
                 // Receive new events
@@ -173,7 +177,7 @@ impl HistoryBufferWorker {
                             } else {
                                 self.buffer.push(event);
                                 self.total_events += 1;
-                                
+
                                 // Flush if buffer full
                                 if self.buffer.len() >= self.buffer_size {
                                     debug!("📦 Buffer full ({} events), flushing...", self.buffer.len());
@@ -188,7 +192,7 @@ impl HistoryBufferWorker {
                         }
                     }
                 }
-                
+
                 // Periodic flush timer
                 _ = flush_timer.tick() => {
                     if !self.buffer.is_empty() && self.last_flush.elapsed() >= self.flush_interval {
@@ -198,19 +202,21 @@ impl HistoryBufferWorker {
                 }
             }
         }
-        
-        info!("✅ AsyncHistoryBuffer worker stopped (processed {} events, {} flushes)", 
-              self.total_events, self.flush_count);
+
+        info!(
+            "✅ AsyncHistoryBuffer worker stopped (processed {} events, {} flushes)",
+            self.total_events, self.flush_count
+        );
     }
-    
+
     async fn flush_buffer(&mut self) {
         if self.buffer.is_empty() {
             return;
         }
-        
+
         let start_time = Instant::now();
         let event_count = self.buffer.len();
-        
+
         // Process in batches to avoid large transactions
         for chunk in self.buffer.chunks(self.batch_size) {
             if let Err(e) = self.write_batch(chunk).await {
@@ -218,22 +224,26 @@ impl HistoryBufferWorker {
                 // TODO: Implement retry logic or dead letter queue
             }
         }
-        
+
         self.buffer.clear();
         self.last_flush = Instant::now();
         self.flush_count += 1;
-        
-        debug!("✅ Flushed {} events to DB in {:.2}ms (flush #{})", 
-               event_count, start_time.elapsed().as_secs_f64() * 1000.0, self.flush_count);
+
+        debug!(
+            "✅ Flushed {} events to DB in {:.2}ms (flush #{})",
+            event_count,
+            start_time.elapsed().as_secs_f64() * 1000.0,
+            self.flush_count
+        );
     }
-    
+
     async fn write_batch(&self, events: &[HistoryEvent]) -> Result<(), sqlx::Error> {
         let mut tx = self.db_pool.begin().await?;
-        
+
         let mut orderbook_count = 0;
         let mut opportunity_count = 0;
         let mut execution_count = 0;
-        
+
         for event in events {
             match event {
                 HistoryEvent::OrderbookSnapshot(snapshot) => {
@@ -261,7 +271,7 @@ impl HistoryBufferWorker {
                     .execute(&mut *tx).await?;
                     orderbook_count += 1;
                 }
-                
+
                 HistoryEvent::ArbitrageOpportunity(opp) => {
                     sqlx::query(
                         r#"
@@ -289,7 +299,7 @@ impl HistoryBufferWorker {
                     .execute(&mut *tx).await?;
                     opportunity_count += 1;
                 }
-                
+
                 HistoryEvent::ExecutionResult(result) => {
                     sqlx::query(
                         r#"
@@ -315,18 +325,20 @@ impl HistoryBufferWorker {
                     .execute(&mut *tx).await?;
                     execution_count += 1;
                 }
-                
+
                 HistoryEvent::BatchFlush => {} // No-op
             }
         }
-        
+
         tx.commit().await?;
-        
+
         if orderbook_count + opportunity_count + execution_count > 0 {
-            debug!("💾 DB batch written: {} orderbook, {} opportunities, {} executions", 
-                   orderbook_count, opportunity_count, execution_count);
+            debug!(
+                "💾 DB batch written: {} orderbook, {} opportunities, {} executions",
+                orderbook_count, opportunity_count, execution_count
+            );
         }
-        
+
         Ok(())
     }
 }
@@ -346,7 +358,7 @@ pub fn create_orderbook_snapshot(
         (Some(bid), Some(ask)) => Some((bid + ask) / 2.0),
         _ => None,
     };
-    
+
     let spread_bps = match (best_bid, best_ask, mid_price) {
         (Some(bid), Some(ask), Some(mid)) if mid > 0.0 => {
             Some(((ask - bid) / mid * 10000.0) as u16)
@@ -365,8 +377,8 @@ pub fn create_orderbook_snapshot(
         spread_bps,
         bid_depth_usd: None, // Calculate if needed
         ask_depth_usd: None, // Calculate if needed
-        total_bids: 0, // Extract from orderbook_data if needed
-        total_asks: 0, // Extract from orderbook_data if needed
+        total_bids: 0,       // Extract from orderbook_data if needed
+        total_asks: 0,       // Extract from orderbook_data if needed
         raw_orderbook: orderbook_data,
     }
 }

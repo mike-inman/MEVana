@@ -1,7 +1,7 @@
+use log::{debug, error, warn};
 use redis::{Client, Connection};
 use serde_json::json;
 use std::time::{SystemTime, UNIX_EPOCH};
-use log::{debug, error, warn};
 use tokio::sync::mpsc;
 
 /// Ultra-fast Redis metrics publisher for hotpath engine
@@ -47,25 +47,27 @@ pub enum MetricsEvent {
 
 impl RedisMetricsPublisher {
     /// Create new Redis publisher (non-blocking)
-    pub async fn new(redis_url: Option<String>) -> Result<Self, Box<dyn std::error::Error + Send + Sync>> {
+    pub async fn new(
+        redis_url: Option<String>,
+    ) -> Result<Self, Box<dyn std::error::Error + Send + Sync>> {
         let redis_url = redis_url.unwrap_or_else(|| {
             std::env::var("REDIS_URL").unwrap_or_else(|_| "redis://localhost:6379".to_string())
         });
-        
+
         let (sender, receiver) = mpsc::unbounded_channel();
-        
+
         // Spawn background Redis worker
         let handle = tokio::spawn(async move {
             let worker = RedisWorker::new(redis_url, receiver).await;
             worker.run().await;
         });
-        
+
         Ok(Self {
             sender,
             _handle: handle,
         })
     }
-    
+
     /// Publish arbitrage stats (NON-BLOCKING)
     #[inline(always)]
     pub fn publish_arbitrage_stats(
@@ -84,7 +86,7 @@ impl RedisMetricsPublisher {
             success_rate_pct,
         });
     }
-    
+
     /// Publish performance metrics (NON-BLOCKING)
     #[inline(always)]
     pub fn publish_performance_metrics(
@@ -105,7 +107,7 @@ impl RedisMetricsPublisher {
             execution_latency_p99_ms,
         });
     }
-    
+
     /// Publish system status (NON-BLOCKING)
     #[inline(always)]
     pub fn publish_system_status(
@@ -143,11 +145,14 @@ impl RedisWorker {
                 Some(client)
             }
             Err(e) => {
-                warn!("⚠️  Failed to create Redis client: {}. Metrics will be dropped.", e);
+                warn!(
+                    "⚠️  Failed to create Redis client: {}. Metrics will be dropped.",
+                    e
+                );
                 None
             }
         };
-        
+
         Self {
             redis_client,
             receiver,
@@ -155,18 +160,18 @@ impl RedisWorker {
             last_connection_attempt: UNIX_EPOCH,
         }
     }
-    
+
     async fn run(mut self) {
         debug!("🚀 Redis metrics publisher worker started");
-        
+
         let mut connection: Option<Connection> = None;
-        
+
         while let Some(event) = self.receiver.recv().await {
             // Try to establish connection if we don't have one
             if connection.is_none() && self.redis_client.is_some() {
                 connection = self.try_connect().await;
             }
-            
+
             // Publish metrics if we have a connection
             if let Some(ref mut conn) = connection {
                 if let Err(e) = self.publish_event(conn, &event).await {
@@ -175,21 +180,26 @@ impl RedisWorker {
                 }
             }
         }
-        
+
         debug!("📤 Redis metrics publisher worker stopped");
     }
-    
+
     async fn try_connect(&mut self) -> Option<Connection> {
         if let Some(ref client) = self.redis_client {
             // Rate limit connection attempts
             let now = SystemTime::now();
-            if now.duration_since(self.last_connection_attempt).unwrap_or_default().as_secs() < 5 {
+            if now
+                .duration_since(self.last_connection_attempt)
+                .unwrap_or_default()
+                .as_secs()
+                < 5
+            {
                 return None;
             }
-            
+
             self.last_connection_attempt = now;
             self.connection_attempts += 1;
-            
+
             match client.get_connection() {
                 Ok(conn) => {
                     debug!("✅ Connected to Redis for metrics publishing");
@@ -197,8 +207,12 @@ impl RedisWorker {
                     Some(conn)
                 }
                 Err(e) => {
-                    if self.connection_attempts % 10 == 1 { // Log every 10 attempts
-                        warn!("⚠️  Redis connection attempt {} failed: {}", self.connection_attempts, e);
+                    if self.connection_attempts % 10 == 1 {
+                        // Log every 10 attempts
+                        warn!(
+                            "⚠️  Redis connection attempt {} failed: {}",
+                            self.connection_attempts, e
+                        );
                     }
                     None
                 }
@@ -207,13 +221,17 @@ impl RedisWorker {
             None
         }
     }
-    
-    async fn publish_event(&self, connection: &mut Connection, event: &MetricsEvent) -> Result<(), redis::RedisError> {
+
+    async fn publish_event(
+        &self,
+        connection: &mut Connection,
+        event: &MetricsEvent,
+    ) -> Result<(), redis::RedisError> {
         let timestamp = SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .unwrap_or_default()
             .as_secs();
-        
+
         match event {
             MetricsEvent::ArbitrageStats {
                 opportunities_detected,
@@ -231,7 +249,7 @@ impl RedisWorker {
                     "last_updated": chrono::Utc::now(),
                     "timestamp": timestamp
                 });
-                
+
                 redis::cmd("SET")
                     .arg("hotpath:stats:arbitrage")
                     .arg(data.to_string())
@@ -239,7 +257,7 @@ impl RedisWorker {
                     .arg(300) // Expire after 5 minutes
                     .query::<()>(connection)?;
             }
-            
+
             MetricsEvent::PerformanceMetrics {
                 detection_latency_p50_us,
                 detection_latency_p95_us,
@@ -257,7 +275,7 @@ impl RedisWorker {
                     "execution_latency_p99_ms": execution_latency_p99_ms,
                     "timestamp": timestamp
                 });
-                
+
                 redis::cmd("SET")
                     .arg("hotpath:stats:performance")
                     .arg(data.to_string())
@@ -265,7 +283,7 @@ impl RedisWorker {
                     .arg(300)
                     .query::<()>(connection)?;
             }
-            
+
             MetricsEvent::SystemStatus {
                 current_slot,
                 streams_active,
@@ -283,7 +301,7 @@ impl RedisWorker {
                     "uptime_seconds": uptime_seconds,
                     "timestamp": timestamp
                 });
-                
+
                 redis::cmd("SET")
                     .arg("hotpath:stats:system")
                     .arg(data.to_string())
@@ -291,7 +309,7 @@ impl RedisWorker {
                     .arg(300)
                     .query::<()>(connection)?;
             }
-            
+
             MetricsEvent::VenueStats {
                 venue,
                 volume_24h,
@@ -307,13 +325,13 @@ impl RedisWorker {
                     "success_rate": success_rate,
                     "timestamp": timestamp
                 });
-                
+
                 redis::cmd("HSET")
                     .arg("hotpath:stats:venues")
                     .arg(venue)
                     .arg(data.to_string())
                     .query::<()>(connection)?;
-                
+
                 // Set expiry on the hash
                 redis::cmd("EXPIRE")
                     .arg("hotpath:stats:venues")
@@ -321,7 +339,7 @@ impl RedisWorker {
                     .query::<()>(connection)?;
             }
         }
-        
+
         Ok(())
     }
 }

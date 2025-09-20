@@ -15,7 +15,9 @@ use std::sync::Arc;
 use tokio::sync::{broadcast, RwLock};
 use uuid::Uuid;
 
-use crate::property_store::{get_property_store, PropertyChangeEvent, PropertySource, PropertyValue, ValidationError};
+use crate::property_store::{
+    get_property_store, PropertyChangeEvent, PropertySource, PropertyValue, ValidationError,
+};
 
 /// WebSocket client connection management
 #[derive(Debug, Clone)]
@@ -120,8 +122,10 @@ impl WebSocketBroadcaster {
             loop {
                 match property_receiver.recv().await {
                     Ok(property_event) => {
-                        debug!("📡 Broadcasting property change: {} -> {:?}",
-                               property_event.property_key, property_event.new_value);
+                        debug!(
+                            "📡 Broadcasting property change: {} -> {:?}",
+                            property_event.property_key, property_event.new_value
+                        );
 
                         let broadcast_message = PropertyBroadcastMessage::PropertyChanged {
                             property_key: property_event.property_key.clone(),
@@ -141,7 +145,10 @@ impl WebSocketBroadcaster {
                         metrics::counter!("websocket_property_broadcasts_total").increment(1);
                     }
                     Err(broadcast::error::RecvError::Lagged(skipped)) => {
-                        warn!("⚠️ WebSocket broadcaster lagged, skipped {} messages", skipped);
+                        warn!(
+                            "⚠️ WebSocket broadcaster lagged, skipped {} messages",
+                            skipped
+                        );
                         metrics::counter!("websocket_broadcaster_lag_total").increment(skipped);
                     }
                     Err(broadcast::error::RecvError::Closed) => {
@@ -154,23 +161,22 @@ impl WebSocketBroadcaster {
     }
 
     /// Handle new WebSocket connection
-    pub async fn handle_websocket_connection(
-        &self,
-        websocket: WebSocket,
-        client_id: String,
-    ) {
+    pub async fn handle_websocket_connection(&self, websocket: WebSocket, client_id: String) {
         let clients = Arc::clone(&self.clients);
         let mut broadcast_receiver = self.broadcast_sender.subscribe();
 
         // Add client to the connection list
         {
             let mut clients_lock = clients.write().await;
-            clients_lock.insert(client_id.clone(), WebSocketClient {
-                id: client_id.clone(),
-                connected_at: chrono::Utc::now(),
-                subscriptions: Vec::new(),
-                sender: None,
-            });
+            clients_lock.insert(
+                client_id.clone(),
+                WebSocketClient {
+                    id: client_id.clone(),
+                    connected_at: chrono::Utc::now(),
+                    subscriptions: Vec::new(),
+                    sender: None,
+                },
+            );
         }
 
         info!("🔌 WebSocket client connected: {}", client_id);
@@ -187,9 +193,12 @@ impl WebSocketBroadcaster {
         };
 
         if let Ok(msg_json) = serde_json::to_string(&initial_message) {
-                if let Err(e) = ws_sender.lock().await.send(Message::Text(msg_json)).await {
-                    warn!("Failed to send initial property list to client {}: {}", client_id, e);
-                }
+            if let Err(e) = ws_sender.lock().await.send(Message::Text(msg_json)).await {
+                warn!(
+                    "Failed to send initial property list to client {}: {}",
+                    client_id, e
+                );
+            }
         }
 
         // Spawn task to handle outgoing messages (property broadcasts)
@@ -216,7 +225,12 @@ impl WebSocketBroadcaster {
 
                 if should_send {
                     if let Ok(msg_json) = serde_json::to_string(&broadcast_msg) {
-                        if let Err(e) = ws_sender_out.lock().await.send(Message::Text(msg_json)).await {
+                        if let Err(e) = ws_sender_out
+                            .lock()
+                            .await
+                            .send(Message::Text(msg_json))
+                            .await
+                        {
                             debug!("WebSocket send failed for client {}: {}", client_id_out, e);
                             break;
                         }
@@ -231,7 +245,9 @@ impl WebSocketBroadcaster {
                 Ok(Message::Text(text)) => {
                     match serde_json::from_str::<PropertyControlMessage>(&text) {
                         Ok(control_msg) => {
-                            if let Err(e) = self.handle_control_message(control_msg, &client_id).await {
+                            if let Err(e) =
+                                self.handle_control_message(control_msg, &client_id).await
+                            {
                                 warn!("Error handling control message from {}: {}", client_id, e);
 
                                 let error_response = PropertyBroadcastMessage::Error {
@@ -240,7 +256,11 @@ impl WebSocketBroadcaster {
                                 };
 
                                 if let Ok(error_json) = serde_json::to_string(&error_response) {
-                                    let _ = ws_sender.lock().await.send(Message::Text(error_json)).await;
+                                    let _ = ws_sender
+                                        .lock()
+                                        .await
+                                        .send(Message::Text(error_json))
+                                        .await;
                                 }
                             }
                         }
@@ -288,7 +308,10 @@ impl WebSocketBroadcaster {
                     client.subscriptions.sort();
                     client.subscriptions.dedup();
 
-                    info!("📡 Client {} subscribed to properties: {:?}", client_id, property_keys);
+                    info!(
+                        "📡 Client {} subscribed to properties: {:?}",
+                        client_id, property_keys
+                    );
                 }
             }
 
@@ -303,9 +326,15 @@ impl WebSocketBroadcaster {
                 }
             }
 
-            PropertyControlMessage::SetProperty { property_key, value, applied_by } => {
-                info!("🎛️ Client {} attempting to set property: {} = {:?}",
-                      client_id, property_key, value);
+            PropertyControlMessage::SetProperty {
+                property_key,
+                value,
+                applied_by,
+            } => {
+                info!(
+                    "🎛️ Client {} attempting to set property: {} = {:?}",
+                    client_id, property_key, value
+                );
 
                 // Validate and set property through PropertyStore
                 let property_store = get_property_store();
@@ -314,21 +343,36 @@ impl WebSocketBroadcaster {
                         property_store.set_atomic_bool(&property_key, val, PropertySource::HumanUI)
                     }
                     PropertyValue::Integer(val) => {
-                        if property_key.ends_with("_lamports") || property_key.ends_with("_ms") ||
-                           property_key.ends_with("_seconds") || property_key.contains("_u64") {
-                            property_store.set_atomic_u64(&property_key, val as u64, PropertySource::HumanUI)
+                        if property_key.ends_with("_lamports")
+                            || property_key.ends_with("_ms")
+                            || property_key.ends_with("_seconds")
+                            || property_key.contains("_u64")
+                        {
+                            property_store.set_atomic_u64(
+                                &property_key,
+                                val as u64,
+                                PropertySource::HumanUI,
+                            )
                         } else if property_key.ends_with("_bps") {
-                            property_store.set_atomic_i32(&property_key, val, PropertySource::HumanUI)
+                            property_store.set_atomic_i32(
+                                &property_key,
+                                val,
+                                PropertySource::HumanUI,
+                            )
                         } else {
-                            property_store.set_atomic_u32(&property_key, val as u32, PropertySource::HumanUI)
+                            property_store.set_atomic_u32(
+                                &property_key,
+                                val as u32,
+                                PropertySource::HumanUI,
+                            )
                         }
                     }
                     PropertyValue::Float(val) => {
                         property_store.set_atomic_f64(&property_key, val, PropertySource::HumanUI)
                     }
-                    PropertyValue::String(_) => {
-                        Err(anyhow::anyhow!("String properties not yet supported via WebSocket"))
-                    }
+                    PropertyValue::String(_) => Err(anyhow::anyhow!(
+                        "String properties not yet supported via WebSocket"
+                    )),
                 };
 
                 // Send response back to client
@@ -395,13 +439,24 @@ impl WebSocketBroadcaster {
             }
 
             PropertyControlMessage::EmergencyStop { reason, applied_by } => {
-                error!("🚨 EMERGENCY STOP requested by {} via WebSocket: {}", applied_by, reason);
+                error!(
+                    "🚨 EMERGENCY STOP requested by {} via WebSocket: {}",
+                    applied_by, reason
+                );
 
                 // Set emergency stop flags
                 let property_store = get_property_store();
-                let _ = property_store.set_atomic_bool("enable_live_execution", false, PropertySource::HumanUI);
+                let _ = property_store.set_atomic_bool(
+                    "enable_live_execution",
+                    false,
+                    PropertySource::HumanUI,
+                );
                 let _ = property_store.set_atomic_bool("dry_run", true, PropertySource::HumanUI);
-                let _ = property_store.set_atomic_bool("simulation_mode", true, PropertySource::HumanUI);
+                let _ = property_store.set_atomic_bool(
+                    "simulation_mode",
+                    true,
+                    PropertySource::HumanUI,
+                );
 
                 // Broadcast system health alert
                 let health_alert = PropertyBroadcastMessage::SystemHealth {
@@ -442,7 +497,9 @@ pub async fn websocket_handler(
         let broadcaster = Arc::clone(&broadcaster);
         let client_id = client_id;
         async move {
-            broadcaster.handle_websocket_connection(socket, client_id).await;
+            broadcaster
+                .handle_websocket_connection(socket, client_id)
+                .await;
         }
     })
 }

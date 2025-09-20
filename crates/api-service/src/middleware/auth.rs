@@ -61,7 +61,7 @@ fn extract_token(headers: &HeaderMap) -> Result<String, AuthError> {
 fn validate_token(token: &str, secret: &str) -> Result<Claims, AuthError> {
     let decoding_key = DecodingKey::from_secret(secret.as_bytes());
     let validation = Validation::new(Algorithm::HS256);
-    
+
     match decode::<Claims>(token, &decoding_key, &validation) {
         Ok(token_data) => Ok(token_data.claims),
         Err(_) => Err(AuthError::InvalidToken),
@@ -83,7 +83,7 @@ pub async fn auth_middleware(
             }
         }
     }
-    
+
     // No valid token found, return 401
     Err(StatusCode::UNAUTHORIZED)
 }

@@ -1,0 +1,13 @@
+FROM debian:bookworm-slim
+
+RUN apt-get update && apt-get install -y \
+    ca-certificates \
+    curl \
+    && rm -rf /var/lib/apt/lists/*
+
+COPY target/debug/discovery-service /usr/local/bin/discovery-service
+RUN chmod +x /usr/local/bin/discovery-service
+
+EXPOSE 9102
+
+ENTRYPOINT ["/usr/local/bin/discovery-service"]

@@ -53,8 +53,8 @@ edge_assembler = { package = "edge-assembler", path = "../edge-assembler" } # Co
 axum = { version = "0.7", features = ["ws", "json"] }
 tokio-stream = "0.1"
 futures-util = "0.3"
-metrics = "0.22"
-metrics-exporter-prometheus = "0.14"
+metrics = "0.23"
+metrics-exporter-prometheus = "0.15"
 reqwest = { version = "0.12", features = ["json", "rustls-tls"] }
 libc = { version = "0.2", optional = true }
 base64 = "0.22"
@@ -65,7 +65,7 @@ pprof = { version = "0.13", optional = true, features = ["flamegraph","prost-cod
 [dev-dependencies]
 tower = { version = "0.4", features = ["util"] }
 serde_json = "1"
-metrics-exporter-prometheus = "0.14"
+metrics-exporter-prometheus = "0.15"
 hyper = { version = "0.14", features = ["client", "server"] }
 serial_test = "2"
  tempfile = "3"

@@ -1,7 +1,6 @@
 use crate::edge_integration::edge_threshold_snapshot;
 use crate::models::ArbSignal;
 use dashmap::DashMap;
-use metrics::counter;
 use once_cell::sync::Lazy;
 use serde::Deserialize;
 use serde_json::json;
@@ -59,12 +58,12 @@ pub async fn get_token(mint: &str) -> Option<TokenRecord> {
                             fetched: Instant::now(),
                         },
                     );
-                    counter!("token_meta_fetch_success_total");
+                    metrics::counter!("token_meta_fetch_success_total").increment(1);
                 }
             } else {
                 let sc = resp.status();
                 let sc_s = sc.as_str().to_string();
-                counter!("token_meta_fetch_error_total", "status" => sc_s);
+                metrics::counter!("token_meta_fetch_error_total", "status" => sc_s).increment(1);
             }
         }
     });
@@ -75,13 +74,13 @@ pub async fn get_token(mint: &str) -> Option<TokenRecord> {
 pub fn prime_tokens<'a, I: IntoIterator<Item = &'a str>>(mints: I) {
     for m in mints {
         if !CACHE.contains_key(m) {
-            counter!("token_meta_prime_miss_total");
+            metrics::counter!("token_meta_prime_miss_total").increment(1);
             let m_owned = m.to_string();
             tokio::spawn(async move {
                 let _ = get_token(&m_owned).await;
             });
         } else {
-            counter!("token_meta_prime_hit_total");
+            metrics::counter!("token_meta_prime_hit_total").increment(1);
         }
     }
 }
@@ -99,15 +98,25 @@ pub async fn fetch_token_now(mint: &str) -> Option<TokenRecord> {
                         fetched: Instant::now(),
                     },
                 );
-                counter!("token_meta_fetch_success_total", "force" => "1");
+                metrics::counter!("token_meta_fetch_success_total", "force" => "1").increment(1);
                 return Some(rec);
             }
         } else {
             let scs = resp.status().as_str().to_string();
-            counter!("token_meta_fetch_error_total", "status" => scs, "force" => "1");
+            metrics::counter!(
+                "token_meta_fetch_error_total",
+                "status" => scs,
+                "force" => "1"
+            )
+            .increment(1);
         }
     } else {
-        counter!("token_meta_fetch_error_total", "status" => "network", "force" => "1");
+        metrics::counter!(
+            "token_meta_fetch_error_total",
+            "status" => "network",
+            "force" => "1"
+        )
+        .increment(1);
     }
     None
 }

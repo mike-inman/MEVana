@@ -70,6 +70,9 @@ impl PortManager {
             .unwrap()
             .as_secs();
 
+        // Remove any stale allocation for this service so restarts can reuse the same port
+        self.allocations.remove(service_name);
+
         // Get port range for service type
         let (min_port, max_port) = self
             .port_ranges

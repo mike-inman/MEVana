@@ -1,22 +1,22 @@
 use anyhow::Result;
+use futures::StreamExt;
+use log::{error, info, warn};
 use rdkafka::{
-    consumer::{StreamConsumer, Consumer},
     config::ClientConfig,
+    consumer::{Consumer, StreamConsumer},
     message::Message,
 };
-use futures::StreamExt;
-use log::{info, error, warn};
 
 #[tokio::main]
 async fn main() -> Result<()> {
     env_logger::init();
-    
-    let kafka_broker = std::env::var("KAFKA_BROKER")
-        .unwrap_or_else(|_| "localhost:29092".to_string());
-    
+
+    let kafka_broker =
+        std::env::var("KAFKA_BROKER").unwrap_or_else(|_| "localhost:29092".to_string());
+
     info!("🚀 Starting Kafka test consumer");
     info!("📡 Connecting to Kafka broker: {}", kafka_broker);
-    
+
     let consumer: StreamConsumer = ClientConfig::new()
         .set("bootstrap.servers", &kafka_broker)
         .set("group.id", "api-service-test-consumer")
@@ -32,9 +32,9 @@ async fn main() -> Result<()> {
 
     let mut stream = consumer.stream();
     let mut message_count = 0;
-    
+
     info!("🔍 Listening for arbitrage opportunities from hotpath engine...");
-    
+
     while let Some(message) = stream.next().await {
         match message {
             Ok(borrowed_message) => {
@@ -42,8 +42,11 @@ async fn main() -> Result<()> {
                 if let Some(payload) = borrowed_message.payload() {
                     match std::str::from_utf8(payload) {
                         Ok(message_str) => {
-                            info!("📨 Received arbitrage opportunity #{}: {}", message_count, message_str);
-                            
+                            info!(
+                                "📨 Received arbitrage opportunity #{}: {}",
+                                message_count, message_str
+                            );
+
                             // Try to parse as JSON for better formatting
                             match serde_json::from_str::<serde_json::Value>(message_str) {
                                 Ok(json) => {

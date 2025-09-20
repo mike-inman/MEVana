@@ -34,30 +34,51 @@ impl HealthChecker {
 
         // Try multiple health check methods
         if let Some(endpoint) = &service.health_check.endpoint {
-            match self.check_http_endpoint(endpoint, &service.health_check).await {
+            match self
+                .check_http_endpoint(endpoint, &service.health_check)
+                .await
+            {
                 HealthStatus::Healthy => return HealthStatus::Healthy,
-                status => debug!("HTTP endpoint check failed for {}: {:?}", service.name, status),
+                status => debug!(
+                    "HTTP endpoint check failed for {}: {:?}",
+                    service.name, status
+                ),
             }
         }
 
         if let Some(port) = service.health_check.port {
-            match self.check_port_connectivity(port, &service.health_check).await {
+            match self
+                .check_port_connectivity(port, &service.health_check)
+                .await
+            {
                 HealthStatus::Healthy => return HealthStatus::Healthy,
-                status => debug!("Port connectivity check failed for {}: {:?}", service.name, status),
+                status => debug!(
+                    "Port connectivity check failed for {}: {:?}",
+                    service.name, status
+                ),
             }
         }
 
         if let Some(custom_check) = &service.health_check.custom_check {
-            return self.run_custom_health_check(custom_check, &service.health_check).await;
+            return self
+                .run_custom_health_check(custom_check, &service.health_check)
+                .await;
         }
 
         // If no specific health check is configured, assume healthy
         // (This is for services that don't expose health endpoints)
-        warn!("⚠️  No health check configured for service: {}", service.name);
+        warn!(
+            "⚠️  No health check configured for service: {}",
+            service.name
+        );
         HealthStatus::Unknown
     }
 
-    async fn check_http_endpoint(&self, endpoint: &str, config: &HealthCheckConfig) -> HealthStatus {
+    async fn check_http_endpoint(
+        &self,
+        endpoint: &str,
+        config: &HealthCheckConfig,
+    ) -> HealthStatus {
         for attempt in 1..=config.retries {
             match timeout(config.timeout, self.client.get(endpoint).send()).await {
                 Ok(Ok(response)) => {
@@ -65,20 +86,30 @@ impl HealthChecker {
                         debug!("✅ HTTP health check passed: {}", endpoint);
                         return HealthStatus::Healthy;
                     } else {
-                        debug!("❌ HTTP health check failed with status {}: {}", response.status(), endpoint);
+                        debug!(
+                            "❌ HTTP health check failed with status {}: {}",
+                            response.status(),
+                            endpoint
+                        );
                         if attempt == config.retries {
                             return HealthStatus::Unhealthy(format!("HTTP {}", response.status()));
                         }
                     }
                 }
                 Ok(Err(e)) => {
-                    debug!("❌ HTTP health check request failed (attempt {}): {} - {}", attempt, endpoint, e);
+                    debug!(
+                        "❌ HTTP health check request failed (attempt {}): {} - {}",
+                        attempt, endpoint, e
+                    );
                     if attempt == config.retries {
                         return HealthStatus::Unhealthy(format!("Request failed: {}", e));
                     }
                 }
                 Err(_) => {
-                    debug!("⏰ HTTP health check timed out (attempt {}): {}", attempt, endpoint);
+                    debug!(
+                        "⏰ HTTP health check timed out (attempt {}): {}",
+                        attempt, endpoint
+                    );
                     if attempt == config.retries {
                         return HealthStatus::Timeout;
                     }
@@ -97,20 +128,28 @@ impl HealthChecker {
         for attempt in 1..=config.retries {
             match timeout(
                 config.timeout,
-                tokio::net::TcpStream::connect(format!("127.0.0.1:{}", port))
-            ).await {
+                tokio::net::TcpStream::connect(format!("127.0.0.1:{}", port)),
+            )
+            .await
+            {
                 Ok(Ok(_)) => {
                     debug!("✅ Port connectivity check passed: {}", port);
                     return HealthStatus::Healthy;
                 }
                 Ok(Err(e)) => {
-                    debug!("❌ Port connectivity check failed (attempt {}): {} - {}", attempt, port, e);
+                    debug!(
+                        "❌ Port connectivity check failed (attempt {}): {} - {}",
+                        attempt, port, e
+                    );
                     if attempt == config.retries {
                         return HealthStatus::Unhealthy(format!("Port connection failed: {}", e));
                     }
                 }
                 Err(_) => {
-                    debug!("⏰ Port connectivity check timed out (attempt {}): {}", attempt, port);
+                    debug!(
+                        "⏰ Port connectivity check timed out (attempt {}): {}",
+                        attempt, port
+                    );
                     if attempt == config.retries {
                         return HealthStatus::Timeout;
                     }
@@ -125,7 +164,11 @@ impl HealthChecker {
         HealthStatus::Unhealthy("Max retries exceeded".to_string())
     }
 
-    async fn run_custom_health_check(&self, command: &str, config: &HealthCheckConfig) -> HealthStatus {
+    async fn run_custom_health_check(
+        &self,
+        command: &str,
+        config: &HealthCheckConfig,
+    ) -> HealthStatus {
         let mut cmd = tokio::process::Command::new("sh");
         cmd.arg("-c").arg(command);
 
@@ -141,7 +184,10 @@ impl HealthChecker {
                 }
             }
             Ok(Err(e)) => {
-                debug!("❌ Custom health check execution failed: {} - {}", command, e);
+                debug!(
+                    "❌ Custom health check execution failed: {} - {}",
+                    command, e
+                );
                 HealthStatus::Unhealthy(format!("Execution failed: {}", e))
             }
             Err(_) => {
@@ -151,11 +197,18 @@ impl HealthChecker {
         }
     }
 
-    pub async fn wait_for_service_healthy(&self, service: &ServiceConfig, max_wait: Duration) -> Result<()> {
+    pub async fn wait_for_service_healthy(
+        &self,
+        service: &ServiceConfig,
+        max_wait: Duration,
+    ) -> Result<()> {
         let start_time = std::time::Instant::now();
         let check_interval = Duration::from_secs(5);
 
-        info!("⏳ Waiting for service '{}' to become healthy (max wait: {:?})", service.name, max_wait);
+        info!(
+            "⏳ Waiting for service '{}' to become healthy (max wait: {:?})",
+            service.name, max_wait
+        );
 
         loop {
             if start_time.elapsed() >= max_wait {
@@ -172,11 +225,17 @@ impl HealthChecker {
                     return Ok(());
                 }
                 HealthStatus::Unknown => {
-                    warn!("⚠️  Service '{}' health status unknown, assuming healthy", service.name);
+                    warn!(
+                        "⚠️  Service '{}' health status unknown, assuming healthy",
+                        service.name
+                    );
                     return Ok(());
                 }
                 status => {
-                    debug!("⏳ Service '{}' not yet healthy: {:?}, retrying...", service.name, status);
+                    debug!(
+                        "⏳ Service '{}' not yet healthy: {:?}, retrying...",
+                        service.name, status
+                    );
                     tokio::time::sleep(check_interval).await;
                 }
             }
@@ -218,26 +277,32 @@ impl HealthChecker {
     }
 
     async fn check_redis(&self) -> Result<()> {
-        let redis_url = std::env::var("REDIS_URL").unwrap_or_else(|_| "redis://localhost:6379".to_string());
+        let redis_url =
+            std::env::var("REDIS_URL").unwrap_or_else(|_| "redis://localhost:6379".to_string());
         let client = redis::Client::open(redis_url)?;
         let mut conn = client.get_multiplexed_tokio_connection().await?;
-        redis::cmd("PING").query_async::<_, String>(&mut conn).await?;
+        redis::cmd("PING")
+            .query_async::<_, String>(&mut conn)
+            .await?;
         Ok(())
     }
 
     async fn check_kafka(&self) -> Result<()> {
         // Simple TCP connection check for Kafka
-        tokio::net::TcpStream::connect("localhost:9092").await
+        tokio::net::TcpStream::connect("localhost:9092")
+            .await
             .context("Failed to connect to Kafka")?;
         Ok(())
     }
 
     async fn check_postgres(&self) -> Result<()> {
-        let postgres_url = std::env::var("DATABASE_URL")
-            .context("DATABASE_URL environment variable is required - no hardcoded fallbacks allowed")?;
-        
-        let (client, connection) = tokio_postgres::connect(&postgres_url, tokio_postgres::NoTls).await?;
-        
+        let postgres_url = std::env::var("DATABASE_URL").context(
+            "DATABASE_URL environment variable is required - no hardcoded fallbacks allowed",
+        )?;
+
+        let (client, connection) =
+            tokio_postgres::connect(&postgres_url, tokio_postgres::NoTls).await?;
+
         // Spawn the connection to run in the background
         tokio::spawn(async move {
             if let Err(e) = connection.await {

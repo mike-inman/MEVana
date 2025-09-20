@@ -4,7 +4,7 @@ use axum::{
     middleware::Next,
     response::Response,
 };
-use jsonwebtoken::{decode, DecodingKey, Validation, Algorithm};
+use jsonwebtoken::{decode, Algorithm, DecodingKey, Validation};
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 
@@ -23,7 +23,10 @@ pub struct AuthConfig {
 
 impl AuthConfig {
     pub fn new(jwt_secret: String, required: bool) -> Self {
-        Self { jwt_secret, required }
+        Self {
+            jwt_secret,
+            required,
+        }
     }
 }
 
@@ -62,7 +65,7 @@ pub async fn auth_middleware(
     // Validate JWT token
     let validation = Validation::new(Algorithm::HS256);
     let decoding_key = DecodingKey::from_secret(auth_config.jwt_secret.as_bytes());
-    
+
     match decode::<Claims>(token, &decoding_key, &validation) {
         Ok(token_data) => {
             // Add user ID to request extensions for use in handlers
@@ -115,14 +118,13 @@ pub async fn api_key_middleware(
         .map(|s| s.to_string());
 
     // Validate API key (simple secret for service-to-service)
-    let expected_key = std::env::var("WALLET_VAULT_SECRET").unwrap_or_else(|_| "dev-secret".to_string());
-    
+    let expected_key =
+        std::env::var("WALLET_VAULT_SECRET").unwrap_or_else(|_| "dev-secret".to_string());
+
     match (user_id_header, api_key) {
         (Some(user_id), Some(key)) if key == expected_key => {
             // Add user context from header
-            request.extensions_mut().insert(UserContext {
-                user_id,
-            });
+            request.extensions_mut().insert(UserContext { user_id });
             Ok(next.run(request).await)
         }
         _ => {
