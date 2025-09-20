@@ -2,15 +2,6 @@ name: Pre-Deployment Validation
 
 on:
   workflow_dispatch:
-    inputs:
-      environment:
-        description: 'Environment to validate'
-        required: true
-        default: 'production'
-        type: choice
-        options:
-        - production
-        - staging
 
 permissions:
   contents: read
@@ -69,7 +60,7 @@ jobs:
 
           **Date**: $(date)
           **Server**: $(hostname) ($(hostname -I | awk '{print $1}'))
-          **Environment**: ${{ github.event.inputs.environment }}
+          **Environment**: production
           **Working Directory**: $(pwd)
 
           ## Validation Summary
