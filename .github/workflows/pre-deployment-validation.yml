@@ -111,46 +111,24 @@ jobs:
           echo "🐙 Creating GitHub notification issue..."
 
           if command -v gh >/dev/null 2>&1 && gh repo view >/dev/null 2>&1; then
-            # Get the latest report
-            LATEST_REPORT="$(ls -t deployment-reports/pre-deployment-validation-*.md 2>/dev/null | head -1)"
-
-            if [ -n "$LATEST_REPORT" ] && [ -f "$LATEST_REPORT" ]; then
-              REPORT_CONTENT="$(cat "$LATEST_REPORT")"
-
-              # Determine status and create appropriate issue
-              if [ "${{ job.status }}" = "success" ]; then
-                TITLE="✅ Pre-Deployment Validation PASSED - Ready to Deploy!"
-                LABELS="deployment,validation-passed,ready-to-deploy"
-                BODY="$REPORT_CONTENT
-
-## 🚀 Next Steps
-Your server is validated and ready for deployment!
-
-**To deploy:**
-1. Go to GitHub Actions
-2. Run **Build and Deploy (Self-Hosted)** workflow
-3. Monitor deployment progress
-
-**Validation completed successfully at:** $(date)"
-              else
-                TITLE="🚨 Pre-Deployment Validation FAILED - Requires Fixes"
-                LABELS="deployment,validation-failed,needs-attention"
-                BODY="$REPORT_CONTENT
-
-## 🔧 Next Steps
-Fix the issues listed above, then re-run validation.
-
-**Validation failed at:** $(date)"
-              fi
-
-              gh issue create \
-                --title "$TITLE" \
-                --body "$BODY" \
-                --label "$LABELS" \
-                --assignee "@me" || echo "Could not create GitHub issue"
-
-              echo "📧 GitHub issue created - you'll get a notification!"
+            # Create simple notification
+            if [ "${{ job.status }}" = "success" ]; then
+              TITLE="✅ Pre-Deployment Validation PASSED - Ready to Deploy!"
+              BODY="Pre-deployment validation completed successfully. Server is ready for deployment. Run 'Build and Deploy (Self-Hosted)' workflow next."
+              LABELS="deployment,validation-passed,ready-to-deploy"
+            else
+              TITLE="❌ Pre-Deployment Validation FAILED - Requires Fixes"
+              BODY="Pre-deployment validation failed. Check the GitHub Actions logs for details and fix issues before retrying."
+              LABELS="deployment,validation-failed,needs-attention"
             fi
+
+            gh issue create \
+              --title "$TITLE" \
+              --body "$BODY" \
+              --label "$LABELS" \
+              --assignee "@me" || echo "Could not create GitHub issue"
+
+            echo "📧 GitHub issue created - you'll get a notification!"
           else
             echo "GitHub CLI not available - skipping issue creation"
           fi
