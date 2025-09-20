@@ -46,13 +46,19 @@ jobs:
           cd /opt/MEVana
           echo "🧪 Testing deployment readiness..."
 
-          # Run deployment readiness test
-          if ./scripts/ci/deployment-readiness-test.sh; then
+          # Run deployment readiness test with detailed output
+          if ./scripts/ci/deployment-readiness-test.sh 2>&1; then
             echo "✅ Server is ready for deployment!"
             echo "🚀 You can now run the 'Build and Deploy (Self-Hosted)' workflow"
           else
             echo "❌ Server needs alignment before deployment"
             echo "🔧 Review the issues above and fix them"
+            echo ""
+            echo "📊 Current Docker status:"
+            docker ps -a 2>/dev/null || echo "Docker not accessible"
+            echo ""
+            echo "🌐 Current network status:"
+            docker network ls 2>/dev/null || echo "Docker networks not accessible"
             exit 1
           fi
 
