@@ -26,11 +26,12 @@ jobs:
       - name: Ensure Docker network
         run: docker network create mevana_net 2>/dev/null || true
 
-      - name: Sync infrastructure to /opt/MEVana
+      - name: Sync infrastructure and compose files to /opt/MEVana
         run: |
           set -euo pipefail
           mkdir -p /opt/MEVana
           rsync -a --delete infrastructure/ /opt/MEVana/infrastructure/
+          rsync -a docker-compose.mevana.yml /opt/MEVana/
 
       - name: Write infra env (optional)
         env:
@@ -156,9 +157,14 @@ jobs:
           set -euo pipefail
           cd /opt/MEVana
 
-          # Start MEVana application services
+          # Stop any conflicting old containers first
+          echo "🧹 Cleaning up any conflicting containers..."
+          docker stop mevana-hotpath || true
+          docker rm mevana-hotpath || true
+
+          # Start MEVana application services using dedicated compose file
           echo "🚀 Starting MEVana application services..."
-          docker compose -f infrastructure/docker-compose.yml up -d hotpath_arb_engine normalizer-service discovery-service executor-service
+          docker compose -f docker-compose.mevana.yml up -d
 
           # Wait for services to start
           echo "⏳ Waiting for MEVana services to initialize..."
@@ -166,7 +172,7 @@ jobs:
 
           # Show final status
           echo "📊 Final deployment status:"
-          docker compose -f infrastructure/docker-compose.yml ps
+          docker compose -f docker-compose.mevana.yml ps
 
       - name: Post-Deployment Comprehensive Validation
         run: |
