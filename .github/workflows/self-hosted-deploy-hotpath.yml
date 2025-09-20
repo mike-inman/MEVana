@@ -69,8 +69,28 @@ jobs:
           docker compose -p mevana -f infrastructure/docker-compose.server.yml -f infrastructure/docker-compose.full.yml up -d hotpath-arb-engine
           docker compose -p mevana -f infrastructure/docker-compose.server.yml -f infrastructure/docker-compose.full.yml ps
 
-      - name: Quick HTTP checks (hotpath)
+      - name: Verify monitoring after deploy
         run: |
-          set +e
-          echo "Hotpath metrics head:"; curl -s --connect-timeout 5 http://localhost:8088/metrics | head -n 10 || true
+          set -euo pipefail
 
+          echo "Prometheus ready check"
+          curl -fsS http://localhost:9090/-/ready >/dev/null
+
+          echo "Ensure hotpath target is up"
+          curl -fsS http://localhost:9090/api/v1/targets \
+            | python3 - <<'PY'
+import json, sys
+data = json.load(sys.stdin)
+targets = data.get("data", {}).get("activeTargets", [])
+hotpath = [t for t in targets if t.get("labels", {}).get("job") == "hotpath-engine"]
+if not hotpath:
+    raise SystemExit("Prometheus target hotpath-engine not found")
+if any(t.get("health") != "up" for t in hotpath):
+    raise SystemExit("Prometheus target hotpath-engine is not up")
+PY
+
+          echo "Grafana health"
+          curl -fsS http://localhost:3000/api/health | grep '"status":"ok"'
+
+          echo "Hotpath metrics head"
+          curl -fsS --connect-timeout 5 http://localhost:8088/metrics | head -n 10
