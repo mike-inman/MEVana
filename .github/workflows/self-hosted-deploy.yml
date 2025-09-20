@@ -115,14 +115,9 @@ jobs:
             build_one "$s" "$TAG"
           done
 
-      - name: Deploy Infrastructure
+      - name: Clean Complete Deployment - Infrastructure
         env:
           MEVANA_TAG: ${{ steps.vars.outputs.tag }}
-          # Set production image references
-          HOTPATH_IMAGE: ghcr.io/mike-inman/mevana-hotpath-arb-engine:${{ steps.vars.outputs.tag }}
-          NORMALIZER_IMAGE: ghcr.io/mike-inman/mevana-normalizer-service:${{ steps.vars.outputs.tag }}
-          DISCOVERY_IMAGE: ghcr.io/mike-inman/mevana-discovery-service:${{ steps.vars.outputs.tag }}
-          EXECUTOR_IMAGE: ghcr.io/mike-inman/mevana-executor-service:${{ steps.vars.outputs.tag }}
         run: |
           set -euo pipefail
           cd /opt/MEVana
@@ -134,19 +129,28 @@ jobs:
           echo "${MEVANA_TAG}" > /opt/MEVana/.mevana_tag
           echo "Using MEVANA_TAG=${MEVANA_TAG} (persisted to /opt/MEVana/.mevana_tag)"
 
-          # Clean up any existing containers to avoid conflicts
-          echo "🧹 Cleaning up existing containers..."
+          # COMPLETE CLEAN SHUTDOWN - Remove ALL containers to avoid conflicts
+          echo "🧹 Complete clean shutdown of all services..."
           docker compose -f infrastructure/docker-compose.yml down || true
+          docker compose -f docker-compose.mevana.yml down || true
 
-          # Start infrastructure services first
-          echo "🏗️ Starting infrastructure services..."
+          # Remove any remaining conflicting containers
+          docker stop mevana-hotpath mevana-hotpath-arb-engine-1 hotpath_arb_engine || true
+          docker rm mevana-hotpath mevana-hotpath-arb-engine-1 hotpath_arb_engine || true
+
+          # Start infrastructure services with correct configuration
+          echo "🏗️ Starting infrastructure services (Prometheus, Grafana, Kafka, etc.)..."
           docker compose -f infrastructure/docker-compose.yml up -d prometheus grafana kafka redis postgres zookeeper kafka-ui adminer
 
           # Wait for infrastructure to be healthy
           echo "⏳ Waiting for infrastructure to be ready..."
-          sleep 15
+          sleep 30
 
-      - name: Deploy MEVana Services
+          # Verify infrastructure health
+          echo "🔍 Verifying infrastructure health..."
+          docker compose -f infrastructure/docker-compose.yml ps
+
+      - name: Clean Complete Deployment - MEVana Services
         env:
           MEVANA_TAG: ${{ steps.vars.outputs.tag }}
           HOTPATH_IMAGE: ghcr.io/mike-inman/mevana-hotpath-arb-engine:${{ steps.vars.outputs.tag }}
@@ -157,22 +161,33 @@ jobs:
           set -euo pipefail
           cd /opt/MEVana
 
-          # Stop any conflicting old containers first
-          echo "🧹 Cleaning up any conflicting containers..."
-          docker stop mevana-hotpath || true
-          docker rm mevana-hotpath || true
+          # Verify infrastructure is ready before deploying MEVana services
+          echo "🔍 Verifying infrastructure readiness..."
+          if ! curl -s --connect-timeout 5 http://localhost:9090/-/healthy >/dev/null; then
+            echo "❌ Prometheus not ready - infrastructure deployment may have failed"
+            exit 1
+          fi
+          if ! curl -s --connect-timeout 5 http://localhost:3000/api/health >/dev/null; then
+            echo "❌ Grafana not ready - infrastructure deployment may have failed"
+            exit 1
+          fi
+          echo "✅ Infrastructure is ready for MEVana services"
 
-          # Start MEVana application services using dedicated compose file
-          echo "🚀 Starting MEVana application services..."
+          # Deploy MEVana application services with coordinated configuration
+          echo "🚀 Starting MEVana arbitrage detection services..."
           docker compose -f docker-compose.mevana.yml up -d
 
-          # Wait for services to start
-          echo "⏳ Waiting for MEVana services to initialize..."
-          sleep 30
+          # Wait for services to initialize with proper startup time
+          echo "⏳ Waiting for MEVana services to initialize and connect to Kafka..."
+          sleep 45
 
-          # Show final status
-          echo "📊 Final deployment status:"
+          # Verify MEVana services are healthy
+          echo "🔍 Verifying MEVana services health..."
           docker compose -f docker-compose.mevana.yml ps
+
+          # Test Kafka connectivity specifically
+          echo "🔍 Testing Kafka connectivity from hotpath engine..."
+          docker logs mevana-hotpath-arb-engine | tail -10 || true
 
       - name: Post-Deployment Comprehensive Validation
         run: |
@@ -188,8 +203,11 @@ jobs:
           ./scripts/ci/post-deployment-diagnostics.sh || {
             echo "⚠️ Some post-deployment checks failed - review above"
             echo "📊 Service status for troubleshooting:"
+            echo "Infrastructure services:"
             docker compose -f infrastructure/docker-compose.yml ps
-            docker compose -f infrastructure/docker-compose.yml logs --tail=10 hotpath_arb_engine || true
+            echo "MEVana services:"
+            docker compose -f docker-compose.mevana.yml ps
+            docker compose -f docker-compose.mevana.yml logs --tail=10 hotpath-arb-engine || true
             exit 1
           }
 
