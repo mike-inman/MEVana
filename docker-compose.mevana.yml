@@ -1,0 +1,138 @@
+version: '3.8'
+
+# MEVana Custom Services Only
+# Infrastructure (Kafka, Prometheus, Grafana, etc.) should already be running
+# This compose file deploys only the MEVana arbitrage detection services
+
+networks:
+  mevana_net:
+    external: true
+
+services:
+  # =============================================================================
+  # HOTPATH ARBITRAGE ENGINE - Core MEV Detection System
+  # =============================================================================
+  hotpath-arb-engine:
+    image: ${HOTPATH_IMAGE:-ghcr.io/mike-inman/mevana-hotpath-arb-engine:latest}
+    container_name: mevana-hotpath-arb-engine
+    environment:
+      # Geyser connection settings
+      - GEYSER_ENDPOINT=${GEYSER_ENDPOINT:-https://grpc.ny.shyft.to}
+      - X_TOKEN=${X_TOKEN:-efff2d23-97ae-4c5f-8b8b-9a6265001189}
+      # Database configuration
+      - DATABASE_URL=postgresql://mev:mevpassword@postgres:5432/mevdb
+      # Kafka configuration (CRITICAL: Use internal Docker network)
+      - KAFKA_BROKER=kafka:9092
+      # Service configuration
+      - METRICS_PORT=8088
+      - RUST_LOG=info
+      - PAPER_TRADING=true
+      # Multi-endpoint mode for load distribution
+      - MULTI_ENDPOINT_MODE=true
+      # AI optimization settings
+      - AI_LEARNING_ENABLED=true
+      - ORDERBOOK_HISTORY_ENABLED=true
+    ports:
+      # Metrics and API endpoints
+      - "8088:8088"
+      - "8089:8089"
+    networks:
+      - mevana_net
+    restart: unless-stopped
+    depends_on:
+      - kafka
+      - postgres
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8088/metrics"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+
+  # =============================================================================
+  # NORMALIZER SERVICE - Transaction Processing Pipeline
+  # =============================================================================
+  normalizer-service:
+    image: ${NORMALIZER_IMAGE:-ghcr.io/mike-inman/mevana-normalizer-service:latest}
+    container_name: mevana-normalizer-service
+    environment:
+      # Kafka configuration
+      - KAFKA_BROKER=kafka:9092
+      - IN_TOPIC=dex-transactions
+      - OUT_TOPIC=orca-swaps.parsed.v2
+      # Database configuration
+      - DATABASE_URL=postgresql://mev:mevpassword@postgres:5432/mevdb
+      # Metrics configuration
+      - METRICS_PORT=9901
+      - RUST_LOG=info
+    ports:
+      # Match local development port mapping
+      - "9901:9901"
+    networks:
+      - mevana_net
+    restart: unless-stopped
+    depends_on:
+      - kafka
+      - postgres
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9901/metrics"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 45s
+
+  # =============================================================================
+  # DISCOVERY SERVICE - Market Opportunity Scanner
+  # =============================================================================
+  discovery-service:
+    image: ${DISCOVERY_IMAGE:-ghcr.io/mike-inman/mevana-discovery-service:latest}
+    container_name: mevana-discovery-service
+    environment:
+      # Kafka configuration
+      - KAFKA_BOOTSTRAP_SERVERS=kafka:9092
+      # Metrics configuration
+      - DISCOVERY_METRICS_PORT=9102
+      - RUST_LOG=info
+    ports:
+      - "9102:9102"
+    networks:
+      - mevana_net
+    restart: unless-stopped
+    depends_on:
+      - kafka
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9102/metrics"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 45s
+
+  # =============================================================================
+  # EXECUTOR SERVICE - Trade Execution Engine
+  # =============================================================================
+  executor-service:
+    image: ${EXECUTOR_IMAGE:-ghcr.io/mike-inman/mevana-executor-service:latest}
+    container_name: mevana-executor-service
+    environment:
+      # Kafka configuration
+      - KAFKA_BROKER=kafka:9092
+      # Database configuration
+      - DATABASE_URL=postgresql://mev:mevpassword@postgres:5432/mevdb
+      # Execution configuration
+      - EXECUTION_DRY_RUN=true
+      - METRICS_PORT=9904
+      - RUST_LOG=info
+    ports:
+      - "9904:9904"
+    networks:
+      - mevana_net
+    restart: unless-stopped
+    depends_on:
+      - kafka
+      - postgres
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9904/metrics"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 45s
