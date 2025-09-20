@@ -5,7 +5,7 @@
 # Returns PASS/FAIL for deployment readiness
 #
 
-set -e
+set -euo pipefail
 
 # Colors
 RED='\033[0;31m'
@@ -100,6 +100,9 @@ compare_config_file() {
 }
 
 echo -e "${CYAN}═══ DOCKER INFRASTRUCTURE TESTS ═══${NC}"
+
+# Disable exit-on-error for tests (we want to run all tests)
+set +e
 
 # Test 1: Docker network exists
 run_test "Docker mevana_net network" \
@@ -219,6 +222,9 @@ echo ""
 echo -e "${CYAN}═══ DEPLOYMENT READINESS SUMMARY ═══${NC}"
 
 echo -e "${BLUE}📊 Test Results:${NC}"
+# Re-enable exit-on-error for final logic
+set -e
+
 echo -e "${GREEN}✅ Passed: $PASSED_TESTS/$TOTAL_TESTS tests${NC}"
 echo -e "${RED}❌ Failed: $FAILED_TESTS/$TOTAL_TESTS tests${NC}"
 
