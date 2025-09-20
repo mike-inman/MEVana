@@ -108,7 +108,7 @@ jobs:
 
           if command -v gh >/dev/null 2>&1 && gh repo view >/dev/null 2>&1; then
             # Get the latest report
-            LATEST_REPORT=$(ls -t deployment-reports/pre-deployment-validation-*.md 2>/dev/null | head -1)
+            LATEST_REPORT=\$(ls -t deployment-reports/pre-deployment-validation-*.md 2>/dev/null | head -1)
 
             if [ -n "\$LATEST_REPORT" ] && [ -f "\$LATEST_REPORT" ]; then
               REPORT_CONTENT=\$(cat "\$LATEST_REPORT")
