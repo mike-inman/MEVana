@@ -98,7 +98,6 @@ impl DatabaseConfig {
 
     /// Load database configuration - NO hardcoded fallbacks allowed
     /// All configuration MUST come from environment variables only
-
     /// Convert back to a PostgreSQL connection URL
     pub fn to_url(&self) -> String {
         format!(
