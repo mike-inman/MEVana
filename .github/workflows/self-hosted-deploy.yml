@@ -1,4 +1,5 @@
 name: Build and Deploy (Self-Hosted)
+run-name: "Build and Deploy (Self-Hosted): services=${{ inputs.services || 'all' }}"
 
 concurrency:
   group: self-hosted-deploy-${{ github.ref }}
@@ -9,6 +10,11 @@ permissions:
 
 on:
   workflow_dispatch:
+    inputs:
+      services:
+        description: "Services to deploy (hotpath normalizer discovery executor). Empty = all services"
+        required: false
+        default: "hotpath normalizer discovery executor"
 
 jobs:
   deploy:
