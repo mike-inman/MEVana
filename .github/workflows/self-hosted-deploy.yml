@@ -221,50 +221,11 @@ jobs:
             if [ "$DEPLOYMENT_STATUS" = "success" ]; then
               TITLE="🎉 MEVana Deployment SUCCESSFUL - Live and Ready!"
               LABELS="deployment,deployment-success,live"
-              BODY="# 🚀 MEVana Deployment Completed Successfully!
-
-## 🎯 Deployment Summary
-- **Status**: ✅ SUCCESS
-- **Server**: $(hostname) ($SERVER_IP)
-- **Completed**: $(date)
-- **Services**: All MEVana services deployed and running
-
-## 🌐 Live Access Links
-- **Grafana Dashboard**: http://$SERVER_IP:3000 (admin/admin123)
-- **Prometheus**: http://$SERVER_IP:9090
-- **Hotpath Metrics**: http://$SERVER_IP:8088/metrics
-- **Kafka UI**: http://$SERVER_IP:8084
-
-## 📊 Service Status
-\`\`\`
-$(docker compose -f infrastructure/docker-compose.yml ps 2>/dev/null || echo 'Could not fetch service status')
-\`\`\`
-
-## 🎯 Live Arbitrage Detection
-Your MEVana arbitrage detection system is now live and processing transactions!
-
-Check the Grafana dashboard for real-time metrics and opportunities."
-
+              BODY="MEVana deployment completed successfully! Server: $(hostname) at $SERVER_IP. Grafana: http://$SERVER_IP:3000 (admin/admin123). Prometheus: http://$SERVER_IP:9090. All services running and processing live arbitrage detection."
             else
               TITLE="❌ MEVana Deployment FAILED - Requires Investigation"
               LABELS="deployment,deployment-failed,urgent"
-              BODY="# 🚨 MEVana Deployment Failed
-
-## ⚠️ Deployment Summary
-- **Status**: ❌ FAILED
-- **Server**: $(hostname) ($SERVER_IP)
-- **Failed**: $(date)
-
-## 🔧 Next Steps
-1. Review the GitHub Actions logs above
-2. Check service status on server
-3. Run pre-deployment validation again
-4. Fix any issues and retry deployment
-
-## 📊 Current Service Status
-\`\`\`
-$(docker compose -f infrastructure/docker-compose.yml ps 2>/dev/null || echo 'Could not fetch service status')
-\`\`\`"
+              BODY="MEVana deployment failed on $(hostname) at $SERVER_IP. Check GitHub Actions logs and service status. Run pre-deployment validation and fix issues before retrying."
             fi
 
             gh issue create \
