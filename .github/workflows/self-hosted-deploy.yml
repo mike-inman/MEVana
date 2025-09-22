@@ -192,6 +192,9 @@ jobs:
           echo "🚀 Starting MEVana arbitrage detection services..."
           svcs=( ${{ steps.vars.outputs.services }} )
           if [ ${#svcs[@]} -eq 0 ]; then svcs=(hotpath-arb-engine normalizer-service discovery-service executor-service); fi
+          echo "Available compose services:";
+          docker compose -p mevana -f infrastructure/docker-compose.server.yml \
+            -f infrastructure/docker-compose.full.yml config --services
           echo "🚀 Target application services: ${svcs[*]}"
           docker compose -p mevana -f infrastructure/docker-compose.server.yml \
             -f infrastructure/docker-compose.full.yml up -d ${svcs[@]}
