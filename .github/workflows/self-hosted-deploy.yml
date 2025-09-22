@@ -137,6 +137,19 @@ jobs:
           docker stop mevana-hotpath mevana-hotpath-arb-engine-1 hotpath_arb_engine || true
           docker rm mevana-hotpath mevana-hotpath-arb-engine-1 hotpath_arb_engine || true
 
+          # Free critical host ports in case stray containers are still bound
+          for port in 9090 3000 8080 29092 5433 6380; do
+            ids=$(docker ps --filter "publish=${port}" --format '{{.ID}}')
+            if [ -n "$ids" ]; then
+              echo "Port ${port} still in use by container(s): $ids — stopping"
+              echo "$ids" | while read -r cid; do
+                [ -n "$cid" ] || continue
+                docker stop "$cid" 2>/dev/null || true
+                docker rm "$cid" 2>/dev/null || true
+              done
+            fi
+          done
+
           # Start infrastructure services with correct configuration
           echo "🏗️ Starting infrastructure services (Prometheus, Grafana, Kafka, etc.)..."
           docker compose -p mevana -f infrastructure/docker-compose.server.yml up -d \
