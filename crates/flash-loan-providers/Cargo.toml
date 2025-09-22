@@ -1,0 +1,22 @@
+[package]
+name = "flash-loan-providers"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+anyhow = { workspace = true }
+async-trait = "0.1"
+once_cell = "1.19"
+serde = { workspace = true, features = ["derive"] }
+serde_json = { workspace = true }
+log = { workspace = true }
+solana-sdk = "=2.1.21"
+thiserror = "1.0"
+flash-loan-receiver = { path = "../flash-loan-receiver" }
+
+[features]
+default = []
+
+[dev-dependencies]
+futures = "0.3"
+tokio = { version = "1", features = ["macros", "rt"] }

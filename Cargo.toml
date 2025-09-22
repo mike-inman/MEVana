@@ -22,6 +22,8 @@ members = [
   # SHARED LIBRARIES
   "crates/shared-core",                  # Common utilities
   "crates/shared-protocol",              # Protocol definitions
+  "crates/flash-loan-providers",         # Flash loan provider plugins
+  "crates/flash-loan-receiver",          # Shared flash-loan receiver client
   "crates/whirlpool-core",              # Orca integration
   
   # CODE GENERATION

@@ -1,0 +1,16 @@
+[package]
+name = "flash-loan-receiver"
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+name = "flash_loan_receiver"
+path = "src/lib.rs"
+
+[dependencies]
+solana-program = { version = "=2.1.21" }
+thiserror = "1.0"
+heapless = "0.8"
+
+[dev-dependencies]
+solana-program = { version = "=2.1.21" }
