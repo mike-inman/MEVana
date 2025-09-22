@@ -31,7 +31,6 @@ jobs:
           set -euo pipefail
           mkdir -p /opt/MEVana
           rsync -a --delete infrastructure/ /opt/MEVana/infrastructure/
-          rsync -a docker-compose.mevana.yml /opt/MEVana/
 
       - name: Write infra env (optional)
         env:
@@ -131,8 +130,8 @@ jobs:
 
           # COMPLETE CLEAN SHUTDOWN - Remove ALL containers to avoid conflicts
           echo "🧹 Complete clean shutdown of all services..."
-          docker compose -f infrastructure/docker-compose.yml down || true
-          docker compose -f docker-compose.mevana.yml down || true
+          docker compose -p mevana -f infrastructure/docker-compose.server.yml -f infrastructure/docker-compose.full.yml down --remove-orphans || true
+          docker compose -p mevana -f infrastructure/docker-compose.server.yml down --remove-orphans || true
 
           # Remove any remaining conflicting containers
           docker stop mevana-hotpath mevana-hotpath-arb-engine-1 hotpath_arb_engine || true
@@ -140,7 +139,8 @@ jobs:
 
           # Start infrastructure services with correct configuration
           echo "🏗️ Starting infrastructure services (Prometheus, Grafana, Kafka, etc.)..."
-          docker compose -f infrastructure/docker-compose.yml up -d prometheus grafana kafka redis postgres zookeeper kafka-ui adminer
+          docker compose -p mevana -f infrastructure/docker-compose.server.yml up -d \
+            zookeeper kafka redis redis-ui postgres adminer prometheus grafana kafka-ui
 
           # Wait for infrastructure to be healthy
           echo "⏳ Waiting for infrastructure to be ready..."
@@ -148,7 +148,7 @@ jobs:
 
           # Verify infrastructure health
           echo "🔍 Verifying infrastructure health..."
-          docker compose -f infrastructure/docker-compose.yml ps
+          docker compose -p mevana -f infrastructure/docker-compose.server.yml ps
 
       - name: Clean Complete Deployment - MEVana Services
         env:
@@ -175,7 +175,8 @@ jobs:
 
           # Deploy MEVana application services with coordinated configuration
           echo "🚀 Starting MEVana arbitrage detection services..."
-          docker compose -f docker-compose.mevana.yml up -d
+          docker compose -p mevana -f infrastructure/docker-compose.server.yml \
+            -f infrastructure/docker-compose.full.yml up -d
 
           # Wait for services to initialize with proper startup time
           echo "⏳ Waiting for MEVana services to initialize and connect to Kafka..."
@@ -183,11 +184,13 @@ jobs:
 
           # Verify MEVana services are healthy
           echo "🔍 Verifying MEVana services health..."
-          docker compose -f docker-compose.mevana.yml ps
+          docker compose -p mevana -f infrastructure/docker-compose.server.yml \
+            -f infrastructure/docker-compose.full.yml ps
 
           # Test Kafka connectivity specifically
           echo "🔍 Testing Kafka connectivity from hotpath engine..."
-          docker logs mevana-hotpath-arb-engine | tail -10 || true
+          docker compose -p mevana -f infrastructure/docker-compose.server.yml \
+            -f infrastructure/docker-compose.full.yml logs --tail=10 hotpath-arb-engine || true
 
       - name: Post-Deployment Comprehensive Validation
         run: |
@@ -204,10 +207,12 @@ jobs:
             echo "⚠️ Some post-deployment checks failed - review above"
             echo "📊 Service status for troubleshooting:"
             echo "Infrastructure services:"
-            docker compose -f infrastructure/docker-compose.yml ps
+            docker compose -p mevana -f infrastructure/docker-compose.server.yml ps
             echo "MEVana services:"
-            docker compose -f docker-compose.mevana.yml ps
-            docker compose -f docker-compose.mevana.yml logs --tail=10 hotpath-arb-engine || true
+            docker compose -p mevana -f infrastructure/docker-compose.server.yml \
+              -f infrastructure/docker-compose.full.yml ps
+            docker compose -p mevana -f infrastructure/docker-compose.server.yml \
+              -f infrastructure/docker-compose.full.yml logs --tail=10 hotpath-arb-engine || true
             exit 1
           }
 
