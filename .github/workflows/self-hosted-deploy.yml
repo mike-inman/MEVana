@@ -192,12 +192,29 @@ jobs:
           echo "🚀 Starting MEVana arbitrage detection services..."
           svcs=( ${{ steps.vars.outputs.services }} )
           if [ ${#svcs[@]} -eq 0 ]; then svcs=(hotpath-arb-engine normalizer-service discovery-service executor-service); fi
-          echo "Available compose services:";
+          available=$(docker compose -p mevana -f infrastructure/docker-compose.server.yml \
+            -f infrastructure/docker-compose.full.yml config --services)
+          echo "Available compose services:"; echo "$available"
+
+          select_service() {
+            local fallback="$1"; shift
+            for candidate in "$@" "$fallback"; do
+              if echo "$available" | grep -qx "$candidate"; then
+                echo "$candidate"; return 0
+              fi
+            done
+            echo "$fallback"
+          }
+
+          resolved=(
+            $(select_service hotpath-arb-engine mevana-hotpath)
+            $(select_service normalizer-service mevana-normalizer)
+            $(select_service discovery-service mevana-discovery)
+            $(select_service executor-service)
+          )
+          echo "🚀 Target application services: ${resolved[*]}"
           docker compose -p mevana -f infrastructure/docker-compose.server.yml \
-            -f infrastructure/docker-compose.full.yml config --services
-          echo "🚀 Target application services: ${svcs[*]}"
-          docker compose -p mevana -f infrastructure/docker-compose.server.yml \
-            -f infrastructure/docker-compose.full.yml up -d ${svcs[@]}
+            -f infrastructure/docker-compose.full.yml up -d ${resolved[@]}
 
           # Wait for services to initialize with proper startup time
           echo "⏳ Waiting for MEVana services to initialize and connect to Kafka..."
@@ -206,7 +223,7 @@ jobs:
           # Verify MEVana services are healthy
           echo "🔍 Verifying MEVana services health..."
           docker compose -p mevana -f infrastructure/docker-compose.server.yml \
-            -f infrastructure/docker-compose.full.yml ps ${svcs[@]}
+            -f infrastructure/docker-compose.full.yml ps ${resolved[@]}
 
           # Test Kafka connectivity specifically
           echo "🔍 Testing Kafka connectivity from hotpath engine..."
@@ -230,10 +247,25 @@ jobs:
             echo "Infrastructure services:"
             docker compose -p mevana -f infrastructure/docker-compose.server.yml ps
             echo "MEVana services:"
-            svcs=( ${{ steps.vars.outputs.services }} )
-            if [ ${#svcs[@]} -eq 0 ]; then svcs=(hotpath-arb-engine normalizer-service discovery-service executor-service); fi
+            available=$(docker compose -p mevana -f infrastructure/docker-compose.server.yml \
+              -f infrastructure/docker-compose.full.yml config --services)
+            resolve_service() {
+              local fallback="$1"; shift
+              for candidate in "$@" "$fallback"; do
+                if echo "$available" | grep -qx "$candidate"; then
+                  echo "$candidate"; return 0
+                fi
+              done
+              echo "$fallback"
+            }
+            resolved_svcs=(
+              $(resolve_service hotpath-arb-engine mevana-hotpath)
+              $(resolve_service normalizer-service mevana-normalizer)
+              $(resolve_service discovery-service mevana-discovery)
+              $(resolve_service executor-service)
+            )
             docker compose -p mevana -f infrastructure/docker-compose.server.yml \
-              -f infrastructure/docker-compose.full.yml ps ${svcs[@]}
+              -f infrastructure/docker-compose.full.yml ps ${resolved_svcs[@]}
             docker compose -p mevana -f infrastructure/docker-compose.server.yml \
               -f infrastructure/docker-compose.full.yml logs --tail=10 hotpath-arb-engine || true
             exit 1
