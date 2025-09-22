@@ -1,13 +1,26 @@
+#![allow(unexpected_cfgs)]
+#![cfg_attr(not(feature = "std"), no_std)]
+
+#[cfg(not(feature = "std"))]
+extern crate alloc;
+
+use core::str;
 use heapless::String;
 use solana_program::{
-    declare_id,
+    account_info::AccountInfo,
+    declare_id, entrypoint,
+    entrypoint::ProgramResult,
     instruction::{AccountMeta, Instruction},
     msg,
     program_error::ProgramError,
     pubkey::Pubkey,
 };
-use std::vec::Vec;
 use thiserror::Error;
+
+#[cfg(not(feature = "std"))]
+use alloc::vec::Vec;
+#[cfg(feature = "std")]
+use std::vec::Vec;
 
 declare_id!("26hsTvfGVS5yxfgYM7htEgrsCKdvMVtWSjHnyk277hCg");
 
@@ -42,15 +55,11 @@ impl ExecuteFlashLoanPayload {
         }
         let mut provider = String::<32>::new();
         let name_slice = &data[1..1 + len];
-        if provider
-            .push_str(
-                std::str::from_utf8(name_slice)
-                    .map_err(|_| FlashLoanReceiverError::Serialization)?,
-            )
-            .is_err()
-        {
-            return Err(FlashLoanReceiverError::ProviderIdTooLong);
-        }
+        let name = str::from_utf8(name_slice).map_err(|_| FlashLoanReceiverError::Serialization)?;
+        provider
+            .push_str(name)
+            .map_err(|_| FlashLoanReceiverError::ProviderIdTooLong)?;
+
         let amount_offset = 1 + len;
         let mut amount_bytes = [0u8; 8];
         amount_bytes.copy_from_slice(&data[amount_offset..amount_offset + 8]);
@@ -120,7 +129,7 @@ pub fn build_execute_flash_loan_ix(
 /// and perform the CPI dance (borrow -> trade -> repay).
 pub fn process_instruction(
     _program_id: &Pubkey,
-    _accounts: &[solana_program::account_info::AccountInfo],
+    _accounts: &[AccountInfo],
     instruction_data: &[u8],
 ) -> ProgramResult {
     let payload = ExecuteFlashLoanPayload::unpack(instruction_data)?;
@@ -133,11 +142,12 @@ pub fn process_instruction(
     Ok(())
 }
 
-pub type ProgramResult = Result<(), ProgramError>;
+entrypoint!(process_instruction);
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use core::str::FromStr;
     use solana_program::pubkey::Pubkey;
 
     #[test]
@@ -160,5 +170,12 @@ mod tests {
         assert_eq!(decoded.provider_id.as_str(), "jetprotocol");
         assert_eq!(decoded.amount, 42);
         assert_eq!(decoded.token_mint, mint);
+    }
+
+    #[test]
+    fn test_id() {
+        // Ensure the declared id is a valid base58 pubkey
+        let expected = Pubkey::from_str("26hsTvfGVS5yxfgYM7htEgrsCKdvMVtWSjHnyk277hCg").unwrap();
+        assert_eq!(crate::id(), expected);
     }
 }

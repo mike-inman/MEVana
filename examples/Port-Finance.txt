@@ -1,0 +1,85 @@
+
+
+https://docs.rs/port-variable-rate-lending-instructions/latest/port_variable_rate_lending_instructions/
+
+https://github.com/solendprotocol/
+
+ Implemented Solend flash‑loan support end‑to‑end and laid the groundwork for Port Finance.
+
+  - crates/flash-loan-providers/src/solend/mod.rs and solend/instructions.rs now expose the full WSOL devnet configuration: PDA validation, borrow/repay instruction builders,
+  deterministic fee math, and unit tests that assert account ordering, discriminators, and fee computation.
+  - Executor (crates/executor-service/src/execution_engine.rs:809-833) now requests plans for Marginfi, Solend, and PortFinance, logging flash_loan_plan_ready … when a concrete plan is
+  produced so you can trace bundles during runs.
+  - Port Finance provider (crates/flash-loan-providers/src/port_finance/mod.rs) quotes WSOL and validates the devnet config. Because Port’s lending program requires a receiver CPI
+  contract, build_plan currently returns an explicit error; associated tests confirm the message until we hook up a receiver.
+
+  Tests/Checks: cargo test -p flash-loan-providers, cargo check -p executor-service.
+
+  Next actions for you
+
+  1. Export SOLEND_WSOL_HOST_FEE_ACCOUNT=AJVS4MHtdmwnKAkKbuX7FUKVwhuEM1woVRVctS4Gi33S before running devnet and keep that WSOL account synced (spl-token sync-native --fee-payer
+  ~/.config/solana/id.json --address AJVS4MHtdmwnKAkKbuX7FUKVwhuEM1woVRVctS4Gi33S).
+  2. Run a devnet cycle and inspect logs/bundles for flash_loan_plan_ready provider=solend …; your host-fee account should collect the ~30 bps fee.
+  3. Decide how you want to approach Port Finance next: either build the minimal receiver program so we can generate plans, or leave it as a quoted-but-disabled provider with a clear
+  error message until that component exists.
+
+▌ https://docs.rs/port-variable-rate-lending-instructions/latest/port_variable_rate_lending_instructions/
+
+• Ran curl -s https://docs.rs/port-variable-rate-lending-instructions/latest/port_variable_rate_lending_instructions/ | head
+
+• Ran curl -s https://docs.rs/port-variable-rate-lending-instructions/latest/src/port_variable_rate_lending_instructions/instruction.rs.html | rg "Flash" | head
+
+• I'll acknowledge the shared docs about Port's FlashLoan using CPI, explaining it requires building a flash loan receiver contract or picking another provider since we currently just
+  fallback to error. I'll outline how the docs help in deriving instructions and fetching accounts, and propose a plan to implement a dedicated Port plugin once the receiver is ready.
+
+> Thanks—those docs confirm what we suspected: Port Finance still exposes the original FlashLoan instruction that CPI‑calls a “receiver” program (see FlashLoan/ReceiveFlashLoan in the
+  crate). Until we ship our own flash‑loan receiver contract, Port can’t hand us a borrow/repay pair like Solend does, so the provider we added correctly bails out with the “requires
+  receiver program” error rather than emitting broken instructions.
+
+  What we can do with that doc set:
+
+  1. Lift the exact account order and data format for FlashLoan and the expected ReceiveFlashLoan—that will give us the instruction builder once we have a receiver.
+  2. Design a lightweight receiver program (Anchor or raw Rust) that takes the borrowed funds, runs our trade logic, and repays before returning. Once it exists, we’ll update
+  PortFinanceProvider to include that program ID and additional accounts and flip build_plan back on.
+  3. Add an integration test that plugs in the receiver program’s pubkey so we can catch any future wiring drift.
+
+  In short: the docs confirm the path forward; now it’s a matter of either writing (or sourcing) the receiver program or, if you prefer, focusing on another lender that already allows
+  standalone borrow/repay instructions while Port stays “quote-only” until we have that CPI target.
+
+
+  > Thanks—those docs confirm what we suspected: Port Finance still exposes the original FlashLoan instruction that CPI‑calls a “receiver” program (see FlashLoan/ReceiveFlashLoan in the
+  crate). Until we ship our own flash‑loan receiver contract, Port can’t hand us a borrow/repay pair like Solend does, so the provider we added correctly bails out with the “requires
+  receiver program” error rather than emitting broken instructions.
+
+  What we can do with that doc set:
+
+  1. Lift the exact account order and data format for FlashLoan and the expected ReceiveFlashLoan—that will give us the instruction builder once we have a receiver.
+  2. Design a lightweight receiver program (Anchor or raw Rust) that takes the borrowed funds, runs our trade logic, and repays before returning. Once it exists, we’ll update
+  PortFinanceProvider to include that program ID and additional accounts and flip build_plan back on.
+  3. Add an integration test that plugs in the receiver program’s pubkey so we can catch any future wiring drift.
+
+  In short: the docs confirm the path forward; now it’s a matter of either writing (or sourcing) the receiver program or, if you prefer, focusing on another lender that already allows
+  standalone borrow/repay instructions while Port stays “quote-only” until we have that CPI target.
+
+▌ we just need to give them the CPI target then. right?
+
+• I'm preparing to explain the approach and options for building a receiver program, including specifying requirements and restructuring the plan to involve the FlashLoan instruction.
+  I'll outline steps like developing a minimal receiver program, deploying it to the devnet for testing, and managing configuration. Next, I'll suggest crafting the receiver program
+  within the repo, possibly as a separate crate, and propose asking whether to proceed with implementation.
+
+> Exactly—Port’s FlashLoan instruction insists on CPI’ing a receiver program you control. To use Port in our hotpath flow we need to supply that “FlashLoan receiver” contract and pass
+  its program id (plus any extra accounts) to the FlashLoan instruction. Once the receiver exists, the flow becomes:
+
+  1. Borrow via Port’s FlashLoan.
+  2. CPI into our receiver program; it executes the swap/arbitrage logic and writes the amount + fee back into the reserve.
+  3. Return from CPI; the Port program verifies repayment and closes out.
+
+  If you’d like, I can sketch the minimal receiver program (Anchor or native Solana) that:
+
+  - Accepts the standard accounts (source/destination/token program/etc.).
+  - Calls into our execution path, then transfers principal + fee back to the reserve.
+  - Exposes the handler we can point Port’s FlashLoan at.
+
+  Let me know and I’ll draft that crate along with matching unit tests so we can wire Port in once the program is deployed to devnet.
+
+Update: the repository now includes `crates/flash-loan-receiver/`, which provides the instruction builder and a stub on-chain entrypoint. Build it with `cargo build-sbf --manifest-path crates/flash-loan-receiver/Cargo.toml` and deploy to devnet; then set `FLASH_LOAN_RECEIVER_PROGRAM_ID` so the Port provider emits the CPI call using your deployed program id.

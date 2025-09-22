@@ -97,6 +97,8 @@ export FLASH_LOAN_RECEIVER_PROGRAM_ID=<deployed_receiver_program>
 
 Once these are set the Jet provider will register and return quotes. With `FLASH_LOAN_RECEIVER_PROGRAM_ID` defined, the executor also emits the receiver instruction so the on-chain program can perform the borrow/repay cycle when it is ready. Keep the values in your `.env` so the aggregator picks them up automatically.
 
+> **Note:** The sample values shipped in `.env` / `infrastructure/.env` are placeholders generated for local testing. Replace every Jet public key with the real devnet (or mainnet) addresses before running the stack.
+
 ## Testing the Providers
 
 - Solend and Marginfi can both produce full borrow/repay plans in local tests (`cargo test -p flash-loan-providers`).
