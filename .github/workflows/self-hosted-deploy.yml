@@ -140,7 +140,7 @@ jobs:
           # Start infrastructure services with correct configuration
           echo "🏗️ Starting infrastructure services (Prometheus, Grafana, Kafka, etc.)..."
           docker compose -p mevana -f infrastructure/docker-compose.server.yml up -d \
-            zookeeper kafka redis redis-ui postgres adminer prometheus grafana kafka-ui
+            zookeeper kafka redis postgres adminer prometheus grafana kafka-ui
 
           # Wait for infrastructure to be healthy
           echo "⏳ Waiting for infrastructure to be ready..."
