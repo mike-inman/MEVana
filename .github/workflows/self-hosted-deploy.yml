@@ -130,6 +130,8 @@ jobs:
 
           # COMPLETE CLEAN SHUTDOWN - Remove ALL containers to avoid conflicts
           echo "🧹 Complete clean shutdown of all services..."
+          docker compose -f infrastructure/docker-compose.yml down --remove-orphans || true
+          docker compose -f infrastructure/docker-compose.core.yml down --remove-orphans || true
           docker compose -p mevana -f infrastructure/docker-compose.server.yml -f infrastructure/docker-compose.full.yml down --remove-orphans || true
           docker compose -p mevana -f infrastructure/docker-compose.server.yml down --remove-orphans || true
 
@@ -138,7 +140,7 @@ jobs:
           docker rm mevana-hotpath mevana-hotpath-arb-engine-1 hotpath_arb_engine || true
 
           # Free critical host ports in case stray containers are still bound
-          for port in 9090 3000 8080 29092 5433 6380 6379 2181; do
+          for port in 9090 3000 8080 8082 29092 5433 6380 6379 2181; do
             ids=$(docker ps --filter "publish=${port}" --format '{{.ID}}')
             if [ -n "$ids" ]; then
               echo "Port ${port} still in use by container(s): $ids — stopping"
