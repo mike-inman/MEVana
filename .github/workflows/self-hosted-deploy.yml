@@ -138,7 +138,7 @@ jobs:
           docker rm mevana-hotpath mevana-hotpath-arb-engine-1 hotpath_arb_engine || true
 
           # Free critical host ports in case stray containers are still bound
-          for port in 9090 3000 8080 29092 5433 6380; do
+          for port in 9090 3000 8080 29092 5433 6380 6379; do
             ids=$(docker ps --filter "publish=${port}" --format '{{.ID}}')
             if [ -n "$ids" ]; then
               echo "Port ${port} still in use by container(s): $ids — stopping"
