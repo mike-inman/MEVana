@@ -2,6 +2,11 @@ name: Dashboard Auto-Deploy
 run-name: "Auto-Deploy Dashboards: Hot-reload to server with zero downtime"
 
 on:
+  workflow_dispatch:
+    inputs:
+      dashboards:
+        description: "Optional space-separated list of dashboard filenames to deploy (defaults to all)"
+        required: false
   # push:
   #   paths:
   #     - 'infrastructure/grafana/dashboards/curated/*.json'

@@ -1596,7 +1596,6 @@ impl HotPathArbitrageEngine {
         let flash_loan_aggregator = Arc::new(FlashLoanAggregator::new(
             Arc::new(executor_config.clone()),
             Arc::clone(&shyft_client),
-            Some(Arc::clone(&metrics_server)),
         )?);
 
         let bundle_builder = Arc::new(BundleBuilder::new(Arc::clone(&shyft_client)));
@@ -2383,11 +2382,6 @@ impl HotPathArbitrageEngine {
             FlashLoanProvider::PortFinance,
             market_hours && self.calculate_recent_success_rate() > 0.7,
         );
-        availability.insert(
-            FlashLoanProvider::Kamino,
-            market_hours && self.calculate_recent_success_rate() > 0.6,
-        );
-
         availability
     }
 
