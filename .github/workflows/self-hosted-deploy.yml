@@ -31,6 +31,8 @@ jobs:
           set -euo pipefail
           mkdir -p /opt/MEVana
           rsync -a --delete infrastructure/ /opt/MEVana/infrastructure/
+          mkdir -p /opt/MEVana/scripts
+          rsync -a --delete scripts/ /opt/MEVana/scripts/
           rm -f /opt/MEVana/docker-compose.mevana.yml
 
       - name: Write infra env (optional)
