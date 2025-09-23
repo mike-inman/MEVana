@@ -1,122 +1,122 @@
-# Full services overlay (Phase 1) — containerize services with existing Dockerfiles
-# Use with base stack:
-#   docker compose -p mevana \
-#     -f infrastructure/docker-compose.server.yml \
-#     -f infrastructure/docker-compose.full.yml up -d --build
+# Application services overlay for production deployments.
+# Definitions are intentionally kept in sync with infrastructure/docker-compose.core.yml
+# so container names, health checks, and exposed ports match local development.
 
 services:
-  # Normalizer Service — consumes raw TXs → produces orca-swaps.parsed.v2
+  hotpath-arb-engine:
+    image: ${HOTPATH_IMAGE:-ghcr.io/mike-inman/mevana-hotpath-arb-engine:${MEVANA_TAG:-dev}}
+    depends_on:
+      kafka:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+    env_file:
+      - ../.env
+    environment:
+      - RUST_LOG=${RUST_LOG:-info}
+      - METRICS_PORT=${HOTPATH_INTERNAL_METRICS_PORT:-8088}
+      - KAFKA_BROKER=${KAFKA_BROKER:-kafka:9092}
+      - REDIS_URL=${REDIS_URL:-redis://redis:6379/0}
+      - DATABASE_URL=${DATABASE_URL:-postgresql://mev:mevpassword@postgres:5432/mevdb}
+      - GEYSER_ENDPOINT=${GEYSER_ENDPOINT:-https://grpc.ny.shyft.to}
+      - X_TOKEN=${X_TOKEN:-}
+      - FLASH_LOAN_PROVIDERS_CONFIG=${FLASH_LOAN_PROVIDERS_CONFIG:-/app/config/flash_loan_providers.local.json}
+    ports:
+      - "${HOTPATH_METRICS_PORT:-8088}:8088"
+      - "${HOTPATH_API_PORT:-8089}:8089"
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8089/health/ready"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 40s
+    networks: [mevana_net]
+    volumes:
+      - ../config:/app/config:ro
+    restart: unless-stopped
+
   normalizer-service:
-    image: ghcr.io/mike-inman/mevana-normalizer-service:${MEVANA_TAG:-dev}
-    environment:
-      - RUST_LOG=info
-      - KAFKA_BROKER=kafka:9092
-      - IN_TOPIC=dex-transactions
-      - OUT_TOPIC=orca-swaps.parsed.v2
-      - GROUP_ID=tap-orca-extract
-      - REDIS_URL=redis://redis:6379/0
-      - HEALTH_PORT=8085
-      - BIND_ADDRESS=0.0.0.0
-      - FAST_MODE=1
-      - MINT_DECIMALS_TTL_MS=60000
-      - POOL_SNAPSHOT_TTL_MS=60000
-      - DEBUG_MODE=0
+    image: ${NORMALIZER_IMAGE:-ghcr.io/mike-inman/mevana-normalizer-service:${MEVANA_TAG:-dev}}
     depends_on:
       kafka:
         condition: service_healthy
       redis:
         condition: service_healthy
+    environment:
+      - RUST_LOG=${RUST_LOG:-info}
+      - KAFKA_BROKER=${KAFKA_BROKER:-kafka:9092}
+      - REDIS_URL=${REDIS_URL:-redis://redis:6379/0}
+      - IN_TOPIC=${NORMALIZER_IN_TOPIC:-dex-transactions}
+      - OUT_TOPIC=${NORMALIZER_OUT_TOPIC:-orca-swaps.parsed.v2}
+      - GROUP_ID=${NORMALIZER_GROUP_ID:-tap-orca-extract}
+      - HEALTH_PORT=${NORMALIZER_HEALTH_PORT:-8085}
+      - BIND_ADDRESS=${NORMALIZER_BIND_ADDRESS:-0.0.0.0}
+      - METRICS_PORT=${NORMALIZER_METRICS_PORT_INTERNAL:-8085}
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:8085/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 40s
+    ports:
+      - "9901:8085"
     networks: [mevana_net]
     restart: unless-stopped
 
-  # Discovery Service — discovers unknown programs
   discovery-service:
-    image: ghcr.io/mike-inman/mevana-discovery-service:${MEVANA_TAG:-dev}
-    environment:
-      - RUST_LOG=info
-      - KAFKA_BOOTSTRAP_SERVERS=kafka:9092
-      - REDIS_URL=redis://redis:6379/0
-      - UNKNOWN_PROGRAMS_TOPIC=unknown-programs
-      - DISCOVERY_METRICS_PORT=9102
+    image: ${DISCOVERY_IMAGE:-ghcr.io/mike-inman/mevana-discovery-service:${MEVANA_TAG:-dev}}
     depends_on:
       kafka:
         condition: service_healthy
-      redis:
-        condition: service_healthy
+    environment:
+      - RUST_LOG=${RUST_LOG:-info}
+      - KAFKA_BOOTSTRAP_SERVERS=${KAFKA_BOOTSTRAP_SERVERS:-kafka:9092}
+      - REDIS_URL=${REDIS_URL:-redis://redis:6379/0}
+      - DISCOVERY_METRICS_PORT=${DISCOVERY_METRICS_PORT_INTERNAL:-9102}
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:9102/metrics"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 40s
+    ports:
+      - "9102:9102"
     networks: [mevana_net]
     restart: unless-stopped
 
-  # Executor Service — trade execution orchestration
   executor-service:
-    image: ghcr.io/mike-inman/mevana-executor-service:${MEVANA_TAG:-dev}
-    environment:
-      - RUST_LOG=info
-      - DATABASE_URL=postgresql://mev:mevpassword@postgres:5432/mevdb
-      - KAFKA_BROKER=kafka:9092
-      - REDIS_URL=redis://redis:6379/0
-      - EXECUTION_DRY_RUN=true
-      - METRICS_PORT=9904
+    image: ${EXECUTOR_IMAGE:-ghcr.io/mike-inman/mevana-executor-service:${MEVANA_TAG:-dev}}
     depends_on:
       kafka:
-        condition: service_healthy
-      redis:
         condition: service_healthy
       postgres:
         condition: service_healthy
-    networks: [mevana_net]
-    restart: unless-stopped
-
-  # Edge Assembler — builds edge deltas for arb-engine
-  edge-assembler:
-    image: ghcr.io/mike-inman/mevana-edge-assembler:${MEVANA_TAG:-dev}
+    env_file:
+      - ../.env
     environment:
-      - RUST_LOG=info
-      - KAFKA_BROKER=kafka:9092
-      - REDIS_URL=redis://redis:6379/0
-    depends_on:
-      kafka:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
-    networks: [mevana_net]
-    restart: unless-stopped
-
-  # Arbitrage Engine — consumes edges and emits decisions
-  arb-engine:
-    image: ghcr.io/mike-inman/mevana-arb-engine:${MEVANA_TAG:-dev}
-    environment:
-      - RUST_LOG=info
-      - REDIS_URL=redis://redis:6379/0
-      - KAFKA_BROKER=kafka:9092
-    depends_on:
-      kafka:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
-    networks: [mevana_net]
-    restart: unless-stopped
-
-  # Token Registry API — HTTP service with DB
-  token-registry-service:
-    image: ghcr.io/mike-inman/mevana-token-registry-service:${MEVANA_TAG:-dev}
-    environment:
-      - RUST_LOG=info
-      - DATABASE_URL=postgresql://mev:mevpassword@postgres:5432/mevdb
-    depends_on:
-      postgres:
-        condition: service_healthy
-    networks: [mevana_net]
-    restart: unless-stopped
-
-  # Monitoring API/UI
-  monitoring-service:
-    image: ghcr.io/mike-inman/mevana-monitoring-service:${MEVANA_TAG:-dev}
-    environment:
-      - RUST_LOG=info
-      - REDIS_URL=redis://redis:6379/0
-    depends_on:
-      redis:
-        condition: service_healthy
+      - RUST_LOG=${RUST_LOG:-info}
+      - KAFKA_BROKER=${KAFKA_BROKER:-kafka:9092}
+      - DATABASE_URL=${DATABASE_URL:-postgresql://mev:mevpassword@postgres:5432/mevdb}
+      - REDIS_URL=${REDIS_URL:-redis://redis:6379/0}
+      - METRICS_PORT=${EXECUTOR_METRICS_PORT_INTERNAL:-9904}
+      - EXECUTION_DRY_RUN=${EXECUTION_DRY_RUN:-true}
+      - SHYFT_API_KEY=${SHYFT_API_KEY:-}
+      - ALLOW_EMPTY_SHYFT_API=${ALLOW_EMPTY_SHYFT_API:-1}
+      - WALLET_KEYPAIR_PATH=${WALLET_KEYPAIR_PATH:-/root/.config/solana/id.json}
+      - FLASH_LOAN_PROVIDERS_CONFIG=${FLASH_LOAN_PROVIDERS_CONFIG:-/app/config/flash_loan_providers.local.json}
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:9904/metrics"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 40s
+    ports:
+      - "9904:9904"
+    volumes:
+      - ./keys/executor-dev.json:/root/.config/solana/id.json:ro
+      - ../config:/app/config:ro
     networks: [mevana_net]
     restart: unless-stopped
 
@@ -124,3 +124,9 @@ networks:
   mevana_net:
     external: true
     name: mevana_net
+
+volumes:
+  postgres_data:
+  prometheus_data:
+  grafana_data:
+  redis_data:
