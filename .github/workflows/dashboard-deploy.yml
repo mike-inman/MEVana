@@ -2,11 +2,11 @@ name: Dashboard Auto-Deploy
 run-name: "Auto-Deploy Dashboards: Hot-reload to server with zero downtime"
 
 on:
-  push:
-    paths:
-      - 'infrastructure/grafana/dashboards/curated/*.json'
-    branches:
-      - main
+  # push:
+  #   paths:
+  #     - 'infrastructure/grafana/dashboards/curated/*.json'
+  #   branches:
+  #     - main
 
 permissions:
   contents: read

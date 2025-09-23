@@ -1,5 +1,5 @@
 # MEVana Current System Status
-Last updated: 2025-09-15
+Last updated: 2025-09-23
 
 **Date:** September 12, 2025  
 **Time:** 22:15 UTC  
@@ -13,6 +13,17 @@ Last updated: 2025-09-15
 After comprehensive code verification, the MEVana system is significantly more advanced than initially assessed. The system demonstrates **sophisticated architecture with real implementations** rather than placeholder frameworks, putting it much closer to production readiness.
 
 **Key Discovery**: Previous documentation was outdated and significantly underestimated current implementation status.
+
+---
+
+## 🤝 Assistant Handoff Notes (2025-09-23)
+
+- GitHub Actions auto-triggers are paused: `ghcr-build-deploy.yml`, `dashboard-deploy.yml`, `cargo-deny.yml`, `repo-hygiene.yml`, and `rust-lint.yml` now only run via `workflow_dispatch` (push blocks commented).
+- Normalizer service now exposes Prometheus metrics at `http://normalizer-service:8085/metrics` (mirrored on host port 9901). Grafana dashboards expect gauges `normalizer_total_messages`, `normalizer_decode_errors`, latency gauges, etc.
+- Latest server rollout uses tag `20250922221915` for all core services; the tag is recorded in `/opt/MEVana/.mevana_tag`.
+- Kafka topics `arb.opportunities.v1` and `execution.results.v1` exist on the server; executor is subscribing successfully.
+- SHYFT devnet credentials live in `/opt/MEVana/.env` and `/opt/MEVana/infrastructure/.env`; update those files (or repo secrets) before switching environments.
+- Grafana (`http://<server-ip>:3000`, admin/admin123) and Prometheus (`http://<server-ip>:9090`) currently show live data; normalizer charts rely on the new metrics.
 
 ---
 

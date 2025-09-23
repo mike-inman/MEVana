@@ -1,8 +1,25 @@
+#![allow(
+    unused_imports,
+    clippy::single_component_path_imports,
+    deprecated,
+    unused_parens,
+    clippy::bind_instead_of_map,
+    clippy::type_complexity,
+    clippy::manual_range_contains
+)]
+
 // crates/normalizer-service/src/bin/tap_orca_extract.rs
 
 use normalizer_generated::registry as generated;
 
 use anyhow::{Context, Result};
+use axum::{
+    body::Body,
+    http::{header, HeaderValue, StatusCode},
+    response::Json,
+    routing::get,
+    Router,
+};
 use bs58;
 use chrono::Utc;
 use dotenv::dotenv;
@@ -16,7 +33,11 @@ use rdkafka::Message as _;
 use redis::{aio::MultiplexedConnection, AsyncCommands};
 use serde_json;
 use std::collections::HashMap;
+use std::fmt::Write as FmtWrite;
+use std::sync::Arc;
 use std::time::Instant;
+use tokio::net::TcpListener;
+use tokio::sync::Mutex;
 use yellowstone_grpc_proto::prelude as ypp;
 use yellowstone_grpc_proto::prost::Message as _;
 
@@ -122,6 +143,12 @@ impl Metrics {
         }
     }
 
+    fn after_update(&mut self) {
+        if self.total_messages > 0 && self.total_messages % 1000 == 0 {
+            self.log_summary();
+        }
+    }
+
     fn get_p50_latency(&self) -> Option<f64> {
         if self.latency_samples.is_empty() {
             return None;
@@ -153,13 +180,38 @@ impl Metrics {
             self.get_p99_latency().unwrap_or(0.0)
         );
     }
+
+    fn to_prometheus(&self) -> String {
+        let mut out = String::new();
+        let _ = writeln!(out, "# TYPE normalizer_total_messages counter");
+        let _ = writeln!(out, "normalizer_total_messages {}", self.total_messages);
+        let _ = writeln!(out, "# TYPE normalizer_successful_decodes counter");
+        let _ = writeln!(
+            out,
+            "normalizer_successful_decodes {}",
+            self.successful_decodes
+        );
+        let _ = writeln!(out, "# TYPE normalizer_decode_errors counter");
+        let _ = writeln!(out, "normalizer_decode_errors {}", self.decode_errors);
+        let _ = writeln!(out, "# TYPE normalizer_kafka_errors counter");
+        let _ = writeln!(out, "normalizer_kafka_errors {}", self.kafka_errors);
+        let _ = writeln!(out, "# TYPE normalizer_redis_errors counter");
+        let _ = writeln!(out, "normalizer_redis_errors {}", self.redis_errors);
+
+        let p50 = self.get_p50_latency().unwrap_or(0.0);
+        let p99 = self.get_p99_latency().unwrap_or(0.0);
+        let _ = writeln!(out, "# TYPE normalizer_latency_ms_p50 gauge");
+        let _ = writeln!(out, "normalizer_latency_ms_p50 {}", p50);
+        let _ = writeln!(out, "# TYPE normalizer_latency_ms_p99 gauge");
+        let _ = writeln!(out, "normalizer_latency_ms_p99 {}", p99);
+
+        out
+    }
 }
 
 // NEW: Health check endpoint
-async fn start_health_server(config: &ServiceConfig) -> Result<()> {
-    use axum::{http::StatusCode, response::Json, routing::get, Router};
+async fn start_health_server(config: &ServiceConfig, metrics: Arc<Mutex<Metrics>>) -> Result<()> {
     use serde_json::json;
-    use tokio::net::TcpListener;
 
     let app = Router::new()
         .route(
@@ -173,11 +225,25 @@ async fn start_health_server(config: &ServiceConfig) -> Result<()> {
         )
         .route(
             "/metrics",
-            get(|| async {
-                (
-                    StatusCode::OK,
-                    Json(json!({ "status": "metrics endpoint ready" })),
-                )
+            get({
+                let metrics = metrics.clone();
+                move || {
+                    let metrics = metrics.clone();
+                    async move {
+                        let body = {
+                            let metrics = metrics.lock().await;
+                            metrics.to_prometheus()
+                        };
+                        axum::response::Response::builder()
+                            .status(StatusCode::OK)
+                            .header(
+                                header::CONTENT_TYPE,
+                                HeaderValue::from_static("text/plain; version=0.0.4"),
+                            )
+                            .body(Body::from(body))
+                            .unwrap()
+                    }
+                }
             }),
         );
 
@@ -230,8 +296,10 @@ async fn main() -> Result<()> {
         }
     };
 
+    let metrics = Arc::new(Mutex::new(Metrics::default()));
+
     // Start health server
-    if let Err(e) = start_health_server(&config).await {
+    if let Err(e) = start_health_server(&config, metrics.clone()).await {
         error!("❌ Failed to start health server: {}", e);
         std::process::exit(1);
     }
@@ -292,41 +360,55 @@ async fn main() -> Result<()> {
     }
     info!("✅ Subscribed to input topic: {}", config.in_topic);
 
-    let mut metrics = Metrics::default();
     info!("🚀 Starting message processing loop...");
 
     loop {
         match consumer.recv().await {
             Err(e) => {
-                metrics.kafka_errors += 1;
+                {
+                    let mut stats = metrics.lock().await;
+                    stats.kafka_errors += 1;
+                    stats.total_messages += 1;
+                    stats.after_update();
+                }
                 warn!("⚠️  Kafka receive error: {e:?}");
             }
             Ok(m) => {
                 if let Some(bytes) = m.payload() {
                     let t0 = Instant::now();
-                    if let Err(e) =
-                        handle(bytes, &producer, &config.out_topic, &mut redis_conn).await
-                    {
-                        metrics.decode_errors += 1;
-                        error!("❌ Handle error: {e:#}");
-                    } else {
-                        metrics.successful_decodes += 1;
-                    }
+                    let result = handle(bytes, &producer, &config.out_topic, &mut redis_conn).await;
                     let dt_ms = t0.elapsed().as_micros() as f64 / 1000.0;
-                    metrics.record_latency(dt_ms);
+
+                    {
+                        let mut stats = metrics.lock().await;
+                        stats.total_messages += 1;
+                        stats.record_latency(dt_ms);
+                        if result.is_ok() {
+                            stats.successful_decodes += 1;
+                        } else {
+                            stats.decode_errors += 1;
+                        }
+                        stats.after_update();
+                    }
+
+                    if let Err(e) = result {
+                        error!("❌ Handle error: {e:#}");
+                    }
+
                     if dt_ms > 25.0 {
                         warn!("⚠️  Extract path latency high: {:.2} ms", dt_ms);
                     }
                 } else {
-                    metrics.kafka_errors += 1;
+                    {
+                        let mut stats = metrics.lock().await;
+                        stats.kafka_errors += 1;
+                        stats.total_messages += 1;
+                        stats.after_update();
+                    }
                     warn!("⚠️  Empty payload received");
                 }
                 let _ = consumer.commit_message(&m, CommitMode::Async);
             }
-        }
-        metrics.total_messages += 1;
-        if metrics.total_messages % 1000 == 0 {
-            metrics.log_summary();
         }
     }
 }

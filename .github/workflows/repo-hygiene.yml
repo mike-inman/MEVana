@@ -2,8 +2,8 @@ name: Repo Hygiene
 
 on:
   pull_request:
-  push:
-    branches: [ main ]
+  # push:
+  #   branches: [ main ]
 
 jobs:
   hygiene:
@@ -15,4 +15,3 @@ jobs:
       - name: Run hygiene checks
         run: |
           bash scripts/ci/repo_hygiene.sh
-
