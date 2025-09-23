@@ -1,4 +1,4 @@
-use once_cell::sync::OnceLock;
+use once_cell::sync::Lazy;
 use serde::Deserialize;
 use solana_sdk::pubkey::Pubkey;
 use std::collections::HashMap;
@@ -94,14 +94,14 @@ fn resolve_config() -> FlashLoanProvidersConfig {
     FlashLoanProvidersConfig::default()
 }
 
-static CONFIG: OnceLock<FlashLoanProvidersConfig> = OnceLock::new();
+static CONFIG: Lazy<FlashLoanProvidersConfig> = Lazy::new(resolve_config);
 
 pub fn providers_config() -> FlashLoanProvidersConfig {
-    CONFIG.get_or_init(resolve_config).clone()
+    CONFIG.clone()
 }
 
 pub fn providers_config_ref() -> &'static FlashLoanProvidersConfig {
-    CONFIG.get_or_init(resolve_config)
+    &CONFIG
 }
 
 pub fn parse_pubkey(value: &Option<String>) -> Option<Pubkey> {
