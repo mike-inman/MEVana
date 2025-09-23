@@ -1,6 +1,6 @@
 # Local Stack Overview
 
-Last updated: 2025-09-22
+Last updated: 2025-09-23
 
 This guide documents the reference local deployment that mirrors the self-hosted production stack. It explains the architecture, prerequisites, and the workflow used to assemble the full containerized environment that powers Prometheus/Grafana monitoring and the Solana trading services.
 
@@ -30,9 +30,9 @@ This guide documents the reference local deployment that mirrors the self-hosted
 6. Generate a local Solana keypair for the executor (already created during setup):
    ```bash
    mkdir -p infrastructure/keys
-   solana-keygen new --no-passphrase --outfile infrastructure/keys/executor-dev.json --force
+   solana-keygen new --no-passphrase --outfile infrastructure/keys/id.json --force
    ```
-   The compose file mounts this read-only at `/root/.config/solana/id.json` inside the executor container. Replace the key before enabling real execution.
+   The compose file mounts the entire `infrastructure/keys/` directory at `/root/.config/solana/`, so the executor will read `/root/.config/solana/id.json`. Replace this key before enabling real execution.
 
 ## Boot Sequence
 From the repo root:

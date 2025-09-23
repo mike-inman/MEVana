@@ -306,7 +306,7 @@ services:
     ports:
       - "9904:9904"
     volumes:
-      - ./keys/executor-dev.json:/root/.config/solana/id.json:ro
+      - ./keys:/root/.config/solana:ro
       - ../config:/app/config:ro
     networks: [mevana_net]
     restart: unless-stopped
