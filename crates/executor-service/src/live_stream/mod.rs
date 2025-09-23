@@ -1,3 +1,5 @@
+#![allow(warnings)]
+
 //! Live edge stream integration (Whirlpool, Raydium CLMM/CPMM, Meteora DLMM, Phoenix)
 //! Additive, opt-in via ENABLE_LIVE_EDGE_STREAM=1
 
@@ -21,6 +23,7 @@ use whirlpool_core::decode::decode_whirlpool;
 // Discriminator constant reused from archived code.
 const RAYDIUM_POOL_STATE_ACCOUNT_DISCM: [u8; 8] = [247, 237, 227, 245, 215, 195, 222, 70];
 use borsh::BorshDeserialize;
+
 use std::collections::HashMap;
 
 #[allow(dead_code)]
@@ -196,7 +199,7 @@ fn directional_prices_q64(sqrt_price_x64: u128) -> (u128, u128) {
     if let Some(prod) = sqrt_price_x64.checked_mul(sqrt_price_x64) {
         let price_ab = prod >> 64; // Q64 price of token_b per token_a (assuming sqrt is price_ab^0.5 * 2^64)
         if price_ab > 0 {
-            let inv = (u128::MAX / price_ab); // coarse inverse approximation
+            let inv = u128::MAX / price_ab; // coarse inverse approximation
             (price_ab, inv)
         } else {
             (0, 0)
@@ -427,7 +430,7 @@ async fn run_stream(
                         let owner_b58 = bs58::encode(&inner.owner).into_string();
                         if owner_b58 == RAYDIUM_CLMM_PROGRAM_ID {
                             raydium_clmm_accounts += 1;
-                            if raydium_clmm_accounts % 500 == 0 {
+                            if raydium_clmm_accounts.is_multiple_of(500) {
                                 info!(
                                     "raydium_clmm_account_updates count={}",
                                     raydium_clmm_accounts
@@ -468,7 +471,7 @@ async fn run_stream(
                                     sqrt_price_x64: decoded.sqrt_price_x64,
                                     liquidity: decoded.liquidity,
                                     tick_current: decoded.tick_current,
-                                    slot: account.slot as u64,
+                                    slot: account.slot,
                                     ts_ns: current_time_ns(),
                                     decimals_a: decoded.mint_decimals_0,
                                     decimals_b: decoded.mint_decimals_1,
@@ -477,7 +480,7 @@ async fn run_stream(
                             }
                         } else if owner_b58 == ORCA_WHIRLPOOL_PROGRAM_ID {
                             whirlpool_accounts += 1;
-                            if whirlpool_accounts % 500 == 0 {
+                            if whirlpool_accounts.is_multiple_of(500) {
                                 info!("whirlpool_account_updates count={}", whirlpool_accounts);
                             }
                             if let Ok(w) = decode_whirlpool(&inner.data) {
@@ -497,8 +500,8 @@ async fn run_stream(
                                     sqrt_price_x64: w.sqrt_price,
                                     liquidity: w.liquidity,
                                     tick_current: w.tick_current_index,
-                                    tick_spacing: w.tick_spacing as u16,
-                                    slot: account.slot as u64,
+                                    tick_spacing: w.tick_spacing,
+                                    slot: account.slot,
                                     ts_ns: current_time_ns(),
                                     // Decimals not present in account; leave 0 (to be hydrated later)
                                     decimals_a: 0,

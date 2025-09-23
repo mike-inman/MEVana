@@ -1,3 +1,5 @@
+#![allow(unused_imports, clippy::single_component_path_imports, deprecated)]
+
 // crates/normalizer-service/src/bin/tap_orca_decode.rs
 
 use normalizer_generated::registry as generated;

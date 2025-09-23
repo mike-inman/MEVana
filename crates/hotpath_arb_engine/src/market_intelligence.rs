@@ -4,9 +4,8 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::{mpsc, RwLock};
-use uuid::Uuid;
 
-use crate::ai_strategy_engine::{AIStrategyEngine, ExecutionStrategy, MarketCondition};
+use crate::ai_strategy_engine::{AIStrategyEngine, MarketCondition};
 use crate::orderbook_tracker::ArbitrageEvent;
 
 /// Real-time market intelligence system that feeds the AI

@@ -647,7 +647,7 @@ fn validate_arbitrage_request(request: &CreateArbitrageRequest) -> Result<(), St
         if !price_impact.is_finite() {
             return Err("price_impact_pct must be a finite number".to_string());
         }
-        if price_impact < -100.0 || price_impact > 100.0 {
+        if !(-100.0..=100.0).contains(&price_impact) {
             return Err("price_impact_pct must be between -100% and 100%".to_string());
         }
     }

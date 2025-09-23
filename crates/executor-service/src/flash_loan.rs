@@ -1,24 +1,25 @@
-use anyhow::Result;
+use anyhow::{anyhow, bail, Context, Result};
 use dashmap::DashMap;
-use log::{debug, info, warn};
+use flash_loan_providers::kamino::KaminoProvider;
+use flash_loan_providers::marginfi::MarginfiProvider;
+use flash_loan_providers::port_finance::PortFinanceProvider;
+use flash_loan_providers::solend::SolendProvider;
+use flash_loan_providers::{
+    get_provider, providers as registered_providers, FlashLoanEnvironment,
+    FlashLoanProvider as PluginProvider, PlanRequest as ProviderPlanRequest,
+    ProviderId as PluginProviderId, QuoteRequest as ProviderQuoteRequest,
+    QuoteResponse as ProviderQuoteResponse,
+};
+use log::{info, warn};
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
+use solana_sdk::pubkey::Pubkey;
+use std::str::FromStr;
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
-use tokio::time::{Duration, Instant};
 
 use crate::config::ExecutorConfig;
+use crate::metrics::MetricsServer;
 use crate::shyft_client::ShyftClient;
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct FlashLoanQuote {
-    pub provider: FlashLoanProvider,
-    pub token_mint: String,
-    pub available_amount: u64,
-    pub fee_bps: u16,
-    pub estimated_latency_ms: u16,
-    pub is_available: bool,
-    pub quote_timestamp: u64,
-}
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Hash)]
 pub enum FlashLoanProvider {
@@ -27,19 +28,30 @@ pub enum FlashLoanProvider {
     Tulip,
     Mango,
     PortFinance,
-    JetProtocol,
+    Kamino,
 }
 
 impl FlashLoanProvider {
     pub fn from_string(s: &str) -> Option<Self> {
         match s.to_lowercase().as_str() {
-            "solend" => Some(Self::Solend),
+            "solend" | "save" => Some(Self::Solend),
             "marginfi" => Some(Self::Marginfi),
             "tulip" => Some(Self::Tulip),
             "mango" => Some(Self::Mango),
-            "portfinance" => Some(Self::PortFinance),
-            "jetprotocol" => Some(Self::JetProtocol),
+            "portfinance" | "port" => Some(Self::PortFinance),
+            "kamino" | "kamino lend" | "k-lend" => Some(Self::Kamino),
             _ => None,
+        }
+    }
+
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            Self::Solend => "solend",
+            Self::Marginfi => "marginfi",
+            Self::Tulip => "tulip",
+            Self::Mango => "mango",
+            Self::PortFinance => "portfinance",
+            Self::Kamino => "kamino",
         }
     }
 
@@ -50,56 +62,94 @@ impl FlashLoanProvider {
             Self::Tulip => "4bcFeLv4nydFrsZqV5CgwCVrPhkQKsXtzfy2KyMz7ozM",
             Self::Mango => "mv3ekLzLbnVPNxjSKvqBpU3ZeZXPQdEC3bp5MDEBG68",
             Self::PortFinance => "Port7uDYB1NMso4t9LZgq4u7GsAmYHj3jdkd8fHRh",
-            Self::JetProtocol => "JPLockxtkngHkaQT5AuRYow3HyUv5qWzmhwsCPd653n",
-        }
-    }
-
-    pub fn base_fee_bps(&self) -> u16 {
-        match self {
-            Self::Solend => 9,       // 0.09%
-            Self::Marginfi => 5,     // 0.05%
-            Self::Tulip => 10,       // 0.10%
-            Self::Mango => 8,        // 0.08%
-            Self::PortFinance => 12, // 0.12%
-            Self::JetProtocol => 15, // 0.15%
+            Self::Kamino => "KMino8LendZzzzzzzzzzzzzzzzzzzzzzzzzzzzzz",
         }
     }
 }
 
-/// Multi-provider flash loan aggregator for optimal rate selection
-pub struct FlashLoanAggregator {
-    config: Arc<ExecutorConfig>,
-    shyft_client: Arc<ShyftClient>,
-    providers: Vec<FlashLoanProvider>,
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct FlashLoanQuote {
+    pub provider: FlashLoanProvider,
+    pub token_mint: String,
+    pub available_amount: u64,
+    pub fee_bps: u16,
+    pub fee_lamports: u64,
+    pub estimated_latency_ms: u16,
+    pub confidence: f32,
+    pub is_available: bool,
+    pub quote_timestamp: u64,
+}
 
-    // Rate caching for performance
-    quote_cache: Arc<DashMap<String, FlashLoanQuote>>, // token_mint -> best_quote
-    provider_health: Arc<DashMap<FlashLoanProvider, ProviderHealth>>,
-
-    // Performance metrics
-    last_quote_refresh: std::sync::atomic::AtomicU64,
-    successful_loans: Arc<DashMap<FlashLoanProvider, u64>>,
-    failed_loans: Arc<DashMap<FlashLoanProvider, u64>>,
+#[derive(Clone)]
+struct RegisteredProvider {
+    label: FlashLoanProvider,
+    handler: Arc<dyn PluginProvider>,
 }
 
 #[derive(Debug, Clone)]
 struct ProviderHealth {
     is_healthy: bool,
-    consecutive_failures: u32,
-    last_successful_quote: u64,
-    average_latency_ms: u32,
+}
+
+pub struct FlashLoanAggregator {
+    _shyft_client: Arc<ShyftClient>,
+    environment: FlashLoanEnvironment,
+    providers: Vec<RegisteredProvider>,
+    quote_cache: Arc<DashMap<String, FlashLoanQuote>>, // token_mint -> best quote
+    provider_health: Arc<DashMap<FlashLoanProvider, ProviderHealth>>,
+    last_quote_refresh: AtomicU64,
+    metrics: Option<Arc<MetricsServer>>,
+}
+
+#[derive(Debug, Clone, Default)]
+pub struct FlashLoanPlanOptions {
+    pub receiver_program_id: Option<Pubkey>,
+    pub receiver_payload: Option<Vec<u8>>,
+    pub reserve_hint: Option<Pubkey>,
 }
 
 impl FlashLoanAggregator {
-    pub fn new(config: Arc<ExecutorConfig>, shyft_client: Arc<ShyftClient>) -> Result<Self> {
-        let providers: Vec<FlashLoanProvider> = config
+    pub fn new(
+        config: Arc<ExecutorConfig>,
+        shyft_client: Arc<ShyftClient>,
+        metrics: Option<Arc<MetricsServer>>,
+    ) -> Result<Self> {
+        // Ensure built-in providers are registered before discovery
+        MarginfiProvider::register();
+        SolendProvider::register();
+        PortFinanceProvider::register();
+        KaminoProvider::register();
+        let _ = registered_providers(); // initialize registry lazily
+
+        let requested: Vec<String> = config
             .flash_loan_providers
             .iter()
-            .filter_map(|p| FlashLoanProvider::from_string(p))
+            .map(|p| p.trim().to_lowercase())
+            .filter(|p| !p.is_empty())
             .collect();
 
+        let mut providers = Vec::new();
+        for name in requested {
+            if let Some(kind) = FlashLoanProvider::from_string(&name) {
+                let provider_id = PluginProviderId::from(name.as_str());
+                match get_provider(&provider_id) {
+                    Some(handler) => {
+                        providers.push(RegisteredProvider {
+                            label: kind,
+                            handler,
+                        });
+                    }
+                    None => {
+                        warn!("Configured flash loan provider '{}' not registered", name);
+                    }
+                }
+            } else {
+                warn!("Unknown flash loan provider '{}' in configuration", name);
+            }
+        }
+
         if providers.is_empty() {
-            anyhow::bail!("No valid flash loan providers configured");
+            bail!("No flash loan providers available after registration");
         }
 
         info!(
@@ -107,336 +157,163 @@ impl FlashLoanAggregator {
             providers.len()
         );
         for provider in &providers {
-            info!("  - {:?} ({})", provider, provider.program_id());
+            info!("  - {}", provider.label.as_str());
         }
 
         let aggregator = Self {
-            config,
-            shyft_client,
-            providers: providers.clone(),
+            _shyft_client: shyft_client,
+            environment: FlashLoanEnvironment::default(),
+            providers,
             quote_cache: Arc::new(DashMap::new()),
             provider_health: Arc::new(DashMap::new()),
-            last_quote_refresh: std::sync::atomic::AtomicU64::new(0),
-            successful_loans: Arc::new(DashMap::new()),
-            failed_loans: Arc::new(DashMap::new()),
+            last_quote_refresh: AtomicU64::new(0),
+            metrics,
         };
 
-        // Initialize provider health
-        for provider in providers {
-            aggregator.provider_health.insert(
-                provider,
-                ProviderHealth {
-                    is_healthy: true,
-                    consecutive_failures: 0,
-                    last_successful_quote: 0,
-                    average_latency_ms: 100,
-                },
-            );
+        // Seed health information
+        for provider in &aggregator.providers {
+            aggregator
+                .provider_health
+                .insert(provider.label, ProviderHealth { is_healthy: true });
         }
 
         Ok(aggregator)
     }
 
-    /// Get the best flash loan quote for a token
-    pub async fn get_best_quote(&self, token_mint: &str, amount: u64) -> Result<FlashLoanQuote> {
-        // Check cache first (refresh every 5 seconds)
-        let now = chrono::Utc::now().timestamp_millis() as u64;
-        let last_refresh = self
-            .last_quote_refresh
-            .load(std::sync::atomic::Ordering::Relaxed);
+    #[allow(dead_code)]
+    pub fn providers(&self) -> Vec<FlashLoanProvider> {
+        self.providers.iter().map(|p| p.label).collect()
+    }
 
-        let should_refresh = now - last_refresh > 5000; // 5 seconds
+    pub async fn get_best_quote(&self, token_mint: &str, amount: u64) -> Result<FlashLoanQuote> {
+        let now = chrono::Utc::now().timestamp_millis() as u64;
+        let last_refresh = self.last_quote_refresh.load(Ordering::Relaxed);
+        let should_refresh = now.saturating_sub(last_refresh) > 5_000;
 
         if should_refresh {
-            self.refresh_quotes(token_mint, amount).await?;
+            let quotes = self.get_all_quotes(token_mint, amount).await;
+            if let Some(best) = quotes.first() {
+                self.quote_cache
+                    .insert(token_mint.to_string(), best.clone());
+            }
+            self.last_quote_refresh.store(now, Ordering::Relaxed);
         }
 
-        // Get best quote from cache
         self.quote_cache
             .get(token_mint)
             .map(|entry| entry.value().clone())
-            .ok_or_else(|| anyhow::anyhow!("No flash loan quotes available for {}", token_mint))
+            .ok_or_else(|| anyhow!("No flash loan quotes available for {token_mint}"))
     }
 
-    /// Get quotes from all providers
     pub async fn get_all_quotes(&self, token_mint: &str, amount: u64) -> Vec<FlashLoanQuote> {
         let mut quotes = Vec::new();
+        let Ok(mint_pubkey) = Pubkey::from_str(token_mint) else {
+            warn!("Invalid token mint for flash loan quotes: {}", token_mint);
+            return quotes;
+        };
 
-        // Query all healthy providers in parallel
         let mut tasks = Vec::new();
-
+        let metrics = self.metrics.clone();
         for provider in &self.providers {
-            if self.is_provider_healthy(provider) {
-                let provider_clone = provider.clone();
-                let token_mint = token_mint.to_string();
-                let shyft_client = Arc::clone(&self.shyft_client);
-
-                let task = tokio::spawn(async move {
-                    Self::get_provider_quote(shyft_client, provider_clone, token_mint, amount).await
-                });
-
-                tasks.push(task);
+            if self.is_provider_healthy(provider.label) {
+                let env = self.environment.clone();
+                let handler = Arc::clone(&provider.handler);
+                let label = provider.label;
+                let request = ProviderQuoteRequest {
+                    token_mint: mint_pubkey,
+                    amount,
+                    reserve_hint: None,
+                };
+                let metrics = metrics.clone();
+                tasks.push(tokio::spawn(async move {
+                    if let Some(ref metrics) = metrics {
+                        metrics.record_flash_loan_quote_attempt();
+                    }
+                    match handler.quote(&env, &request).await {
+                        Ok(Some(response)) => Some(convert_quote(label, response)),
+                        Ok(None) => None,
+                        Err(err) => {
+                            warn!("Quote error from provider {}: {}", label.as_str(), err);
+                            None
+                        }
+                    }
+                }));
             }
         }
 
-        // Collect results
         for task in tasks {
-            if let Ok(Ok(quote)) = task.await {
+            if let Ok(Some(quote)) = task.await {
                 quotes.push(quote);
             }
         }
 
-        // Sort by effective cost (fee + latency penalty)
-        quotes.sort_by(|a, b| {
-            let cost_a = a.fee_bps as u32 + (a.estimated_latency_ms as u32 / 10);
-            let cost_b = b.fee_bps as u32 + (b.estimated_latency_ms as u32 / 10);
-            cost_a.cmp(&cost_b)
-        });
-
+        quotes.sort_by_key(|q| q.fee_lamports);
         quotes
     }
 
-    /// Build flash loan instructions for optimal provider
-    pub async fn build_flash_loan_instructions(
+    #[allow(dead_code)]
+    pub async fn build_plan(
         &self,
+        provider: FlashLoanProvider,
         token_mint: &str,
         amount: u64,
         borrower_pubkey: &str,
-    ) -> Result<Vec<String>> {
-        let quote = self.get_best_quote(token_mint, amount).await?;
+        options: FlashLoanPlanOptions,
+    ) -> Result<flash_loan_providers::PlanResponse> {
+        let registered = self
+            .providers
+            .iter()
+            .find(|p| p.label == provider)
+            .context("Requested flash loan provider is not registered")?;
 
-        info!(
-            "Building flash loan instructions for {:?} provider",
-            quote.provider
-        );
+        let borrower = Pubkey::from_str(borrower_pubkey)
+            .context("Invalid borrower pubkey for flash loan plan")?;
+        let token_pubkey =
+            Pubkey::from_str(token_mint).context("Invalid token mint for flash loan plan")?;
 
-        match quote.provider {
-            FlashLoanProvider::Solend => {
-                self.build_solend_instructions(token_mint, amount, borrower_pubkey)
-                    .await
-            }
-            FlashLoanProvider::Marginfi => {
-                self.build_marginfi_instructions(token_mint, amount, borrower_pubkey)
-                    .await
-            }
-            FlashLoanProvider::Tulip => {
-                self.build_tulip_instructions(token_mint, amount, borrower_pubkey)
-                    .await
-            }
-            _ => {
-                // For now, return placeholder instructions
-                // In production, would implement actual instruction building
-                warn!(
-                    "Flash loan provider {:?} not yet implemented",
-                    quote.provider
-                );
-                Ok(vec![
-                    "placeholder_borrow_instruction".to_string(),
-                    "placeholder_repay_instruction".to_string(),
-                ])
-            }
-        }
-    }
+        let result = registered
+            .handler
+            .build_plan(
+                &self.environment,
+                &ProviderPlanRequest {
+                    token_mint: token_pubkey,
+                    amount,
+                    borrower,
+                    receiver_program_id: options.receiver_program_id,
+                    receiver_payload: options.receiver_payload,
+                    reserve_hint: options.reserve_hint,
+                },
+            )
+            .await;
 
-    /// Record flash loan success/failure for provider health tracking
-    pub fn record_loan_result(&self, provider: FlashLoanProvider, success: bool) {
-        if success {
-            self.successful_loans
-                .entry(provider)
-                .and_modify(|count| *count += 1)
-                .or_insert(1);
-
-            // Update provider health
-            if let Some(mut health) = self.provider_health.get_mut(&provider) {
-                health.is_healthy = true;
-                health.consecutive_failures = 0;
-                health.last_successful_quote = chrono::Utc::now().timestamp_millis() as u64;
-            }
-        } else {
-            self.failed_loans
-                .entry(provider)
-                .and_modify(|count| *count += 1)
-                .or_insert(1);
-
-            // Update provider health
-            if let Some(mut health) = self.provider_health.get_mut(&provider) {
-                health.consecutive_failures += 1;
-
-                // Mark as unhealthy after 3 consecutive failures
-                if health.consecutive_failures >= 3 {
-                    health.is_healthy = false;
-                    warn!("Marked flash loan provider {:?} as unhealthy", provider);
-                }
+        if let Some(metrics) = &self.metrics {
+            match &result {
+                Ok(plan) => metrics.record_flash_loan_plan_success(plan.fee_lamports),
+                Err(_) => metrics.record_flash_loan_plan_failure(),
             }
         }
+
+        result
     }
 
-    /// Get aggregator status and metrics
-    pub fn get_status(&self) -> FlashLoanAggregatorStatus {
-        FlashLoanAggregatorStatus {
-            total_providers: self.providers.len(),
-            healthy_providers: self
-                .provider_health
-                .iter()
-                .filter(|entry| entry.value().is_healthy)
-                .count(),
-            cached_quotes: self.quote_cache.len(),
-            provider_stats: self
-                .providers
-                .iter()
-                .map(|provider| {
-                    let successful = self.successful_loans.get(provider).map(|v| *v).unwrap_or(0);
-                    let failed = self.failed_loans.get(provider).map(|v| *v).unwrap_or(0);
-                    let health = self.provider_health.get(provider).unwrap().clone();
-
-                    ProviderStats {
-                        provider: provider.clone(),
-                        is_healthy: health.is_healthy,
-                        successful_loans: successful,
-                        failed_loans: failed,
-                        success_rate: if successful + failed > 0 {
-                            successful as f64 / (successful + failed) as f64
-                        } else {
-                            0.0
-                        },
-                        average_latency_ms: health.average_latency_ms,
-                    }
-                })
-                .collect(),
-        }
-    }
-
-    // Private helper methods
-
-    async fn refresh_quotes(&self, token_mint: &str, amount: u64) -> Result<()> {
-        let quotes = self.get_all_quotes(token_mint, amount).await;
-
-        if let Some(best_quote) = quotes.first() {
-            self.quote_cache
-                .insert(token_mint.to_string(), best_quote.clone());
-            debug!(
-                "Cached best quote for {}: {:?} @ {} bps",
-                token_mint, best_quote.provider, best_quote.fee_bps
-            );
-        }
-
-        self.last_quote_refresh.store(
-            chrono::Utc::now().timestamp_millis() as u64,
-            std::sync::atomic::Ordering::Relaxed,
-        );
-
-        Ok(())
-    }
-
-    fn is_provider_healthy(&self, provider: &FlashLoanProvider) -> bool {
+    fn is_provider_healthy(&self, provider: FlashLoanProvider) -> bool {
         self.provider_health
-            .get(provider)
+            .get(&provider)
             .map(|health| health.is_healthy)
             .unwrap_or(false)
     }
-
-    async fn get_provider_quote(
-        shyft_client: Arc<ShyftClient>,
-        provider: FlashLoanProvider,
-        token_mint: String,
-        amount: u64,
-    ) -> Result<FlashLoanQuote> {
-        let start_time = Instant::now();
-
-        // For now, return simulated quotes based on provider characteristics
-        // In production, would query actual lending pool states
-
-        let base_fee = provider.base_fee_bps();
-        let utilization_fee = Self::calculate_utilization_fee(&provider, &token_mint, amount).await;
-        let total_fee = base_fee + utilization_fee;
-
-        let latency = start_time.elapsed().as_millis() as u16;
-
-        Ok(FlashLoanQuote {
-            provider,
-            token_mint,
-            available_amount: amount, // Simplified - assume always available
-            fee_bps: total_fee,
-            estimated_latency_ms: latency.max(50), // Minimum 50ms
-            is_available: true,
-            quote_timestamp: chrono::Utc::now().timestamp_millis() as u64,
-        })
-    }
-
-    async fn calculate_utilization_fee(
-        provider: &FlashLoanProvider,
-        _token_mint: &str,
-        _amount: u64,
-    ) -> u16 {
-        // Simplified utilization fee calculation
-        // In production, would fetch actual pool utilization
-        match provider {
-            FlashLoanProvider::Solend => 2,   // +0.02% if high utilization
-            FlashLoanProvider::Marginfi => 1, // +0.01% if high utilization
-            FlashLoanProvider::Tulip => 3,    // +0.03% if high utilization
-            _ => 2,
-        }
-    }
-
-    async fn build_solend_instructions(
-        &self,
-        _token_mint: &str,
-        _amount: u64,
-        _borrower_pubkey: &str,
-    ) -> Result<Vec<String>> {
-        // Placeholder for Solend flash loan instruction building
-        // In production, would:
-        // 1. Derive lending market and reserve PDAs
-        // 2. Build borrow instruction
-        // 3. Build repay instruction with fees
-
-        Ok(vec![
-            "solend_flash_borrow_instruction".to_string(),
-            "solend_flash_repay_instruction".to_string(),
-        ])
-    }
-
-    async fn build_marginfi_instructions(
-        &self,
-        _token_mint: &str,
-        _amount: u64,
-        _borrower_pubkey: &str,
-    ) -> Result<Vec<String>> {
-        // Placeholder for Marginfi flash loan instruction building
-        Ok(vec![
-            "marginfi_flash_borrow_instruction".to_string(),
-            "marginfi_flash_repay_instruction".to_string(),
-        ])
-    }
-
-    async fn build_tulip_instructions(
-        &self,
-        _token_mint: &str,
-        _amount: u64,
-        _borrower_pubkey: &str,
-    ) -> Result<Vec<String>> {
-        // Placeholder for Tulip flash loan instruction building
-        Ok(vec![
-            "tulip_flash_borrow_instruction".to_string(),
-            "tulip_flash_repay_instruction".to_string(),
-        ])
-    }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct FlashLoanAggregatorStatus {
-    pub total_providers: usize,
-    pub healthy_providers: usize,
-    pub cached_quotes: usize,
-    pub provider_stats: Vec<ProviderStats>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ProviderStats {
-    pub provider: FlashLoanProvider,
-    pub is_healthy: bool,
-    pub successful_loans: u64,
-    pub failed_loans: u64,
-    pub success_rate: f64,
-    pub average_latency_ms: u32,
+fn convert_quote(provider: FlashLoanProvider, response: ProviderQuoteResponse) -> FlashLoanQuote {
+    FlashLoanQuote {
+        provider,
+        token_mint: response.token_mint.to_string(),
+        available_amount: response.available_amount,
+        fee_bps: response.fee_bps,
+        fee_lamports: response.fee_lamports,
+        estimated_latency_ms: response.estimated_latency_ms,
+        confidence: response.confidence,
+        is_available: true,
+        quote_timestamp: chrono::Utc::now().timestamp_millis() as u64,
+    }
 }

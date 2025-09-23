@@ -1,5 +1,7 @@
+use base64::engine::general_purpose;
+use base64::Engine;
 use chrono::{DateTime, Utc};
-use secrecy::{ExposeSecret, SecretVec};
+use secrecy::ExposeSecret;
 use serde::{Deserialize, Serialize};
 use solana_sdk::signature::Keypair;
 use solana_sdk::signer::Signer;
@@ -151,14 +153,15 @@ impl SecureWallet {
     pub fn export(&self) -> WalletExport {
         WalletExport {
             metadata: self.metadata.clone(),
-            encrypted_data: base64::encode(&self.encrypted_keypair),
+            encrypted_data: general_purpose::STANDARD.encode(&self.encrypted_keypair),
             export_version: 1,
             exported_at: Utc::now(),
         }
     }
 
     pub fn from_export(export: WalletExport) -> Result<Self> {
-        let encrypted_keypair = base64::decode(&export.encrypted_data)
+        let encrypted_keypair = general_purpose::STANDARD
+            .decode(&export.encrypted_data)
             .map_err(|e| VaultError::Serialization(e.to_string()))?;
 
         Ok(SecureWallet {

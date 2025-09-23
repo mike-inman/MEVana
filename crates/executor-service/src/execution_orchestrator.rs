@@ -2,7 +2,7 @@
 //! Enterprise-grade execution orchestrator combining all optimization components
 
 use anyhow::Result;
-use log::{debug, error, info, warn};
+use log::{debug, info, warn};
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
@@ -11,7 +11,7 @@ use uuid::Uuid;
 
 use crate::bundle_builder::BundleBuilder;
 use crate::config::ExecutorConfig;
-use crate::execution_engine::{ArbitrageOpportunity, ExecutionResult, ExecutionStatus};
+use crate::execution_engine::{ArbitrageOpportunity, ExecutionStatus};
 use crate::flash_loan::{FlashLoanAggregator, FlashLoanProvider};
 use crate::flash_loan_optimizer::{FlashLoanOptimizer, OptimizedFlashLoanQuote};
 use crate::jito_optimizer::{JitoBundleResult, JitoOptimizationParams, JitoOptimizer};
@@ -102,6 +102,15 @@ pub struct ExecutionMetrics {
     pub timing_efficiency_score: f64,
 }
 
+#[derive(Debug)]
+struct ExecutionOutcomeContext {
+    flash_loan_result: Option<FlashLoanExecutionResult>,
+    jito_result: JitoBundleResult,
+    performance_metrics: ExecutionMetrics,
+    total_execution_time_ms: u64,
+}
+
+#[allow(dead_code)]
 pub struct ExecutionOrchestrator {
     config: Arc<ExecutorConfig>,
     shyft_client: Arc<ShyftClient>,
@@ -116,6 +125,7 @@ pub struct ExecutionOrchestrator {
 }
 
 #[derive(Debug, Clone)]
+#[allow(dead_code)]
 struct DailyPnLTracker {
     total_profit_lamports: i64,
     total_fees_paid_lamports: u64,
@@ -227,25 +237,26 @@ impl ExecutionOrchestrator {
 
         // Phase 5: Create comprehensive result
         let total_execution_time = start_time.elapsed().as_millis() as u64;
+        let performance_metrics = ExecutionMetrics {
+            planning_time_ms,
+            flash_loan_selection_time_ms: flash_loan_time_ms,
+            bundle_building_time_ms: bundle_time_ms,
+            submission_time_ms: 0,     // Updated from jito result
+            confirmation_time_ms: 0,   // Updated from jito result
+            slippage_bps: None,        // TODO: Calculate actual slippage
+            gas_efficiency_score: 0.9, // TODO: Calculate based on actual gas usage
+            timing_efficiency_score: self.calculate_timing_efficiency(total_execution_time),
+        };
+
+        let context = ExecutionOutcomeContext {
+            flash_loan_result,
+            jito_result,
+            performance_metrics,
+            total_execution_time_ms: total_execution_time,
+        };
+
         let result = self
-            .create_comprehensive_result(
-                execution_id,
-                opportunity,
-                execution_plan,
-                flash_loan_result,
-                jito_result,
-                ExecutionMetrics {
-                    planning_time_ms,
-                    flash_loan_selection_time_ms: flash_loan_time_ms,
-                    bundle_building_time_ms: bundle_time_ms,
-                    submission_time_ms: 0,     // Updated from jito result
-                    confirmation_time_ms: 0,   // Updated from jito result
-                    slippage_bps: None,        // TODO: Calculate actual slippage
-                    gas_efficiency_score: 0.9, // TODO: Calculate based on actual gas usage
-                    timing_efficiency_score: self.calculate_timing_efficiency(total_execution_time),
-                },
-                total_execution_time,
-            )
+            .create_comprehensive_result(execution_id, opportunity, execution_plan, context)
             .await?;
 
         // Phase 6: Update tracking and metrics
@@ -295,7 +306,7 @@ impl ExecutionOrchestrator {
             flash_loan_strategy,
             jito_strategy,
             risk_parameters,
-            estimated_profit_lamports: (opportunity.profit_bps as u64 * 1000),
+            estimated_profit_lamports: opportunity.profit_bps * 1000,
             execution_timeout_ms: 10_000, // 10 seconds
             priority_level: self.determine_priority(opportunity),
         };
@@ -310,7 +321,7 @@ impl ExecutionOrchestrator {
 
     async fn optimize_and_execute_flash_loan(
         &self,
-        opportunity: &ArbitrageOpportunity,
+        _opportunity: &ArbitrageOpportunity,
         execution_plan: &ExecutionPlan,
     ) -> Result<FlashLoanExecutionResult> {
         if let Some(flash_loan_strategy) = &execution_plan.flash_loan_strategy {
@@ -336,7 +347,7 @@ impl ExecutionOrchestrator {
             let execution_time = start_time.elapsed().as_millis() as u64;
 
             // Update provider performance tracking
-            let mut optimizer = self.flash_loan_optimizer.write().await;
+            let optimizer = self.flash_loan_optimizer.write().await;
             optimizer
                 .record_execution_result(
                     flash_loan_strategy.provider,
@@ -440,7 +451,7 @@ impl ExecutionOrchestrator {
 
     fn create_risk_parameters(
         &self,
-        opportunity: &ArbitrageOpportunity,
+        _opportunity: &ArbitrageOpportunity,
         mode: &ExecutionMode,
     ) -> RiskParameters {
         match mode {
@@ -453,7 +464,7 @@ impl ExecutionOrchestrator {
                 daily_loss_limit_lamports: 100_000_000_000, // 100 SOL for testing
             },
             ExecutionMode::Live {
-                max_slippage_bps,
+                max_slippage_bps: _max_slippage_bps,
                 force_profit_threshold_lamports,
                 ..
             } => RiskParameters {
@@ -484,11 +495,14 @@ impl ExecutionOrchestrator {
         execution_id: Uuid,
         opportunity: ArbitrageOpportunity,
         execution_plan: ExecutionPlan,
-        flash_loan_result: Option<FlashLoanExecutionResult>,
-        jito_result: JitoBundleResult,
-        performance_metrics: ExecutionMetrics,
-        total_execution_time_ms: u64,
+        context: ExecutionOutcomeContext,
     ) -> Result<ComprehensiveExecutionResult> {
+        let ExecutionOutcomeContext {
+            flash_loan_result,
+            jito_result,
+            performance_metrics,
+            total_execution_time_ms,
+        } = context;
         let final_status = match jito_result.status {
             crate::jito_optimizer::JitoBundleStatus::Landed => ExecutionStatus::Confirmed,
             crate::jito_optimizer::JitoBundleStatus::Failed => ExecutionStatus::Failed,
@@ -524,7 +538,7 @@ impl ExecutionOrchestrator {
             jito_bundle_result: Some(jito_result),
             final_status,
             total_execution_time_ms,
-            estimated_profit_lamports: opportunity.profit_bps as u64 * 1000,
+            estimated_profit_lamports: opportunity.profit_bps * 1000,
             actual_profit_lamports: actual_profit,
             total_fees_paid_lamports: total_fees,
             roi_basis_points: roi_bps,
@@ -576,9 +590,9 @@ impl ExecutionOrchestrator {
 
     fn calculate_execution_efficiency(
         &self,
-        plan: &ExecutionPlan,
+        _plan: &ExecutionPlan,
         metrics: &ExecutionMetrics,
-        total_time_ms: u64,
+        _total_time_ms: u64,
     ) -> f64 {
         let timing_weight = 0.3;
         let gas_weight = 0.3;

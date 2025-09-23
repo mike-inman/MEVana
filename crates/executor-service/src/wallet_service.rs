@@ -1,3 +1,5 @@
+#![allow(dead_code)]
+
 use anyhow::Result;
 use chrono::Datelike;
 use dashmap::DashMap;

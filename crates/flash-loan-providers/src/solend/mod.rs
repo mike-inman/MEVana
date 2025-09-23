@@ -3,6 +3,7 @@ mod instructions;
 use self::instructions::{
     create_flash_borrow_instruction, create_flash_repay_instruction, SolendReserveConfig,
 };
+use crate::config::{parse_pubkey, providers_config};
 use crate::plugin::{
     Environment, FlashLoanProvider, PlanInstructions, PlanRequest, PlanResponse, ProviderId,
     QuoteRequest, QuoteResponse,
@@ -144,14 +145,32 @@ impl FlashLoanProvider for SolendProvider {
             return Ok(None);
         }
 
-        let capped_amount = request.amount.min(MAX_LOAN_LAMPORTS);
-        let fee_lamports = self.compute_fee_lamports(capped_amount);
+        let cfg = providers_config();
+        let mint_key = request.token_mint.to_string();
+        let reserve_cfg = cfg.save.reserves.get(&mint_key);
+
+        let capped_amount = request.amount.min(
+            reserve_cfg
+                .and_then(|c| c.available_amount)
+                .unwrap_or(MAX_LOAN_LAMPORTS),
+        );
+
+        if capped_amount == 0 {
+            return Ok(None);
+        }
+
+        let fee_bps = reserve_cfg
+            .and_then(|c| c.fee_bps)
+            .unwrap_or(FLASH_LOAN_FEE_BPS);
+        let fee_lamports = reserve_cfg
+            .and_then(|c| c.fee_lamports)
+            .unwrap_or_else(|| self.compute_fee_lamports(capped_amount));
 
         Ok(Some(QuoteResponse {
             provider: PROVIDER_ID,
             token_mint: request.token_mint,
             available_amount: capped_amount,
-            fee_bps: FLASH_LOAN_FEE_BPS,
+            fee_bps,
             fee_lamports,
             estimated_latency_ms: 140,
             confidence: 0.55,
@@ -167,7 +186,15 @@ impl FlashLoanProvider for SolendProvider {
             return Err(anyhow!("unsupported mint for Solend flash loan"));
         }
 
-        let amount = request.amount.min(MAX_LOAN_LAMPORTS);
+        let cfg = providers_config();
+        let mint_key = request.token_mint.to_string();
+        let reserve_cfg = cfg.save.reserves.get(&mint_key);
+
+        let amount = request.amount.min(
+            reserve_cfg
+                .and_then(|c| c.available_amount)
+                .unwrap_or(MAX_LOAN_LAMPORTS),
+        );
         if amount == 0 {
             return Err(anyhow!("flash loan amount must be greater than zero"));
         }
@@ -175,10 +202,28 @@ impl FlashLoanProvider for SolendProvider {
         let borrower_token_account =
             associated_token_address(&request.borrower, &request.token_mint);
 
-        let borrow_ix =
-            create_flash_borrow_instruction(&self.config, borrower_token_account, amount);
+        let mut config = (*self.config).clone();
+        if let Some(entry) = reserve_cfg {
+            if let Some(program_id) = parse_pubkey(&cfg.save.program_id) {
+                config.program_id = program_id;
+            }
+            if let Some(reserve) = parse_pubkey(&entry.reserve) {
+                config.reserve = reserve;
+            }
+            if let Some(vault) = parse_pubkey(&entry.liquidity_vault) {
+                config.reserve_liquidity_supply = vault;
+            }
+            if let Some(fee_receiver) = parse_pubkey(&entry.fee_receiver) {
+                config.fee_receiver = fee_receiver;
+            }
+            if let Some(host_fee) = parse_pubkey(&entry.host_fee_receiver) {
+                config.host_fee_receiver = host_fee;
+            }
+        }
+
+        let borrow_ix = create_flash_borrow_instruction(&config, borrower_token_account, amount);
         let repay_ix = create_flash_repay_instruction(
-            &self.config,
+            &config,
             borrower_token_account,
             request.borrower,
             amount,
@@ -189,7 +234,9 @@ impl FlashLoanProvider for SolendProvider {
         instructions.borrow.push(borrow_ix);
         instructions.repay.push(repay_ix);
 
-        let fee_lamports = self.compute_fee_lamports(amount);
+        let fee_lamports = reserve_cfg
+            .and_then(|c| c.fee_lamports)
+            .unwrap_or_else(|| self.compute_fee_lamports(amount));
 
         Ok(PlanResponse {
             provider: PROVIDER_ID,
@@ -233,6 +280,7 @@ mod tests {
             &QuoteRequest {
                 token_mint: WSOL_MINT,
                 amount: 25_000_000_000,
+                reserve_hint: None,
             },
         ))
         .expect("quote ok")
@@ -252,6 +300,9 @@ mod tests {
                 token_mint: WSOL_MINT,
                 amount: 10_000_000_000,
                 borrower: TEST_BORROWER,
+                receiver_program_id: None,
+                receiver_payload: None,
+                reserve_hint: None,
             },
         ))
         .expect("plan builds");
@@ -277,6 +328,9 @@ mod tests {
                 token_mint: WSOL_MINT,
                 amount,
                 borrower: TEST_BORROWER,
+                receiver_program_id: None,
+                receiver_payload: None,
+                reserve_hint: None,
             },
         ))
         .expect("plan response");
@@ -334,6 +388,7 @@ mod tests {
             &QuoteRequest {
                 token_mint: Pubkey::new_unique(),
                 amount: 1_000,
+                reserve_hint: None,
             },
         ))
         .expect("quote ok");

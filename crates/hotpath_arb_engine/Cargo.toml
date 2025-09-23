@@ -54,6 +54,7 @@ normalizer-runtime = { path = "../normalizer-runtime" }
 shared-core = { path = "../shared-core" }
 shared-protocol = { path = "../shared-protocol" }
 whirlpool-core = { path = "../whirlpool-core" }
+flash-loan-providers = { path = "../flash-loan-providers" }
 
 # LETHAL EXECUTION SYSTEM - Direct executor integration for instant trade execution
 executor-service = { path = "../executor-service" }
@@ -79,3 +80,7 @@ path = "src/main.rs"
 [lib]
 name = "hotpath_arb_engine"
 path = "src/lib.rs"
+
+[features]
+default = []
+experimental-hooks = []

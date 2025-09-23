@@ -1,6 +1,7 @@
 # Flash Loan Devnet Setup (Solend WSOL Host Fee)
 
-Created: 2025-09-22
+Created: 2025-09-22  
+Last updated: 2025-09-22
 
 This short guide explains, in plain language, how to prepare wrapped SOL (`WSOL`) accounts and configuration so the flash-loan plugins have somewhere to send their fees on Solana devnet. Think of it like setting up special piggy banks that each loan provider can pay into after every borrow.
 
@@ -81,28 +82,14 @@ Now the MEVana flash-loan plugin will direct all Solend host fees on devnet into
 - Full execution requires deploying a custom receiver program (Port’s program enforces this). Set `FLASH_LOAN_RECEIVER_PROGRAM_ID` to the deployed program id so the executor includes the hand-off instruction in the flash-loan plan.
 - Until the receiver is implemented on-chain, the instruction is a no-op placeholder—use it for discovery/testing and update the program once the CPI flow is ready.
 
-## Jet Protocol Provider (Env-Driven Setup)
+## Kamino Provider (Config-Driven Setup)
 
-Jet needs us to supply the reserve addresses through environment variables before it will register. Gather the latest devnet values from Jet’s docs or CLI and export them:
-
-```bash
-export JET_LENDING_MARKET=<pubkey>
-export JET_RESERVE=<pubkey>
-export JET_RESERVE_LIQUIDITY_SUPPLY=<pubkey>
-export JET_FEE_RECEIVER=<pubkey>
-# optional override if the PDA derivation is not what you expect
-# export JET_MARKET_AUTHORITY=<pubkey>
-export FLASH_LOAN_RECEIVER_PROGRAM_ID=<deployed_receiver_program>
-```
-
-Once these are set the Jet provider will register and return quotes. With `FLASH_LOAN_RECEIVER_PROGRAM_ID` defined, the executor also emits the receiver instruction so the on-chain program can perform the borrow/repay cycle when it is ready. Keep the values in your `.env` so the aggregator picks them up automatically.
-
-> **Note:** The sample values shipped in `.env` / `infrastructure/.env` are placeholders generated for local testing. Replace every Jet public key with the real devnet (or mainnet) addresses before running the stack.
+- Kamino loads its reserve metadata from `FLASH_LOAN_PROVIDERS_CONFIG`. Populate the `kamino` section with the reserve, liquidity vault, and fee receiver accounts you intend to borrow from (see `config/flash_loan_providers.sample.json`).
+- Provide the same JSON in both local and CI environments so quotes and plan assembly stay in sync. When you deploy the shared receiver program, set `FLASH_LOAN_RECEIVER_PROGRAM_ID` to that program id so Kamino plans automatically include the CPI hand-off instruction.
 
 ## Testing the Providers
 
-- Solend and Marginfi can both produce full borrow/repay plans in local tests (`cargo test -p flash-loan-providers`).
-- Port Finance and Jet currently emit quotes only; their tests verify env/config validation so we know when they are ready for the next implementation step.
-- When you are ready to ship full execution for those providers, follow `FLASH_LOAN_RECEIVER_PROGRAM.md` to build the shared CPI receiver program.
+- `cargo test -p flash-loan-providers` exercises Solend, Marginfi, Port, and Kamino adapters using the JSON overrides.
+- Port Finance and Kamino still rely on the shared receiver program; until that program is finalized the executor builds the plan but the on-chain logic is a stub. Follow `FLASH_LOAN_RECEIVER_PROGRAM.md` when you are ready to deploy the CPI handler.
 
 Remember: devnet is for practice. When you are ready to point at mainnet, replace the devnet WSOL account with a secure production wallet and remove any `solana airdrop` steps.

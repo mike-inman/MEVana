@@ -4,13 +4,14 @@ use log::{debug, info, warn};
 use serde::{Deserialize, Serialize};
 use solana_sdk::{
     hash::Hash,
-    instruction::Instruction,
+    instruction::{AccountMeta, Instruction},
     message::Message,
     pubkey::Pubkey,
     signature::{Keypair, Signer},
     transaction::Transaction,
 };
 use std::collections::HashMap;
+use std::convert::TryInto;
 use std::str::FromStr;
 use std::sync::Arc;
 use tokio::sync::RwLock;
@@ -22,6 +23,7 @@ use crate::metrics::MetricsServer;
 use crate::shyft_client::ShyftClient;
 use base64::engine::general_purpose::STANDARD as BASE64_STANDARD;
 use base64::Engine;
+use flash_loan_providers::PlanResponse;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ArbitrageBundle {
@@ -133,7 +135,7 @@ fn flash_loan_provider_to_u8(p: FlashLoanProvider) -> u8 {
         FlashLoanProvider::Tulip => 2,
         FlashLoanProvider::Mango => 3,
         FlashLoanProvider::PortFinance => 4,
-        FlashLoanProvider::JetProtocol => 5,
+        FlashLoanProvider::Kamino => 5,
     }
 }
 
@@ -231,6 +233,7 @@ impl BundleBuilder {
         &self,
         opportunity: &ArbitrageOpportunity,
         flash_loan_provider: Option<FlashLoanProvider>,
+        flash_loan_plan: Option<&PlanResponse>,
     ) -> Result<ArbitrageBundle> {
         info!(
             "Building arbitrage bundle for opportunity {}",
@@ -277,14 +280,42 @@ impl BundleBuilder {
         // Materialize dynamic instructions from template
         let dynamic_values = self.compute_dynamic_values(opportunity).await?;
         let all_instructions = self.instantiate_from_template(&template, &dynamic_values)?;
+        let instructions = if let Some(plan) = flash_loan_plan {
+            let mut combined: Vec<String> = Vec::new();
+
+            for ix in &plan.instructions.setup {
+                combined.push(Self::instruction_to_base64(ix));
+            }
+            for ix in &plan.instructions.borrow {
+                combined.push(Self::instruction_to_base64(ix));
+            }
+
+            let swap_slice = if all_instructions.len() > 1 {
+                &all_instructions[1..all_instructions.len().saturating_sub(1)]
+            } else {
+                &[][..]
+            };
+            combined.extend_from_slice(swap_slice);
+
+            for ix in &plan.instructions.repay {
+                combined.push(Self::instruction_to_base64(ix));
+            }
+            for ix in &plan.instructions.cleanup {
+                combined.push(Self::instruction_to_base64(ix));
+            }
+
+            combined
+        } else {
+            all_instructions
+        };
         if let Some(m) = &self.metrics {
-            m.record_instantiation(all_instructions.len(), 0);
+            m.record_instantiation(instructions.len(), 0);
         }
 
         // Build transactions (group instructions to fit in transaction limits)
-        let instructions_count = all_instructions.len();
+        let instructions_count = instructions.len();
         let transactions = self
-            .build_transactions(all_instructions, &recent_blockhash)
+            .build_transactions(instructions, &recent_blockhash)
             .await?;
 
         let bundle = ArbitrageBundle {
@@ -316,6 +347,10 @@ impl BundleBuilder {
             let mut ix_vec: Vec<Instruction> = Vec::new();
             for encoded in chunk {
                 if let Ok(raw) = BASE64_STANDARD.decode(encoded) {
+                    if let Some(decoded) = Self::decode_instruction_bytes(&raw) {
+                        ix_vec.push(decoded);
+                        continue;
+                    }
                     // Derive pseudo program id from first byte for now
                     let tag = raw.get(1).cloned().unwrap_or_default();
                     // Use fixed-length 12-byte labels to keep array sizing uniform
@@ -361,6 +396,78 @@ impl BundleBuilder {
 
         debug!("Estimated bundle fees: {} lamports", total_fees);
         Ok(total_fees)
+    }
+
+    fn instruction_to_base64(ix: &Instruction) -> String {
+        let mut bytes = Vec::new();
+        bytes.extend_from_slice(ix.program_id.as_ref());
+        bytes.extend_from_slice(&(ix.accounts.len() as u32).to_le_bytes());
+        for meta in &ix.accounts {
+            bytes.extend_from_slice(meta.pubkey.as_ref());
+            bytes.push(meta.is_signer as u8);
+            bytes.push(meta.is_writable as u8);
+        }
+        bytes.extend_from_slice(&(ix.data.len() as u32).to_le_bytes());
+        bytes.extend_from_slice(&ix.data);
+        BASE64_STANDARD.encode(bytes)
+    }
+
+    fn decode_instruction_bytes(bytes: &[u8]) -> Option<Instruction> {
+        if bytes.len() < 32 + 4 + 4 {
+            return None;
+        }
+        let mut offset = 0;
+        let program_id = {
+            let array: [u8; 32] = bytes[offset..offset + 32].try_into().ok()?;
+            offset += 32;
+            Pubkey::new_from_array(array)
+        };
+        let accounts_len = {
+            let array: [u8; 4] = bytes[offset..offset + 4].try_into().ok()?;
+            offset += 4;
+            u32::from_le_bytes(array)
+        } as usize;
+        let mut accounts = Vec::with_capacity(accounts_len);
+        for _ in 0..accounts_len {
+            if bytes.len() < offset + 34 {
+                return None;
+            }
+            let pubkey = {
+                let array: [u8; 32] = bytes[offset..offset + 32].try_into().ok()?;
+                offset += 32;
+                Pubkey::new_from_array(array)
+            };
+            let is_signer = *bytes.get(offset)? != 0;
+            offset += 1;
+            let is_writable = *bytes.get(offset)? != 0;
+            offset += 1;
+            accounts.push(AccountMeta {
+                pubkey,
+                is_signer,
+                is_writable,
+            });
+        }
+        if bytes.len() < offset + 4 {
+            return None;
+        }
+        let data_len = {
+            let array: [u8; 4] = bytes[offset..offset + 4].try_into().ok()?;
+            offset += 4;
+            u32::from_le_bytes(array) as usize
+        };
+        if bytes.len() < offset + data_len {
+            return None;
+        }
+        let data = bytes[offset..offset + data_len].to_vec();
+        offset += data_len;
+        if offset != bytes.len() {
+            return None;
+        }
+        Some(Instruction {
+            program_id,
+            accounts,
+            data,
+        })
     }
 
     /// Simulate bundle execution before submission (RPC based)
@@ -631,7 +738,7 @@ impl BundleBuilder {
                 FlashLoanProvider::Tulip => "tulip",
                 FlashLoanProvider::Mango => "mango",
                 FlashLoanProvider::PortFinance => "portfinance",
-                FlashLoanProvider::JetProtocol => "jetprotocol",
+                FlashLoanProvider::Kamino => "kamino",
             };
             if let Some(mints) = reg.data.flash_loans.get(prov_key) {
                 if let Some((_, accs)) = mints.iter().next() {
@@ -749,41 +856,38 @@ impl BundleBuilder {
             is_writable: false,
         });
         if let Some(reg) = self.account_registry.as_ref() {
-            match venue {
-                VenueProgram::RaydiumClmm => {
-                    if !reg.data.clmm_pools.is_empty() {
-                        let idx = venue_index % reg.data.clmm_pools.len();
-                        if let Some(pool) = reg.data.clmm_pools.values().nth(idx) {
+            if let VenueProgram::RaydiumClmm = venue {
+                if !reg.data.clmm_pools.is_empty() {
+                    let idx = venue_index % reg.data.clmm_pools.len();
+                    if let Some(pool) = reg.data.clmm_pools.values().nth(idx) {
+                        metas.push(AccountMetaLite {
+                            pubkey: pool.pool.clone(),
+                            is_signer: false,
+                            is_writable: true,
+                        });
+                        metas.push(AccountMetaLite {
+                            pubkey: pool.token_a_vault.clone(),
+                            is_signer: false,
+                            is_writable: true,
+                        });
+                        metas.push(AccountMetaLite {
+                            pubkey: pool.token_b_vault.clone(),
+                            is_signer: false,
+                            is_writable: true,
+                        });
+                        if let Some(first_tick) = pool.tick_arrays.first() {
                             metas.push(AccountMetaLite {
-                                pubkey: pool.pool.clone(),
+                                pubkey: first_tick.clone(),
                                 is_signer: false,
-                                is_writable: true,
+                                is_writable: false,
                             });
-                            metas.push(AccountMetaLite {
-                                pubkey: pool.token_a_vault.clone(),
-                                is_signer: false,
-                                is_writable: true,
-                            });
-                            metas.push(AccountMetaLite {
-                                pubkey: pool.token_b_vault.clone(),
-                                is_signer: false,
-                                is_writable: true,
-                            });
-                            if let Some(first_tick) = pool.tick_arrays.first() {
-                                metas.push(AccountMetaLite {
-                                    pubkey: first_tick.clone(),
-                                    is_signer: false,
-                                    is_writable: false,
-                                });
-                            }
-                            if let Some(m) = &self.metrics {
-                                m.record_account_meta_resolution(metas.len(), 0);
-                            }
-                            return metas;
                         }
+                        if let Some(m) = &self.metrics {
+                            m.record_account_meta_resolution(metas.len(), 0);
+                        }
+                        return metas;
                     }
                 }
-                _ => {}
             }
         }
         // Fallback placeholders

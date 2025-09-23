@@ -34,6 +34,7 @@ fn gen_cert(
 }
 
 #[tokio::test]
+#[allow(clippy::useless_conversion)]
 async fn mtls_handshake_logs_client_cn() {
     // Generate CA, server, client
     let (ca_cert, ca_key) = gen_ca();

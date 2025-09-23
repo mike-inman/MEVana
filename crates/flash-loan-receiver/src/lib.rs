@@ -33,15 +33,20 @@ pub struct ExecuteFlashLoanPayload {
     pub amount: u64,
     /// Token mint for the loan (WSOL for current providers).
     pub token_mint: Pubkey,
+    /// Arbitrary payload forwarded to the downstream receiver program.
+    pub payload: Vec<u8>,
 }
 
 impl ExecuteFlashLoanPayload {
     pub fn pack(&self) -> Vec<u8> {
-        let mut data = Vec::with_capacity(1 + self.provider_id.len() + 8 + 32);
+        let mut data =
+            Vec::with_capacity(1 + self.provider_id.len() + 8 + 32 + 4 + self.payload.len());
         data.push(self.provider_id.len() as u8);
         data.extend_from_slice(self.provider_id.as_bytes());
         data.extend_from_slice(&self.amount.to_le_bytes());
         data.extend_from_slice(self.token_mint.as_ref());
+        data.extend_from_slice(&(self.payload.len() as u32).to_le_bytes());
+        data.extend_from_slice(&self.payload);
         data
     }
 
@@ -50,7 +55,7 @@ impl ExecuteFlashLoanPayload {
             return Err(FlashLoanReceiverError::Serialization);
         }
         let len = data[0] as usize;
-        if data.len() < 1 + len + 8 + 32 {
+        if data.len() < 1 + len + 8 + 32 + 4 {
             return Err(FlashLoanReceiverError::Serialization);
         }
         let mut provider = String::<32>::new();
@@ -67,10 +72,19 @@ impl ExecuteFlashLoanPayload {
         let mut mint_bytes = [0u8; 32];
         mint_bytes.copy_from_slice(&data[amount_offset + 8..amount_offset + 8 + 32]);
         let token_mint = Pubkey::new_from_array(mint_bytes);
+        let payload_offset = amount_offset + 8 + 32;
+        let mut payload_len_bytes = [0u8; 4];
+        payload_len_bytes.copy_from_slice(&data[payload_offset..payload_offset + 4]);
+        let payload_len = u32::from_le_bytes(payload_len_bytes) as usize;
+        if data.len() < payload_offset + 4 + payload_len {
+            return Err(FlashLoanReceiverError::Serialization);
+        }
+        let payload = data[payload_offset + 4..payload_offset + 4 + payload_len].to_vec();
         Ok(Self {
             provider_id: provider,
             amount,
             token_mint,
+            payload,
         })
     }
 }
@@ -98,6 +112,7 @@ pub fn build_execute_flash_loan_ix(
     token_mint: Pubkey,
     amount: u64,
     mut extra_accounts: Vec<AccountMeta>,
+    receiver_payload: Vec<u8>,
 ) -> Result<Instruction, FlashLoanReceiverError> {
     if provider_id.len() > 32 {
         return Err(FlashLoanReceiverError::ProviderIdTooLong);
@@ -112,6 +127,7 @@ pub fn build_execute_flash_loan_ix(
         provider_id: provider,
         amount,
         token_mint,
+        payload: receiver_payload,
     };
 
     let mut accounts = Vec::with_capacity(1 + extra_accounts.len());
@@ -162,6 +178,7 @@ mod tests {
             mint,
             42,
             Vec::new(),
+            vec![1, 2, 3],
         )
         .expect("instruction built");
         assert_eq!(ix.program_id, program_id);
@@ -170,6 +187,7 @@ mod tests {
         assert_eq!(decoded.provider_id.as_str(), "jetprotocol");
         assert_eq!(decoded.amount, 42);
         assert_eq!(decoded.token_mint, mint);
+        assert_eq!(decoded.payload, vec![1, 2, 3]);
     }
 
     #[test]

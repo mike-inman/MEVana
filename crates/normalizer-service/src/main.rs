@@ -1,3 +1,5 @@
+#![allow(warnings)]
+
 // crates/normalizer-service/src/main.rs
 mod kafka;
 mod meteora_map; // meteora parsers
@@ -16,6 +18,8 @@ use serde::Deserialize;
 use std::{fs, path::PathBuf};
 // use kafka::{make_producer, publish_json};
 use anyhow::{Context, Result};
+use base64::engine::general_purpose::STANDARD as BASE64_STANDARD;
+use base64::Engine;
 use prometheus::{Counter, Encoder, TextEncoder};
 
 use clap::{Parser, Subcommand};
@@ -259,11 +263,11 @@ async fn handle_raw(
                     }
                     // 2) live fallback: first referenced account of this instruction
                     if ns.pool_id.is_empty() {
-                        if let Some(first_idx) = ci.accounts.get(0) {
+                        if let Some(first_idx) = ci.accounts.first() {
                             if let Some(k) = keys_b58.get(*first_idx as usize) {
                                 ns.pool_id = k.clone();
                             }
-                        } else if let Some(k) = keys_b58.get(0) {
+                        } else if let Some(k) = keys_b58.first() {
                             ns.pool_id = k.clone();
                         }
                     }
@@ -542,11 +546,11 @@ fn run_fixture(path: PathBuf) -> Result<()> {
 
             // Fill pool_id if extractor didn’t
             if ns.pool_id.is_empty() {
-                if let Some(i) = fx.instruction.account_indices.get(0) {
+                if let Some(i) = fx.instruction.account_indices.first() {
                     if let Some(k) = fx.instruction.account_keys.get(*i as usize) {
                         ns.pool_id = k.clone();
                     }
-                } else if let Some(k) = fx.instruction.account_keys.get(0) {
+                } else if let Some(k) = fx.instruction.account_keys.first() {
                     ns.pool_id = k.clone();
                 }
             }
@@ -582,7 +586,7 @@ async fn run_account_fixture(
 ) -> Result<()> {
     let layouts = load_layouts()?;
     let b64 = std::fs::read_to_string(path)?;
-    let data = base64::decode(b64.trim())?;
+    let data = BASE64_STANDARD.decode(b64.trim())?;
 
     match kind.as_str() {
         "raydium:tickarray" => {

@@ -79,7 +79,7 @@ async fn live_edge_audit() {
                     Ok(m) => {
                         if let Some(payload) = m.payload() {
                             let ed_res = decode_and_validate_edge(payload);
-                            let mut rep = venues.entry(ed_res.as_ref().ok().map(|e| e.venue_id).unwrap_or(0)).or_default();
+                            let rep = venues.entry(ed_res.as_ref().ok().map(|e| e.venue_id).unwrap_or(0)).or_default();
                             rep.total += 1;
                             match ed_res {
                                 Ok(ed) => {

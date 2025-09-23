@@ -52,6 +52,7 @@ shared-protocol = { path = "../shared-protocol" }
 # High-performance collections
 dashmap = "5.5"
 ahash = "0.8"
+flash-loan-providers = { path = "../flash-loan-providers" }
 
 # Cryptography and encoding
 bs58 = "0.5"

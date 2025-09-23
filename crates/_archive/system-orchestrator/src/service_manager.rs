@@ -1,5 +1,4 @@
 use anyhow::{Context, Result};
-use chrono;
 use log::{debug, error, info, warn};
 use std::collections::HashMap;
 use std::process::Stdio;
@@ -16,6 +15,7 @@ use crate::health_checker::{HealthChecker, HealthStatus};
 
 #[derive(Debug, Clone)]
 pub struct ServiceInstance {
+    #[allow(dead_code)]
     pub id: Uuid,
     pub config: ServiceConfig,
     pub status: ServiceStatus,
@@ -76,6 +76,7 @@ impl ServiceManager {
         self.start_service_with_options(service_name, false).await
     }
 
+    #[allow(dead_code)]
     pub async fn start_service_without_delay(&self, service_name: &str) -> Result<()> {
         self.start_service_with_options(service_name, true).await
     }
@@ -357,7 +358,7 @@ impl ServiceManager {
                         // Log the crash to central error log
                         self.log_service_crash(
                             &service_name,
-                            &format!("Service process terminated unexpectedly"),
+                            "Service process terminated unexpectedly",
                         )
                         .await;
 
@@ -383,11 +384,6 @@ impl ServiceManager {
 
     pub async fn shutdown_all_services(&self) -> Result<()> {
         info!("🛑 Shutting down all services...");
-
-        let service_names: Vec<String> = {
-            let services = self.services.read().await;
-            services.keys().cloned().collect()
-        };
 
         // Stop services in reverse tier order (monitoring -> hotpath -> supporting -> core -> infrastructure)
         let mut services_by_tier: Vec<_> = {
@@ -435,5 +431,11 @@ impl ServiceManager {
 
         // Also log to console
         warn!("⚠️ SERVICE CRASH: {} - {}", service_name, error_msg);
+    }
+}
+
+impl Default for ServiceManager {
+    fn default() -> Self {
+        Self::new()
     }
 }

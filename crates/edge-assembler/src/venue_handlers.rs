@@ -1,3 +1,5 @@
+#![allow(dead_code)]
+
 use std::hash::Hash;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]

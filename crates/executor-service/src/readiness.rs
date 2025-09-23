@@ -11,6 +11,7 @@ pub fn set_ready() {
     log::info!("readiness_state changed=ready");
 }
 
+#[allow(dead_code)]
 pub fn is_ready() -> bool {
     readiness_flag().load(Ordering::SeqCst)
 }

@@ -254,10 +254,8 @@ impl KafkaDbWriter {
                             error!("❌ Failed to commit transaction: {}", e);
                         }
                     }
-                } else {
-                    if let Err(e) = tx.rollback().await {
-                        error!("❌ Failed to rollback transaction: {}", e);
-                    }
+                } else if let Err(e) = tx.rollback().await {
+                    error!("❌ Failed to rollback transaction: {}", e);
                 }
             }
             Err(e) => {
@@ -290,7 +288,7 @@ impl KafkaDbWriter {
         .bind(opportunity.slot as i64)
         .bind(&opportunity.venue_a)
         .bind(&opportunity.venue_b)
-        .bind(&format!("{}/{}", opportunity.token_a, opportunity.token_b))
+        .bind(format!("{}/{}", opportunity.token_a, opportunity.token_b))
         .bind(opportunity.profit_bps)
         .bind(0.0) // amount_in - not available in producer struct
         .bind(0.0) // expected_amount_out - not available in producer struct  

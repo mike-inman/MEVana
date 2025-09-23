@@ -1,17 +1,18 @@
 # Flash Loan Receiver Program Outline
 
-Created: 2025-09-22
+Created: 2025-09-22  
+Last updated: 2025-09-22
 
-Port Finance and Jet Protocol both require a lightweight “flash loan receiver” program. The lender insists that every flash-loan bundle invoke an on-chain contract owned by you; that program performs the borrow, executes your trading logic, and then sends the borrowed funds plus fee back to the reserve in one transaction. This note explains the required accounts and the project structure so the dev team can implement it quickly.
+Several lenders (Port Finance today, Kamino soon) require a lightweight “flash loan receiver” program. The lender insists that every flash-loan bundle invoke an on-chain contract owned by you; that program performs the borrow, executes your trading logic, and then sends the borrowed funds plus fee back to the reserve in one transaction. This note explains the required accounts and the project structure so the dev team can implement it quickly.
 
 ## Why We Need It
 
-- **Solend and Marginfi** already expose CPI hooks that accept direct borrowers; our executor can build the borrow/repay instructions directly.
-- **Port Finance and Jet** check that the borrower is a program they know how to call (a receiver). Until we deploy that program, any attempt to build a plan will end with “receiver program required”.
+- **Solend (Save) and Marginfi** already expose CPI hooks that accept direct borrowers; our executor can build the borrow/repay instructions directly.
+- **Port Finance (and Kamino when enabled)** check that the borrower is a program they know how to call (a receiver). Until we deploy that program, any attempt to build a plan will end with “receiver program required”.
 
 ## High-Level Design
 
-1. **Program Language**: Anchor is the fastest path (Jet already exposes Anchor-compatible interfaces), but a plain solana-program crate works too. Keep it minimal.
+1. **Program Language**: Anchor is the fastest path (Port’s examples translate cleanly), but a plain solana-program crate works too. Keep it minimal.
 2. **Entrypoint Flow**
    - Instruction `execute_flash_loan` receives the flash-loan configuration, the trading payload (e.g. serialized arbitrage plan), and any extra accounts.
    - Inside, invoke the lender’s borrow instruction via CPI.
@@ -19,7 +20,7 @@ Port Finance and Jet Protocol both require a lightweight “flash loan receiver�
    - Invoke the lender’s repay instruction, making sure the fee account has the required lamports.
    - Emit events/logging for observability.
 3. **Account Validation**
-   - Verify the WSOL token accounts match the reserve metadata (the same accounts we place in `JET_RESERVE`, `JET_RESERVE_LIQUIDITY_SUPPLY`, etc.).
+   - Verify the WSOL token accounts match the reserve metadata (the same accounts we place in `PORT_RESERVE`, `PORT_RESERVE_LIQUIDITY_SUPPLY`, etc.).
    - Check the authority signer matches the executor wallet (~`id.json` in devnet).
 4. **Safety Switches**
    - Add a configuration account with flags like `enabled`, `max_amount`, `allowed_providers` so we can kill the program quickly if needed.
@@ -29,7 +30,7 @@ Port Finance and Jet Protocol both require a lightweight “flash loan receiver�
 
 This repository already ships with a starter crate at `crates/flash-loan-receiver/` that contains:
 
-- `build_execute_flash_loan_ix` – client helper used by the Port/Jet providers.
+- `build_execute_flash_loan_ix` – client helper used by the Port/Kamino providers.
 - `process_instruction` – a minimal on-chain entrypoint that simply logs the payload today. Extend this function with the real borrow/trade/repay logic.
 
 You can keep the code in that crate or split it into a dedicated `programs/` directory later—just remember to update `FLASH_LOAN_RECEIVER_PROGRAM_ID` when you redeploy.
@@ -37,7 +38,7 @@ You can keep the code in that crate or split it into a dedicated `programs/` dir
 ## Devnet Testing Checklist
 
 1. Deploy the program ID and note it in `.env` (e.g. `FLASH_LOAN_RECEIVER_PROGRAM_ID`).
-2. Update the Port/Jet providers to insert the receiver program when building the plan.
+2. Update the Port/Kamino providers to insert the receiver program when building the plan.
 3. Spin up `solana-program-test` integration tests that:
    - Fund mock reserves with WSOL.
    - Execute `execute_flash_loan` with a dummy trading CPI (e.g. transfer lamports back and forth).
@@ -48,7 +49,7 @@ You can keep the code in that crate or split it into a dedicated `programs/` dir
 
 1. Build & deploy the receiver program (`anchor deploy` or `cargo build-bpf` + `solana program deploy`).
 2. Export the new program ID and any configuration accounts into `.env`.
-3. Modify the Port Finance and Jet provider implementations to call the receiver program instead of returning “not supported”.
+3. Modify the Port Finance (and future Kamino) provider implementations to call the receiver program instead of returning “not supported”.
 4. Re-run `cargo test -p flash-loan-providers` and executor integration tests.
 5. Perform a full devnet end-to-end run, confirm metrics in Grafana, then schedule the mainnet deployment plan.
 
@@ -70,6 +71,6 @@ solana program deploy target/deploy/flash_loan_receiver.so \
 export FLASH_LOAN_RECEIVER_PROGRAM_ID=<program_id_printed_by_deploy>
 ```
 
-The repository currently uses the placeholder program id `26hsTvfGVS5yxfgYM7htEgrsCKdvMVtWSjHnyk277hCg` so tests can run. Replace it with the id printed by `solana program deploy` once your real receiver is uploaded.
+-The repository currently uses the placeholder program id `26hsTvfGVS5yxfgYM7htEgrsCKdvMVtWSjHnyk277hCg` so tests can run. Replace it with the id printed by `solana program deploy` once your real receiver is uploaded.
 
-With this outline in place we can implement the shared receiver program next. Once that lands, both Port Finance and Jet will graduate from “quote-only” to “full flash-loan execution”.
+With this outline in place we can implement the shared receiver program next. Once that lands, Port Finance (and future providers such as Kamino) can graduate from “quote-only” to “full flash-loan execution”.

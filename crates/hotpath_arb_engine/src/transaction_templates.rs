@@ -1,3 +1,5 @@
+#![allow(warnings)]
+
 use anyhow::Result;
 use log::{info, warn};
 use serde::{Deserialize, Serialize};
@@ -11,8 +13,7 @@ use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::RwLock;
 
-use crate::flash_loan_integration::{FlashLoanProvider, FlashLoanQuote};
-use crate::marginfi_instructions::create_marginfi_flash_loan_instruction;
+use crate::flash_loan_integration::FlashLoanProvider;
 
 /// Jupiter program ID and instruction discriminators
 const JUPITER_PROGRAM_ID: &str = "JUP6LkbZbjS1jKKwapdHNy74zcZ3tLUZoi5QNyVTaV4";
@@ -343,9 +344,9 @@ impl TransactionTemplateCache {
     /// Hydrate individual instruction template with actual values
     async fn hydrate_instruction_template(
         &self,
-        template: &[u8],
-        amount: u64,
-        accounts: &HashMap<String, Pubkey>,
+        _template: &[u8],
+        _amount: u64,
+        _accounts: &HashMap<String, Pubkey>,
         signer: &Keypair,
     ) -> Result<Transaction> {
         // This would:
@@ -360,7 +361,7 @@ impl TransactionTemplateCache {
             data: vec![],
         };
 
-        let mut transaction = Transaction::new_unsigned(solana_sdk::message::Message::new(
+        let transaction = Transaction::new_unsigned(solana_sdk::message::Message::new(
             &[instruction],
             Some(&signer.pubkey()),
         ));
@@ -539,6 +540,12 @@ impl TransactionTemplateCache {
             template.len()
         );
         Ok(template)
+    }
+}
+
+impl Default for TransactionTemplateCache {
+    fn default() -> Self {
+        Self::new()
     }
 }
 

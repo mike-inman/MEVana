@@ -166,11 +166,13 @@ impl RetryExecutor {
     }
 
     fn create_backoff(&self) -> ExponentialBackoff {
-        let mut backoff = ExponentialBackoff::default();
-        backoff.initial_interval = self.policy.initial_interval;
-        backoff.max_interval = self.policy.max_interval;
-        backoff.multiplier = self.policy.exponential_base;
-        backoff.max_elapsed_time = self.policy.max_elapsed_time;
+        let mut backoff = ExponentialBackoff {
+            initial_interval: self.policy.initial_interval,
+            max_interval: self.policy.max_interval,
+            multiplier: self.policy.exponential_base,
+            max_elapsed_time: self.policy.max_elapsed_time,
+            ..Default::default()
+        };
 
         if !self.policy.jitter {
             backoff.randomization_factor = 0.0;

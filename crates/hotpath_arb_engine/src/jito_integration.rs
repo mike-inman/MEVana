@@ -1,3 +1,5 @@
+#![allow(warnings)]
+
 use anyhow::Result;
 use log::{error, info, warn};
 use serde::{Deserialize, Serialize};

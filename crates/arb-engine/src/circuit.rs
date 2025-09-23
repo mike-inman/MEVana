@@ -114,7 +114,7 @@ pub fn circuit_on_message_with_config(msg_error: bool, now_ns: u64, cfg: &Circui
                 }
             }
         }
-    } else if eval_mod > 0 && total % eval_mod == 0 && total >= min_msgs {
+    } else if eval_mod > 0 && total.is_multiple_of(eval_mod) && total >= min_msgs {
         let dec_err = EDGE_DECODE_ERRORS.load(Ao::Relaxed);
         let proc_err = EDGE_PROCESS_ERRORS.load(Ao::Relaxed);
         let err_ratio = (dec_err + proc_err) as f64 / total as f64;

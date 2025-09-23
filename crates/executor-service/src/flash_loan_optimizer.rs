@@ -2,13 +2,12 @@
 //! Advanced flash loan optimization and aggregation for MEV arbitrage
 
 use anyhow::Result;
-use log::{debug, error, info, warn};
+use log::{debug, info};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 use tokio::sync::RwLock;
-use tokio::time::sleep;
 
 use crate::config::ExecutorConfig;
 use crate::execution_engine::ArbitrageOpportunity;
@@ -67,6 +66,7 @@ impl Default for FlashLoanOptimizationParams {
     }
 }
 
+#[allow(dead_code)]
 pub struct FlashLoanOptimizer {
     config: Arc<ExecutorConfig>,
     shyft_client: Arc<ShyftClient>,
@@ -80,6 +80,7 @@ pub struct FlashLoanOptimizer {
 }
 
 #[derive(Debug, Clone)]
+#[allow(dead_code)]
 struct ProviderStats {
     success_rate: f64,
     average_execution_time_ms: f64,
@@ -89,6 +90,7 @@ struct ProviderStats {
 }
 
 #[derive(Debug, Clone)]
+#[allow(dead_code)]
 struct LiquidityInfo {
     available_amount: u64,
     last_checked: Instant,
@@ -171,62 +173,20 @@ impl FlashLoanOptimizer {
         amount: u64,
         token_mint: &str,
     ) -> Result<Vec<FlashLoanQuote>> {
-        let mut all_quotes = Vec::new();
+        let quotes = self
+            .base_aggregator
+            .get_all_quotes(token_mint, amount)
+            .await;
 
-        // Query all known providers in parallel
-        let providers = [
-            FlashLoanProvider::Solend,
-            FlashLoanProvider::Marginfi,
-            FlashLoanProvider::Tulip,
-            FlashLoanProvider::Mango,
-            FlashLoanProvider::PortFinance,
-            FlashLoanProvider::JetProtocol,
-        ];
+        info!("📊 Gathered {} flash loan quotes", quotes.len());
 
-        let mut futures = Vec::new();
-
-        for provider in providers {
-            let aggregator = Arc::clone(&self.base_aggregator);
-            let token = token_mint.to_string();
-
-            let future = async move {
-                // Note: Using get_all_quotes for now as individual provider quotes not exposed
-                // This is a design limitation that should be addressed in future iterations
-                let all_quotes = aggregator.get_all_quotes(&token, amount).await;
-                let provider_quote = all_quotes.into_iter().find(|q| q.provider == provider);
-                match provider_quote {
-                    Some(quote) => Some(quote),
-                    None => {
-                        debug!("Provider {:?} unavailable or no quotes", provider);
-                        None
-                    }
-                }
-            };
-
-            futures.push(future);
-        }
-
-        // Execute all queries concurrently
-        let results = futures_util::future::join_all(futures).await;
-
-        for result in results {
-            if let Some(quote) = result {
-                all_quotes.push(quote);
-            }
-        }
-
-        info!(
-            "📊 Gathered {} flash loan quotes from providers",
-            all_quotes.len()
-        );
-
-        Ok(all_quotes)
+        Ok(quotes)
     }
 
     async fn enhance_quotes_with_optimization_data(
         &self,
         raw_quotes: &[FlashLoanQuote],
-        opportunity: &ArbitrageOpportunity,
+        _opportunity: &ArbitrageOpportunity,
     ) -> Result<Vec<OptimizedFlashLoanQuote>> {
         let mut enhanced_quotes = Vec::new();
         let provider_stats = self.provider_performance_history.read().await;
@@ -246,12 +206,11 @@ impl FlashLoanOptimizer {
 
             // Calculate total cost including gas estimates
             let estimated_gas_cost = self.estimate_gas_cost_for_provider(quote.provider).await;
-            let fee_lamports =
-                (quote.available_amount as u128 * quote.fee_bps as u128 / 10000) as u64;
+            let fee_lamports = quote.fee_lamports;
             let total_cost = fee_lamports + estimated_gas_cost;
 
             // Determine risk level
-            let risk_level = self.assess_risk_level(&quote, &stats);
+            let risk_level = self.assess_risk_level(quote, &stats);
 
             // Calculate liquidity depth score
             let liquidity_score = self.calculate_liquidity_score(quote).await;
@@ -329,10 +288,7 @@ impl FlashLoanOptimizer {
         // For high-profit opportunities, prefer reliability over cost
         if opportunity.profit_bps > 100 {
             // Find the most reliable option
-            if let Some(reliable_quote) = ranked_quotes
-                .iter()
-                .filter(|q| q.reliability_score > 0.95)
-                .next()
+            if let Some(reliable_quote) = ranked_quotes.iter().find(|q| q.reliability_score > 0.95)
             {
                 return Ok(reliable_quote.clone());
             }
@@ -342,8 +298,7 @@ impl FlashLoanOptimizer {
         if opportunity.max_edge_age_ms < 1000 {
             if let Some(fast_quote) = ranked_quotes
                 .iter()
-                .filter(|q| q.execution_time_estimate_ms < 150)
-                .next()
+                .find(|q| q.execution_time_estimate_ms < 150)
             {
                 return Ok(fast_quote.clone());
             }
@@ -361,7 +316,7 @@ impl FlashLoanOptimizer {
             FlashLoanProvider::Tulip => 20_000,
             FlashLoanProvider::Mango => 25_000,
             FlashLoanProvider::PortFinance => 17_000,
-            FlashLoanProvider::JetProtocol => 16_000,
+            FlashLoanProvider::Kamino => 14_000,
         }
     }
 
@@ -451,8 +406,8 @@ impl FlashLoanOptimizer {
     /// Start background tasks for cache warming and rate monitoring
     pub fn start_background_optimization_tasks(&self) {
         // Liquidity monitoring task
-        let liquidity_cache = Arc::clone(&self.liquidity_cache);
-        let aggregator = Arc::clone(&self.base_aggregator);
+        let _liquidity_cache = Arc::clone(&self.liquidity_cache);
+        let _aggregator = Arc::clone(&self.base_aggregator);
         tokio::spawn(async move {
             let mut interval = tokio::time::interval(Duration::from_secs(30));
             loop {
@@ -464,8 +419,8 @@ impl FlashLoanOptimizer {
         });
 
         // Rate monitoring task
-        let rate_cache = Arc::clone(&self.rate_cache);
-        let aggregator_clone = Arc::clone(&self.base_aggregator);
+        let _rate_cache = Arc::clone(&self.rate_cache);
+        let _aggregator_clone = Arc::clone(&self.base_aggregator);
         tokio::spawn(async move {
             let mut interval = tokio::time::interval(Duration::from_secs(10));
             loop {

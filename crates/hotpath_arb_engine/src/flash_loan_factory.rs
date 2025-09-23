@@ -1,8 +1,8 @@
 use anyhow::Result;
 use std::sync::Arc;
 
+use crate::flash_loan_integration::{FlashLoanProvider, FlashLoanQuote, HotpathFlashLoanManager};
 use crate::live_trading_config::LiveTradingConfig;
-use crate::flash_loan_integration::{HotpathFlashLoanManager, FlashLoanProvider, FlashLoanQuote};
 
 // Import the full system when available
 // use executor_service::flash_loan::{FlashLoanAggregator, FlashLoanProvider as FullFlashLoanProvider};
@@ -23,9 +23,9 @@ impl FlashLoanFactory {
             "streamlined" => {
                 info!("🚀 Initializing STREAMLINED flash loan system");
                 info!("   - Ultra-fast in-memory simulation");
-                info!("   - Zero network calls for quotes");  
+                info!("   - Zero network calls for quotes");
                 info!("   - Perfect for development and testing");
-                
+
                 let manager = Arc::new(HotpathFlashLoanManager::new(config.clone()));
                 Ok(FlashLoanSystem::Streamlined(manager))
             }
@@ -37,10 +37,10 @@ impl FlashLoanFactory {
                 warn!("   - Would make live RPC calls for quotes");
                 warn!("   - Would optimize across multiple providers");
                 warn!("   - Falling back to streamlined mode...");
-                
+
                 let manager = Arc::new(HotpathFlashLoanManager::new(config.clone()));
                 Ok(FlashLoanSystem::Streamlined(manager))
-                
+
                 // TODO: When ready for production, replace with:
                 // info!("🏭 Initializing FULL flash loan system");
                 // let aggregator = Arc::new(FlashLoanAggregator::new(executor_config, shyft_client)?);
@@ -48,7 +48,10 @@ impl FlashLoanFactory {
                 // Ok(FlashLoanSystem::Full(aggregator, optimizer))
             }
             mode => {
-                warn!("❌ Unknown flash loan mode: '{}', defaulting to streamlined", mode);
+                warn!(
+                    "❌ Unknown flash loan mode: '{}'\n   - Defaulting to streamlined",
+                    mode
+                );
                 let manager = Arc::new(HotpathFlashLoanManager::new(config.clone()));
                 Ok(FlashLoanSystem::Streamlined(manager))
             }
@@ -73,7 +76,7 @@ impl FlashLoanSystem {
             // }
         }
     }
-    
+
     /// Record flash loan execution result
     pub async fn record_flash_loan_result(&self, provider: FlashLoanProvider, success: bool) {
         match self {
@@ -86,13 +89,11 @@ impl FlashLoanSystem {
             // }
         }
     }
-    
+
     /// Get flash loan statistics
     pub async fn get_stats(&self) -> String {
         match self {
-            FlashLoanSystem::Streamlined(manager) => {
-                manager.get_stats().await
-            }
+            FlashLoanSystem::Streamlined(manager) => manager.get_stats().await,
             // FlashLoanSystem::Full(aggregator, optimizer) => {
             //     // Would return comprehensive full system stats
             //     todo!("Implement full system stats")
@@ -102,6 +103,6 @@ impl FlashLoanSystem {
 }
 
 // Re-export for convenience
-pub use crate::flash_loan_integration::{FlashLoanProvider, FlashLoanQuote, FlashLoanBundle};
+pub use crate::flash_loan_integration::{FlashLoanBundle, FlashLoanProvider, FlashLoanQuote};
 
 use log::{info, warn};

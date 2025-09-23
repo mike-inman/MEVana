@@ -1,3 +1,4 @@
+use crate::config::providers_config;
 use crate::plugin::{
     Environment, FlashLoanProvider, PlanInstructions, PlanRequest, PlanResponse, ProviderId,
     QuoteRequest, QuoteResponse,
@@ -76,14 +77,26 @@ impl FlashLoanProvider for MarginfiProvider {
             return Ok(None);
         }
 
-        let capped_amount = request.amount.min(MAX_LOAN_LAMPORTS);
-        let fee_lamports = calculate_flash_loan_fee(capped_amount);
+        let cfg = providers_config();
+        let reserve_cfg = cfg.marginfi.reserves.get(&request.token_mint.to_string());
+        let capped_amount = request.amount.min(
+            reserve_cfg
+                .and_then(|c| c.available_amount)
+                .unwrap_or(MAX_LOAN_LAMPORTS),
+        );
+        if capped_amount == 0 {
+            return Ok(None);
+        }
+        let fee_bps = reserve_cfg.and_then(|c| c.fee_bps).unwrap_or(5);
+        let fee_lamports = reserve_cfg
+            .and_then(|c| c.fee_lamports)
+            .unwrap_or_else(|| calculate_flash_loan_fee(capped_amount));
 
         Ok(Some(QuoteResponse {
             provider: PROVIDER_ID,
             token_mint: request.token_mint,
             available_amount: capped_amount,
-            fee_bps: 5,
+            fee_bps,
             fee_lamports,
             estimated_latency_ms: 120,
             confidence: 0.85,
@@ -99,10 +112,26 @@ impl FlashLoanProvider for MarginfiProvider {
             bail!("Unsupported token for Marginfi flash loan");
         }
 
-        let capped_amount = request.amount.min(MAX_LOAN_LAMPORTS);
+        let cfg = providers_config();
+        let reserve_cfg = cfg.marginfi.reserves.get(&request.token_mint.to_string());
+        let capped_amount = request.amount.min(
+            reserve_cfg
+                .and_then(|c| c.available_amount)
+                .unwrap_or(MAX_LOAN_LAMPORTS),
+        );
         validate_flash_loan_preconditions(capped_amount, MAX_LOAN_LAMPORTS)?;
 
-        let fee = calculate_flash_loan_fee(capped_amount);
+        let fee = reserve_cfg
+            .and_then(|c| c.fee_lamports)
+            .unwrap_or_else(|| calculate_flash_loan_fee(capped_amount));
+
+        let program_id = cfg
+            .marginfi
+            .program_id
+            .as_ref()
+            .and_then(|pid| pid.parse().ok())
+            .unwrap_or(MARGINFI_PROGRAM_ID);
+
         let borrow_ix = create_flash_loan_instruction(&request.borrower, capped_amount)?;
         let repay_ix = create_flash_loan_repay_instruction(&request.borrower, capped_amount + fee)?;
 
@@ -110,12 +139,23 @@ impl FlashLoanProvider for MarginfiProvider {
         instructions.borrow.push(borrow_ix);
         instructions.repay.push(repay_ix);
 
-        Ok(PlanResponse {
+        let mut response = PlanResponse {
             provider: PROVIDER_ID,
             amount: capped_amount,
             fee_lamports: fee,
             instructions,
-        })
+        };
+
+        if program_id != MARGINFI_PROGRAM_ID {
+            // Update program id in instructions if override provided
+            for ix in &mut response.instructions.borrow {
+                ix.program_id = program_id;
+            }
+            for ix in &mut response.instructions.repay {
+                ix.program_id = program_id;
+            }
+        }
+        Ok(response)
     }
 }
 
@@ -136,6 +176,7 @@ mod tests {
                 &QuoteRequest {
                     token_mint: SUPPORTED_SOL_MINT,
                     amount: 20_000_000_000,
+                    reserve_hint: None,
                 },
             )
             .await
@@ -153,6 +194,9 @@ mod tests {
                     token_mint: SUPPORTED_SOL_MINT,
                     amount: 10_000_000_000,
                     borrower,
+                    receiver_program_id: None,
+                    receiver_payload: None,
+                    reserve_hint: None,
                 },
             )
             .await
@@ -175,6 +219,9 @@ mod tests {
                     token_mint: SUPPORTED_SOL_MINT,
                     amount: 1000,
                     borrower,
+                    receiver_program_id: None,
+                    receiver_payload: None,
+                    reserve_hint: None,
                 },
             )
             .await;

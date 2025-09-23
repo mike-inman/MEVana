@@ -15,7 +15,7 @@ use uuid::Uuid;
 
 use crate::auth::{api_key_middleware, AuthConfig, UserContext};
 use crate::error::VaultError;
-use crate::vault::{VaultConfig, WalletVault};
+use crate::vault::WalletVault;
 use crate::wallet::{WalletMetadata, WalletTier};
 use solana_sdk::signer::Signer;
 

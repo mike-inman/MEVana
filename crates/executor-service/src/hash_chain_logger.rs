@@ -26,7 +26,7 @@ impl HashChainLogger {
     pub fn checkpoint(&self) -> (String, usize) {
         let mut st = self.state.lock().unwrap();
         if st.pending.is_empty() {
-            return (st.last_hash.map(|h| hex::encode(h)).unwrap_or_default(), 0);
+            return (st.last_hash.map(hex::encode).unwrap_or_default(), 0);
         }
         let mut hasher = Sha256::new();
         if let Some(prev) = st.last_hash {
@@ -44,8 +44,8 @@ impl HashChainLogger {
     }
 }
 
-pub static GLOBAL_HASH_LOGGER: Lazy<HashChainLogger> = Lazy::new(|| HashChainLogger::new());
+pub static GLOBAL_HASH_LOGGER: Lazy<HashChainLogger> = Lazy::new(HashChainLogger::new);
 
 pub fn global_logger() -> &'static HashChainLogger {
-    &*GLOBAL_HASH_LOGGER
+    &GLOBAL_HASH_LOGGER
 }

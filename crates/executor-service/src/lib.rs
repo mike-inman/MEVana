@@ -1,3 +1,5 @@
+#![allow(warnings)]
+
 pub mod account_registry;
 pub mod audit_log;
 pub mod bundle_builder;

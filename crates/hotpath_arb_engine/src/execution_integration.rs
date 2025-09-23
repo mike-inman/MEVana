@@ -1,3 +1,5 @@
+#![allow(warnings)]
+
 use anyhow::Result;
 use log::{error, info, warn};
 use serde::{Deserialize, Serialize};
@@ -13,7 +15,6 @@ use crate::smart_filter::{SmartFilter, SmartOpportunity};
 
 // Flash loan integration
 use crate::flash_loan_integration::{FlashLoanProvider, FlashLoanQuote, HotpathFlashLoanManager};
-use solana_sdk::{instruction::Instruction, transaction::Transaction};
 
 /// Complete live trading execution system with all infrastructure
 #[derive(Debug)]
@@ -485,7 +486,7 @@ impl ExecutionIntegrator {
     /// Create flash loan + arbitrage Jito bundle
     async fn create_flash_loan_jito_bundle(
         quote: &FlashLoanQuote,
-        arbitrage_instructions: Vec<solana_sdk::instruction::Instruction>,
+        _arbitrage_instructions: Vec<solana_sdk::instruction::Instruction>,
     ) -> Result<Vec<solana_sdk::transaction::Transaction>> {
         // In production, this would:
         // 1. Create flash loan borrow transaction
@@ -502,7 +503,7 @@ impl ExecutionIntegrator {
 
     /// Create direct arbitrage Jito bundle
     async fn create_direct_jito_bundle(
-        arbitrage_instructions: Vec<solana_sdk::instruction::Instruction>,
+        _arbitrage_instructions: Vec<solana_sdk::instruction::Instruction>,
     ) -> Result<Vec<solana_sdk::transaction::Transaction>> {
         // In production, this would:
         // 1. Create arbitrage transaction(s)

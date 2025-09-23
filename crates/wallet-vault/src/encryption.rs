@@ -3,12 +3,12 @@ use aes_gcm::{
     Aes256Gcm, Key, Nonce,
 };
 use argon2::{
-    password_hash::{PasswordHash, PasswordHasher, PasswordVerifier, SaltString},
+    password_hash::{PasswordHasher, SaltString},
     Argon2,
 };
 use chacha20poly1305::ChaCha20Poly1305;
 use rand::RngCore;
-use secrecy::{ExposeSecret, SecretVec};
+use secrecy::SecretVec;
 use zeroize::{Zeroize, ZeroizeOnDrop};
 
 use crate::error::{Result, VaultError};
@@ -148,6 +148,7 @@ impl DualEncryption {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use secrecy::ExposeSecret;
 
     #[test]
     fn test_master_key_generation() {

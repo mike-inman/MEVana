@@ -1,5 +1,6 @@
+#![allow(warnings)]
+
 use chrono::{DateTime, Utc};
-use futures::executor;
 use log::{debug, info, warn};
 use serde::{Deserialize, Serialize};
 use sqlx::PgPool;
@@ -546,7 +547,7 @@ impl EventBus {
     /// from the main application to prevent duplicate database connections.
     pub fn set_shared_database_pool(
         &self,
-        db_pool: Arc<PgPool>,
+        _db_pool: Arc<PgPool>,
     ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         warn!("⚠️ EventBus::set_shared_database_pool not yet implemented - EventBus will use API fallback for now");
         warn!("🔧 TODO: Implement runtime database pool injection for existing EventBus instance");

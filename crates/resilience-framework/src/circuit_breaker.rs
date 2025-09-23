@@ -232,6 +232,12 @@ impl MultiCircuitBreaker {
     }
 }
 
+impl Default for MultiCircuitBreaker {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

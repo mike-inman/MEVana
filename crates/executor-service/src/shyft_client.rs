@@ -1,5 +1,7 @@
+#![allow(dead_code)]
+
 use anyhow::Result;
-use log::{debug, error, info};
+use log::{debug, info};
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -93,8 +95,8 @@ impl ShyftClient {
 
         let response = self
             .client
-            .post(&format!("{}/api/v1/bundle", self.jito_url))
-            .header("Authorization", format!("Bearer {}", self.api_key))
+            .post(format!("{}/api/v1/bundle", self.jito_url))
+            .header("x-api-key", &self.api_key)
             .header("Content-Type", "application/json")
             .json(&request)
             .send()
@@ -119,8 +121,8 @@ impl ShyftClient {
     pub async fn get_bundle_status(&self, bundle_id: &str) -> Result<JitoBundleResponse> {
         let response = self
             .client
-            .get(&format!("{}/api/v1/bundle/{}", self.jito_url, bundle_id))
-            .header("Authorization", format!("Bearer {}", self.api_key))
+            .get(format!("{}/api/v1/bundle/{}", self.jito_url, bundle_id))
+            .header("x-api-key", &self.api_key)
             .send()
             .await?;
 
@@ -235,7 +237,7 @@ impl ShyftClient {
         let request = ShyftRpcRequest {
             jsonrpc: "2.0".to_string(),
             id: self.next_request_id(),
-            method: "getRecentBlockhash".to_string(),
+            method: "getLatestBlockhash".to_string(),
             params: serde_json::json!([{
                 "commitment": "confirmed"
             }]),
@@ -322,7 +324,7 @@ impl ShyftClient {
         let response = self
             .client
             .post(&self.rpc_url)
-            .header("Authorization", format!("Bearer {}", self.api_key))
+            .header("x-api-key", &self.api_key)
             .header("Content-Type", "application/json")
             .json(&request)
             .send()

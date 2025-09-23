@@ -1,6 +1,5 @@
 use axum::{
     extract::State,
-    middleware,
     routing::{get, post},
     Router,
 };
@@ -11,7 +10,6 @@ use utoipa_swagger_ui::SwaggerUi;
 
 use crate::database::DatabaseService;
 use crate::handlers::*;
-use crate::middleware::auth::auth_middleware;
 use crate::middleware::request_id::RequestIdLayer;
 use crate::models::*;
 
@@ -182,7 +180,7 @@ async fn detailed_health_check(
     let start_time = std::time::Instant::now();
 
     // Check database connectivity
-    let db_status = match db.test_connection().await {
+    match db.test_connection().await {
         Ok(_) => {
             checks.insert(
                 "database",
@@ -191,7 +189,6 @@ async fn detailed_health_check(
                     "message": "Database connection successful"
                 }),
             );
-            "healthy"
         }
         Err(e) => {
             checks.insert(
@@ -202,7 +199,6 @@ async fn detailed_health_check(
                 }),
             );
             status = "unhealthy";
-            "unhealthy"
         }
     };
 

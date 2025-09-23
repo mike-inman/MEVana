@@ -9,7 +9,6 @@ use arb_engine::stats::{
 };
 use edge_assembler::edge::{edge_delta, ClmmState, ClobState, CpmmState, DlmmState, EdgeDelta};
 use metrics_exporter_prometheus::{PrometheusBuilder, PrometheusHandle};
-use rand::Rng;
 use rdkafka::config::ClientConfig;
 use rdkafka::consumer::{Consumer, StreamConsumer};
 use rdkafka::Message;
@@ -74,7 +73,7 @@ async fn main() -> anyhow::Result<()> {
     );
 
     // Initialize Jupiter scanner
-    let jupiter_scanner = if enable_jupiter {
+    let _jupiter_scanner = if enable_jupiter {
         let scanner = Arc::new(JupiterArbitrageScanner::new(
             tx.clone(),
             Some(jupiter_config),
@@ -229,115 +228,229 @@ async fn main() -> anyhow::Result<()> {
     }
     if synth_requested && synth_allowed {
         let engine_synth = engine.clone();
-        tokio::spawn(async move {
-            let mut id: u64 = 1;
-            // Config knobs for synthetic data shaping
-            let spread = std::env::var("EDGE_SYNTH_SPREAD")
-                .ok()
-                .and_then(|v| v.parse::<f64>().ok())
-                .filter(|v| *v > 0.0 && *v < 0.05)
-                .unwrap_or(0.0005);
-            let cycles_mode = std::env::var("EDGE_SYNTH_CYCLES")
-                .ok()
-                .map(|v| v == "1" || v.eq_ignore_ascii_case("true"))
-                .unwrap_or(false);
-            let fake_signals = std::env::var("EDGE_SYNTH_FAKE_SIGNALS")
-                .ok()
-                .map(|v| v == "1" || v.eq_ignore_ascii_case("true"))
-                .unwrap_or(false);
-            // Dynamic venue list reused by both modes
-            let venue_ids: Vec<u32> = std::env::var("EDGE_VENUES")
-                .ok()
-                .map(|s| {
-                    s.split([',', ' '])
-                        .filter_map(|p| {
-                            let t = p.trim();
-                            if t.is_empty() {
-                                None
-                            } else {
-                                t.parse::<u32>().ok()
-                            }
-                        })
-                        .collect::<Vec<_>>()
-                })
-                .filter(|v: &Vec<u32>| !v.is_empty())
-                .unwrap_or_else(|| {
+        tokio::spawn(
+            async move {
+                #![allow(clippy::field_reassign_with_default)]
+                let mut id: u64 = 1;
+                // Config knobs for synthetic data shaping
+                let spread = std::env::var("EDGE_SYNTH_SPREAD")
+                    .ok()
+                    .and_then(|v| v.parse::<f64>().ok())
+                    .filter(|v| *v > 0.0 && *v < 0.05)
+                    .unwrap_or(0.0005);
+                let cycles_mode = std::env::var("EDGE_SYNTH_CYCLES")
+                    .ok()
+                    .map(|v| v == "1" || v.eq_ignore_ascii_case("true"))
+                    .unwrap_or(false);
+                let fake_signals = std::env::var("EDGE_SYNTH_FAKE_SIGNALS")
+                    .ok()
+                    .map(|v| v == "1" || v.eq_ignore_ascii_case("true"))
+                    .unwrap_or(false);
+                // Dynamic venue list reused by both modes
+                let venue_ids: Vec<u32> = std::env::var("EDGE_VENUES")
+                    .ok()
+                    .map(|s| {
+                        s.split([',', ' '])
+                            .filter_map(|p| {
+                                let t = p.trim();
+                                if t.is_empty() {
+                                    None
+                                } else {
+                                    t.parse::<u32>().ok()
+                                }
+                            })
+                            .collect::<Vec<_>>()
+                    })
+                    .filter(|v: &Vec<u32>| !v.is_empty())
+                    .unwrap_or_else(|| {
+                        if cycles_mode {
+                            vec![1, 2, 3]
+                        } else {
+                            vec![1, 2, 3, 4]
+                        }
+                    });
+                // Optional explicit per-venue biases (comma list matching venue_ids order) relative to spread units
+                let venue_biases: Vec<f64> = std::env::var("EDGE_SYNTH_VENUE_BIASES")
+                    .ok()
+                    .map(|s| {
+                        s.split([',', ' '])
+                            .filter_map(|p| {
+                                let t = p.trim();
+                                if t.is_empty() {
+                                    None
+                                } else {
+                                    t.parse::<f64>().ok()
+                                }
+                            })
+                            .collect::<Vec<_>>()
+                    })
+                    .unwrap_or_default();
+                // Predefine a small token universe for cycle formation when cycles_mode enabled
+                let token_bytes: Vec<Vec<u8>> = (0u8..3u8).map(|t| vec![t; 32]).collect(); // T0,T1,T2
+                use arb_engine::sizing::record_signal_profit_bps;
+                use arb_engine::stats::{incr_signals_emitted, record_profit};
+                use rand::Rng;
+                loop {
                     if cycles_mode {
-                        vec![1, 2, 3]
-                    } else {
-                        vec![1, 2, 3, 4]
-                    }
-                });
-            // Optional explicit per-venue biases (comma list matching venue_ids order) relative to spread units
-            let venue_biases: Vec<f64> = std::env::var("EDGE_SYNTH_VENUE_BIASES")
-                .ok()
-                .map(|s| {
-                    s.split([',', ' '])
-                        .filter_map(|p| {
-                            let t = p.trim();
-                            if t.is_empty() {
-                                None
-                            } else {
-                                t.parse::<f64>().ok()
+                        // Deterministic 3-token cycle edges across venues; venue-specific bias for price differentiation
+                        // We create directed edges T[i] -> T[(i+1)%3]
+                        for (idx, venue) in venue_ids.iter().enumerate() {
+                            for i in 0..3usize {
+                                #[allow(clippy::field_reassign_with_default)]
+                                let mut ed = EdgeDelta::default();
+                                ed.edge_id = id;
+                                id += 1;
+                                ed.venue_id = *venue;
+                                ed.direction = 0;
+                                ed.slot = id / 10;
+                                ed.updated_at_ns = std::time::SystemTime::now()
+                                    .duration_since(std::time::UNIX_EPOCH)
+                                    .unwrap()
+                                    .as_nanos()
+                                    as u64;
+                                ed.fee_bps_total = 10; // 0.10%
+                                ed.decimals_in = 6;
+                                ed.decimals_out = 6;
+                                ed.cu_estimate = 0;
+                                let tin = &token_bytes[i];
+                                let tout = &token_bytes[(i + 1) % 3];
+                                ed.token_in = tin.clone();
+                                ed.token_out = tout.clone();
+                                // Pool key derived deterministically
+                                let mut pk = [*venue as u8; 32];
+                                pk[0] = tin[0];
+                                pk[1] = tout[0];
+                                ed.pool_pubkey = pk.to_vec();
+                                // Venue bias ensures cycle product > 1 slightly (customizable)
+                                let venue_bias =
+                                    if !venue_biases.is_empty() && idx < venue_biases.len() {
+                                        spread * venue_biases[idx]
+                                    } else {
+                                        // fallback default pattern (roughly net positive)
+                                        match idx {
+                                            0 => spread * 0.8,
+                                            1 => -spread * 0.4,
+                                            2 => spread * 0.5,
+                                            _ => 0.0,
+                                        }
+                                    };
+                                let jitter =
+                                    rand::thread_rng().gen_range(-spread * 0.1..spread * 0.1);
+                                let price = 1.0 + venue_bias + jitter;
+                                let raw = (price * 18446744073709551616.0) as u128;
+                                ed.marginal_price_q64 = raw.to_le_bytes().to_vec();
+                                let size: u128 = 5_000_000u128;
+                                ed.size_to_next_boundary_in = size.to_le_bytes().to_vec();
+                                // Simple CLMM state for venue 1, CPMM for 2, DLMM for 3
+                                ed.state = Some(match *venue {
+                                    1 => edge_delta::State::Clmm(ClmmState {
+                                        sqrt_price_x64: raw.to_le_bytes().to_vec(),
+                                        liquidity: 1_000_000u128.to_le_bytes().to_vec(),
+                                        tick_current: 0,
+                                        tick_spacing: 64,
+                                        size_to_next_in: size.to_le_bytes().to_vec(),
+                                    }),
+                                    2 => edge_delta::State::Cpmm(CpmmState {
+                                        reserve_in: 10_000_000u128.to_le_bytes().to_vec(),
+                                        reserve_out: 9_900_000u128.to_le_bytes().to_vec(),
+                                    }),
+                                    3 => edge_delta::State::Dlmm(DlmmState {
+                                        active_bin: 0,
+                                        bin_price_q64: raw.to_le_bytes().to_vec(),
+                                        depth_hint_in: size.to_le_bytes().to_vec(),
+                                    }),
+                                    _ => unreachable!(),
+                                });
+                                let _ = engine_synth.process_edge_update(ed);
+                                // Generate reverse direction edge to enable full cycle reconstruction unless disabled.
+                                let bidir = std::env::var("EDGE_SYNTH_BIDIR")
+                                    .ok()
+                                    .map(|v| v == "1" || v.eq_ignore_ascii_case("true"))
+                                    .unwrap_or(true);
+                                if bidir {
+                                    #[allow(clippy::field_reassign_with_default)]
+                                    let mut rev = EdgeDelta::default();
+                                    rev.edge_id = id;
+                                    id += 1;
+                                    rev.venue_id = *venue;
+                                    rev.direction = 1; // opposite direction marker
+                                    rev.slot = id / 10;
+                                    rev.updated_at_ns = std::time::SystemTime::now()
+                                        .duration_since(std::time::UNIX_EPOCH)
+                                        .unwrap()
+                                        .as_nanos()
+                                        as u64;
+                                    rev.fee_bps_total = 10;
+                                    rev.decimals_in = 6;
+                                    rev.decimals_out = 6;
+                                    rev.cu_estimate = 0;
+                                    rev.token_in = token_bytes[(i + 1) % 3].clone();
+                                    rev.token_out = token_bytes[i].clone();
+                                    // Invert price (avoid division by zero)
+                                    let price_f = price; // original forward price
+                                    let inv_price = if price_f > 0.0 { 1.0 / price_f } else { 1.0 };
+                                    let inv_raw = (inv_price * 18446744073709551616.0) as u128;
+                                    rev.marginal_price_q64 = inv_raw.to_le_bytes().to_vec();
+                                    let size: u128 = 5_000_000u128;
+                                    rev.size_to_next_boundary_in = size.to_le_bytes().to_vec();
+                                    rev.state = Some(match *venue {
+                                        1 => edge_delta::State::Clmm(ClmmState {
+                                            sqrt_price_x64: inv_raw.to_le_bytes().to_vec(),
+                                            liquidity: 1_000_000u128.to_le_bytes().to_vec(),
+                                            tick_current: 0,
+                                            tick_spacing: 64,
+                                            size_to_next_in: size.to_le_bytes().to_vec(),
+                                        }),
+                                        2 => edge_delta::State::Cpmm(CpmmState {
+                                            reserve_in: 10_000_000u128.to_le_bytes().to_vec(),
+                                            reserve_out: 9_900_000u128.to_le_bytes().to_vec(),
+                                        }),
+                                        3 => edge_delta::State::Dlmm(DlmmState {
+                                            active_bin: 0,
+                                            bin_price_q64: inv_raw.to_le_bytes().to_vec(),
+                                            depth_hint_in: size.to_le_bytes().to_vec(),
+                                        }),
+                                        _ => unreachable!(),
+                                    });
+                                    let mut rpk = [*venue as u8; 32];
+                                    rpk[0] = rev.token_in[0];
+                                    rpk[1] = rev.token_out[0];
+                                    rev.pool_pubkey = rpk.to_vec();
+                                    let _ = engine_synth.process_edge_update(rev);
+                                }
                             }
-                        })
-                        .collect::<Vec<_>>()
-                })
-                .unwrap_or_default();
-            // Predefine a small token universe for cycle formation when cycles_mode enabled
-            let token_bytes: Vec<Vec<u8>> = (0u8..3u8).map(|t| vec![t; 32]).collect(); // T0,T1,T2
-            use arb_engine::sizing::record_signal_profit_bps;
-            use arb_engine::stats::{incr_signals_emitted, record_profit};
-            use rand::Rng;
-            loop {
-                if cycles_mode {
-                    // Deterministic 3-token cycle edges across venues; venue-specific bias for price differentiation
-                    // We create directed edges T[i] -> T[(i+1)%3]
-                    for (idx, venue) in venue_ids.iter().enumerate() {
-                        for i in 0..3usize {
+                        }
+                    } else {
+                        // Original random mode (slight modifications already captured above)
+                        for venue in venue_ids.iter() {
+                            #[allow(clippy::field_reassign_with_default)]
                             let mut ed = EdgeDelta::default();
                             ed.edge_id = id;
                             id += 1;
                             ed.venue_id = *venue;
-                            ed.direction = 0;
+                            ed.direction = (id % 2) as u32;
                             ed.slot = id / 10;
+                            ed.write_version = 0;
                             ed.updated_at_ns = std::time::SystemTime::now()
                                 .duration_since(std::time::UNIX_EPOCH)
                                 .unwrap()
                                 .as_nanos() as u64;
-                            ed.fee_bps_total = 10; // 0.10%
+                            ed.fee_bps_total = 20;
                             ed.decimals_in = 6;
                             ed.decimals_out = 6;
                             ed.cu_estimate = 0;
-                            let tin = &token_bytes[i];
-                            let tout = &token_bytes[(i + 1) % 3];
-                            ed.token_in = tin.clone();
-                            ed.token_out = tout.clone();
-                            // Pool key derived deterministically
-                            let mut pk = [*venue as u8; 32];
-                            pk[0] = tin[0];
-                            pk[1] = tout[0];
-                            ed.pool_pubkey = pk.to_vec();
-                            // Venue bias ensures cycle product > 1 slightly (customizable)
-                            let venue_bias = if !venue_biases.is_empty() && idx < venue_biases.len()
-                            {
-                                spread * venue_biases[idx]
-                            } else {
-                                // fallback default pattern (roughly net positive)
-                                match idx {
-                                    0 => spread * 0.8,
-                                    1 => -spread * 0.4,
-                                    2 => spread * 0.5,
-                                    _ => 0.0,
-                                }
-                            };
-                            let jitter = rand::thread_rng().gen_range(-spread * 0.1..spread * 0.1);
-                            let price = 1.0 + venue_bias + jitter;
+                            let mut buf = [0u8; 32];
+                            rand::thread_rng().fill(&mut buf);
+                            ed.token_in = buf.to_vec();
+                            rand::thread_rng().fill(&mut buf);
+                            ed.token_out = buf.to_vec();
+                            rand::thread_rng().fill(&mut buf);
+                            ed.pool_pubkey = buf.to_vec();
+                            let price = 1.0 + rand::thread_rng().gen_range(-spread..spread);
                             let raw = (price * 18446744073709551616.0) as u128;
                             ed.marginal_price_q64 = raw.to_le_bytes().to_vec();
                             let size: u128 = 5_000_000u128;
                             ed.size_to_next_boundary_in = size.to_le_bytes().to_vec();
-                            // Simple CLMM state for venue 1, CPMM for 2, DLMM for 3
                             ed.state = Some(match *venue {
                                 1 => edge_delta::State::Clmm(ClmmState {
                                     sqrt_price_x64: raw.to_le_bytes().to_vec(),
@@ -355,141 +468,35 @@ async fn main() -> anyhow::Result<()> {
                                     bin_price_q64: raw.to_le_bytes().to_vec(),
                                     depth_hint_in: size.to_le_bytes().to_vec(),
                                 }),
-                                _ => unreachable!(),
+                                4 => edge_delta::State::Clob(ClobState {
+                                    best_bid_px_q64: raw.to_le_bytes().to_vec(),
+                                    best_bid_size: (1000u64).to_le_bytes().to_vec(),
+                                    best_ask_px_q64: raw.to_le_bytes().to_vec(),
+                                    best_ask_size: (1200u64).to_le_bytes().to_vec(),
+                                }),
+                                _ => edge_delta::State::Clmm(ClmmState {
+                                    sqrt_price_x64: raw.to_le_bytes().to_vec(),
+                                    liquidity: 500_000u128.to_le_bytes().to_vec(),
+                                    tick_current: 0,
+                                    tick_spacing: 64,
+                                    size_to_next_in: size.to_le_bytes().to_vec(),
+                                }),
                             });
                             let _ = engine_synth.process_edge_update(ed);
-                            // Generate reverse direction edge to enable full cycle reconstruction unless disabled.
-                            let bidir = std::env::var("EDGE_SYNTH_BIDIR")
-                                .ok()
-                                .map(|v| v == "1" || v.eq_ignore_ascii_case("true"))
-                                .unwrap_or(true);
-                            if bidir {
-                                let mut rev = EdgeDelta::default();
-                                rev.edge_id = id;
-                                id += 1;
-                                rev.venue_id = *venue;
-                                rev.direction = 1; // opposite direction marker
-                                rev.slot = id / 10;
-                                rev.updated_at_ns = std::time::SystemTime::now()
-                                    .duration_since(std::time::UNIX_EPOCH)
-                                    .unwrap()
-                                    .as_nanos()
-                                    as u64;
-                                rev.fee_bps_total = 10;
-                                rev.decimals_in = 6;
-                                rev.decimals_out = 6;
-                                rev.cu_estimate = 0;
-                                rev.token_in = token_bytes[(i + 1) % 3].clone();
-                                rev.token_out = token_bytes[i].clone();
-                                // Invert price (avoid division by zero)
-                                let price_f = price; // original forward price
-                                let inv_price = if price_f > 0.0 { 1.0 / price_f } else { 1.0 };
-                                let inv_raw = (inv_price * 18446744073709551616.0) as u128;
-                                rev.marginal_price_q64 = inv_raw.to_le_bytes().to_vec();
-                                let size: u128 = 5_000_000u128;
-                                rev.size_to_next_boundary_in = size.to_le_bytes().to_vec();
-                                rev.state = Some(match *venue {
-                                    1 => edge_delta::State::Clmm(ClmmState {
-                                        sqrt_price_x64: inv_raw.to_le_bytes().to_vec(),
-                                        liquidity: 1_000_000u128.to_le_bytes().to_vec(),
-                                        tick_current: 0,
-                                        tick_spacing: 64,
-                                        size_to_next_in: size.to_le_bytes().to_vec(),
-                                    }),
-                                    2 => edge_delta::State::Cpmm(CpmmState {
-                                        reserve_in: 10_000_000u128.to_le_bytes().to_vec(),
-                                        reserve_out: 9_900_000u128.to_le_bytes().to_vec(),
-                                    }),
-                                    3 => edge_delta::State::Dlmm(DlmmState {
-                                        active_bin: 0,
-                                        bin_price_q64: inv_raw.to_le_bytes().to_vec(),
-                                        depth_hint_in: size.to_le_bytes().to_vec(),
-                                    }),
-                                    _ => unreachable!(),
-                                });
-                                let mut rpk = [*venue as u8; 32];
-                                rpk[0] = rev.token_in[0];
-                                rpk[1] = rev.token_out[0];
-                                rev.pool_pubkey = rpk.to_vec();
-                                let _ = engine_synth.process_edge_update(rev);
-                            }
                         }
                     }
-                } else {
-                    // Original random mode (slight modifications already captured above)
-                    for venue in venue_ids.iter() {
-                        let mut ed = EdgeDelta::default();
-                        ed.edge_id = id;
-                        id += 1;
-                        ed.venue_id = *venue;
-                        ed.direction = (id % 2) as u32;
-                        ed.slot = id / 10;
-                        ed.write_version = 0;
-                        ed.updated_at_ns = std::time::SystemTime::now()
-                            .duration_since(std::time::UNIX_EPOCH)
-                            .unwrap()
-                            .as_nanos() as u64;
-                        ed.fee_bps_total = 20;
-                        ed.decimals_in = 6;
-                        ed.decimals_out = 6;
-                        ed.cu_estimate = 0;
-                        let mut buf = [0u8; 32];
-                        rand::thread_rng().fill(&mut buf);
-                        ed.token_in = buf.to_vec();
-                        rand::thread_rng().fill(&mut buf);
-                        ed.token_out = buf.to_vec();
-                        rand::thread_rng().fill(&mut buf);
-                        ed.pool_pubkey = buf.to_vec();
-                        let price = 1.0 + rand::thread_rng().gen_range(-spread..spread);
-                        let raw = (price * 18446744073709551616.0) as u128;
-                        ed.marginal_price_q64 = raw.to_le_bytes().to_vec();
-                        let size: u128 = 5_000_000u128;
-                        ed.size_to_next_boundary_in = size.to_le_bytes().to_vec();
-                        ed.state = Some(match *venue {
-                            1 => edge_delta::State::Clmm(ClmmState {
-                                sqrt_price_x64: raw.to_le_bytes().to_vec(),
-                                liquidity: 1_000_000u128.to_le_bytes().to_vec(),
-                                tick_current: 0,
-                                tick_spacing: 64,
-                                size_to_next_in: size.to_le_bytes().to_vec(),
-                            }),
-                            2 => edge_delta::State::Cpmm(CpmmState {
-                                reserve_in: 10_000_000u128.to_le_bytes().to_vec(),
-                                reserve_out: 9_900_000u128.to_le_bytes().to_vec(),
-                            }),
-                            3 => edge_delta::State::Dlmm(DlmmState {
-                                active_bin: 0,
-                                bin_price_q64: raw.to_le_bytes().to_vec(),
-                                depth_hint_in: size.to_le_bytes().to_vec(),
-                            }),
-                            4 => edge_delta::State::Clob(ClobState {
-                                best_bid_px_q64: raw.to_le_bytes().to_vec(),
-                                best_bid_size: (1000u64).to_le_bytes().to_vec(),
-                                best_ask_px_q64: raw.to_le_bytes().to_vec(),
-                                best_ask_size: (1200u64).to_le_bytes().to_vec(),
-                            }),
-                            _ => edge_delta::State::Clmm(ClmmState {
-                                sqrt_price_x64: raw.to_le_bytes().to_vec(),
-                                liquidity: 500_000u128.to_le_bytes().to_vec(),
-                                tick_current: 0,
-                                tick_spacing: 64,
-                                size_to_next_in: size.to_le_bytes().to_vec(),
-                            }),
-                        });
-                        let _ = engine_synth.process_edge_update(ed);
+                    if fake_signals {
+                        // Emit fabricated signal metrics to drive dashboards (profit_bps sampled around 80-200 bps)
+                        let profit_bps = rand::thread_rng().gen_range(80..200) as i32;
+                        record_profit(profit_bps);
+                        record_signal_profit_bps(profit_bps);
+                        incr_signals_emitted();
                     }
+                    tokio::time::sleep(std::time::Duration::from_millis(200)).await;
+                    // pacing
                 }
-                if fake_signals {
-                    // Emit fabricated signal metrics to drive dashboards (profit_bps sampled around 80-200 bps)
-                    let profit_bps = rand::thread_rng().gen_range(80..200) as i32;
-                    record_profit(profit_bps);
-                    record_signal_profit_bps(profit_bps);
-                    incr_signals_emitted();
-                }
-                tokio::time::sleep(std::time::Duration::from_millis(200)).await;
-                // pacing
-            }
-        });
+            },
+        );
         tracing::info!("synthetic_edge_generator_started");
     }
 

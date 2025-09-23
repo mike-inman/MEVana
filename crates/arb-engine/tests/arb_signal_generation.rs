@@ -1,4 +1,8 @@
-use arb_engine::{hotpath::SignalQueue, FastEngine};
+use arb_engine::{
+    config::{get_knobs, set_knobs, Knobs},
+    hotpath::SignalQueue,
+    FastEngine,
+};
 use edge_assembler::EdgeDelta;
 use std::sync::Arc;
 
@@ -14,8 +18,11 @@ async fn generates_signal_from_two_edges() {
     }
     let q = Arc::new(SignalQueue::new(16));
     let tx = q.sender();
-    let mut engine = FastEngine::new(tx);
-    engine.update_edge_config(1, 100); // lower threshold for test
+    let engine = FastEngine::new(tx);
+    let original_knobs = get_knobs();
+    let mut tuned_knobs: Knobs = (*original_knobs).clone();
+    tuned_knobs.min_profit_lamports = 100; // lower threshold for test
+    set_knobs(tuned_knobs.clone());
 
     // Token mints (dummy 32 bytes)
     let token_a = vec![1u8; 32];
@@ -68,4 +75,7 @@ async fn generates_signal_from_two_edges() {
     .await
     .expect("no signal");
     assert!(sig.profit_bps > 0, "profit_bps should be positive");
+
+    // Restore knob configuration for other tests
+    set_knobs((*original_knobs).clone());
 }

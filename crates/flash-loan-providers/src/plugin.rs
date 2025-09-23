@@ -38,17 +38,12 @@ impl From<&str> for ProviderId {
     }
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, Serialize, Deserialize, Default)]
 pub enum Cluster {
+    #[default]
     Mainnet,
     Devnet,
     Custom(&'static str),
-}
-
-impl Default for Cluster {
-    fn default() -> Self {
-        Cluster::Mainnet
-    }
 }
 
 #[derive(Clone, Debug, Default)]
@@ -60,6 +55,9 @@ pub struct Environment {
 pub struct QuoteRequest {
     pub token_mint: Pubkey,
     pub amount: u64,
+    /// Optional reserve hint when a protocol exposes multiple pools per mint.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub reserve_hint: Option<Pubkey>,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -78,6 +76,15 @@ pub struct PlanRequest {
     pub token_mint: Pubkey,
     pub amount: u64,
     pub borrower: Pubkey,
+    /// Downstream receiver program invoked during the flash-loan callback.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub receiver_program_id: Option<Pubkey>,
+    /// Arbitrary payload forwarded to the receiver (route plan, safety config, etc.).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub receiver_payload: Option<Vec<u8>>,
+    /// Provider-specific reserve hint to speed up account discovery.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub reserve_hint: Option<Pubkey>,
 }
 
 #[derive(Clone, Debug)]
@@ -96,6 +103,12 @@ impl PlanInstructions {
             repay: Vec::new(),
             cleanup: Vec::new(),
         }
+    }
+}
+
+impl Default for PlanInstructions {
+    fn default() -> Self {
+        Self::new()
     }
 }
 

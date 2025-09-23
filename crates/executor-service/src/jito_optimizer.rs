@@ -12,7 +12,7 @@ use tokio::time::sleep;
 use crate::bundle_builder::{ArbitrageBundle, BundleBuilder};
 use crate::config::ExecutorConfig;
 use crate::execution_engine::ArbitrageOpportunity;
-use crate::flash_loan::{FlashLoanProvider, FlashLoanQuote};
+use crate::flash_loan::FlashLoanProvider;
 use crate::metrics::MetricsServer;
 use crate::shyft_client::ShyftClient;
 
@@ -72,6 +72,7 @@ impl Default for JitoOptimizationParams {
     }
 }
 
+#[allow(dead_code)]
 pub struct JitoOptimizer {
     config: Arc<ExecutorConfig>,
     shyft_client: Arc<ShyftClient>,
@@ -175,12 +176,12 @@ impl JitoOptimizer {
         &self,
         opportunity: &ArbitrageOpportunity,
         flash_loan_provider: Option<FlashLoanProvider>,
-        result: &mut JitoBundleResult,
+        _result: &mut JitoBundleResult,
     ) -> Result<ArbitrageBundle> {
         // Enhanced bundle building with MEV protection
         let bundle = self
             .bundle_builder
-            .build_arbitrage_bundle(opportunity, flash_loan_provider)
+            .build_arbitrage_bundle(opportunity, flash_loan_provider, None)
             .await?;
 
         // Add Jito-specific optimizations
@@ -269,7 +270,7 @@ impl JitoOptimizer {
     async fn execute_live_mode(
         &mut self,
         result: &JitoBundleResult,
-        opportunity: &ArbitrageOpportunity,
+        _opportunity: &ArbitrageOpportunity,
     ) -> Result<JitoBundleResult> {
         info!("🔥 LIVE MODE: Executing real Jito bundle submission");
 

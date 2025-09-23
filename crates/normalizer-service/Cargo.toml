@@ -42,6 +42,10 @@ normalizer-codegen = { path = "../normalizer-codegen" }
 futures-util = "0.3.31"
 # tokio-stream = "0.1.17"
 
+[features]
+default = []
+experimental-hooks = []
+
 [[bin]]
 name = "list"
 path = "src/bin/list.rs"
@@ -58,4 +62,3 @@ path = "src/bin/tap_orca_extract.rs"
 # [[bin]]
 # name = "tap_orca_debug"
 # path = "src/bin/tap_orca_debug.rs"
-

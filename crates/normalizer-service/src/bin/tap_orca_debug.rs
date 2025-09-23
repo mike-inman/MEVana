@@ -1,3 +1,5 @@
+#![allow(unused_imports, clippy::single_component_path_imports, deprecated)]
+
 // crates/normalizer-service/src/bin/tap_orca_debug.rs
 // Debug binary for outputting full transaction JSON
 
@@ -99,7 +101,7 @@ fn build_full_transaction_json_debug(
 
             // COMPLETE METADATA
             "meta": {
-                "fee": info.meta.as_ref().and_then(|m| Some(m.fee)),
+                "fee": info.meta.as_ref().map(|m| m.fee),
                 "log_messages": info.meta.as_ref().map(|m| m.log_messages.clone()),
                 "compute_units_consumed": info.meta.as_ref().and_then(|m| m.compute_units_consumed),
             },
@@ -109,7 +111,7 @@ fn build_full_transaction_json_debug(
         "raw_instruction_data": msg.instructions.iter().enumerate().map(|(idx, ci)| {
             serde_json::json!({
                 "index": idx,
-                "raw_bytes": ci.data.iter().map(|b| *b as u8).collect::<Vec<_>>(),
+                "raw_bytes": ci.data.to_vec(),
                 "base64": base64::encode(&ci.data),
                 "hex": ci.data.iter().map(|b| format!("{:02x}", b)).collect::<Vec<_>>().join(""),
                 "length": ci.data.len(),
@@ -150,7 +152,7 @@ async fn handle_debug(
     payload: &[u8],
     producer: &FutureProducer,
     debug_topic: &str,
-    config: &DebugConfig,
+    _config: &DebugConfig,
 ) -> Result<()> {
     // Decode the Yellowstone SubscribeUpdateTransaction
     let update = ypp::SubscribeUpdateTransaction::decode(payload)

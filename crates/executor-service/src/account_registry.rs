@@ -1,3 +1,5 @@
+#![allow(clippy::items_after_test_module)]
+
 use anyhow::{anyhow, Result};
 use log::{info, warn};
 use serde::{Deserialize, Serialize};
@@ -98,14 +100,14 @@ impl AccountRegistryData {
     pub fn dynamic_required_keys(&self) -> Vec<String> {
         let mut out = Vec::new();
         for (prov, mints) in &self.flash_loans {
-            for (mint, _r) in mints {
+            for mint in mints.keys() {
                 out.push(format!("flash.{prov}.{mint}"));
             }
         }
-        for (pool_id, _p) in &self.clmm_pools {
+        for pool_id in self.clmm_pools.keys() {
             out.push(format!("clmm.{pool_id}"));
         }
-        for (sym, _o) in &self.oracles {
+        for sym in self.oracles.keys() {
             out.push(format!("oracle.{sym}"));
         }
         if self.jito.tip_account.is_some() {
@@ -115,24 +117,13 @@ impl AccountRegistryData {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Default)]
 pub struct AccountRegistry {
     pub data: AccountRegistryData,
     pub missing_keys: Vec<String>,
     pub validation_errors: Vec<String>,
     // Aggregated mint -> decimals map (derived from flash loan reserves currently)
     pub mint_decimals: HashMap<String, u8>,
-}
-
-impl Default for AccountRegistry {
-    fn default() -> Self {
-        Self {
-            data: AccountRegistryData::default(),
-            missing_keys: Vec::new(),
-            validation_errors: Vec::new(),
-            mint_decimals: HashMap::new(),
-        }
-    }
 }
 
 impl AccountRegistry {
@@ -164,8 +155,8 @@ impl AccountRegistry {
             mint_decimals: HashMap::new(),
         };
         // Derive mint decimals map from flash loan reserves (can be extended later)
-        for (_prov, mints) in &registry.data.flash_loans {
-            for (_mint_key, reserve) in mints {
+        for mints in registry.data.flash_loans.values() {
+            for reserve in mints.values() {
                 registry
                     .mint_decimals
                     .entry(reserve.mint.clone())

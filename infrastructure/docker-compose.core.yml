@@ -74,6 +74,8 @@ services:
   redis:
     image: redis:7-alpine
     command: redis-server --appendonly yes --maxmemory 512mb --maxmemory-policy allkeys-lru
+    volumes:
+      - redis_data:/data
     healthcheck:
       test: ["CMD", "redis-cli", "--raw", "incr", "ping"]
       interval: 10s
@@ -195,14 +197,17 @@ services:
         condition: service_healthy
       postgres:
         condition: service_healthy
+    env_file:
+      - ../.env
     environment:
-      - RUST_LOG=info
-      - METRICS_PORT=8088
-      - KAFKA_BROKER=kafka:9092
-      - REDIS_URL=redis://redis:6379/0
-      - DATABASE_URL=postgresql://mev:mevpassword@postgres:5432/mevdb
-      - GEYSER_ENDPOINT=${ENDPOINT:-https://grpc.ny.shyft.to}
-      - X_TOKEN=${X_TOKEN}
+      - RUST_LOG=${RUST_LOG:-info}
+      - METRICS_PORT=${HOTPATH_INTERNAL_METRICS_PORT:-8088}
+      - KAFKA_BROKER=${KAFKA_BROKER:-kafka:9092}
+      - REDIS_URL=${REDIS_URL:-redis://redis:6379/0}
+      - DATABASE_URL=${DATABASE_URL:-postgresql://mev:mevpassword@postgres:5432/mevdb}
+      - GEYSER_ENDPOINT=${GEYSER_ENDPOINT:-https://grpc.ny.shyft.to}
+      - X_TOKEN=${X_TOKEN:-}
+      - FLASH_LOAN_PROVIDERS_CONFIG=${FLASH_LOAN_PROVIDERS_CONFIG:-/app/config/flash_loan_providers.local.json}
     ports:
       - "${HOTPATH_METRICS_PORT:-8088}:8088"
       - "${HOTPATH_API_PORT:-8089}:8089"
@@ -213,6 +218,8 @@ services:
       retries: 5
       start_period: 40s
     networks: [mevana_net]
+    volumes:
+      - ../config:/app/config:ro
     restart: unless-stopped
 
   normalizer-service:
@@ -225,15 +232,15 @@ services:
       redis:
         condition: service_healthy
     environment:
-      - RUST_LOG=info
-      - KAFKA_BROKER=kafka:9092
-      - REDIS_URL=redis://redis:6379/0
-      - IN_TOPIC=dex-transactions
-      - OUT_TOPIC=orca-swaps.parsed.v2
-      - GROUP_ID=tap-orca-extract
-      - HEALTH_PORT=8085
-      - BIND_ADDRESS=0.0.0.0
-      - METRICS_PORT=8085
+      - RUST_LOG=${RUST_LOG:-info}
+      - KAFKA_BROKER=${KAFKA_BROKER:-kafka:9092}
+      - REDIS_URL=${REDIS_URL:-redis://redis:6379/0}
+      - IN_TOPIC=${NORMALIZER_IN_TOPIC:-dex-transactions}
+      - OUT_TOPIC=${NORMALIZER_OUT_TOPIC:-orca-swaps.parsed.v2}
+      - GROUP_ID=${NORMALIZER_GROUP_ID:-tap-orca-extract}
+      - HEALTH_PORT=${NORMALIZER_HEALTH_PORT:-8085}
+      - BIND_ADDRESS=${NORMALIZER_BIND_ADDRESS:-0.0.0.0}
+      - METRICS_PORT=${NORMALIZER_METRICS_PORT_INTERNAL:-8085}
     healthcheck:
       test: ["CMD", "curl", "-sf", "http://localhost:8085/health"]
       interval: 30s
@@ -253,10 +260,10 @@ services:
       kafka:
         condition: service_healthy
     environment:
-      - RUST_LOG=info
-      - KAFKA_BOOTSTRAP_SERVERS=kafka:9092
-      - REDIS_URL=redis://redis:6379/0
-      - DISCOVERY_METRICS_PORT=9102
+      - RUST_LOG=${RUST_LOG:-info}
+      - KAFKA_BOOTSTRAP_SERVERS=${KAFKA_BOOTSTRAP_SERVERS:-kafka:9092}
+      - REDIS_URL=${REDIS_URL:-redis://redis:6379/0}
+      - DISCOVERY_METRICS_PORT=${DISCOVERY_METRICS_PORT_INTERNAL:-9102}
     healthcheck:
       test: ["CMD", "curl", "-sf", "http://localhost:9102/metrics"]
       interval: 30s
@@ -277,15 +284,19 @@ services:
         condition: service_healthy
       postgres:
         condition: service_healthy
+    env_file:
+      - ../.env
     environment:
-      - RUST_LOG=info
-      - KAFKA_BROKER=kafka:9092
-      - DATABASE_URL=postgresql://mev:mevpassword@postgres:5432/mevdb
-      - REDIS_URL=redis://redis:6379/0
-      - METRICS_PORT=9904
-      - EXECUTION_DRY_RUN=true
-      - ALLOW_EMPTY_SHYFT_API=1
-      - WALLET_KEYPAIR_PATH=/root/.config/solana/id.json
+      - RUST_LOG=${RUST_LOG:-info}
+      - KAFKA_BROKER=${KAFKA_BROKER:-kafka:9092}
+      - DATABASE_URL=${DATABASE_URL:-postgresql://mev:mevpassword@postgres:5432/mevdb}
+      - REDIS_URL=${REDIS_URL:-redis://redis:6379/0}
+      - METRICS_PORT=${EXECUTOR_METRICS_PORT_INTERNAL:-9904}
+      - EXECUTION_DRY_RUN=${EXECUTION_DRY_RUN:-true}
+      - SHYFT_API_KEY=${SHYFT_API_KEY:-}
+      - ALLOW_EMPTY_SHYFT_API=${ALLOW_EMPTY_SHYFT_API:-1}
+      - WALLET_KEYPAIR_PATH=${WALLET_KEYPAIR_PATH:-/root/.config/solana/id.json}
+      - FLASH_LOAN_PROVIDERS_CONFIG=${FLASH_LOAN_PROVIDERS_CONFIG:-/app/config/flash_loan_providers.local.json}
     healthcheck:
       test: ["CMD", "curl", "-sf", "http://localhost:9904/metrics"]
       interval: 30s
@@ -296,6 +307,7 @@ services:
       - "9904:9904"
     volumes:
       - ./keys/executor-dev.json:/root/.config/solana/id.json:ro
+      - ../config:/app/config:ro
     networks: [mevana_net]
     restart: unless-stopped
 
@@ -308,3 +320,4 @@ volumes:
   postgres_data:
   prometheus_data:
   grafana_data:
+  redis_data:

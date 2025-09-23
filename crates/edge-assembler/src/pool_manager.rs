@@ -1,3 +1,5 @@
+#![allow(dead_code)]
+
 use crate::edge::EdgeSnapshot;
 use dashmap::DashMap;
 use std::sync::atomic::{AtomicU64, Ordering};
@@ -147,7 +149,7 @@ impl PoolManager {
     pub fn get_pool(
         &self,
         pool_pubkey: &str,
-    ) -> Option<dashmap::mapref::one::Ref<String, PoolState>> {
+    ) -> Option<dashmap::mapref::one::Ref<'_, String, PoolState>> {
         self.pools.get(pool_pubkey)
     }
 

@@ -3,6 +3,8 @@
 //! This test suite verifies that the MEVana system is actively receiving and processing
 //! live transaction data from the Solana blockchain through Geyser streams.
 
+#![allow(warnings)]
+
 use anyhow::{anyhow, Result};
 use reqwest::Client;
 use serde_json::Value;

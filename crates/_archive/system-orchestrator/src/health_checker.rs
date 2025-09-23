@@ -242,6 +242,7 @@ impl HealthChecker {
         }
     }
 
+    #[allow(dead_code)]
     pub async fn check_infrastructure_services(&self) -> Result<()> {
         info!("🔍 Checking infrastructure services...");
 
@@ -276,6 +277,7 @@ impl HealthChecker {
         Ok(())
     }
 
+    #[allow(dead_code)]
     async fn check_redis(&self) -> Result<()> {
         let redis_url =
             std::env::var("REDIS_URL").unwrap_or_else(|_| "redis://localhost:6379".to_string());
@@ -287,6 +289,7 @@ impl HealthChecker {
         Ok(())
     }
 
+    #[allow(dead_code)]
     async fn check_kafka(&self) -> Result<()> {
         // Simple TCP connection check for Kafka
         tokio::net::TcpStream::connect("localhost:9092")
@@ -295,6 +298,7 @@ impl HealthChecker {
         Ok(())
     }
 
+    #[allow(dead_code)]
     async fn check_postgres(&self) -> Result<()> {
         let postgres_url = std::env::var("DATABASE_URL").context(
             "DATABASE_URL environment variable is required - no hardcoded fallbacks allowed",
@@ -313,5 +317,11 @@ impl HealthChecker {
         // Simple query to check connectivity
         client.execute("SELECT 1", &[]).await?;
         Ok(())
+    }
+}
+
+impl Default for HealthChecker {
+    fn default() -> Self {
+        Self::new()
     }
 }

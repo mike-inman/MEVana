@@ -1,6 +1,5 @@
 // crates/normalizer-service/src/lib.rs
-#![allow(unused_imports, unused_variables, dead_code)]
-#![allow(clippy::single_match, unused_assignments, unused_mut)]
+#![allow(warnings)]
 
 pub mod kafka;
 pub mod meteora_map;

@@ -8,6 +8,7 @@ use whirlpool_core::{
     math::q64_to_f64,
     pda::{actual_tick_index, derive_tick_array_address, three_tick_arrays_around},
     tick_window::{find_nearest_initialized_ticks, TickArrayView},
+    types::TickArray,
 };
 
 fn main() -> Result<()> {
@@ -50,7 +51,7 @@ fn main() -> Result<()> {
     let accs = rpc
         .get_multiple_accounts(&[ta_lower, ta_current, ta_upper])
         .context("get_multiple_accounts")?;
-    let mut views = [None, None, None];
+    let mut arrays: [Option<std::sync::Arc<TickArray>>; 3] = [None, None, None];
 
     for (idx, acc_opt) in accs.into_iter().enumerate() {
         let addr = match idx {
@@ -93,11 +94,7 @@ fn main() -> Result<()> {
                                 }
                             }
                         }
-                        let view = TickArrayView {
-                            start_tick_index: ta.start_tick_index,
-                            ticks: &ta.ticks,
-                        };
-                        views[idx] = Some(view);
+                        arrays[idx] = Some(std::sync::Arc::new(ta));
                     }
                     Err(e) => {
                         println!("  decode error: {}", e);
@@ -107,11 +104,24 @@ fn main() -> Result<()> {
         }
     }
 
+    let lower_view = arrays[0].as_ref().map(|arr| TickArrayView {
+        start_tick_index: arr.start_tick_index,
+        ticks: &arr.ticks,
+    });
+    let current_view = arrays[1].as_ref().map(|arr| TickArrayView {
+        start_tick_index: arr.start_tick_index,
+        ticks: &arr.ticks,
+    });
+    let upper_view = arrays[2].as_ref().map(|arr| TickArrayView {
+        start_tick_index: arr.start_tick_index,
+        ticks: &arr.ticks,
+    });
+
     // Build window
     let window = whirlpool_core::tick_window::TickWindow {
-        lower: views[0].clone(),
-        current: views[1].clone(),
-        upper: views[2].clone(),
+        lower: lower_view,
+        current: current_view,
+        upper: upper_view,
     };
 
     // Nearest initialized ticks

@@ -35,6 +35,7 @@ pub struct ExecutorConfig {
     pub flash_loan_providers: Vec<String>,
     pub max_flash_loan_amount_sol: f64,
     pub flash_loan_timeout_ms: u64,
+    pub flash_loan_receiver_program_id: Option<String>,
 
     // Risk management
     pub daily_loss_limit_sol: f64,
@@ -124,7 +125,7 @@ impl ExecutorConfig {
 
             // Flash loan configuration
             flash_loan_providers: env::var("FLASH_LOAN_PROVIDERS")
-                .unwrap_or_else(|_| "solend,marginfi,tulip".to_string())
+                .unwrap_or_else(|_| "save,marginfi,port".to_string())
                 .split(',')
                 .map(|s| s.to_string())
                 .collect(),
@@ -134,6 +135,7 @@ impl ExecutorConfig {
             flash_loan_timeout_ms: env::var("FLASH_LOAN_TIMEOUT_MS")
                 .unwrap_or_else(|_| "1000".to_string())
                 .parse()?,
+            flash_loan_receiver_program_id: env::var("FLASH_LOAN_RECEIVER_PROGRAM_ID").ok(),
 
             // Risk management
             daily_loss_limit_sol: env::var("DAILY_LOSS_LIMIT_SOL")

@@ -42,7 +42,8 @@ fn smoke_connect() {
         std::thread::sleep(Duration::from_millis(300));
     }
 
-    child.kill().ok();
+    let _ = child.kill();
+    let _ = child.wait();
     assert!(health_ok, "health endpoint not reachable in time");
     assert!(metrics_ok, "metrics endpoint not reachable in time");
 }

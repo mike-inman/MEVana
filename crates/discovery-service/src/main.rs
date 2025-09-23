@@ -172,7 +172,7 @@ impl DiscoveryService {
             }
 
             // Report metrics every 100 programs
-            if self.metrics.programs_discovered % 100 == 0 {
+            if self.metrics.programs_discovered.is_multiple_of(100) {
                 self.report_metrics().await?;
             }
         }

@@ -1,3 +1,4 @@
+#![allow(dead_code, unused_imports, unused_variables, unused_mut)]
 // executor-service/src/bin/wallet_setup.rs
 //! Wallet setup and funding verification tool
 
@@ -21,7 +22,7 @@ async fn main() -> Result<()> {
     info!("📁 Checking wallet at: {}", expanded_path);
 
     // Verify wallet file exists
-    if !fs::metadata(&*expanded_path).is_ok() {
+    if fs::metadata(&*expanded_path).is_err() {
         error!("❌ Wallet file not found: {}", expanded_path);
         error!(
             "💡 Create a wallet with: solana-keygen new --outfile {}",

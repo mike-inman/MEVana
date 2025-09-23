@@ -1,3 +1,5 @@
+#![allow(unused_imports)]
+
 use anyhow::Result;
 use axum::{
     extract::{

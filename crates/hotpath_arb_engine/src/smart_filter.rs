@@ -1,6 +1,6 @@
 use anyhow::Result;
-use chrono::{DateTime, Timelike, Utc};
-use log::{debug, info, warn};
+use chrono::{Timelike, Utc};
+use log::{debug, info};
 use serde::{Deserialize, Serialize};
 use sqlx::Row;
 use std::collections::{HashMap, VecDeque};
@@ -387,7 +387,7 @@ impl SmartFilter {
         let gas_cost_sol = self.estimate_gas_cost().await;
 
         // Step 2: Calculate net profit
-        let trade_size_sol = opportunity.amount_in * 0.000000001; // Assuming amount_in is in lamports
+        let trade_size_sol = opportunity.amount_in * 1e-9; // Assuming amount_in is in lamports
         let gross_profit_sol = (opportunity.profit_bps as f64 / 10000.0) * trade_size_sol;
         let net_profit_sol = gross_profit_sol - gas_cost_sol;
 
@@ -526,7 +526,7 @@ impl SmartFilter {
         actual_profit_sol: f64,
     ) {
         let venue_pair = format!("{}->{}", opportunity.venue_sell, opportunity.venue_buy);
-        let hour = chrono::Utc::now().hour() as u8;
+        let hour = Utc::now().hour() as u8;
 
         // Real-time profit validation and learning
         self.update_profit_prediction_accuracy(opportunity, actual_profit_sol)
@@ -775,7 +775,7 @@ impl SmartFilter {
         actual_profit_sol: f64,
     ) {
         let venue_pair = format!("{}->{}", opportunity.venue_sell, opportunity.venue_buy);
-        let trade_size_sol = opportunity.amount_in as f64 * 0.000000001;
+        let trade_size_sol = opportunity.amount_in * 1e-9;
         let predicted_gross_profit = (opportunity.profit_bps as f64 / 10000.0) * trade_size_sol;
         let prediction_error = (predicted_gross_profit - actual_profit_sol).abs();
 

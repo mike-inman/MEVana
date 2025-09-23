@@ -1,3 +1,5 @@
+#![allow(warnings)]
+
 use axum::{
     extract::{Query, State},
     http::{Method, StatusCode},

@@ -289,6 +289,7 @@ impl EdgeAssembler {
         Ok(())
     }
 
+    #[allow(dead_code)]
     async fn update_tick_array_and_emit_edges(
         &self,
         _ta_pubkey: &str,

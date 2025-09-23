@@ -161,7 +161,7 @@ impl DatabaseService {
             ),
             request
                 .price_impact_pct
-                .map(|v| serde_json::Value::Number(serde_json::Number::from_f64(v as f64).unwrap()))
+                .map(|v| serde_json::Value::Number(serde_json::Number::from_f64(v).unwrap()))
                 .unwrap_or(serde_json::Value::Null),
             serde_json::Value::Number(serde_json::Number::from(
                 request.detection_time_us.unwrap_or(0) as i64,
@@ -388,6 +388,7 @@ impl DatabaseService {
     // KAFKA CONSUMER METHODS
     // ============================================================================
 
+    #[allow(clippy::too_many_arguments)]
     pub async fn insert_arbitrage_opportunity_from_kafka(
         &self,
         _signature: &str,
@@ -594,9 +595,6 @@ impl DatabaseService {
         &self,
         request: UpdateSmartFilterConfigRequest,
     ) -> Result<SmartFilterConfigUpdateResponse, sqlx::Error> {
-        use chrono::Utc;
-        use serde_json::json;
-
         // Get current value if it exists
         let current_config = self.get_smart_filter_config().await?;
         let old_value = match request.parameter.as_str() {

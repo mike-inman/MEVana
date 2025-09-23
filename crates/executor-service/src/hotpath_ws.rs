@@ -1,7 +1,6 @@
 use anyhow::Result;
 use futures_util::StreamExt;
 use log::{error, info, warn};
-use serde::Deserialize;
 use tokio::time::{sleep, Duration, Instant};
 use tokio_tungstenite::connect_async;
 use url::Url;
@@ -53,23 +52,21 @@ pub async fn start_hotpath_ws(
                             Ok(m) => {
                                 if m.is_text() {
                                     metrics.hotpath_ws_messages.inc();
-                                    if let Ok(sig) =
+                                    if let Ok(ArbSignal::V1(v1)) =
                                         serde_json::from_str::<ArbSignal>(m.to_text().unwrap_or(""))
                                     {
-                                        if let ArbSignal::V1(v1) = sig {
-                                            let opp = map_signal(v1);
-                                            let start = Instant::now();
-                                            if let Err(e) =
-                                                engine.process_hotpath_opportunity(opp).await
-                                            {
-                                                error!("hotpath_process_error: {}", e);
-                                                metrics.hotpath_ws_errors.inc();
-                                            }
-                                            metrics.hotpath_opportunities_processed.inc();
-                                            metrics
-                                                .hotpath_processing_time_seconds
-                                                .observe(start.elapsed().as_secs_f64());
+                                        let opp = map_signal(v1);
+                                        let start = Instant::now();
+                                        if let Err(e) =
+                                            engine.process_hotpath_opportunity(opp).await
+                                        {
+                                            error!("hotpath_process_error: {}", e);
+                                            metrics.hotpath_ws_errors.inc();
                                         }
+                                        metrics.hotpath_opportunities_processed.inc();
+                                        metrics
+                                            .hotpath_processing_time_seconds
+                                            .observe(start.elapsed().as_secs_f64());
                                     }
                                 }
                             }

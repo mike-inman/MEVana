@@ -1,6 +1,5 @@
 use anyhow::Result;
 use log::{error, info, warn};
-use std::time::Duration;
 use tokio::signal;
 
 mod config;

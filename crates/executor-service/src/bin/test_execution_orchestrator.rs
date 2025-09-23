@@ -62,12 +62,13 @@ async fn main() -> Result<()> {
         "https://mainnet.block-engine.jito.wtf".to_string(),
     )?);
     let wallet_service = Arc::new(WalletService::new(config.clone(), shyft_client.clone())?);
+    let metrics_server = Arc::new(MetricsServer::new(config.metrics_port)?);
     let bundle_builder = Arc::new(BundleBuilder::new(shyft_client.clone()));
     let flash_loan_aggregator = Arc::new(FlashLoanAggregator::new(
         config.clone(),
         shyft_client.clone(),
+        Some(metrics_server.clone()),
     )?);
-    let metrics_server = Arc::new(MetricsServer::new(config.metrics_port)?);
 
     // Create the ExecutionOrchestrator
     let orchestrator = ExecutionOrchestrator::new(

@@ -1,14 +1,13 @@
 use anyhow::Result;
 use chrono::Utc;
-use log::{debug, info, warn};
+use log::{debug, info};
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, VecDeque};
 use std::sync::Arc;
 use tokio::sync::{mpsc, RwLock};
 use uuid::Uuid;
 
-use crate::flash_loan_integration::{FlashLoanProvider, FlashLoanQuote};
-use crate::orderbook_tracker::ArbitrageEvent;
+use crate::flash_loan_integration::FlashLoanProvider;
 use crate::smart_filter::SmartOpportunity;
 use crate::transaction_templates::{TransactionTemplate, TransactionTemplateCache};
 
@@ -218,7 +217,7 @@ pub enum StrategyUpdateType {
 
 impl AIStrategyEngine {
     pub async fn new(template_cache: Arc<TransactionTemplateCache>) -> Result<Self> {
-        let (strategy_sender, mut strategy_receiver) = mpsc::unbounded_channel();
+        let (strategy_sender, strategy_receiver) = mpsc::unbounded_channel();
 
         // Initialize with default strategies
         let default_rules = Self::create_default_strategy_rules();
@@ -286,7 +285,7 @@ impl AIStrategyEngine {
             }
 
             // Check cooldown
-            let now = chrono::Utc::now().timestamp() as u64;
+            let now = Utc::now().timestamp() as u64;
             if now - rule.last_applied < rule.cooldown_ms {
                 continue;
             }
@@ -324,7 +323,7 @@ impl AIStrategyEngine {
                 confidence_score: confidence,
                 expected_profit: opportunity.estimated_net_profit_sol,
                 actual_result: None, // Will be filled in later
-                timestamp: chrono::Utc::now().timestamp() as u64,
+                timestamp: Utc::now().timestamp() as u64,
             };
 
             self.ai_model
@@ -453,7 +452,7 @@ impl AIStrategyEngine {
             ExecutionStrategy::BlitzkriegArb {
                 max_position_multiplier,
                 force_flash_loans,
-                template_preference,
+                template_preference: _,
             } => {
                 let position_size = opportunity.estimated_net_profit_sol * max_position_multiplier;
                 let template = self
@@ -473,7 +472,7 @@ impl AIStrategyEngine {
                     strategy: strategy.clone(),
                     position_size_sol: position_size,
                     use_flash_loan: *force_flash_loans || position_size > 1.0,
-                    template: template,
+                    template,
                     flash_loan_provider: Self::select_flash_loan_provider(context).await,
                     priority_fee_multiplier: 2.0, // Aggressive fees for speed
                     max_slippage_bps: 100,        // Higher slippage tolerance for speed

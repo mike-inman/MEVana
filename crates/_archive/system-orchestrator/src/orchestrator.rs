@@ -8,19 +8,16 @@ use tokio::sync::RwLock;
 use tokio::time::Instant;
 
 use crate::config::OrchestratorConfig;
-use crate::health_checker::HealthChecker;
 use crate::service_manager::ServiceManager;
 use crate::startup_sequence::StartupSequence;
 
 pub struct SystemOrchestrator {
     config: OrchestratorConfig,
     service_manager: ServiceManager,
-    health_checker: HealthChecker,
     startup_time: Arc<RwLock<Option<Instant>>>,
     infrastructure_was_already_healthy: bool,
 
     // Prometheus metrics
-    services_total: IntGauge,
     services_healthy: IntGauge,
     services_unhealthy: IntGauge,
     system_restarts: IntCounter,
@@ -58,10 +55,8 @@ impl SystemOrchestrator {
         Ok(Self {
             config,
             service_manager: ServiceManager::new(),
-            health_checker: HealthChecker::new(),
             startup_time: Arc::new(RwLock::new(None)),
             infrastructure_was_already_healthy: false,
-            services_total,
             services_healthy,
             services_unhealthy,
             system_restarts,
@@ -134,7 +129,6 @@ impl SystemOrchestrator {
         });
 
         // Start health monitoring
-        let health_checker = self.health_checker.clone();
         let service_manager = self.service_manager.clone();
         let services_healthy = self.services_healthy.clone();
         let services_unhealthy = self.services_unhealthy.clone();
@@ -329,9 +323,8 @@ impl SystemOrchestrator {
         info!("🔍 Checking for existing MEVana processes...");
 
         // Kill any existing system-orchestrator processes (except current)
-        let current_pid = std::process::id();
         let output = Command::new("pkill")
-            .args(&["-f", "system-orchestrator"])
+            .args(["-f", "system-orchestrator"])
             .output()
             .await;
 
@@ -354,7 +347,8 @@ impl SystemOrchestrator {
 
         for service in &services_to_kill {
             let output = Command::new("pkill")
-                .args(&["-f", &format!("cargo run.*{}", service)])
+                .arg("-f")
+                .arg(format!("cargo run.*{}", service))
                 .output()
                 .await;
 
@@ -377,13 +371,13 @@ impl SystemOrchestrator {
 
         // First, ensure docker network exists
         let _network_result = Command::new("docker")
-            .args(&["network", "create", "mevana_net"])
+            .args(["network", "create", "mevana_net"])
             .output()
             .await;
 
         // Start infrastructure using docker-compose
         let result = Command::new("docker")
-            .args(&[
+            .args([
                 "compose",
                 "-f",
                 "infrastructure/docker-compose.yml",
@@ -478,13 +472,8 @@ impl SystemOrchestrator {
         let result = tokio::time::timeout(
             Duration::from_secs(10),
             Command::new("docker")
-                .args(&[
-                    "compose",
-                    "-f",
-                    "infrastructure/docker-compose.yml",
-                    "ps",
-                    service_name,
-                ])
+                .args(["compose", "-f", "infrastructure/docker-compose.yml", "ps"])
+                .arg(service_name)
                 .current_dir(".")
                 .output(),
         )

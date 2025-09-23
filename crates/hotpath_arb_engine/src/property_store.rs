@@ -1,3 +1,5 @@
+#![allow(warnings)]
+
 use anyhow::Result;
 use log::{debug, error, info, warn};
 use serde::{Deserialize, Serialize};
@@ -1736,7 +1738,6 @@ impl PropertyStore {
 
     /// Crash Recovery and Persistence System
     /// =====================================
-
     /// Attempt to recover from previous crash by loading persisted state
     async fn attempt_crash_recovery(&mut self) -> Result<bool> {
         let persistence_path = self.persistence_path.read().await.clone();
@@ -2033,13 +2034,12 @@ static GLOBAL_PROPERTY_STORE: OnceLock<PropertyStore> = OnceLock::new();
 
 /// Get global property store instance
 pub fn get_property_store() -> &'static PropertyStore {
-    GLOBAL_PROPERTY_STORE.get_or_init(|| PropertyStore::new())
+    GLOBAL_PROPERTY_STORE.get_or_init(PropertyStore::new)
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use tokio::time::{sleep, Duration};
 
     #[tokio::test]
     async fn test_atomic_property_updates() {

@@ -1,6 +1,6 @@
 use crossbeam::queue::SegQueue;
 use lazy_static::lazy_static;
-use log::{debug, info, warn};
+use log::{debug, info};
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, VecDeque};
 use std::sync::Arc;
@@ -323,7 +323,7 @@ pub fn create_orderbook_snapshot(
     };
 
     // Estimate depth in USD (simplified)
-    let depth_usd = mid_price.map(|mid| {
+    let depth_usd = mid_price.map(|_mid| {
         let bid_depth: f64 = bid_levels.iter().take(10).map(|l| l.size * l.price).sum();
         let ask_depth: f64 = ask_levels.iter().take(10).map(|l| l.size * l.price).sum();
         (bid_depth + ask_depth) / 2.0
@@ -343,6 +343,7 @@ pub fn create_orderbook_snapshot(
 }
 
 /// Helper to create arbitrage event
+#[allow(clippy::too_many_arguments)]
 pub fn create_arbitrage_event(
     opportunity_id: &str,
     slot: u64,
@@ -378,6 +379,7 @@ pub fn create_arbitrage_event(
 }
 
 /// Helper to create execution result
+#[allow(clippy::too_many_arguments)]
 pub fn create_execution_result(
     opportunity_id: &str,
     executed: bool,

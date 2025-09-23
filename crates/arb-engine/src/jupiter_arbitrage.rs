@@ -429,8 +429,10 @@ mod tests {
     async fn test_paper_trading_mode() {
         let signal_queue = crate::hotpath::SignalQueue::new(1000);
         let tx = signal_queue.sender();
-        let mut config = JupiterArbConfig::default();
-        config.enable_paper_trading = true;
+        let config = JupiterArbConfig {
+            enable_paper_trading: true,
+            ..Default::default()
+        };
 
         let scanner = JupiterArbitrageScanner::new(tx, Some(config));
         let results = scanner.get_paper_results().await;

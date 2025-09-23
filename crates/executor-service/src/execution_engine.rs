@@ -1,3 +1,5 @@
+#![allow(clippy::items_after_test_module)]
+#![allow(dead_code)]
 use anyhow::Result;
 use log::{error, info, warn};
 use rdkafka::config::ClientConfig;
@@ -16,13 +18,16 @@ use uuid::Uuid;
 use crate::account_registry::{report_missing_accounts, AccountRegistry, AccountRegistryConfig};
 use crate::bundle_builder::{ArbitrageBundle, BundleBuilder};
 use crate::config::ExecutorConfig;
-use crate::flash_loan::FlashLoanAggregator;
+use crate::flash_loan::{FlashLoanAggregator, FlashLoanPlanOptions};
 use crate::hotpath_ws;
 use crate::metrics::MetricsServer;
 use crate::opportunity_processor::OpportunityProcessor;
 use crate::shyft_client::ShyftClient;
 use crate::token_registry::{NoopEnricher, ShyftEnricher, TokenRegistry};
 use crate::wallet_service::WalletService;
+use flash_loan_providers::PlanResponse;
+use solana_sdk::pubkey::Pubkey;
+use std::str::FromStr;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ArbitrageOpportunity {
@@ -146,6 +151,17 @@ impl OpportunityDedupe {
     }
 }
 
+#[derive(Serialize)]
+struct ReceiverPlanPayload<'a> {
+    opportunity_id: Uuid,
+    token_in: &'a str,
+    token_out: &'a str,
+    max_size_in: u128,
+    estimated_profit_lamports: u64,
+    edges: &'a [u64],
+    venues: &'a [u32],
+}
+
 impl ExecutionEngine {
     #[allow(dead_code)]
     pub fn metrics(&self) -> &Arc<MetricsServer> {
@@ -227,6 +243,7 @@ impl ExecutionEngine {
         let flash_loan_aggregator = Arc::new(FlashLoanAggregator::new(
             Arc::clone(&config),
             Arc::clone(&shyft_client),
+            Some(Arc::clone(&metrics)),
         )?);
 
         // Initialize Kafka consumer
@@ -407,7 +424,7 @@ impl ExecutionEngine {
                 };
             let _ = sqlx::query("INSERT INTO token_oracles (mint, price_lamports, price_decimals, updated_at) VALUES ($1,$2,$3,NOW()) ON CONFLICT (mint) DO UPDATE SET price_lamports=EXCLUDED.price_lamports, price_decimals=EXCLUDED.price_decimals, updated_at=NOW()")
                 .bind(mint)
-                .bind(price_lamports.map(|v| v as i64))
+                .bind(price_lamports)
                 .bind(price_decimals)
                 .execute(&mut *tx).await;
         }
@@ -473,9 +490,9 @@ impl ExecutionEngine {
                     .copied()
                     .unwrap_or(9) as u32;
                 let canonical_amount = if mint_decimals < 9 {
-                    amount_in_smallest * 10u128.pow((9 - mint_decimals) as u32)
+                    amount_in_smallest * 10u128.pow(9 - mint_decimals)
                 } else if mint_decimals > 9 {
-                    amount_in_smallest / 10u128.pow((mint_decimals - 9) as u32)
+                    amount_in_smallest / 10u128.pow(mint_decimals - 9)
                 } else {
                     amount_in_smallest
                 };
@@ -496,8 +513,8 @@ impl ExecutionEngine {
         let prev = self
             .daily_reset_unix
             .load(std::sync::atomic::Ordering::Relaxed);
-        if today_start != prev {
-            if self
+        if today_start != prev
+            && self
                 .daily_reset_unix
                 .compare_exchange(
                     prev,
@@ -506,11 +523,10 @@ impl ExecutionEngine {
                     std::sync::atomic::Ordering::Relaxed,
                 )
                 .is_ok()
-            {
-                self.daily_realized_pnl_lamports
-                    .store(0, std::sync::atomic::Ordering::SeqCst);
-                log::info!("daily_pnl_reset new_day_start_unix={}", today_start);
-            }
+        {
+            self.daily_realized_pnl_lamports
+                .store(0, std::sync::atomic::Ordering::SeqCst);
+            log::info!("daily_pnl_reset new_day_start_unix={}", today_start);
         }
     }
 
@@ -701,7 +717,7 @@ impl ExecutionEngine {
                     (opportunity.detected_at_ns / 1_000_000_000) as i64,
                     0,
                 )
-                .unwrap_or_else(|| chrono::Utc::now());
+                .unwrap_or_else(chrono::Utc::now);
                 let _ = sqlx::query("INSERT INTO opportunities (id, token_in, token_out, profit_bps, max_size_in, total_cu_estimate, total_fees_bps, detected_at, max_edge_age_ms) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9) ON CONFLICT (id) DO NOTHING")
                     .bind(opportunity.opportunity_id)
                     .bind(raw_in)
@@ -779,6 +795,7 @@ impl ExecutionEngine {
         }
 
         // Step 2: Get flash loan quote
+        let mut flash_loan_plan: Option<PlanResponse> = None;
         let token_in_mint = bs58::encode(&opportunity.token_in).into_string();
         let token_out_mint = bs58::encode(&opportunity.token_out).into_string();
         match self
@@ -788,9 +805,8 @@ impl ExecutionEngine {
         {
             Ok(quote) => {
                 execution_result.status = ExecutionStatus::FlashLoanQuoted;
-                execution_result.flash_loan_provider = Some(format!("{:?}", quote.provider));
-                execution_result.flash_loan_fee_lamports =
-                    Some((opportunity.max_size_in as u64 * quote.fee_bps as u64) / 10_000);
+                execution_result.flash_loan_provider = Some(quote.provider.as_str().to_string());
+                execution_result.flash_loan_fee_lamports = Some(quote.fee_lamports);
 
                 // Check if still profitable after flash loan fees
                 if let Some(fee) = execution_result.flash_loan_fee_lamports {
@@ -802,6 +818,70 @@ impl ExecutionEngine {
                             .publish_execution_result(execution_result)
                             .await?;
                         return Ok(());
+                    }
+                }
+
+                // Attempt to build a concrete flash loan plan for downstream bundling
+                if matches!(
+                    quote.provider,
+                    crate::flash_loan::FlashLoanProvider::Marginfi
+                        | crate::flash_loan::FlashLoanProvider::Solend
+                        | crate::flash_loan::FlashLoanProvider::PortFinance
+                        | crate::flash_loan::FlashLoanProvider::Kamino
+                ) {
+                    let borrower_pubkey = self.wallet_service.get_active_wallet();
+                    let receiver_program_id = self
+                        .config
+                        .flash_loan_receiver_program_id
+                        .as_ref()
+                        .and_then(|pid| Pubkey::from_str(pid).ok());
+
+                    let receiver_payload = serde_json::to_vec(&ReceiverPlanPayload {
+                        opportunity_id: opportunity.opportunity_id,
+                        token_in: &token_in_mint,
+                        token_out: &token_out_mint,
+                        max_size_in: opportunity.max_size_in,
+                        estimated_profit_lamports: execution_result.estimated_profit_lamports,
+                        edges: &opportunity.edges,
+                        venues: &opportunity.venues,
+                    })
+                    .ok();
+
+                    let plan_options = FlashLoanPlanOptions {
+                        receiver_program_id,
+                        receiver_payload,
+                        reserve_hint: None,
+                    };
+
+                    match self
+                        .flash_loan_aggregator
+                        .build_plan(
+                            quote.provider,
+                            &token_in_mint,
+                            opportunity.max_size_in as u64,
+                            &borrower_pubkey,
+                            plan_options,
+                        )
+                        .await
+                    {
+                        Ok(plan) => {
+                            info!(
+                                "flash_loan_plan_ready provider={} amount={} fee_lamports={} borrow_ix={} repay_ix={}",
+                                quote.provider.as_str(),
+                                plan.amount,
+                                plan.fee_lamports,
+                                plan.instructions.borrow.len(),
+                                plan.instructions.repay.len()
+                            );
+                            flash_loan_plan = Some(plan);
+                        }
+                        Err(err) => {
+                            warn!(
+                                "flash_loan_plan_build_failed provider={} err={}",
+                                quote.provider.as_str(),
+                                err
+                            );
+                        }
                     }
                 }
             }
@@ -825,6 +905,7 @@ impl ExecutionEngine {
                     .flash_loan_provider
                     .as_ref()
                     .and_then(|s| crate::flash_loan::FlashLoanProvider::from_string(s)),
+                flash_loan_plan.as_ref(),
             )
             .await
         {
@@ -1173,7 +1254,7 @@ impl ExecutionEngine {
         // Persist (best-effort) execution result
         let executed_at_ts = (result.executed_at_ns / 1_000_000_000) as i64;
         let executed_at = chrono::DateTime::<chrono::Utc>::from_timestamp(executed_at_ts, 0)
-            .unwrap_or_else(|| chrono::Utc::now());
+            .unwrap_or_else(chrono::Utc::now);
         if let Err(e) = sqlx::query(r#"INSERT INTO execution_results (
                 id, opportunity_id, status, bundle_id, transaction_signatures,
                 estimated_profit_lamports, actual_profit_lamports, reconciled_profit_lamports, execution_time_ms, gas_used,
@@ -1210,8 +1291,7 @@ impl ExecutionEngine {
             .bind(result
                 .simulated_token_deltas
                 .as_ref()
-                .map(|m| serde_json::to_value(m).ok())
-                .flatten())
+                .and_then(|m| serde_json::to_value(m).ok()))
             .bind(config_hash)
             .bind(token_registry_hash)
             .execute(&self.db).await {
@@ -1433,16 +1513,124 @@ impl ExecutionEngine {
         {
             use crate::hash_chain_logger::global_logger;
             let line = format!(
-                "exec|{}|{}|{}|{}|{}",
+                "exec|{}|{}|{}|{}|{:?}",
                 result.execution_id,
                 result.opportunity_id,
                 result.estimated_profit_lamports,
                 result.actual_profit_lamports.unwrap_or_default(),
-                format!("{:?}", result.status)
+                result.status
             );
             global_logger().append(&line);
         }
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::account_registry::{AccountRegistry, AccountRegistryData, OracleAccount};
+    use crate::metrics::MetricsServer;
+    use sqlx::PgPool;
+    use std::collections::HashMap;
+
+    // Helper to build minimal engine with injected registry
+    async fn test_engine_with_oracle(
+        price: &str,
+        price_decimals: u8,
+        mint: &str,
+        mint_decimals: u8,
+    ) -> ExecutionEngine {
+        let cfg = ExecutorConfig {
+            kafka_broker: "unused".into(),
+            opportunities_topic: "unused".into(),
+            results_topic: "unused".into(),
+            consumer_group: "unused".into(),
+            shyft_api_key: "x".into(),
+            shyft_rpc_url: "http://localhost".into(),
+            shyft_geyser_url: "http://localhost".into(),
+            shyft_jito_url: "http://localhost".into(),
+            shyft_geyser_x_token: "".into(),
+            wallet_keypair_path: "~/.config/solana/id.json".into(),
+            wallet_backup_paths: vec![],
+            max_wallet_balance_sol: 100.0,
+            min_wallet_balance_sol: 1.0,
+            max_position_size_sol: 10.0,
+            min_profit_threshold_bps: 10,
+            max_slippage_bps: 50,
+            max_execution_time_ms: 1000,
+            flash_loan_providers: vec!["solend".into()],
+            max_flash_loan_amount_sol: 1000.0,
+            flash_loan_timeout_ms: 1000,
+            flash_loan_receiver_program_id: None,
+            daily_loss_limit_sol: 5.0,
+            max_concurrent_trades: 1,
+            cool_down_period_ms: 1000,
+            metrics_port: 0,
+            health_check_port: 0,
+            log_level: "info".into(),
+            shyft_graphql_url: None,
+            shyft_meta_api_key: None,
+        };
+        let metrics = Arc::new(MetricsServer::new(0).unwrap());
+        // Use a separate test database (requires TEST_DATABASE_URL or falls back to local) - best effort
+        let db_url = std::env::var("TEST_DATABASE_URL")
+            .unwrap_or_else(|_| "postgresql://mev:mevpassword@localhost:5433/mevdb".into());
+        let pool = PgPool::connect(&db_url).await.expect("pg connect");
+        let mut eng = ExecutionEngine::new(cfg, Arc::clone(&metrics), pool)
+            .await
+            .unwrap();
+        // Inject oracle & decimals
+        let mut data = AccountRegistryData::default();
+        data.oracles.insert(
+            mint.to_string(),
+            OracleAccount {
+                price: price.into(),
+                price_decimals: Some(price_decimals),
+                confidence_limit_bps: None,
+            },
+        );
+        let mut reg = AccountRegistry {
+            data,
+            missing_keys: vec![],
+            validation_errors: vec![],
+            mint_decimals: HashMap::new(),
+        };
+        reg.mint_decimals.insert(mint.to_string(), mint_decimals);
+        eng.account_registry = Arc::new(reg);
+        eng
+    }
+
+    #[tokio::test]
+    async fn test_notional_cap_compute_sol_passthrough() {
+        let engine =
+            test_engine_with_oracle("1", 0, "So11111111111111111111111111111111111111112", 9).await;
+        let amount = 5_000_000u128; // 0.005 SOL lamports
+        let notional = engine
+            .compute_input_notional_lamports("So11111111111111111111111111111111111111112", amount);
+        assert_eq!(notional, amount);
+    }
+
+    #[tokio::test]
+    async fn test_notional_cap_compute_token_scaled_up() {
+        // token with 6 decimals, price = 2 lamports per canonical 9-dec unit (price_decimals=0 for simplicity)
+        let engine = test_engine_with_oracle("2", 0, "TokenMint6Dec", 6).await;
+        let amount_smallest = 1_000_000u128; // 1 token (6 decimals)
+                                             // canonical amount => multiply by 10^(9-6)=10^3=1000 -> 1_000_000 * 1000 = 1_000_000_000
+                                             // notional = canonical_amount * price = 1_000_000_000 * 2 = 2_000_000_000
+        let notional = engine.compute_input_notional_lamports("TokenMint6Dec", amount_smallest);
+        assert_eq!(notional, 2_000_000_000u128);
+    }
+
+    #[tokio::test]
+    async fn test_notional_cap_compute_token_scaled_down() {
+        // token with 12 decimals (scale down)
+        let engine = test_engine_with_oracle("100", 2, "TokenMint12Dec", 12).await; // price=100, price_decimals=2 => effective price=1 lamport per canonical unit
+        let amount_smallest = 1_000_000_000_000u128; // 1 token (12 decimals)
+                                                     // canonical amount divide by 10^(12-9)=10^3 => 1_000_000_000_000 / 1000 = 1_000_000_000
+                                                     // raw_price=100, price_decimals=2 => scale_div=10^2=100 -> (1_000_000_000 * 100)/100 = 1_000_000_000
+        let notional = engine.compute_input_notional_lamports("TokenMint12Dec", amount_smallest);
+        assert_eq!(notional, 1_000_000_000u128);
     }
 }
 
@@ -1521,8 +1709,7 @@ impl ExecutionEngine {
             .load(std::sync::atomic::Ordering::Relaxed);
         if !self.circuit_open.load(std::sync::atomic::Ordering::Relaxed)
             && (f >= max_fail || u >= max_unlanded)
-        {
-            if self
+            && self
                 .circuit_open
                 .compare_exchange(
                     false,
@@ -1531,135 +1718,27 @@ impl ExecutionEngine {
                     std::sync::atomic::Ordering::Relaxed,
                 )
                 .is_ok()
-            {
-                self.metrics.circuit_breaker_trips_total.inc();
-                self.metrics.circuit_breaker_open_gauge.set(1);
-                // Auto-disable live trading
-                self.live_trading_enabled
-                    .store(false, std::sync::atomic::Ordering::SeqCst);
-                self.metrics.trading_disable_events_total.inc();
-                self.metrics.trading_enabled_gauge.set(0);
-                log::error!(
-                    "circuit_breaker_trip trading_auto_disabled failures={} unlanded={} max_fail={} max_unlanded={}",
-                    f, u, max_fail, max_unlanded
-                );
-                let extra = serde_json::json!({
-                    "failures": f,
-                    "unlanded": u,
-                    "max_fail": max_fail,
-                    "max_unlanded": max_unlanded,
-                    "last_status": status_str
-                });
-                log_event("circuit_breaker_trip", None, None, true, true, Some(&extra));
-            }
+        {
+            self.metrics.circuit_breaker_trips_total.inc();
+            self.metrics.circuit_breaker_open_gauge.set(1);
+            // Auto-disable live trading
+            self.live_trading_enabled
+                .store(false, std::sync::atomic::Ordering::SeqCst);
+            self.metrics.trading_disable_events_total.inc();
+            self.metrics.trading_enabled_gauge.set(0);
+            log::error!(
+                "circuit_breaker_trip trading_auto_disabled failures={} unlanded={} max_fail={} max_unlanded={}",
+                f, u, max_fail, max_unlanded
+            );
+            let extra = serde_json::json!({
+                "failures": f,
+                "unlanded": u,
+                "max_fail": max_fail,
+                "max_unlanded": max_unlanded,
+                "last_status": status_str
+            });
+            log_event("circuit_breaker_trip", None, None, true, true, Some(&extra));
         }
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::account_registry::{AccountRegistry, AccountRegistryData, OracleAccount};
-    use crate::metrics::MetricsServer;
-    use sqlx::PgPool;
-    use std::collections::HashMap;
-
-    // Helper to build minimal engine with injected registry
-    async fn test_engine_with_oracle(
-        price: &str,
-        price_decimals: u8,
-        mint: &str,
-        mint_decimals: u8,
-    ) -> ExecutionEngine {
-        let cfg = ExecutorConfig {
-            kafka_broker: "unused".into(),
-            opportunities_topic: "unused".into(),
-            results_topic: "unused".into(),
-            consumer_group: "unused".into(),
-            shyft_api_key: "x".into(),
-            shyft_rpc_url: "http://localhost".into(),
-            shyft_geyser_url: "http://localhost".into(),
-            shyft_jito_url: "http://localhost".into(),
-            shyft_geyser_x_token: "".into(),
-            wallet_keypair_path: "~/.config/solana/id.json".into(),
-            wallet_backup_paths: vec![],
-            max_wallet_balance_sol: 100.0,
-            min_wallet_balance_sol: 1.0,
-            max_position_size_sol: 10.0,
-            min_profit_threshold_bps: 10,
-            max_slippage_bps: 50,
-            max_execution_time_ms: 1000,
-            flash_loan_providers: vec!["solend".into()],
-            max_flash_loan_amount_sol: 1000.0,
-            flash_loan_timeout_ms: 1000,
-            daily_loss_limit_sol: 5.0,
-            max_concurrent_trades: 1,
-            cool_down_period_ms: 1000,
-            metrics_port: 0,
-            health_check_port: 0,
-            log_level: "info".into(),
-            shyft_graphql_url: None,
-            shyft_meta_api_key: None,
-        };
-        let metrics = Arc::new(MetricsServer::new(0).unwrap());
-        // Use a separate test database (requires TEST_DATABASE_URL or falls back to local) - best effort
-        let db_url = std::env::var("TEST_DATABASE_URL")
-            .unwrap_or_else(|_| "postgresql://mev:mevpassword@localhost:5433/mevdb".into());
-        let pool = PgPool::connect(&db_url).await.expect("pg connect");
-        let mut eng = ExecutionEngine::new(cfg, Arc::clone(&metrics), pool)
-            .await
-            .unwrap();
-        // Inject oracle & decimals
-        let mut data = AccountRegistryData::default();
-        data.oracles.insert(
-            mint.to_string(),
-            OracleAccount {
-                price: price.into(),
-                price_decimals: Some(price_decimals),
-                confidence_limit_bps: None,
-            },
-        );
-        let mut reg = AccountRegistry {
-            data,
-            missing_keys: vec![],
-            validation_errors: vec![],
-            mint_decimals: HashMap::new(),
-        };
-        reg.mint_decimals.insert(mint.to_string(), mint_decimals);
-        eng.account_registry = Arc::new(reg);
-        eng
-    }
-
-    #[tokio::test]
-    async fn test_notional_cap_compute_sol_passthrough() {
-        let engine =
-            test_engine_with_oracle("1", 0, "So11111111111111111111111111111111111111112", 9).await;
-        let amount = 5_000_000u128; // 0.005 SOL lamports
-        let notional = engine
-            .compute_input_notional_lamports("So11111111111111111111111111111111111111112", amount);
-        assert_eq!(notional, amount);
-    }
-
-    #[tokio::test]
-    async fn test_notional_cap_compute_token_scaled_up() {
-        // token with 6 decimals, price = 2 lamports per canonical 9-dec unit (price_decimals=0 for simplicity)
-        let engine = test_engine_with_oracle("2", 0, "TokenMint6Dec", 6).await;
-        let amount_smallest = 1_000_000u128; // 1 token (6 decimals)
-                                             // canonical amount => multiply by 10^(9-6)=10^3=1000 -> 1_000_000 * 1000 = 1_000_000_000
-                                             // notional = canonical_amount * price = 1_000_000_000 * 2 = 2_000_000_000
-        let notional = engine.compute_input_notional_lamports("TokenMint6Dec", amount_smallest);
-        assert_eq!(notional, 2_000_000_000u128);
-    }
-
-    #[tokio::test]
-    async fn test_notional_cap_compute_token_scaled_down() {
-        // token with 12 decimals (scale down)
-        let engine = test_engine_with_oracle("100", 2, "TokenMint12Dec", 12).await; // price=100, price_decimals=2 => effective price=1 lamport per canonical unit
-        let amount_smallest = 1_000_000_000_000u128; // 1 token (12 decimals)
-                                                     // canonical amount divide by 10^(12-9)=10^3 => 1_000_000_000_000 / 1000 = 1_000_000_000
-                                                     // raw_price=100, price_decimals=2 => scale_div=10^2=100 -> (1_000_000_000 * 100)/100 = 1_000_000_000
-        let notional = engine.compute_input_notional_lamports("TokenMint12Dec", amount_smallest);
-        assert_eq!(notional, 1_000_000_000u128);
     }
 }
 
@@ -1760,6 +1839,7 @@ impl ExecutionEngine {
                     .flash_loan_provider
                     .as_ref()
                     .and_then(|s| crate::flash_loan::FlashLoanProvider::from_string(s)),
+                None,
             )
             .await
         {

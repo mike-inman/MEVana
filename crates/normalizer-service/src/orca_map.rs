@@ -1,3 +1,12 @@
+#![allow(
+    clippy::single_component_path_imports,
+    unused_imports,
+    dead_code,
+    clippy::single_match,
+    unused_variables,
+    unused_assignments
+)]
+
 use bs58;
 use normalizer_runtime::{
     layout_parser::{read_scalar, ScalarValue},
@@ -127,7 +136,7 @@ pub fn decode_orca_whirlpool_tick_array(
     };
 
     let mut start_tick_index = 0i32;
-    let mut ticks = Vec::new();
+    let ticks = Vec::new();
 
     for f in fields {
         let v = read_scalar(data, f).ok()?;

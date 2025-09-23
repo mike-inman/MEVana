@@ -2,7 +2,6 @@ use anyhow::Result;
 use prometheus::{Counter, Encoder, Gauge, Histogram, IntCounter, IntGauge, Registry, TextEncoder};
 use std::net::SocketAddr;
 use std::sync::Arc;
-use tokio_stream::wrappers::TcpListenerStream;
 use warp::Filter;
 
 /// Prometheus metrics server for monitoring executor performance
@@ -657,6 +656,19 @@ impl MetricsServer {
         }
 
         self.execution_time_seconds.observe(execution_time);
+    }
+
+    pub fn record_flash_loan_quote_attempt(&self) {
+        self.flash_loan_requests.inc();
+    }
+
+    pub fn record_flash_loan_plan_success(&self, fee_lamports: u64) {
+        self.flash_loan_successes.inc();
+        self.flash_loan_fees_lamports.inc_by(fee_lamports as f64);
+    }
+
+    pub fn record_flash_loan_plan_failure(&self) {
+        self.flash_loan_failures.inc();
     }
 
     /// Update wallet metrics

@@ -9,7 +9,7 @@ pub struct ConnectionPool {
     primary: Pool,
     replica: Option<Pool>,
     circuit_breaker: Arc<CircuitBreaker>,
-    retry_executor: RetryExecutor,
+    _retry_executor: RetryExecutor,
     metrics: Arc<RwLock<DatabaseMetrics>>,
 }
 
@@ -106,7 +106,7 @@ impl ConnectionPool {
             primary,
             replica,
             circuit_breaker,
-            retry_executor,
+            _retry_executor: retry_executor,
             metrics,
         })
     }
@@ -317,7 +317,7 @@ impl ResilientDatabase {
                         _ => {
                             // Fallback: convert all to strings
                             let string_params: Vec<String> =
-                                params.iter().map(|v| convert_json_to_string(v)).collect();
+                                params.iter().map(convert_json_to_string).collect();
                             let param_refs: Vec<&(dyn tokio_postgres::types::ToSql + Sync)> =
                                 string_params
                                     .iter()

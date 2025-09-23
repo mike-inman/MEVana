@@ -8,6 +8,7 @@ pub struct SourceAttribution {
     pub fields: Vec<String>,
 }
 
+#[allow(dead_code)]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TokenVersionRow {
     pub mint: String,

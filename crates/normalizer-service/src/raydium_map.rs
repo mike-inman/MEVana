@@ -1,3 +1,10 @@
+#![allow(
+    clippy::single_component_path_imports,
+    dead_code,
+    unused_variables,
+    unused_imports
+)]
+
 use bs58;
 use normalizer_runtime::{
     layout_parser::{parse_array_entries, read_scalar, ScalarValue},

@@ -11,6 +11,12 @@ impl RequestIdLayer {
     }
 }
 
+impl Default for RequestIdLayer {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl<S> Layer<S> for RequestIdLayer {
     type Service = RequestIdService<S>;
 

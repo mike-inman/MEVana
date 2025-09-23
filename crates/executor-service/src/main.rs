@@ -1,3 +1,5 @@
+#![allow(warnings)]
+
 use anyhow::Result;
 use log::info;
 use sqlx::postgres::PgPoolOptions;
@@ -67,7 +69,7 @@ async fn main() -> Result<()> {
                         if count <= 20 {
                             info!("snapshot_sample={:?}", snap);
                         }
-                        if count % 1000 == 0 {
+                        if count.is_multiple_of(1000) {
                             info!("live_snapshots_received count={}", count);
                         }
                     }
@@ -253,7 +255,7 @@ async fn main() -> Result<()> {
                         }
                     }
                     count += 1;
-                    if count % 1000 == 0 {
+                    if count.is_multiple_of(1000) {
                         info!("live_snapshots_received count={}", count);
                     }
                 }

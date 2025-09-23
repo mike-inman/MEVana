@@ -1,3 +1,4 @@
+use crate::config::{parse_pubkey, providers_config};
 use crate::plugin::{
     Environment, FlashLoanProvider, PlanInstructions, PlanRequest, PlanResponse, ProviderId,
     QuoteRequest, QuoteResponse,
@@ -133,14 +134,28 @@ impl FlashLoanProvider for PortFinanceProvider {
             return Ok(None);
         }
 
-        let capped = request.amount.min(MAX_LOAN_LAMPORTS);
-        let fee_lamports = Self::compute_fee_lamports(capped);
+        let cfg = providers_config();
+        let reserve_cfg = cfg.port.reserves.get(&request.token_mint.to_string());
+        let capped = request.amount.min(
+            reserve_cfg
+                .and_then(|c| c.available_amount)
+                .unwrap_or(MAX_LOAN_LAMPORTS),
+        );
+        if capped == 0 {
+            return Ok(None);
+        }
+        let fee_bps = reserve_cfg
+            .and_then(|c| c.fee_bps)
+            .unwrap_or(FLASH_LOAN_FEE_BPS);
+        let fee_lamports = reserve_cfg
+            .and_then(|c| c.fee_lamports)
+            .unwrap_or_else(|| Self::compute_fee_lamports(capped));
 
         Ok(Some(QuoteResponse {
             provider: PROVIDER_ID,
             token_mint: request.token_mint,
             available_amount: capped,
-            fee_bps: FLASH_LOAN_FEE_BPS,
+            fee_bps,
             fee_lamports,
             estimated_latency_ms: 170,
             confidence: 0.5,
@@ -156,17 +171,46 @@ impl FlashLoanProvider for PortFinanceProvider {
             return Err(anyhow!("unsupported mint for Port Finance flash loan"));
         }
 
-        let receiver_program = Self::receiver_program_id()?;
-        let amount = request.amount.min(MAX_LOAN_LAMPORTS);
-        let fee = Self::compute_fee_lamports(amount);
+        let cfg = providers_config();
+        let reserve_cfg = cfg.port.reserves.get(&request.token_mint.to_string());
+
+        let receiver_program = request
+            .receiver_program_id
+            .or_else(|| {
+                cfg.port
+                    .program_id
+                    .as_ref()
+                    .and_then(|pid| pid.parse().ok())
+            })
+            .unwrap_or(Self::receiver_program_id()?);
+
+        let amount = request.amount.min(
+            reserve_cfg
+                .and_then(|c| c.available_amount)
+                .unwrap_or(MAX_LOAN_LAMPORTS),
+        );
+        if amount == 0 {
+            return Err(anyhow!("flash loan amount must be greater than zero"));
+        }
+        let fee = reserve_cfg
+            .and_then(|c| c.fee_lamports)
+            .unwrap_or_else(|| Self::compute_fee_lamports(amount));
 
         let mut extra_accounts = Vec::new();
-        extra_accounts.push(AccountMeta::new_readonly(DEVNET_RESERVE, false));
-        extra_accounts.push(AccountMeta::new_readonly(
-            DEVNET_RESERVE_LIQUIDITY_SUPPLY,
-            false,
-        ));
-        extra_accounts.push(AccountMeta::new_readonly(DEVNET_FEE_RECEIVER, false));
+        let config_reserve = reserve_cfg.and_then(|c| parse_pubkey(&c.reserve));
+        let reserve = request
+            .reserve_hint
+            .or(config_reserve)
+            .unwrap_or(DEVNET_RESERVE);
+        extra_accounts.push(AccountMeta::new_readonly(reserve, false));
+        let liquidity_vault = reserve_cfg
+            .and_then(|c| parse_pubkey(&c.liquidity_vault))
+            .unwrap_or(DEVNET_RESERVE_LIQUIDITY_SUPPLY);
+        extra_accounts.push(AccountMeta::new_readonly(liquidity_vault, false));
+        let fee_receiver = reserve_cfg
+            .and_then(|c| parse_pubkey(&c.fee_receiver))
+            .unwrap_or(DEVNET_FEE_RECEIVER);
+        extra_accounts.push(AccountMeta::new_readonly(fee_receiver, false));
 
         let execute_ix = build_execute_flash_loan_ix(
             &receiver_program,
@@ -175,6 +219,7 @@ impl FlashLoanProvider for PortFinanceProvider {
             request.token_mint,
             amount,
             extra_accounts,
+            request.receiver_payload.clone().unwrap_or_default(),
         )?;
 
         let mut instructions = PlanInstructions::new();
@@ -237,8 +282,10 @@ mod tests {
 
     #[test]
     fn build_plan_uses_receiver_program() {
-        let _guard = env_guard();
-        set_receiver_env();
+        {
+            let _guard = env_guard();
+            set_receiver_env();
+        }
         let provider = provider();
         let plan = block_on(provider.build_plan(
             &Environment::default(),
@@ -246,6 +293,9 @@ mod tests {
                 token_mint: WSOL_MINT,
                 amount: 3_000,
                 borrower: TEST_BORROWER,
+                receiver_program_id: None,
+                receiver_payload: None,
+                reserve_hint: None,
             },
         ))
         .expect("plan builds");
@@ -282,7 +332,6 @@ mod integration_tests {
 
     #[tokio::test]
     async fn port_finance_quotes_wsol() {
-        let _guard = env_guard();
         let provider = PortFinanceProvider::new();
         let quote = provider
             .quote(
@@ -290,6 +339,7 @@ mod integration_tests {
                 &QuoteRequest {
                     token_mint: WSOL_MINT,
                     amount: 15_000_000_000,
+                    reserve_hint: None,
                 },
             )
             .await
@@ -302,11 +352,13 @@ mod integration_tests {
 
     #[tokio::test]
     async fn port_finance_plan_uses_receiver_instruction() {
-        let _guard = env_guard();
-        std::env::set_var(
-            "FLASH_LOAN_RECEIVER_PROGRAM_ID",
-            "26hsTvfGVS5yxfgYM7htEgrsCKdvMVtWSjHnyk277hCg",
-        );
+        {
+            let _guard = env_guard();
+            std::env::set_var(
+                "FLASH_LOAN_RECEIVER_PROGRAM_ID",
+                "26hsTvfGVS5yxfgYM7htEgrsCKdvMVtWSjHnyk277hCg",
+            );
+        }
         let provider = PortFinanceProvider::new();
         let borrower = Pubkey::new_unique();
         let plan = provider
@@ -316,6 +368,9 @@ mod integration_tests {
                     token_mint: WSOL_MINT,
                     amount: 5_000_000_000,
                     borrower,
+                    receiver_program_id: None,
+                    receiver_payload: None,
+                    reserve_hint: None,
                 },
             )
             .await

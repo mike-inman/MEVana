@@ -1,0 +1,50 @@
+{
+  "save": {
+    "program_id": "So1endDq2YkqhipRh3WViPa8hdiSpxWy6z3Z6tMCpAo",
+    "reserves": {
+      "So11111111111111111111111111111111111111112": {
+        "available_amount": 50000000000,
+        "fee_bps": 30,
+        "reserve": "5VVLD7BQp8y3bTgyF5ezm1ResyMTR3PhYsT4iHFU8Sxz",
+        "liquidity_vault": "furd3XUtjXZ2gRvSsoUts9A5m8cMJNqdsyR2Rt8vY9s",
+        "fee_receiver": "5kFqzU2k1tEXtoeNayk1TVxLycoAH5k8WsaGnBnanYJH",
+        "host_fee_receiver": "AJVS4MHtdmwnKAkKbuX7FUKVwhuEM1woVRVctS4Gi33S"
+      }
+    }
+  },
+  "port": {
+    "program_id": "Port7uDYB3wk6GJAw4KT1WpTeMtSu9bTcChBHkX2LfR",
+    "reserves": {
+      "So11111111111111111111111111111111111111112": {
+        "available_amount": 30000000000,
+        "fee_bps": 12,
+        "reserve": "HWwkuqTst4CNBdkLDgsUY2K2pijn6MDxVGpxdATn91BA",
+        "liquidity_vault": "9Rue5zQjHnfzffvxB1XtgFcB84yKfFzN5LnGMD4SusVD",
+        "fee_receiver": "4uuDuHvpTS8hShhkYjmYqNimz9HAZH5eZVDvYuBTGXFM",
+        "host_fee_receiver": null
+      }
+    }
+  },
+  "kamino": {
+    "program_id": "kLendPlaceholder111111111111111111111111111111",
+    "reserves": {
+      "So11111111111111111111111111111111111111112": {
+        "available_amount": 100000000000,
+        "fee_bps": 1,
+        "reserve": "11111111111111111111111111111112",
+        "liquidity_vault": "22222222222222222222222222222222",
+        "fee_receiver": "33333333333333333333333333333333",
+        "host_fee_receiver": "44444444444444444444444444444444"
+      }
+    }
+  },
+  "marginfi": {
+    "program_id": "MFv2hWf31Z9kbCa1snEPYctwafyhdvnV7FZnsebVacA",
+    "reserves": {
+      "So11111111111111111111111111111111111111112": {
+        "available_amount": 50000000000,
+        "fee_bps": 5
+      }
+    }
+  }
+}

@@ -1,0 +1,54 @@
+{
+  "save": {
+    "program_id": "So1endDq2YkqhipRh3WViPa8hdiSpxWy6z3Z6tMCpAo",
+    "reserves": {
+      "So11111111111111111111111111111111111111112": {
+        "available_amount": null,
+        "fee_bps": null,
+        "fee_lamports": null,
+        "reserve": "<SOLEND_SOL_RESERVE_PUBKEY>",
+        "liquidity_vault": "<SOLEND_SOL_LIQUIDITY_VAULT>",
+        "fee_receiver": "<SOLEND_FEE_RECEIVER>",
+        "host_fee_receiver": "<YOUR_HOST_FEE_ACCOUNT_IF_USED>"
+      }
+    }
+  },
+  "port": {
+    "program_id": "Port7uDYB3wk6GJAw4KT1WpTeMtSu9bTcChBHkX2LfR",
+    "reserves": {
+      "So11111111111111111111111111111111111111112": {
+        "available_amount": null,
+        "fee_bps": null,
+        "fee_lamports": null,
+        "reserve": "<PORT_SOL_RESERVE>",
+        "liquidity_vault": "<PORT_SOL_LIQUIDITY_VAULT>",
+        "fee_receiver": "<PORT_FEE_RECEIVER>",
+        "host_fee_receiver": "<PORT_HOST_FEE_ACCOUNT_IF_USED>"
+      }
+    }
+  },
+  "kamino": {
+    "program_id": "<KAMINO_FLASH_LOAN_PROGRAM>",
+    "reserves": {
+      "So11111111111111111111111111111111111111112": {
+        "available_amount": null,
+        "fee_bps": null,
+        "fee_lamports": null,
+        "reserve": "<KAMINO_SOL_RESERVE>",
+        "liquidity_vault": "<KAMINO_SOL_LIQUIDITY_VAULT>",
+        "fee_receiver": "<KAMINO_FEE_RECEIVER>",
+        "host_fee_receiver": "<KAMINO_HOST_FEE_ACCOUNT_IF_USED>"
+      }
+    }
+  },
+  "marginfi": {
+    "program_id": "MFv2hWf31Z9kbCa1snEPYctwafyhdvnV7FZnsebVacA",
+    "reserves": {
+      "So11111111111111111111111111111111111111112": {
+        "available_amount": null,
+        "fee_bps": null,
+        "fee_lamports": null
+      }
+    }
+  }
+}

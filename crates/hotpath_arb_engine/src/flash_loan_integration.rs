@@ -21,7 +21,7 @@ pub enum FlashLoanProvider {
     Marginfi,
     Solend,
     PortFinance,
-    JetProtocol,
+    Kamino,
 }
 
 impl FlashLoanProvider {
@@ -30,7 +30,7 @@ impl FlashLoanProvider {
             "marginfi" => Some(Self::Marginfi),
             "solend" => Some(Self::Solend),
             "portfinance" | "port" => Some(Self::PortFinance),
-            "jetprotocol" | "jet" => Some(Self::JetProtocol),
+            "kamino" | "kamino lend" | "k-lend" => Some(Self::Kamino),
             _ => None,
         }
     }
@@ -46,9 +46,7 @@ impl FlashLoanProvider {
             Self::PortFinance => "Port7uDYB3wk6GJAw4KT1WpTeMtSu9bTcChBHkX2LfR"
                 .parse()
                 .unwrap(),
-            Self::JetProtocol => "JPv1rCqrhagNNmJVM5J1he7msQ5ybtvE1nNuHpDHMNU"
-                .parse()
-                .unwrap(),
+            Self::Kamino => "KMino8LendZzzzzzzzzzzzzzzzzzzzzzzzzzzzzz".parse().unwrap(),
         }
     }
 
@@ -57,7 +55,7 @@ impl FlashLoanProvider {
             Self::Marginfi => 5,     // 0.05%
             Self::Solend => 10,      // 0.10%
             Self::PortFinance => 12, // 0.12%
-            Self::JetProtocol => 15, // 0.15%
+            Self::Kamino => 1,       // 0.001% (docs indicate low fee)
         }
     }
 }
@@ -138,7 +136,7 @@ impl HotpathFlashLoanManager {
             FlashLoanProvider::Marginfi,
             FlashLoanProvider::Solend,
             FlashLoanProvider::PortFinance,
-            FlashLoanProvider::JetProtocol,
+            FlashLoanProvider::Kamino,
         ] {
             if Some(provider) == preferred_provider {
                 continue; // Already tried
@@ -317,7 +315,7 @@ impl HotpathFlashLoanManager {
             FlashLoanProvider::Marginfi,
             FlashLoanProvider::Solend,
             FlashLoanProvider::PortFinance,
-            FlashLoanProvider::JetProtocol,
+            FlashLoanProvider::Kamino,
         ] {
             let rate = performance.get(&provider).copied().unwrap_or(0.0);
             stats.push_str(&format!(

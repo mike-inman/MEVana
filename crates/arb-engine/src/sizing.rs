@@ -135,7 +135,8 @@ impl AdaptiveSizerInner {
             if self.count == 0 {
                 return;
             }
-            if self.count % *ADAPT_PERSIST_INTERVAL != 0 {
+            let persist_interval = *ADAPT_PERSIST_INTERVAL;
+            if !self.count.is_multiple_of(persist_interval) {
                 return;
             }
             if let Ok(json) = serde_json::to_string(self) {
@@ -316,7 +317,7 @@ mod tests {
         // Simulate writes
         let mut s2 = sizer.clone();
         for i in 0..40 {
-            s2.record(50 + (i as i32 % 10));
+            s2.record(50 + (i % 10));
         }
         s2.force_persist();
         // Ensure file exists

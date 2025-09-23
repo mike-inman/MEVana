@@ -301,7 +301,7 @@ impl StartupSequence {
         // Topological sort to resolve dependencies
         for service_name in dependency_graph.keys() {
             if !visited.contains(service_name) {
-                self.dfs_visit(
+                Self::dfs_visit(
                     service_name,
                     dependency_graph,
                     &mut visited,
@@ -316,7 +316,6 @@ impl StartupSequence {
     }
 
     fn dfs_visit(
-        &self,
         service_name: &str,
         dependency_graph: &HashMap<String, Vec<String>>,
         visited: &mut HashSet<String>,
@@ -338,7 +337,7 @@ impl StartupSequence {
 
         if let Some(dependencies) = dependency_graph.get(service_name) {
             for dep in dependencies {
-                self.dfs_visit(dep, dependency_graph, visited, temp_visited, order)?;
+                Self::dfs_visit(dep, dependency_graph, visited, temp_visited, order)?;
             }
         }
 

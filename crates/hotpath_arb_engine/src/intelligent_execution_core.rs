@@ -1,5 +1,5 @@
 use anyhow::Result;
-use log::{error, info, warn};
+use log::{error, info};
 use std::sync::Arc;
 use tokio::sync::mpsc;
 use uuid::Uuid;

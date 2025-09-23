@@ -30,7 +30,7 @@ members = [
   "crates/normalizer-runtime",
   "crates/normalizer-codegen", 
   "crates/normalizer-generated",
-  "crates/mevana-engine", "crates/wallet-vault", "crates/resilience-framework", "crates/api-service", "crates/system-orchestrator",
+  "crates/mevana-engine", "crates/wallet-vault", "crates/resilience-framework", "crates/api-service",
 ]
 
 # Only build these on plain `cargo build` / `cargo test`

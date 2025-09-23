@@ -27,7 +27,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     log::info!("Kafka consumer initialized (broker: {})", kafka_broker);
 
     // Start Kafka consumer in background
-    let consumer_handle = {
+    let _consumer_handle = {
         let consumer = kafka_consumer;
         tokio::spawn(async move {
             if let Err(e) = consumer.start_consuming().await {

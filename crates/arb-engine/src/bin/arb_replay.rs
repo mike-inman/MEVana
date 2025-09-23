@@ -28,6 +28,12 @@ use std::thread;
 use std::time::{Duration, Instant};
 use tracing_subscriber::EnvFilter;
 
+type LineChannel = (Sender<(u64, String)>, Receiver<(u64, String)>);
+type EdgeChannel = (
+    Sender<(u64, Option<edge_assembler::edge::EdgeDelta>)>,
+    Receiver<(u64, Option<edge_assembler::edge::EdgeDelta>)>,
+);
+
 #[derive(Debug, Clone, Deserialize)]
 #[serde(untagged)]
 enum ReplayLine {
@@ -173,15 +179,13 @@ fn read_varint_len<R: Read>(r: &mut R) -> anyhow::Result<Option<usize>> {
     let mut shift = 0;
     loop {
         let mut byte = [0u8; 1];
-        match r.read(&mut byte)? {
-            0 => {
-                if shift == 0 {
-                    return Ok(None);
-                } else {
-                    return Err(anyhow::anyhow!("truncated_varint"));
-                }
+        let bytes_read = r.read(&mut byte)?;
+        if bytes_read == 0 {
+            if shift == 0 {
+                return Ok(None);
+            } else {
+                return Err(anyhow::anyhow!("truncated_varint"));
             }
-            _ => {}
         }
         let b = byte[0];
         result |= ((b & 0x7F) as usize) << shift;
@@ -279,7 +283,7 @@ fn main() -> anyhow::Result<()> {
             record_ingest_latency_ns(ingest_start.elapsed().as_nanos() as u64);
             processed += 1;
             prev_ts = Some(this_ts);
-            if processed % 10_000 == 0 {
+            if processed.is_multiple_of(10_000) {
                 tracing::info!(processed, "replay_progress");
             }
         }
@@ -288,11 +292,8 @@ fn main() -> anyhow::Result<()> {
         use std::collections::BTreeMap;
         let file = File::open(&cfg.input)?;
         let reader = BufReader::new(file);
-        let (line_tx, line_rx): (Sender<(u64, String)>, Receiver<(u64, String)>) = unbounded();
-        let (edge_tx, edge_rx): (
-            Sender<(u64, Option<edge_assembler::edge::EdgeDelta>)>,
-            Receiver<(u64, Option<edge_assembler::edge::EdgeDelta>)>,
-        ) = unbounded();
+        let (line_tx, line_rx): LineChannel = unbounded();
+        let (edge_tx, edge_rx): EdgeChannel = unbounded();
         for _ in 0..cfg.workers {
             let rx = line_rx.clone();
             let txe = edge_tx.clone();
@@ -394,7 +395,7 @@ fn main() -> anyhow::Result<()> {
                             record_ingest_latency_ns(ingest_start.elapsed().as_nanos() as u64);
                             processed += 1;
                             prev_ts = Some(this_ts);
-                            if processed % 10_000 == 0 {
+                            if processed.is_multiple_of(10_000) {
                                 tracing::info!(processed, "replay_progress");
                             }
                             if let Some(limit) = cfg.max {
