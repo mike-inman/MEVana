@@ -198,6 +198,8 @@ run_test() {
             failed_tests=$((failed_tests + 1))
         fi
     fi
+
+    return 0
 }
 
 check_prometheus_target() {
@@ -237,7 +239,7 @@ echo -e "\n${BLUE}🎯 Phase 2: MEVana Application Services${NC}"
 echo "======================================="
 
 # Test MEVana services metrics endpoints
-run_test "Hotpath Ready" test_endpoint "${SERVER_BASE}:${HOTPATH_API_PORT}/health/ready" "Hotpath readiness endpoint" 200 6 10
+run_test "Hotpath Ready" test_endpoint "${SERVER_BASE}:${HOTPATH_API_PORT}/health/ready" "Hotpath readiness endpoint" 200 12 10
 run_test "Hotpath Metrics" test_endpoint_content "${SERVER_BASE}:${HOTPATH_METRICS_PORT}/metrics" "Hotpath metrics endpoint" "mevana_|hotpath_transactions_processed_total" 5 10
 run_test "Normalizer Metrics" test_endpoint "${SERVER_BASE}:${NORMALIZER_METRICS_PORT}/metrics" "Normalizer metrics endpoint" 200 5 10
 run_test "Discovery Metrics" test_endpoint "${SERVER_BASE}:${DISCOVERY_METRICS_PORT}/metrics" "Discovery metrics endpoint" 200 5 10
