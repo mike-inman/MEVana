@@ -25,6 +25,14 @@ After comprehensive code verification, the MEVana system is significantly more a
 - SHYFT devnet credentials live in `/opt/MEVana/.env` and `/opt/MEVana/infrastructure/.env`; update those files (or repo secrets) before switching environments.
 - Grafana (`http://<server-ip>:3000`, admin/admin123) and Prometheus (`http://<server-ip>:9090`) currently show live data; normalizer charts rely on the new metrics.
 
+### 🛠️ Quick Iteration Checklist
+1. **Local changes first**: edit locally, run targeted service (`cargo run -p …` or `docker compose up <service>`), and shift+refresh Grafana locally if dashboards touch.
+2. **Rebuild only changed services**: on the server, re-tag just the affected service(s) with `scripts/development/build-images-locally.sh <tag>` or direct `docker build`—reuse existing images when nothing changed.
+3. **Update `/opt/MEVana/.env` once**: use `/opt/MEVana/.env.local` → copy before compose (keeps credentials from getting wiped). Ensure `MEVANA_TAG` in `/opt/MEVana/.mevana_tag` matches new build.
+4. **Verify metrics quickly**: `curl -s http://localhost:<port>/metrics | head` for the service you touched; Prometheus target shows `health":"up"` before proceeding.
+5. **Manual deploy only**: trigger “Build and Deploy (Self-Hosted)” after sanity checks; keep noisy workflows commented until explicitly re-enabled.
+6. **Document if you deviate**: jot notes here when touching hotpath/infra so the next helper can retrace steps fast.
+
 ---
 
 ## 📊 Verified Implementation Status
