@@ -55,7 +55,31 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          echo "services=hotpath-arb-engine normalizer-service discovery-service executor-service" >> "$GITHUB_OUTPUT"
+          map_service(){
+            case "$1" in
+              hotpath|hotpath-arb-engine) echo hotpath-arb-engine ;;
+              normalizer|normalizer-service) echo normalizer-service ;;
+              discovery|discovery-service) echo discovery-service ;;
+              executor|executor-service) echo executor-service ;;
+              *) echo "$1" ;;
+            esac
+          }
+
+          if [ -n "${{ inputs.services }}" ]; then
+            svc_list=""
+            for raw in ${{ inputs.services }}; do
+              mapped=$(map_service "$raw")
+              if [ -z "$svc_list" ]; then
+                svc_list="$mapped"
+              else
+                svc_list="$svc_list $mapped"
+              fi
+            done
+          else
+            svc_list="hotpath-arb-engine normalizer-service discovery-service executor-service"
+          fi
+
+          echo "services=${svc_list}" >> "$GITHUB_OUTPUT"
           echo "tag=${GITHUB_SHA}" >> "$GITHUB_OUTPUT"
 
       # We always build locally on the server to avoid registry/auth issues

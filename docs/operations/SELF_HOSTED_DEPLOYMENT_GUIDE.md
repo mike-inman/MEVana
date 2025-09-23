@@ -1,6 +1,6 @@
 Self‑Hosted Deployment Strategy & Workflows (Production Server)
 
-Last updated: 2025-09-16
+Last updated: 2025-09-22
 
 Overview
 - Goal: Fast, predictable, one‑click server builds and deploys. Build images on the server (Linux) to avoid cross‑arch issues; keep compose + env in a canonical path.
@@ -16,9 +16,11 @@ Secrets & Env
 - Provide endpoint + token via GitHub Actions secrets (repo → Settings → Secrets and variables → Actions):
   - Accepted: `HOTPATH_ENDPOINT` or `ENDPOINT`
   - Accepted: `HOTPATH_X_TOKEN` or `X_TOKEN`
+- Provide the flash-loan config path via `FLASH_LOAN_PROVIDERS_CONFIG` (points to `/opt/MEVana/config/flash_loan_providers.mainnet.json` after deploy). The workflow copies `config/flash_loan_providers.mainnet.template.json` to that location; update it with production reserves before first launch.
 - Workflows write both `/opt/MEVana/.env` and `/opt/MEVana/infrastructure/.env`:
   - `ENDPOINT=...`
   - `X_TOKEN=...`
+  - `FLASH_LOAN_PROVIDERS_CONFIG=/opt/MEVana/config/flash_loan_providers.mainnet.json`
 
 Services & Ports
 - hotpath‑arb‑engine (metrics): 8088 (Prometheus exporter `/metrics`)
@@ -36,11 +38,12 @@ Grafana Dashboards
 - Hygiene blocks any `monitoring/grafana/dashboards/**` or top‑level `dashboards/` files.
 
 Workflows (GitHub → Actions)
-- Build and Deploy (Self‑Hosted)
+- Build and Deploy (Self-Hosted)
   - Always builds these images locally on the server: hotpath, normalizer, discovery, executor
   - Rsyncs `infrastructure/` → `/opt/MEVana/infrastructure`
   - Writes env files and persists tag to `/opt/MEVana/.mevana_tag`
   - Runs compose from `/opt/MEVana`
+  - **Tip:** supply the `services` input (e.g. `hotpath normalizer`) when dispatching the workflow to rebuild only those services and skip the rest
 
 - Restart (Self‑Hosted)
   - Runs compose from `/opt/MEVana`
@@ -97,4 +100,3 @@ Common Issues & Fixes
 - 404 from Prometheus endpoint link: Link points to the internal Docker address; use Prometheus query/targets instead.
 - Kafka UI metrics down: Ensure scrape path is `/actuator/prometheus`; restart Prometheus.
 - Env not picked up: Re‑run “Build and Deploy (Self‑Hosted)” so env files are rewritten to `/opt/MEVana/.env` and `/opt/MEVana/infrastructure/.env`.
-
