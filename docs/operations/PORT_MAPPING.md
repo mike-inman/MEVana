@@ -37,6 +37,7 @@ Last updated: 2025-09-15
 | Service | Port | Purpose | Status | Health Check |
 |---------|------|---------|---------|--------------|
 | **api-service** | **8092** | Public REST API | ✅ Running | `curl -s localhost:8092/health` |
+| **gateway (api-service)** | **8095** | Consolidated UI gateway (WebSocket + REST) | Optional | `curl -s localhost:8095/gateway/health` |
 
 ## Future Services (Planned)
 | Service | Proposed Port | Purpose | Notes |
@@ -66,6 +67,7 @@ Last updated: 2025-09-15
 | 8088 | Hotpath Arb Engine | Performance metrics |
 | 8090 | wallet-vault | Secure wallet API boundary |
 | 8091 | api-service | Public API aggregation |
+| 8095 | Gateway listener | UI gateway (enable with `MEVANA_GATEWAY_ENABLE=true`) |
 | 8092-8099 | Future API services | Keep contiguous block |
 | 9000-9099 | (Available) | Leave gap for future high-load services |
 | 9090 | Prometheus | Metrics collector |

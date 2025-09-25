@@ -1,7 +1,10 @@
-use api_service::{create_api_router, ArbitrageKafkaConsumer, DatabaseService};
+use api_service::{
+    build_gateway_router, create_api_router, ArbitrageKafkaConsumer, DatabaseService,
+    GatewayConfig, GatewayConsumerHandles, GatewayContext,
+};
 use shared_core::database_config::get_database_url;
-use std::env;
-use tokio::net::TcpListener;
+use std::{env, net::SocketAddr};
+use tokio::{net::TcpListener, task::JoinHandle};
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -37,6 +40,34 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     };
     log::info!("Kafka consumer started in background");
 
+    let mut gateway_runtime: Option<GatewayRuntime> = None;
+    let gateway_enabled = env_flag("MEVANA_GATEWAY_ENABLE", false);
+
+    if gateway_enabled {
+        let gateway_config = GatewayConfig::from_env();
+        let gateway_context = GatewayContext::new(gateway_config.clone());
+        fn assert_state<T: Clone + Send + Sync + 'static>() {}
+        assert_state::<GatewayContext>();
+        let gateway_router = build_gateway_router(gateway_context.clone());
+        let gateway_addr: SocketAddr =
+            format!("0.0.0.0:{}", gateway_config.gateway_port).parse()?;
+        let gateway_listener = TcpListener::bind(gateway_addr).await?;
+        let bound_addr = gateway_listener.local_addr()?;
+        log::info!("Gateway server listening on {}", bound_addr);
+
+        let gateway_consumers = gateway_context.start_kafka_consumers();
+        let gateway_service = gateway_router.into_make_service_with_connect_info::<SocketAddr>();
+        let gateway_task = tokio::spawn(async move {
+            if let Err(err) = axum::serve(gateway_listener, gateway_service).await {
+                log::error!("Gateway server terminated with error: {}", err);
+            }
+        });
+
+        gateway_runtime = Some(GatewayRuntime::new(gateway_task, gateway_consumers));
+    } else {
+        log::info!("Gateway server disabled (set MEVANA_GATEWAY_ENABLE=true to enable)");
+    }
+
     // Create the API router
     let app = create_api_router(database);
 
@@ -52,9 +83,41 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     );
 
     // Start the server
-    axum::serve(listener, app).await?;
+    let api_result = axum::serve(listener, app).await;
 
+    if let Some(runtime) = gateway_runtime {
+        runtime.shutdown().await;
+    }
+
+    api_result?;
     Ok(())
+}
+
+struct GatewayRuntime {
+    task: JoinHandle<()>,
+    consumers: GatewayConsumerHandles,
+}
+
+impl GatewayRuntime {
+    fn new(task: JoinHandle<()>, consumers: GatewayConsumerHandles) -> Self {
+        Self { task, consumers }
+    }
+
+    async fn shutdown(self) {
+        self.task.abort();
+        let _ = self.task.await;
+        self.consumers.abort();
+    }
+}
+
+fn env_flag(key: &str, default: bool) -> bool {
+    match env::var(key) {
+        Ok(value) => matches!(
+            value.trim().to_ascii_lowercase().as_str(),
+            "1" | "true" | "yes" | "on"
+        ),
+        Err(_) => default,
+    }
 }
 
 #[cfg(test)]

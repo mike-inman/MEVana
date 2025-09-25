@@ -255,6 +255,7 @@ dependencies = [
  "moka",
  "prometheus",
  "rdkafka 0.38.0",
+ "redis 0.25.4",
  "resilience-framework",
  "serde",
  "serde_json",

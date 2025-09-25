@@ -253,9 +253,13 @@ mod tests {
 
     #[tokio::test]
     async fn test_health_check() {
-        let database = DatabaseService::new("postgresql://test".to_string())
-            .await
-            .unwrap();
+        let database_url = std::env::var("DATABASE_URL")
+            .unwrap_or_else(|_| "postgresql://mev:mevpassword@localhost:5433/mevdb".to_string());
+
+        let Ok(database) = DatabaseService::new(database_url).await else {
+            // Skip if local infrastructure is not running.
+            return;
+        };
         let app = create_api_router(database);
 
         let response = app
