@@ -1,5 +1,8 @@
 use anyhow::Result;
-use prometheus::{Counter, Encoder, Gauge, Histogram, IntCounter, IntGauge, Registry, TextEncoder};
+use prometheus::{
+    Counter, Encoder, Gauge, GaugeVec, Histogram, IntCounter, IntGauge, Registry, TextEncoder,
+};
+use std::collections::HashMap;
 use std::net::SocketAddr;
 use std::sync::Arc;
 use warp::Filter;
@@ -19,7 +22,7 @@ pub struct MetricsServer {
     pub loss_lamports: Counter,
 
     // Wallet metrics
-    pub wallet_balance_sol: Gauge,
+    pub wallet_balance_sol: GaugeVec,
     pub daily_pnl_sol: Gauge,
     pub active_trades: IntGauge,
 
@@ -143,8 +146,10 @@ impl MetricsServer {
         registry.register(Box::new(loss_lamports.clone()))?;
 
         // Initialize wallet metrics
-        let wallet_balance_sol =
-            Gauge::new("mevana_wallet_balance_sol", "Current wallet balance in SOL")?;
+        let wallet_balance_sol = GaugeVec::new(
+            prometheus::Opts::new("mevana_wallet_balance_sol", "Current wallet balance in SOL"),
+            &["wallet"],
+        )?;
         registry.register(Box::new(wallet_balance_sol.clone()))?;
 
         let daily_pnl_sol = Gauge::new("mevana_daily_pnl_sol", "Daily profit/loss in SOL")?;
@@ -672,8 +677,28 @@ impl MetricsServer {
     }
 
     /// Update wallet metrics
-    pub fn update_wallet_metrics(&self, balance_sol: f64, daily_pnl_sol: f64, active_trades: i64) {
-        self.wallet_balance_sol.set(balance_sol);
+    pub fn update_wallet_metrics(
+        &self,
+        wallet_label: &str,
+        balance_sol: f64,
+        daily_pnl_sol: f64,
+        active_trades: i64,
+        wallet_labels: &HashMap<String, String>,
+    ) {
+        if wallet_labels.is_empty() {
+            self.wallet_balance_sol
+                .with_label_values(&[wallet_label])
+                .set(balance_sol);
+        } else {
+            for label in wallet_labels.values() {
+                let gauge = self.wallet_balance_sol.with_label_values(&[label]);
+                if label == wallet_label {
+                    gauge.set(balance_sol);
+                } else {
+                    gauge.set(0.0);
+                }
+            }
+        }
         self.daily_pnl_sol.set(daily_pnl_sol);
         self.active_trades.set(active_trades);
     }

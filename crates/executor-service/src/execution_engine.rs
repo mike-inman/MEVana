@@ -432,6 +432,10 @@ impl ExecutionEngine {
         Ok(hash)
     }
 
+    pub fn wallet_service(&self) -> Arc<WalletService> {
+        Arc::clone(&self.wallet_service)
+    }
+
     // Recompute & cache registry hash without persisting (fast path)
     pub fn compute_registry_hash(&self) -> String {
         if let Some(h) = self.registry_hash_cache.read().clone() {
@@ -623,10 +627,23 @@ impl ExecutionEngine {
 
         // Start wallet balance refresh task
         let wallet_service_clone = Arc::clone(&self.wallet_service);
+        let metrics_clone = Arc::clone(&self.metrics);
         tokio::spawn(async move {
             loop {
-                if let Err(e) = wallet_service_clone.refresh_balances().await {
-                    warn!("Failed to refresh wallet balances: {}", e);
+                match wallet_service_clone.refresh_balances().await {
+                    Ok(()) => {
+                        let status = wallet_service_clone.get_status();
+                        metrics_clone.update_wallet_metrics(
+                            &status.active_wallet_label,
+                            status.sol_balance_sol,
+                            status.daily_pnl_sol,
+                            status.active_trades as i64,
+                            &status.wallet_labels,
+                        );
+                    }
+                    Err(e) => {
+                        warn!("Failed to refresh wallet balances: {}", e);
+                    }
                 }
                 sleep(Duration::from_secs(30)).await; // Refresh every 30 seconds
             }
@@ -1553,6 +1570,7 @@ mod tests {
             shyft_geyser_x_token: "".into(),
             wallet_keypair_path: "~/.config/solana/id.json".into(),
             wallet_backup_paths: vec![],
+            wallet_label_overrides: HashMap::new(),
             max_wallet_balance_sol: 100.0,
             min_wallet_balance_sol: 1.0,
             max_position_size_sol: 10.0,

@@ -32,13 +32,49 @@
             "mode": "palette-classic"
           },
           "custom": {
+            "axisBorderShow": false,
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "drawStyle": "line",
+            "fillOpacity": 15,
+            "gradientMode": "none",
             "hideFrom": {
               "legend": false,
               "tooltip": false,
               "vis": false
+            },
+            "lineInterpolation": "linear",
+            "lineWidth": 2,
+            "pointSize": 4,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "never",
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
             }
           },
-          "mappings": []
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 80
+              }
+            ]
+          }
         },
         "overrides": []
       },
@@ -50,24 +86,16 @@
       },
       "id": 1,
       "options": {
-        "displayLabels": [
-          "name"
-        ],
         "legend": {
-          "displayMode": "visible",
-          "placement": "bottom",
-          "showLegend": true
-        },
-        "pieType": "pie",
-        "reduceOptions": {
           "calcs": [
             "lastNotNull"
           ],
-          "fields": "",
-          "values": false
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
         },
         "tooltip": {
-          "mode": "single",
+          "mode": "multi",
           "sort": "none"
         }
       },
@@ -77,14 +105,14 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "geyser_transactions_processed_total",
-          "format": "time_series",
+          "expr": "rate(geyser_transactions_processed_total[1m])",
+          "interval": "",
           "legendFormat": "Stream {{stream_id}}",
           "refId": "A"
         }
       ],
-      "title": "Geyser Stream Distribution",
-      "type": "piechart"
+      "title": "Geyser Stream Throughput",
+      "type": "timeseries"
     },
     {
       "datasource": {
@@ -221,7 +249,7 @@
               }
             ]
           },
-          "unit": "µs"
+          "unit": "\u00b5s"
         },
         "overrides": []
       },

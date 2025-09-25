@@ -173,7 +173,8 @@ services:
       - GF_LOG_LEVEL=info
     volumes:
       - grafana_data:/var/lib/grafana
-      - ./grafana/dashboards/curated:/etc/grafana/provisioning/dashboards
+      - ./grafana/provisioning/dashboards:/etc/grafana/provisioning/dashboards
+      - ./grafana/dashboards/curated:/etc/grafana/provisioning/dashboards/mevana
       - ./grafana/datasources:/etc/grafana/provisioning/datasources
     healthcheck:
       test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3000/api/health"]
@@ -186,130 +187,17 @@ services:
     networks: [mevana_net]
     restart: unless-stopped
 
-  hotpath-arb-engine:
-    build:
-      context: ..
-      dockerfile: crates/hotpath_arb_engine/Dockerfile
-    depends_on:
-      kafka:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
-      postgres:
-        condition: service_healthy
-    env_file:
-      - ../.env
-    environment:
-      - RUST_LOG=${RUST_LOG:-info}
-      - METRICS_PORT=${HOTPATH_INTERNAL_METRICS_PORT:-8088}
-      - KAFKA_BROKER=${KAFKA_BROKER:-kafka:9092}
-      - REDIS_URL=${REDIS_URL:-redis://redis:6379/0}
-      - DATABASE_URL=${DATABASE_URL:-postgresql://mev:mevpassword@postgres:5432/mevdb}
-      - GEYSER_ENDPOINT=${GEYSER_ENDPOINT:-https://grpc.ny.shyft.to}
-      - X_TOKEN=${X_TOKEN:-}
-      - FLASH_LOAN_PROVIDERS_CONFIG=${FLASH_LOAN_PROVIDERS_CONFIG:-/app/config/flash_loan_providers.local.json}
-    ports:
-      - "${HOTPATH_METRICS_PORT:-8088}:8088"
-      - "${HOTPATH_API_PORT:-8089}:8089"
-    healthcheck:
-      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8089/health/ready"]
-      interval: 30s
-      timeout: 10s
-      retries: 5
-      start_period: 40s
-    networks: [mevana_net]
-    volumes:
-      - ../config:/app/config:ro
-    restart: unless-stopped
+  # hotpath-arb-engine:
+  #   (disabled) previously ran the hotpath service in Docker; binaries now run under systemd
 
-  normalizer-service:
-    build:
-      context: ..
-      dockerfile: crates/normalizer-service/Dockerfile
-    depends_on:
-      kafka:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
-    environment:
-      - RUST_LOG=${RUST_LOG:-info}
-      - KAFKA_BROKER=${KAFKA_BROKER:-kafka:9092}
-      - REDIS_URL=${REDIS_URL:-redis://redis:6379/0}
-      - IN_TOPIC=${NORMALIZER_IN_TOPIC:-dex-transactions}
-      - OUT_TOPIC=${NORMALIZER_OUT_TOPIC:-orca-swaps.parsed.v2}
-      - GROUP_ID=${NORMALIZER_GROUP_ID:-tap-orca-extract}
-      - HEALTH_PORT=${NORMALIZER_HEALTH_PORT:-8085}
-      - BIND_ADDRESS=${NORMALIZER_BIND_ADDRESS:-0.0.0.0}
-      - METRICS_PORT=${NORMALIZER_METRICS_PORT_INTERNAL:-8085}
-    healthcheck:
-      test: ["CMD", "curl", "-sf", "http://localhost:8085/health"]
-      interval: 30s
-      timeout: 10s
-      retries: 5
-      start_period: 40s
-    ports:
-      - "9901:8085"
-    networks: [mevana_net]
-    restart: unless-stopped
+  # normalizer-service:
+  #   (disabled) previously ran the normalizer in Docker; binaries now run under systemd
 
-  discovery-service:
-    build:
-      context: ..
-      dockerfile: crates/discovery-service/Dockerfile
-    depends_on:
-      kafka:
-        condition: service_healthy
-    environment:
-      - RUST_LOG=${RUST_LOG:-info}
-      - KAFKA_BOOTSTRAP_SERVERS=${KAFKA_BOOTSTRAP_SERVERS:-kafka:9092}
-      - REDIS_URL=${REDIS_URL:-redis://redis:6379/0}
-      - DISCOVERY_METRICS_PORT=${DISCOVERY_METRICS_PORT_INTERNAL:-9102}
-    healthcheck:
-      test: ["CMD", "curl", "-sf", "http://localhost:9102/metrics"]
-      interval: 30s
-      timeout: 10s
-      retries: 5
-      start_period: 40s
-    ports:
-      - "9102:9102"
-    networks: [mevana_net]
-    restart: unless-stopped
+  # discovery-service:
+  #   (disabled) previously ran the discovery service in Docker; binaries now run under systemd
 
-  executor-service:
-    build:
-      context: ..
-      dockerfile: crates/executor-service/executor-service.Dockerfile
-    depends_on:
-      kafka:
-        condition: service_healthy
-      postgres:
-        condition: service_healthy
-    env_file:
-      - ../.env
-    environment:
-      - RUST_LOG=${RUST_LOG:-info}
-      - KAFKA_BROKER=${KAFKA_BROKER:-kafka:9092}
-      - DATABASE_URL=${DATABASE_URL:-postgresql://mev:mevpassword@postgres:5432/mevdb}
-      - REDIS_URL=${REDIS_URL:-redis://redis:6379/0}
-      - METRICS_PORT=${EXECUTOR_METRICS_PORT_INTERNAL:-9904}
-      - EXECUTION_DRY_RUN=${EXECUTION_DRY_RUN:-true}
-      - SHYFT_API_KEY=${SHYFT_API_KEY:-}
-      - ALLOW_EMPTY_SHYFT_API=${ALLOW_EMPTY_SHYFT_API:-1}
-      - WALLET_KEYPAIR_PATH=${WALLET_KEYPAIR_PATH:-/root/.config/solana/id.json}
-      - FLASH_LOAN_PROVIDERS_CONFIG=${FLASH_LOAN_PROVIDERS_CONFIG:-/app/config/flash_loan_providers.local.json}
-    healthcheck:
-      test: ["CMD", "curl", "-sf", "http://localhost:9904/metrics"]
-      interval: 30s
-      timeout: 10s
-      retries: 5
-      start_period: 40s
-    ports:
-      - "9904:9904"
-    volumes:
-      - ./keys:/root/.config/solana:ro
-      - ../config:/app/config:ro
-    networks: [mevana_net]
-    restart: unless-stopped
+  # executor-service:
+  #   (disabled) previously ran the executor in Docker; binaries now run under systemd
 
 networks:
   mevana_net:

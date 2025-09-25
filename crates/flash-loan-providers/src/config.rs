@@ -5,6 +5,7 @@ use std::collections::HashMap;
 use std::env;
 use std::fs;
 use std::path::PathBuf;
+use std::sync::{RwLock, RwLockReadGuard};
 
 use log::{debug, info, warn};
 
@@ -94,18 +95,25 @@ fn resolve_config() -> FlashLoanProvidersConfig {
     FlashLoanProvidersConfig::default()
 }
 
-static CONFIG: Lazy<FlashLoanProvidersConfig> = Lazy::new(resolve_config);
+static CONFIG: Lazy<RwLock<FlashLoanProvidersConfig>> = Lazy::new(|| RwLock::new(resolve_config()));
 
 pub fn providers_config() -> FlashLoanProvidersConfig {
-    CONFIG.clone()
+    CONFIG
+        .read()
+        .expect("providers_config RwLock poisoned")
+        .clone()
 }
 
-pub fn providers_config_ref() -> &'static FlashLoanProvidersConfig {
-    &CONFIG
+pub fn providers_config_ref() -> RwLockReadGuard<'static, FlashLoanProvidersConfig> {
+    CONFIG.read().expect("providers_config RwLock poisoned")
 }
 
 pub fn parse_pubkey(value: &Option<String>) -> Option<Pubkey> {
-    value
-        .as_ref()
-        .and_then(|s| s.parse::<Pubkey>().ok())
+    value.as_ref().and_then(|s| s.parse::<Pubkey>().ok())
+}
+
+#[cfg(test)]
+pub fn set_providers_config_for_tests(cfg: FlashLoanProvidersConfig) {
+    let mut guard = CONFIG.write().expect("providers_config RwLock poisoned");
+    *guard = cfg;
 }

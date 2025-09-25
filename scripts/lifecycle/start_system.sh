@@ -65,6 +65,30 @@ check_health() {
 # Change to MEVana directory
 cd /Users/michaelinman/Repos/MEVana
 
+# Auto-load environment configuration if present
+ENV_FILES=(
+    ".env"
+    "config/environments/development.env"
+)
+
+for env_file in "${ENV_FILES[@]}"; do
+    if [ -f "$env_file" ]; then
+        log_info "Loading environment variables from $env_file"
+        set -a
+        source "$env_file"
+        set +a
+    fi
+done
+
+# Bootstrap database (idempotent)
+if [ -x "./scripts/deployment/bootstrap_database.sh" ]; then
+    ./scripts/deployment/bootstrap_database.sh || log_warning "Database bootstrap encountered issues; continuing"
+else
+    log_warning "Database bootstrap script missing (scripts/deployment/bootstrap_database.sh)"
+fi
+
+./scripts/deployment/bootstrap_kafka.sh "${KAFKA_BOOTSTRAP_SERVERS:-localhost:29092}" || log_warning "Kafka bootstrap encountered issues"
+
 log_info "==============================================="
 log_info "Starting MEVana System with Enhanced UI"
 log_info "==============================================="

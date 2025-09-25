@@ -3,6 +3,7 @@
 pub mod account_registry;
 pub mod audit_log;
 pub mod bundle_builder;
+pub mod clerk_auth;
 pub mod config;
 pub mod execution_engine;
 pub mod execution_orchestrator;

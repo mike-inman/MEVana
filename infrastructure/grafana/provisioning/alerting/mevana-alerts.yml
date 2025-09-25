@@ -3,6 +3,7 @@
 
 groups:
   - name: mevana_system_health
+    folder: MEVana
     interval: 30s
     rules:
       - alert: MEVanaServiceDown
@@ -25,6 +26,7 @@ groups:
           description: "{{ $value }} services are currently unhealthy"
 
   - name: mevana_arbitrage_performance  
+    folder: MEVana
     interval: 15s
     rules:
       - alert: LowArbitrageSuccessRate
@@ -46,6 +48,7 @@ groups:
           description: "No new arbitrage opportunities detected in the last 3 minutes"
 
   - name: mevana_infrastructure
+    folder: MEVana
     interval: 60s
     rules:
       - alert: PrometheusTargetDown

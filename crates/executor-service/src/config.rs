@@ -1,5 +1,6 @@
 use anyhow::Result;
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 use std::env;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -22,6 +23,8 @@ pub struct ExecutorConfig {
     // Wallet configuration
     pub wallet_keypair_path: String,
     pub wallet_backup_paths: Vec<String>,
+    #[serde(skip)]
+    pub wallet_label_overrides: HashMap<String, String>,
     pub max_wallet_balance_sol: f64,
     pub min_wallet_balance_sol: f64,
 
@@ -102,6 +105,7 @@ impl ExecutorConfig {
                 .filter(|s| !s.is_empty())
                 .map(|s| s.to_string())
                 .collect(),
+            wallet_label_overrides: parse_wallet_label_overrides(env::var("WALLET_LABELS").ok()),
             max_wallet_balance_sol: env::var("MAX_WALLET_BALANCE_SOL")
                 .unwrap_or_else(|_| "100.0".to_string())
                 .parse()?,
@@ -184,4 +188,23 @@ impl ExecutorConfig {
 
         Ok(())
     }
+}
+
+fn parse_wallet_label_overrides(raw: Option<String>) -> HashMap<String, String> {
+    raw.unwrap_or_default()
+        .split(',')
+        .filter_map(|entry| {
+            let entry = entry.trim();
+            if entry.is_empty() {
+                return None;
+            }
+            let mut parts = entry.splitn(2, '=');
+            let path = parts.next()?.trim();
+            let label = parts.next()?.trim();
+            if path.is_empty() || label.is_empty() {
+                return None;
+            }
+            Some((path.to_string(), label.to_string()))
+        })
+        .collect()
 }

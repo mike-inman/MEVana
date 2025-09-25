@@ -1,75 +1,129 @@
 # Local Stack Overview
 
-Last updated: 2025-09-23
+Last updated: 2025-02-14
 
-This guide documents the reference local deployment that mirrors the self-hosted production stack. It explains the architecture, prerequisites, and the workflow used to assemble the full containerized environment that powers Prometheus/Grafana monitoring and the Solana trading services.
+## Quickstart for the next helper
+
+1. **Read `docs/operations/ADMIN_CONTROL_PANEL.md` first.** It captures the Clerk/Grafana hand-off, the new wallet-label plumbing, and the button flows you must validate before calling local setup “done.”
+2. Mirror production labels by setting `WALLET_LABELS` in your local `.env` or the generated `config/environments/executor.env`; without it the per-wallet Prometheus gauges will be useless to Grafana.
+3. After you run `scripts/lifecycle/start_local_stack.sh`, hit `http://localhost:9904/metrics` and confirm `mevana_wallet_balance_sol{wallet="dev"}` (or your label) shows a real balance while any backups stay at `0`.
+
+MEVana development now mirrors production: the Rust services run directly on the host while the shared infrastructure (Kafka, Redis, Postgres, Prometheus, Grafana) stays in Docker. This guide walks through the local workflow that matches the self-hosted runner.
 
 ## Architecture Summary
-- **Docker Compose core file**: `infrastructure/docker-compose.core.yml`
-  - Infrastructure: Zookeeper, Kafka, Redis (+ Redis Insight), Postgres (+ Adminer), Prometheus, Grafana.
-  - Trading services: `hotpath-arb-engine`, `normalizer-service`, `discovery-service`, `executor-service`.
-- **Shared network**: `mevana_net` external bridge so services resolve with container DNS (e.g. `kafka:9092`).
-- **Configuration**: `infrastructure/.env` holds Shyft tokens, Grafana port override, and any secrets consumed by compose.
-- **Observability**: Prometheus scrapes each service container directly; Grafana reads from the Prometheus service and loads curated dashboards from `infrastructure/grafana/dashboards/curated/`.
+- **Host-managed binaries**
+  - `hotpath_arb_engine`, `normalizer-service`, `discovery-service`, `executor-service`
+  - Built with `cargo build --release` and stored under a local install prefix (defaults to `/opt/MEVana` in production).
+- **Docker infrastructure (unchanged)**
+  - `infrastructure/docker-compose.server.yml` brings up Kafka, Redis, Postgres, Adminer, Prometheus, Grafana, Kafka UI.
+  - External network `mevana_net` keeps container DNS consistent (`kafka:9092`, `redis:6379`, etc.).
+- **Observability**
+  - Prometheus scrapes host-exposed metrics ports.
+  - Grafana points at the Prometheus container and provisions dashboards from `infrastructure/grafana/dashboards/`.
 
-## Prerequisites
-1. Docker Desktop (or Docker Engine) with `mevana_net` network available (`docker network create mevana_net || true`).
-2. Rust toolchain only needed if you plan to build binaries outside Docker (optional).
-3. Populate `infrastructure/.env` (or root `.env`) with the required Shyft, Jito, and database settings. The compose file looks for `DATABASE_URL`, `GEYSER_ENDPOINT`, `X_TOKEN`, etc., and will fall back to safe local defaults if they are missing.
-  ```bash
-  cp infrastructure/env.example infrastructure/.env
-  # edit X_TOKEN, ENDPOINT, optional Jupiter keys, GRAFANA_HOST_PORT etc.
-  ```
-4. Provide flash-loan provider overrides by pointing `FLASH_LOAN_PROVIDERS_CONFIG` at a JSON file (see `config/flash_loan_providers.sample.json` for the structure). Copy the sample and tweak per environment:
+## Quick Start Workflow
+1. **Bootstrap a local install prefix (one time)**
    ```bash
-   cp config/flash_loan_providers.sample.json config/flash_loan_providers.local.json
-   export FLASH_LOAN_PROVIDERS_CONFIG=$PWD/config/flash_loan_providers.local.json
+   # Optional: create a local prefix without root/systemd
+   sudo env INSTALL_PREFIX=$PWD/.local/mevana \
+     MEVANA_USER=$USER SYSTEMCTL=false ENV_DIR=$PWD/.local/mevana-env \
+     scripts/deployment/bootstrap-host.sh
    ```
-   Each section lets you cap liquidity, override fees, and supply reserve accounts for Save/Port/Kamino/Marginfi. The executor and hotpath engine read this file on startup.
-5. (Optional) Define `REMOTE_DATABASE_URL` in the env file if you plan to clone the production database locally using `scripts/maintenance/sync_remote_db.sh`. You can also override `DB_SYNC_TABLES` to list the tables that should be copied (defaults to the curated configuration tables such as `vault_config`, `dex_program_registry`, and `circuit_breaker_state`).
-6. Generate a local Solana keypair for the executor (already created during setup):
+   - Populates `config/flash_loan_providers.*.json` under `.local/mevana/config/`.
+   - Copies env samples to `./.local/mevana-env/` if you set `ENV_DIR` (defaults to `/etc/mevana`; override when working locally).
+   - You can keep using `/etc/mevana` with `sudo` if you prefer a single shared configuration.
+
+2. **Start infrastructure containers**
    ```bash
-   mkdir -p infrastructure/keys
-   solana-keygen new --no-passphrase --outfile infrastructure/keys/id.json --force
+   docker network create mevana_net 2>/dev/null || true
+   docker compose -f infrastructure/docker-compose.server.yml up -d \
+     zookeeper kafka redis postgres adminer prometheus grafana kafka-ui
    ```
-   The compose file mounts the entire `infrastructure/keys/` directory at `/root/.config/solana/`, so the executor will read `/root/.config/solana/id.json`. Replace this key before enabling real execution.
+   Ports:
+   - Grafana `http://localhost:3000` (admin/admin123)
+   - Prometheus `http://localhost:9090`
+   - Adminer `http://localhost:8087`
+   - Kafka UI `http://localhost:8084`
 
-## Boot Sequence
-From the repo root:
+3. **Configure environment variables**
+   - Shared values → `config/environments/common.env.sample`
+   - Hotpath overrides → `config/environments/hotpath.env.sample`
+   - Copy to a working location and export before running services:
+     ```bash
+     cp config/environments/common.env.sample .env.common
+     cp config/environments/hotpath.env.sample .env.hotpath
+     # edit .env.* with local tokens / port overrides
+     export $(grep -v '^#' .env.common | xargs)
+     export $(grep -v '^#' .env.hotpath | xargs)
+     ```
+   - Ensure `DATABASE_URL` points at the compose Postgres instance (`postgresql://mev:mevpassword@localhost:5433/mevdb`).
+   - Mirror the production host wiring:
+     ```env
+     KAFKA_BROKER=localhost:29092
+     REDIS_URL=redis://127.0.0.1:6380/0
+     METRICS_PORT=8088           # hotpath → readiness automatically binds 8089
+     EXECUTOR_METRICS_PORT=9904
+     HEALTH_CHECK_PORT=9898
+     ```
+   - Provide an executor wallet at `infrastructure/keys/id.json` (devnet funds recommended) and copy any other required keys (`jito-keypair.json`, etc.) into the install prefix.
 
+4. **Bootstrap data stores (handled automatically)**
+   - `./scripts/lifecycle/start_system.sh` now invokes two idempotent helpers:
+     - `scripts/deployment/bootstrap_database.sh` – applies `database/complete_schema.sql` if required and seeds `vault_config`.
+     - `scripts/deployment/bootstrap_kafka.sh` – creates the standard topics (`dex-transactions`, `orca-swaps.parsed.v2`, `orca-tickarrays.parsed.v2`, `edge.delta.v1`, `edge.snapshot.v1`, `normalized-swaps.v1`, `unknown-programs`, `arb.opportunities.v1`).
+   - If you need to run them manually (e.g., during host provisioning) they can be executed directly and safely re-run as many times as needed.
+
+5. **Run services directly (Cargo)**
+   ```bash
+   # Hotpath (API on 8089, metrics on 8088)
+   cargo run -p hotpath_arb_engine --bin hotpath_arb_engine
+
+   # Normalizer (metrics on 9901)
+   cargo run -p normalizer-service --bin normalizer-service
+
+   # Discovery (metrics on 9102)
+   cargo run -p discovery-service --bin discovery-service
+
+   # Executor (metrics on 9904)
+   cargo run -p executor-service --bin executor-service
+   ```
+   Each binary pulls configuration from the exported environment variables; logs stream to stdout for quick iteration.
+
+6. **Production-parity installs (optional)**
+   - To rehearse the systemd deployment flow locally without root, reuse the release script:
+     ```bash
+   sudo env INSTALL_PREFIX=$PWD/.local/mevana MEVANA_USER=$USER \
+     SYSTEMCTL=false scripts/deployment/release-services.sh hotpath executor
+     ```
+   - Binaries land in `.local/mevana/bin/` and the script writes the current commit hash to `.local/mevana/.mevana_tag`.
+   - Restart your locally managed processes manually after copying binaries.
+
+## Files & Directories to Know
+| Path | Purpose |
+|------|---------|
+| `infrastructure/keys/id.json` | Local executor wallet (copy to `/opt/MEVana/keys/id.json` in production) |
+| `config/flash_loan_providers.local.json` | Editable template for flash-loan settings used by hotpath/executor |
+| `config/environments/*.env.sample` | Canonical env templates for shared + per-service configs |
+| `scripts/deployment/bootstrap-host.sh` | Creates install prefix, env samples, and systemd units |
+| `scripts/deployment/release-services.sh` | Builds release binaries and (optionally) restarts services |
+| `infrastructure/prometheus.core.yml` | Prometheus scrape config that targets the host services via `host.docker.internal` |
+
+## Health & Diagnostics
+- `scripts/ci/post-deployment-diagnostics.sh` works locally; it exercises HTTP health endpoints, Prometheus target status, and logs in to Grafana (admin/admin123) to verify the datasource. With `SYSTEMCTL=false`, systemd checks are skipped.
+- Prometheus targets should include `host.docker.internal:8088`, `host.docker.internal:9901`, `host.docker.internal:9102`, and `host.docker.internal:9904` — matching the production scrape configuration.
+- Grafana dashboards reside in `infrastructure/grafana/dashboards/`; live reload is easiest by restarting the Grafana container: `docker compose -f infrastructure/docker-compose.server.yml restart grafana`.
+
+## Shutdown & Cleanup
 ```bash
-docker compose -f infrastructure/docker-compose.core.yml up -d --build
+docker compose -f infrastructure/docker-compose.server.yml down
 ```
+- Stop any `cargo run` processes or host-managed binaries manually.
+- Remove the local install prefix if desired: `rm -rf .local/mevana`
 
-This performs multi-stage builds for the Rust services (hotpath, normalizer, discovery, executor) and starts every container. First spin typically takes a few minutes while dependencies compile.
+## Tips for Fast Iteration
+- Use `cargo watch -x "run -p hotpath_arb_engine --bin hotpath_arb_engine"` to rebuild on file changes when testing hotpath logic.
+- Keep `config/environments/*.env` under version control with safe defaults but no secrets—source them per terminal session instead of editing system copies so the host and local stacks stay aligned.
+- When tweaking executor logic, run it with `EXECUTION_DRY_RUN=true` and tail metrics: `curl -s http://localhost:9904/metrics | head`.
+- Before dispatching the GitHub workflow, run `scripts/ci/post-deployment-diagnostics.sh` locally to catch regressions fast.
 
-## Database Sync (optional)
-- Ensure `REMOTE_DATABASE_URL` (and optional `LOCAL_DATABASE_URL`) are present in your env file. Adjust `DB_SYNC_TABLES` if you need to sync additional tables.
-- Run `scripts/maintenance/sync_remote_db.sh` to take a snapshot from the remote Postgres instance and restore it into the local compose-managed database. The script stops dependent services, performs the import, and restarts the stack automatically.
-- Snapshots are stored in `backups/remote-<db>-<timestamp>.sql.gz` for auditing or reuse.
-
-### Health Checks
-- `docker compose -f infrastructure/docker-compose.core.yml ps` → look for `Up (healthy)` on each service.
-- Prometheus targets: `http://localhost:9091/targets` (should show `hotpath-arb-engine`, `discovery-service`, `executor-service`, `prometheus` as `UP`).
-- Grafana: `http://localhost:${GRAFANA_HOST_PORT:-3001}` (default overriden to `3300`, login `admin` / `admin123`).
-- Logs (example): `docker compose -f infrastructure/docker-compose.core.yml logs -f hotpath-arb-engine`.
-
-### Shutdown
-```bash
-docker compose -f infrastructure/docker-compose.core.yml down
-```
-
-## Dashboard Provisioning
-- Only curated dashboards in `infrastructure/grafana/dashboards/curated/` load automatically.
-- Restart Grafana after edits: `docker compose -f infrastructure/docker-compose.core.yml restart grafana`.
-- Key dashboards shipped:
-  - **Hotpath Basic Overview** – live Geyser throughput, opportunity rates, stream errors.
-  - **System Signals** (see below) – combined snapshot for discovery/executor health.
-
-## Deploying to the Server
-Once the local stack is validated:
-1. Commit the curated dashboards and configuration changes.
-2. Follow `docs/operations/SELF_HOSTED_DEPLOYMENT_GUIDE.md` to trigger the self-hosted workflow; it syncs `infrastructure/` to `/opt/MEVana` and reuses the same compose definitions.
-3. Confirm server Prometheus/Grafana health via the workflow diagnostics or by visiting the server Grafana instance (default `:3000`).
-
-Keep this document up to date whenever compose topology or monitoring layout changes so new contributors can reproduce the environment without combing through previous instructions.
+By following this host-first workflow locally, you stay aligned with production: the exact binaries you compile are the ones systemd runs, while Docker continues to provide the shared observability and data backbone.

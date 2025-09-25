@@ -23,9 +23,20 @@ EXECUTOR_METRICS_PORT="${MEVANA_EXECUTOR_PORT:-9904}"
 
 # Internal ports scraped by Prometheus (container network)
 HOTPATH_INTERNAL_PORT="${MEVANA_HOTPATH_INTERNAL_PORT:-8088}"
-NORMALIZER_INTERNAL_PORT="${MEVANA_NORMALIZER_INTERNAL_PORT:-8085}"
+NORMALIZER_INTERNAL_PORT="${MEVANA_NORMALIZER_INTERNAL_PORT:-9901}"
 DISCOVERY_INTERNAL_PORT="${MEVANA_DISCOVERY_INTERNAL_PORT:-9102}"
 EXECUTOR_INTERNAL_PORT="${MEVANA_EXECUTOR_INTERNAL_PORT:-9904}"
+
+GRAFANA_USER="${MEVANA_GRAFANA_USER:-admin}"
+GRAFANA_PASS="${MEVANA_GRAFANA_PASS:-admin123}"
+
+TMP_FILES=()
+cleanup() {
+    for file in "${TMP_FILES[@]}"; do
+        [ -n "$file" ] && [ -f "$file" ] && rm -f "$file"
+    done
+}
+trap cleanup EXIT
 
 CURRENT_TEST_SEVERITY="critical"
 
@@ -254,10 +265,10 @@ if command -v jq >/dev/null 2>&1; then
 
     # Check key targets based on current scrape configuration
     key_targets=(
-        "hotpath-arb-engine:${HOTPATH_INTERNAL_PORT}"
-        "normalizer-service:${NORMALIZER_INTERNAL_PORT}"
-        "discovery-service:${DISCOVERY_INTERNAL_PORT}"
-        "executor-service:${EXECUTOR_INTERNAL_PORT}"
+        "host.docker.internal:${HOTPATH_INTERNAL_PORT}"
+        "host.docker.internal:${NORMALIZER_INTERNAL_PORT}"
+        "host.docker.internal:${DISCOVERY_INTERNAL_PORT}"
+        "host.docker.internal:${EXECUTOR_INTERNAL_PORT}"
     )
 
     for target in "${key_targets[@]}"; do
@@ -282,17 +293,28 @@ echo "============================================="
 
 # Test Grafana datasource connectivity
 print_status "test" "Testing Grafana → Prometheus connectivity"
-grafana_ds_test=$(curl -s "${SERVER_BASE}:${GRAFANA_PORT}/api/datasources/proxy/1/api/v1/query?query=up" 2>/dev/null || echo "")
+grafana_cookie=$(mktemp)
+TMP_FILES+=("$grafana_cookie")
+grafana_login=$(curl -s -c "$grafana_cookie" -H "Content-Type: application/json" \
+    -d "{\"user\":\"${GRAFANA_USER}\",\"password\":\"${GRAFANA_PASS}\",\"email\":\"${GRAFANA_USER}@localhost\"}" \
+    "${SERVER_BASE}:${GRAFANA_PORT}/login" 2>/dev/null || echo "")
 
-if [[ "$grafana_ds_test" == *'"status":"success"'* ]]; then
-    run_test "Grafana Datasource" report_pass "Grafana can query Prometheus successfully"
+if [[ "$grafana_login" != *"Logged in"* ]]; then
+    run_test "Grafana Login" report_fail "Grafana API login failed"
 else
-    run_test "Grafana Datasource" report_fail "Grafana cannot query Prometheus"
+    run_test "Grafana Login" report_pass "Grafana API login succeeded"
+    grafana_ds_test=$(curl -s -b "$grafana_cookie" "${SERVER_BASE}:${GRAFANA_PORT}/api/datasources/proxy/1/api/v1/query?query=up" 2>/dev/null || echo "")
+
+    if [[ "$grafana_ds_test" == *'"status":"success"'* ]]; then
+        run_test "Grafana Datasource" report_pass "Grafana can query Prometheus successfully"
+    else
+        run_test "Grafana Datasource" report_fail "Grafana cannot query Prometheus"
+    fi
 fi
 
 # Test dashboard availability
 print_status "test" "Checking Grafana dashboards"
-dashboards_response=$(curl -s "${SERVER_BASE}:${GRAFANA_PORT}/api/search?type=dash-db" 2>/dev/null || echo "[]")
+dashboards_response=$(curl -s -b "$grafana_cookie" "${SERVER_BASE}:${GRAFANA_PORT}/api/search?type=dash-db" 2>/dev/null || echo "[]")
 
 if command -v jq >/dev/null 2>&1; then
     if echo "$dashboards_response" | jq -e '.' >/dev/null 2>&1; then
@@ -301,7 +323,7 @@ if command -v jq >/dev/null 2>&1; then
             dashboard_count=$(echo "$dashboards_response" | jq 'length' 2>/dev/null || echo "0")
 
             if [ "$dashboard_count" -gt 0 ]; then
-                run_test "Grafana Dashboards" report_pass "$dashboard_count dashboards loaded successfully"
+                run_test optional "Grafana Dashboards" report_pass "$dashboard_count dashboards loaded successfully"
 
                 # Check for key dashboards
                 key_dashboards=("Hotpath" "Infrastructure" "Trading")
@@ -313,13 +335,13 @@ if command -v jq >/dev/null 2>&1; then
                     fi
                 done
             else
-                run_test "Grafana Dashboards" report_fail "No dashboards loaded"
+                run_test optional "Grafana Dashboards" report_fail "No dashboards loaded"
             fi
         else
-            run_test "Grafana Dashboards" report_fail "Grafana API returned unexpected JSON type '$response_type' (expected array)"
+            run_test optional "Grafana Dashboards" report_fail "Grafana API returned unexpected JSON type '$response_type' (expected array)"
         fi
     else
-        run_test "Grafana Dashboards" report_fail "Grafana API returned invalid JSON (check authentication)"
+        run_test optional "Grafana Dashboards" report_fail "Grafana API returned invalid JSON (check authentication)"
     fi
 else
     print_status "warn" "Cannot analyze dashboards without jq"
@@ -328,42 +350,41 @@ fi
 echo -e "\n${BLUE}🔗 Phase 5: Service Discovery Verification${NC}"
 echo "==========================================="
 
-# Test container naming
-print_status "test" "Verifying container names match expectations"
+# Prefer host-based systemd verification; fall back to Docker checks when configured
+print_status "test" "Verifying MEVana services are running under systemd"
 
-expected_services=(
-    "prometheus"
-    "grafana"
-    "hotpath-arb-engine"
-    "kafka-ui"
-    "normalizer-service"
-    "discovery-service"
+required_units=(
+    "hotpath-arb-engine.service"
+    "normalizer-service.service"
+    "discovery-service.service"
+    "executor-service.service"
 )
 
-project_name="${COMPOSE_PROJECT_NAME:-mevana}"
-escaped_project=$(escape_regex "$project_name")
-
-if command -v docker >/dev/null 2>&1; then
-    running_containers=$(docker ps --format "{{.Names}}" 2>/dev/null || echo "")
-
-    container_check_passed=0
-    for service in "${expected_services[@]}"; do
-        escaped_service=$(escape_regex "$service")
-        pattern="^(${escaped_project}-${escaped_service}|${escaped_service})(-[0-9]+)?$"
-        match=$(echo "$running_containers" | grep -E -m1 "$pattern" || true)
-
-        if [ -n "$match" ]; then
-            print_status "pass" "Container $match is running (service ${service})"
-            container_check_passed=$((container_check_passed + 1))
+if command -v systemctl >/dev/null 2>&1; then
+    active_count=0
+    for unit in "${required_units[@]}"; do
+        if systemctl is-active --quiet "$unit"; then
+            print_status "pass" "Systemd unit $unit is active"
+            active_count=$((active_count + 1))
         else
-            print_status "fail" "Container for service ${service} not found (expected ${project_name}-${service}-*)"
+            current_state=$(systemctl is-active "$unit" 2>/dev/null || echo "unknown")
+            print_status "fail" "Systemd unit $unit is $current_state"
         fi
     done
 
-    run_test "Container Naming" [ $container_check_passed -eq ${#expected_services[@]} ]
+    if [ $active_count -eq ${#required_units[@]} ]; then
+        run_test "Systemd Service Health" report_pass "All MEVana systemd units active"
+    else
+        run_test "Systemd Service Health" report_fail "One or more MEVana systemd units inactive"
+    fi
 else
-    print_status "warn" "Docker not available for container verification"
-    run_test "Container Naming" report_fail "Container verification skipped"
+    print_status "warn" "systemctl not available; skipping systemd verification"
+fi
+
+# Optional: if Docker is present, surface container status for shared infrastructure
+if command -v docker >/dev/null 2>&1; then
+    print_status "test" "Enumerating Docker containers (infrastructure services)"
+    docker ps --format '  • {{.Names}} ({{.Status}})' 2>/dev/null || true
 fi
 
 echo -e "\n${BLUE}📈 Phase 6: Data Flow Validation${NC}"

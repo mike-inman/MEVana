@@ -22,25 +22,25 @@ scrape_configs:
     scrape_interval: 5s
     scrape_timeout: 3s
     static_configs:
-      - targets: ['hotpath-arb-engine:8088']
+      - targets: ['host.docker.internal:8088']
 
   - job_name: 'discovery-service'
     metrics_path: '/metrics'
     scrape_interval: 15s
     scrape_timeout: 5s
     static_configs:
-      - targets: ['discovery-service:9102']
+      - targets: ['host.docker.internal:9102']
 
   - job_name: 'executor-service'
     metrics_path: '/metrics'
     scrape_interval: 10s
     scrape_timeout: 5s
     static_configs:
-      - targets: ['executor-service:9904']
+      - targets: ['host.docker.internal:9904']
 
   - job_name: 'normalizer-service'
     metrics_path: '/metrics'
     scrape_interval: 10s
     scrape_timeout: 5s
     static_configs:
-      - targets: ['normalizer-service:8085']
+      - targets: ['host.docker.internal:9901']

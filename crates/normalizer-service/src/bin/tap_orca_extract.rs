@@ -144,7 +144,7 @@ impl Metrics {
     }
 
     fn after_update(&mut self) {
-        if self.total_messages > 0 && self.total_messages % 1000 == 0 {
+        if self.total_messages > 0 && self.total_messages.is_multiple_of(1000) {
             self.log_summary();
         }
     }

@@ -2,6 +2,7 @@
 
 use anyhow::Result;
 use log::info;
+use serde::{Deserialize, Serialize};
 use sqlx::postgres::PgPoolOptions;
 use sqlx::PgPool;
 use tokio::signal;
@@ -10,6 +11,7 @@ use uuid::Uuid;
 mod account_registry;
 mod audit_log;
 mod bundle_builder;
+mod clerk_auth;
 mod config;
 mod execution_engine;
 mod flash_loan;
@@ -28,9 +30,354 @@ use execution_engine::ExecutionEngine;
 use hash_chain_logger::global_logger;
 use metrics::MetricsServer;
 use parking_lot::Mutex as PLMutex;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::net::SocketAddr;
 use std::sync::Arc;
+
+use clerk_auth::{ClerkAuthenticator, ClerkIdentity};
+use solana_sdk::native_token::sol_to_lamports;
+
+const DEFAULT_DEVNET_RPC: &str = "https://api.devnet.solana.com";
+const DEFAULT_TESTNET_RPC: &str = "https://api.testnet.solana.com";
+const MAX_AIRDROP_SOL: f64 = 5.0;
+
+#[derive(Clone)]
+struct AdminAuthContext {
+    admin_token: Option<String>,
+    allowed_subjects: Option<HashSet<String>>,
+    clerk: Option<Arc<ClerkAuthenticator>>,
+}
+
+#[derive(Debug, Deserialize)]
+struct WalletTransferRequest {
+    destination: String,
+    amount_sol: f64,
+    #[serde(default)]
+    skip_preflight: bool,
+}
+
+#[derive(Debug, Deserialize)]
+struct WalletAirdropRequest {
+    #[serde(default)]
+    wallet: Option<String>,
+    #[serde(default)]
+    amount_sol: Option<f64>,
+    #[serde(default)]
+    cluster: Option<String>,
+    #[serde(default)]
+    rpc_url: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+struct WalletRotateRequest {
+    #[serde(default)]
+    target_wallet: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+struct WalletDeactivateRequest {
+    wallet: String,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum AuthSource {
+    Clerk,
+    StaticToken,
+    Open,
+    None,
+}
+
+#[derive(Debug, Clone)]
+struct AdminAuthDecision {
+    authorized: bool,
+    subject: Option<String>,
+    source: AuthSource,
+    subject_checked: bool,
+    subject_allowed: bool,
+    subject_missing: bool,
+    static_token_present: bool,
+    static_token_valid: bool,
+    static_token_required: bool,
+    dual_auth_enforced: bool,
+    reason: Option<String>,
+    clerk_identity: Option<ClerkIdentity>,
+    clerk_error: Option<String>,
+}
+
+impl AdminAuthContext {
+    fn new(
+        admin_token: Option<String>,
+        allowed_subjects: Option<HashSet<String>>,
+        clerk: Option<Arc<ClerkAuthenticator>>,
+    ) -> Self {
+        Self {
+            admin_token,
+            allowed_subjects,
+            clerk,
+        }
+    }
+
+    fn has_allowlist(&self) -> bool {
+        self.allowed_subjects.is_some()
+    }
+
+    fn has_static_token(&self) -> bool {
+        self.admin_token.is_some()
+    }
+
+    async fn authorize(
+        &self,
+        provided_token: Option<String>,
+        client_subject: Option<String>,
+        authorization_header: Option<String>,
+    ) -> AdminAuthDecision {
+        let static_token_required = self.admin_token.is_some();
+        let static_token_present = provided_token
+            .as_ref()
+            .map(|s| !s.trim().is_empty())
+            .unwrap_or(false);
+        let static_token_valid = match (&self.admin_token, provided_token.as_ref()) {
+            (Some(expected), Some(provided)) => provided == expected,
+            (Some(_), _) => false,
+            (None, _) => false,
+        };
+
+        let mut subject = client_subject.as_ref().and_then(|s| {
+            let trimmed = s.trim();
+            if trimmed.is_empty() {
+                None
+            } else {
+                Some(trimmed.to_string())
+            }
+        });
+
+        let mut clerk_identity: Option<ClerkIdentity> = None;
+        let mut clerk_error = None;
+
+        if let (Some(clerk), Some(header)) = (&self.clerk, authorization_header.as_deref()) {
+            if let Some(token) = parse_bearer_token(header) {
+                match clerk.validate(&token).await {
+                    Ok(identity) => {
+                        subject = Some(identity.subject.clone());
+                        clerk_identity = Some(identity);
+                    }
+                    Err(err) => {
+                        clerk_error = Some(err.to_string());
+                    }
+                }
+            }
+        }
+
+        let subject_checked = self.allowed_subjects.is_some();
+        let subject_allowed = if let Some(allowlist) = &self.allowed_subjects {
+            subject
+                .as_ref()
+                .map(|value| allowlist.contains(value))
+                .unwrap_or(false)
+        } else {
+            true
+        };
+        let subject_missing = subject_checked && subject.is_none();
+
+        let dual_auth_enforced = self.admin_token.is_some() && subject_checked;
+
+        if let Some(identity) = &clerk_identity {
+            if subject_allowed {
+                return AdminAuthDecision {
+                    authorized: true,
+                    subject,
+                    source: AuthSource::Clerk,
+                    subject_checked,
+                    subject_allowed,
+                    subject_missing,
+                    static_token_present,
+                    static_token_valid,
+                    static_token_required,
+                    dual_auth_enforced,
+                    reason: None,
+                    clerk_identity: Some(identity.clone()),
+                    clerk_error,
+                };
+            }
+        }
+
+        if self.admin_token.is_some() {
+            if dual_auth_enforced {
+                if static_token_valid && subject_allowed {
+                    return AdminAuthDecision {
+                        authorized: true,
+                        subject,
+                        source: AuthSource::StaticToken,
+                        subject_checked,
+                        subject_allowed,
+                        subject_missing,
+                        static_token_present,
+                        static_token_valid,
+                        static_token_required,
+                        dual_auth_enforced,
+                        reason: None,
+                        clerk_identity,
+                        clerk_error,
+                    };
+                }
+            } else if static_token_valid {
+                return AdminAuthDecision {
+                    authorized: true,
+                    subject,
+                    source: AuthSource::StaticToken,
+                    subject_checked,
+                    subject_allowed,
+                    subject_missing,
+                    static_token_present,
+                    static_token_valid,
+                    static_token_required,
+                    dual_auth_enforced,
+                    reason: None,
+                    clerk_identity,
+                    clerk_error,
+                };
+            }
+        }
+
+        if subject_checked && self.admin_token.is_none() && subject_allowed {
+            return AdminAuthDecision {
+                authorized: true,
+                subject,
+                source: AuthSource::Open,
+                subject_checked,
+                subject_allowed,
+                subject_missing,
+                static_token_present,
+                static_token_valid,
+                static_token_required,
+                dual_auth_enforced,
+                reason: None,
+                clerk_identity,
+                clerk_error,
+            };
+        }
+
+        if self.admin_token.is_none() && !subject_checked && self.clerk.is_none() {
+            return AdminAuthDecision {
+                authorized: true,
+                subject,
+                source: AuthSource::Open,
+                subject_checked,
+                subject_allowed,
+                subject_missing,
+                static_token_present,
+                static_token_valid,
+                static_token_required,
+                dual_auth_enforced,
+                reason: None,
+                clerk_identity,
+                clerk_error,
+            };
+        }
+
+        let mut reason = None;
+        if subject_checked {
+            if subject_missing {
+                reason = Some("subject_required".to_string());
+            } else if !subject_allowed {
+                reason = Some("subject_not_allowed".to_string());
+            }
+        }
+        if self.admin_token.is_some() && !static_token_valid {
+            reason.get_or_insert(if static_token_present {
+                "token_invalid".to_string()
+            } else {
+                "token_required".to_string()
+            });
+        }
+        if reason.is_none() && clerk_identity.is_none() && self.clerk.is_some() {
+            if let Some(err) = clerk_error.clone() {
+                reason = Some("clerk_auth_failed".to_string());
+                clerk_error = Some(err);
+            }
+        }
+        if reason.is_none() {
+            reason = Some("unauthorized".to_string());
+        }
+
+        AdminAuthDecision {
+            authorized: false,
+            subject,
+            source: AuthSource::None,
+            subject_checked,
+            subject_allowed,
+            subject_missing,
+            static_token_present,
+            static_token_valid,
+            static_token_required,
+            dual_auth_enforced,
+            reason,
+            clerk_identity,
+            clerk_error,
+        }
+    }
+}
+
+fn parse_csv_list(value: &str) -> HashSet<String> {
+    value
+        .split(',')
+        .filter_map(|segment| {
+            let trimmed = segment.trim();
+            if trimmed.is_empty() {
+                None
+            } else {
+                Some(trimmed.to_string())
+            }
+        })
+        .collect()
+}
+
+fn parse_bearer_token(header: &str) -> Option<String> {
+    let mut parts = header.splitn(2, ' ');
+    match (parts.next(), parts.next()) {
+        (Some(prefix), Some(token)) if prefix.eq_ignore_ascii_case("bearer") => {
+            let trimmed = token.trim();
+            if trimmed.is_empty() {
+                None
+            } else {
+                Some(trimmed.to_string())
+            }
+        }
+        _ => None,
+    }
+}
+
+fn record_admin_metrics(metrics: &Arc<MetricsServer>, decision: &AdminAuthDecision) {
+    if decision.dual_auth_enforced {
+        metrics.admin_dual_auth_required_total.inc();
+    }
+    if decision.static_token_required {
+        if decision.static_token_valid {
+            metrics.admin_token_valid_total.inc();
+        } else {
+            metrics.admin_token_invalid_total.inc();
+        }
+    }
+    if decision.subject_checked {
+        if decision.subject_missing {
+            metrics.admin_subject_missing_total.inc();
+        } else if decision.subject_allowed {
+            metrics.admin_subject_allowed_total.inc();
+        }
+    }
+    if !decision.authorized {
+        metrics.admin_unauthorized_total.inc();
+    }
+}
+
+fn default_airdrop_url(cluster: &str) -> Option<&'static str> {
+    match cluster.to_ascii_lowercase().as_str() {
+        "devnet" => Some(DEFAULT_DEVNET_RPC),
+        "testnet" => Some(DEFAULT_TESTNET_RPC),
+        "localnet" | "local" => Some("http://127.0.0.1:8899"),
+        _ => None,
+    }
+}
 
 #[tokio::main]
 async fn main() -> Result<()> {
@@ -279,21 +626,22 @@ async fn main() -> Result<()> {
     {
         let engine_ref_outer = Arc::clone(&execution_engine);
         let admin_token = std::env::var("ADMIN_API_TOKEN").ok();
-        let admin_token_arc = Arc::new(admin_token);
         // Optional allowlist of client certificate subjects (comma separated)
-        let allowed_subjects: Option<std::collections::HashSet<String>> =
-            std::env::var("ADMIN_ALLOWED_SUBJECTS").ok().map(|v| {
-                v.split(',')
-                    .filter_map(|s| {
-                        let t = s.trim();
-                        if t.is_empty() {
-                            None
-                        } else {
-                            Some(t.to_string())
-                        }
-                    })
-                    .collect()
-            });
+        let allowed_subjects: Option<HashSet<String>> = std::env::var("ADMIN_ALLOWED_SUBJECTS")
+            .ok()
+            .map(|v| parse_csv_list(&v));
+        let clerk_auth = match ClerkAuthenticator::from_env()? {
+            Some(auth) => {
+                log::info!("Clerk JWT admin authentication enabled");
+                Some(Arc::new(auth))
+            }
+            None => None,
+        };
+        let admin_auth_context = Arc::new(AdminAuthContext::new(
+            admin_token.clone(),
+            allowed_subjects,
+            clerk_auth,
+        ));
         let rate_limiter: Arc<PLMutex<HashMap<String, (u64, std::time::Instant)>>> =
             Arc::new(PLMutex::new(HashMap::new()));
         fn allow(
@@ -357,63 +705,55 @@ async fn main() -> Result<()> {
                 });
             let engine_ref2 = Arc::clone(&engine_ref_outer);
             let rl_refresh = Arc::clone(&rate_limiter);
-            let allowed_subjects_refresh = allowed_subjects.clone();
-            let admin_token_arc_refresh = Arc::clone(&admin_token_arc);
+            let admin_auth_refresh = Arc::clone(&admin_auth_context);
             let refresh = warp::path!("admin"/"registry"/"refresh")
                 .and(warp::post())
                 .and(warp::addr::remote())
                 .and(warp::header::optional::<String>("x-admin-token"))
                 .and(warp::header::optional::<String>("x-client-subject"))
-                .and_then(move |remote: Option<SocketAddr>, provided: Option<String>, client_subj: Option<String>| {
+                .and(warp::header::optional::<String>("authorization"))
+                .and_then(move |remote: Option<SocketAddr>, provided: Option<String>, client_subj: Option<String>, authorization: Option<String>| {
                     let engine_clone = Arc::clone(&engine_ref2);
-            let expected = (*admin_token_arc_refresh).clone();
+                    let admin_auth = Arc::clone(&admin_auth_refresh);
                     let rl_inner = Arc::clone(&rl_refresh);
-                    let allowlist = allowed_subjects_refresh.clone();
                     async move {
-                        engine_clone.metrics().admin_requests_total.inc();
-                        engine_clone.metrics().admin_refresh_requests_total.inc();
+                        let metrics = engine_clone.metrics();
+                        metrics.admin_requests_total.inc();
+                        metrics.admin_refresh_requests_total.inc();
                         if let Some(addr) = remote {
                             if !allow(&addr.ip().to_string(), &rl_inner, 30, 60) {
-                                engine_clone.metrics().admin_rate_limited_total.inc();
+                                metrics.admin_rate_limited_total.inc();
                                 return Ok::<_, warp::Rejection>(warp::reply::with_status(
                                     warp::reply::json(&serde_json::json!({"status":"rate_limited"})),
                                     StatusCode::TOO_MANY_REQUESTS,
                                 ));
                             }
                         }
-                        // Evaluate subject allowlist, capturing decision
-                        let subject_ok = if let Some(list) = &allowlist {
-                            match client_subj.as_ref().map(|s| s.trim()) {
-                                Some(subj) => {
-                                    if list.contains(subj) { engine_clone.metrics().admin_subject_allowed_total.inc(); true } else { engine_clone.metrics().admin_unauthorized_total.inc(); false }
-                                },
-                                None => { engine_clone.metrics().admin_subject_missing_total.inc(); engine_clone.metrics().admin_unauthorized_total.inc(); false }
-                            }
-                        } else { true };
-                        // Evaluate token
-                        let token_ok = match (&expected, &provided) {
-                            (Some(exp), Some(got)) if got == exp => { engine_clone.metrics().admin_token_valid_total.inc(); true },
-                            (Some(_), _) => { engine_clone.metrics().admin_token_invalid_total.inc(); false },
-                            (None, _) => true,
-                        };
-                        // Dual-auth rule: if both an allowlist AND a token are configured, require BOTH pass.
-                        // If only one mechanism configured, require that one.
-                        let authorized = if expected.is_some() && allowlist.is_some() {
-                            engine_clone.metrics().admin_dual_auth_required_total.inc();
-                            subject_ok && token_ok
-                        } else if expected.is_some() {
-                            token_ok
-                        } else if allowlist.is_some() {
-                            subject_ok
-                        } else { true };
-                        if !authorized {
-                            engine_clone.metrics().admin_unauthorized_total.inc();
-                            let status_detail = if !subject_ok && allowlist.is_some() { "unauthorized_subject" } else { "unauthorized" };
+
+                        let decision = admin_auth
+                            .authorize(provided, client_subj.clone(), authorization)
+                            .await;
+
+                        record_admin_metrics(metrics, &decision);
+
+                        if let Some(err) = &decision.clerk_error {
+                            log::warn!(
+                                "clerk_admin_auth_failed action=registry_refresh err={}",
+                                err
+                            );
+                        }
+
+                        if !decision.authorized {
+                            let status_detail = decision
+                                .reason
+                                .clone()
+                                .unwrap_or_else(|| "unauthorized".to_string());
                             return Ok::<_, warp::Rejection>(warp::reply::with_status(
                                 warp::reply::json(&serde_json::json!({"status":status_detail})),
                                 StatusCode::UNAUTHORIZED,
                             ));
                         }
+
                         let resp = match engine_clone.persist_registry_state().await {
                             Ok(hash) => warp::reply::with_status(
                                 warp::reply::json(&serde_json::json!({"status":"ok","registry_hash":hash})),
@@ -424,57 +764,63 @@ async fn main() -> Result<()> {
                                 StatusCode::INTERNAL_SERVER_ERROR,
                             ),
                         };
-                        crate::audit_log::log_event("registry_refresh", remote.as_ref(), client_subj.as_deref(), token_ok, authorized, None);
+
+                        crate::audit_log::log_event(
+                            "registry_refresh",
+                            remote.as_ref(),
+                            decision.subject.as_deref(),
+                            decision.static_token_valid,
+                            decision.authorized,
+                            None,
+                        );
+
                         Ok::<_, warp::Rejection>(resp)
                     }
                 });
             // Trading status (read-only) endpoint with same auth gating as refresh (so no info leak)
             let engine_ref_status = Arc::clone(&engine_ref_outer);
-            let allowed_subjects_status = allowed_subjects.clone();
-            let admin_token_arc_status = Arc::clone(&admin_token_arc);
+            let admin_auth_status = Arc::clone(&admin_auth_context);
             let trading_status = warp::path!("admin" / "trading" / "status")
                 .and(warp::get())
                 .and(warp::addr::remote())
                 .and(warp::header::optional::<String>("x-admin-token"))
                 .and(warp::header::optional::<String>("x-client-subject"))
+                .and(warp::header::optional::<String>("authorization"))
                 .and_then(
                     move |remote: Option<SocketAddr>,
                           provided: Option<String>,
-                          client_subj: Option<String>| {
+                          client_subj: Option<String>,
+                          authorization: Option<String>| {
                         let engine_clone = Arc::clone(&engine_ref_status);
-                        let expected = (*admin_token_arc_status).clone();
-                        let allowlist = allowed_subjects_status.clone();
+                        let admin_auth = Arc::clone(&admin_auth_status);
                         async move {
-                            let subject_ok = if let Some(list) = &allowlist {
-                                client_subj
-                                    .as_ref()
-                                    .map(|s| list.contains(s.trim()))
-                                    .unwrap_or(false)
-                            } else {
-                                true
-                            };
-                            let token_ok = match (&expected, &provided) {
-                                (Some(exp), Some(got)) if got == exp => true,
-                                (Some(_), _) => false,
-                                (None, _) => true,
-                            };
-                            let authorized = if expected.is_some() && allowlist.is_some() {
-                                subject_ok && token_ok
-                            } else if expected.is_some() {
-                                token_ok
-                            } else if allowlist.is_some() {
-                                subject_ok
-                            } else {
-                                true
-                            };
-                            if !authorized {
+                            let metrics = engine_clone.metrics();
+                            metrics.admin_requests_total.inc();
+
+                            let decision = admin_auth
+                                .authorize(provided, client_subj.clone(), authorization)
+                                .await;
+
+                            record_admin_metrics(metrics, &decision);
+
+                            if let Some(err) = &decision.clerk_error {
+                                log::warn!(
+                                    "clerk_admin_auth_failed action=trading_status err={}",
+                                    err
+                                );
+                            }
+
+                            if !decision.authorized {
+                                let status_detail = decision
+                                    .reason
+                                    .clone()
+                                    .unwrap_or_else(|| "unauthorized".to_string());
                                 return Ok::<_, warp::Rejection>(warp::reply::with_status(
-                                    warp::reply::json(
-                                        &serde_json::json!({"status":"unauthorized"}),
-                                    ),
+                                    warp::reply::json(&serde_json::json!({"status":status_detail})),
                                     StatusCode::UNAUTHORIZED,
                                 ));
                             }
+
                             let live_flag = engine_clone.live_trading_status();
                             let dry_run = std::env::var("EXECUTION_DRY_RUN")
                                 .ok()
@@ -485,14 +831,16 @@ async fn main() -> Result<()> {
                                 .map(|v| v == "1" || v.eq_ignore_ascii_case("true"))
                                 .unwrap_or(false);
                             let effective_live = !dry_run && allow_live && live_flag;
+
                             crate::audit_log::log_event(
                                 "trading_status",
                                 remote.as_ref(),
-                                client_subj.as_deref(),
-                                token_ok,
-                                authorized,
+                                decision.subject.as_deref(),
+                                decision.static_token_valid,
+                                decision.authorized,
                                 None,
                             );
+
                             Ok::<_, warp::Rejection>(warp::reply::with_status(
                                 warp::reply::json(&serde_json::json!({
                                     "status":"ok",
@@ -508,68 +856,63 @@ async fn main() -> Result<()> {
                 );
             // Trading control endpoints (enable/disable live trading kill switch)
             let engine_ref_trading_enable = Arc::clone(&engine_ref_outer);
-            let allowed_subjects_enable = allowed_subjects.clone();
-            let admin_token_arc_enable = Arc::clone(&admin_token_arc);
+            let admin_auth_enable = Arc::clone(&admin_auth_context);
             let trading_enable = warp::path!("admin" / "trading" / "enable")
                 .and(warp::post())
                 .and(warp::addr::remote())
                 .and(warp::header::optional::<String>("x-admin-token"))
                 .and(warp::header::optional::<String>("x-client-subject"))
+                .and(warp::header::optional::<String>("authorization"))
                 .and_then(
                     move |remote: Option<SocketAddr>,
                           provided: Option<String>,
-                          client_subj: Option<String>| {
+                          client_subj: Option<String>,
+                          authorization: Option<String>| {
                         let engine_clone = Arc::clone(&engine_ref_trading_enable);
-                        let expected = (*admin_token_arc_enable).clone();
-                        let allowlist = allowed_subjects_enable.clone();
+                        let admin_auth = Arc::clone(&admin_auth_enable);
                         async move {
-                            engine_clone.metrics().admin_requests_total.inc();
-                            // Reuse auth logic (simplified: must be authorized like refresh endpoint)
-                            let subject_ok = if let Some(list) = &allowlist {
-                                match client_subj.as_ref().map(|s| s.trim()) {
-                                    Some(subj) => list.contains(subj),
-                                    None => false,
-                                }
-                            } else {
-                                true
-                            };
-                            let token_ok = match (&expected, &provided) {
-                                (Some(exp), Some(got)) if got == exp => true,
-                                (Some(_), _) => false,
-                                (None, _) => true,
-                            };
-                            let authorized = if expected.is_some() && allowlist.is_some() {
-                                subject_ok && token_ok
-                            } else if expected.is_some() {
-                                token_ok
-                            } else if allowlist.is_some() {
-                                subject_ok
-                            } else {
-                                true
-                            };
-                            if !authorized {
-                                engine_clone.metrics().admin_unauthorized_total.inc();
+                            let metrics = engine_clone.metrics();
+                            metrics.admin_requests_total.inc();
+
+                            let decision = admin_auth
+                                .authorize(provided, client_subj.clone(), authorization)
+                                .await;
+
+                            record_admin_metrics(metrics, &decision);
+
+                            if let Some(err) = &decision.clerk_error {
+                                log::warn!(
+                                    "clerk_admin_auth_failed action=trading_enable err={}",
+                                    err
+                                );
+                            }
+
+                            if !decision.authorized {
+                                let status_detail = decision
+                                    .reason
+                                    .clone()
+                                    .unwrap_or_else(|| "unauthorized".to_string());
                                 return Ok::<_, warp::Rejection>(warp::reply::with_status(
-                                    warp::reply::json(
-                                        &serde_json::json!({"status":"unauthorized"}),
-                                    ),
+                                    warp::reply::json(&serde_json::json!({"status":status_detail})),
                                     StatusCode::UNAUTHORIZED,
                                 ));
                             }
+
                             engine_clone.enable_live_trading();
                             log::info!(
                                 "audit_event action=trading_enable remote={:?} subject={:?}",
                                 remote,
-                                client_subj
+                                decision.subject
                             );
                             crate::audit_log::log_event(
                                 "trading_enable",
                                 remote.as_ref(),
-                                client_subj.as_deref(),
-                                token_ok,
-                                authorized,
+                                decision.subject.as_deref(),
+                                decision.static_token_valid,
+                                decision.authorized,
                                 None,
                             );
+
                             Ok::<_, warp::Rejection>(warp::reply::with_status(
                                 warp::reply::json(
                                     &serde_json::json!({"status":"ok","trading_enabled":true}),
@@ -580,67 +923,63 @@ async fn main() -> Result<()> {
                     },
                 );
             let engine_ref_trading_disable = Arc::clone(&engine_ref_outer);
-            let allowed_subjects_disable = allowed_subjects.clone();
-            let admin_token_arc_disable = Arc::clone(&admin_token_arc);
+            let admin_auth_disable = Arc::clone(&admin_auth_context);
             let trading_disable = warp::path!("admin" / "trading" / "disable")
                 .and(warp::post())
                 .and(warp::addr::remote())
                 .and(warp::header::optional::<String>("x-admin-token"))
                 .and(warp::header::optional::<String>("x-client-subject"))
+                .and(warp::header::optional::<String>("authorization"))
                 .and_then(
                     move |remote: Option<SocketAddr>,
                           provided: Option<String>,
-                          client_subj: Option<String>| {
+                          client_subj: Option<String>,
+                          authorization: Option<String>| {
                         let engine_clone = Arc::clone(&engine_ref_trading_disable);
-                        let expected = (*admin_token_arc_disable).clone();
-                        let allowlist = allowed_subjects_disable.clone();
+                        let admin_auth = Arc::clone(&admin_auth_disable);
                         async move {
-                            engine_clone.metrics().admin_requests_total.inc();
-                            let subject_ok = if let Some(list) = &allowlist {
-                                match client_subj.as_ref().map(|s| s.trim()) {
-                                    Some(subj) => list.contains(subj),
-                                    None => false,
-                                }
-                            } else {
-                                true
-                            };
-                            let token_ok = match (&expected, &provided) {
-                                (Some(exp), Some(got)) if got == exp => true,
-                                (Some(_), _) => false,
-                                (None, _) => true,
-                            };
-                            let authorized = if expected.is_some() && allowlist.is_some() {
-                                subject_ok && token_ok
-                            } else if expected.is_some() {
-                                token_ok
-                            } else if allowlist.is_some() {
-                                subject_ok
-                            } else {
-                                true
-                            };
-                            if !authorized {
-                                engine_clone.metrics().admin_unauthorized_total.inc();
+                            let metrics = engine_clone.metrics();
+                            metrics.admin_requests_total.inc();
+
+                            let decision = admin_auth
+                                .authorize(provided, client_subj.clone(), authorization)
+                                .await;
+
+                            record_admin_metrics(metrics, &decision);
+
+                            if let Some(err) = &decision.clerk_error {
+                                log::warn!(
+                                    "clerk_admin_auth_failed action=trading_disable err={}",
+                                    err
+                                );
+                            }
+
+                            if !decision.authorized {
+                                let status_detail = decision
+                                    .reason
+                                    .clone()
+                                    .unwrap_or_else(|| "unauthorized".to_string());
                                 return Ok::<_, warp::Rejection>(warp::reply::with_status(
-                                    warp::reply::json(
-                                        &serde_json::json!({"status":"unauthorized"}),
-                                    ),
+                                    warp::reply::json(&serde_json::json!({"status":status_detail})),
                                     StatusCode::UNAUTHORIZED,
                                 ));
                             }
+
                             engine_clone.disable_live_trading();
                             log::info!(
                                 "audit_event action=trading_disable remote={:?} subject={:?}",
                                 remote,
-                                client_subj
+                                decision.subject
                             );
                             crate::audit_log::log_event(
                                 "trading_disable",
                                 remote.as_ref(),
-                                client_subj.as_deref(),
-                                token_ok,
-                                authorized,
+                                decision.subject.as_deref(),
+                                decision.static_token_valid,
+                                decision.authorized,
                                 None,
                             );
+
                             Ok::<_, warp::Rejection>(warp::reply::with_status(
                                 warp::reply::json(
                                     &serde_json::json!({"status":"ok","trading_enabled":false}),
@@ -650,11 +989,560 @@ async fn main() -> Result<()> {
                         }
                     },
                 );
+            let wallet_service_handle = engine_ref_outer.wallet_service();
+            let engine_ref_wallet_status = Arc::clone(&engine_ref_outer);
+            let admin_auth_wallet_status = Arc::clone(&admin_auth_context);
+            let wallet_service_status = Arc::clone(&wallet_service_handle);
+            let rl_wallet_status = Arc::clone(&rate_limiter);
+            let wallet_status_route = warp::path!("admin" / "wallet" / "status")
+                .and(warp::get())
+                .and(warp::addr::remote())
+                .and(warp::header::optional::<String>("x-admin-token"))
+                .and(warp::header::optional::<String>("x-client-subject"))
+                .and(warp::header::optional::<String>("authorization"))
+                .and_then(
+                    move |remote: Option<SocketAddr>,
+                          provided: Option<String>,
+                          client_subj: Option<String>,
+                          authorization: Option<String>| {
+                        let engine_clone = Arc::clone(&engine_ref_wallet_status);
+                        let admin_auth = Arc::clone(&admin_auth_wallet_status);
+                        let status_service = Arc::clone(&wallet_service_status);
+                        let rl_inner = Arc::clone(&rl_wallet_status);
+                        async move {
+                            let metrics = engine_clone.metrics();
+                            metrics.admin_requests_total.inc();
+
+                            if let Some(addr) = remote {
+                                if !allow(&addr.ip().to_string(), &rl_inner, 30, 60) {
+                                    metrics.admin_rate_limited_total.inc();
+                                    return Ok::<_, warp::Rejection>(warp::reply::with_status(
+                                        warp::reply::json(
+                                            &serde_json::json!({"status":"rate_limited"}),
+                                        ),
+                                        StatusCode::TOO_MANY_REQUESTS,
+                                    ));
+                                }
+                            }
+
+                            let decision = admin_auth
+                                .authorize(provided, client_subj, authorization)
+                                .await;
+
+                            record_admin_metrics(metrics, &decision);
+
+                            if let Some(err) = &decision.clerk_error {
+                                log::warn!(
+                                    "clerk_admin_auth_failed action=wallet_status err={}",
+                                    err
+                                );
+                            }
+
+                            if !decision.authorized {
+                                let status_detail = decision
+                                    .reason
+                                    .clone()
+                                    .unwrap_or_else(|| "unauthorized".to_string());
+                                return Ok::<_, warp::Rejection>(warp::reply::with_status(
+                                    warp::reply::json(&serde_json::json!({"status":status_detail})),
+                                    StatusCode::UNAUTHORIZED,
+                                ));
+                            }
+
+                            let status = status_service.get_admin_status().await;
+                            Ok::<_, warp::Rejection>(warp::reply::with_status(
+                                warp::reply::json(&status),
+                                StatusCode::OK,
+                            ))
+                        }
+                    },
+                );
+            let engine_ref_wallet_rotate = Arc::clone(&engine_ref_outer);
+            let admin_auth_wallet_rotate = Arc::clone(&admin_auth_context);
+            let wallet_service_rotate = Arc::clone(&wallet_service_handle);
+            let rl_wallet_rotate = Arc::clone(&rate_limiter);
+            let wallet_rotate_route = warp::path!("admin" / "wallet" / "rotate")
+                .and(warp::post())
+                .and(warp::addr::remote())
+                .and(warp::header::optional::<String>("x-admin-token"))
+                .and(warp::header::optional::<String>("x-client-subject"))
+                .and(warp::header::optional::<String>("authorization"))
+                .and(warp::body::json())
+                .and_then(
+                    move |remote: Option<SocketAddr>,
+                          provided: Option<String>,
+                          client_subj: Option<String>,
+                          authorization: Option<String>,
+                          payload: WalletRotateRequest| {
+                        let engine_clone = Arc::clone(&engine_ref_wallet_rotate);
+                        let admin_auth = Arc::clone(&admin_auth_wallet_rotate);
+                        let rotate_service = Arc::clone(&wallet_service_rotate);
+                        let rl_inner = Arc::clone(&rl_wallet_rotate);
+                        async move {
+                            let metrics = engine_clone.metrics();
+                            metrics.admin_requests_total.inc();
+
+                            if let Some(addr) = remote {
+                                if !allow(&addr.ip().to_string(), &rl_inner, 30, 60) {
+                                    metrics.admin_rate_limited_total.inc();
+                                    return Ok::<_, warp::Rejection>(warp::reply::with_status(
+                                        warp::reply::json(
+                                            &serde_json::json!({"status":"rate_limited"}),
+                                        ),
+                                        StatusCode::TOO_MANY_REQUESTS,
+                                    ));
+                                }
+                            }
+
+                            let decision = admin_auth
+                                .authorize(provided, client_subj.clone(), authorization)
+                                .await;
+
+                            record_admin_metrics(metrics, &decision);
+
+                            if let Some(err) = &decision.clerk_error {
+                                log::warn!(
+                                    "clerk_admin_auth_failed action=wallet_rotate err={}",
+                                    err
+                                );
+                            }
+
+                            if !decision.authorized {
+                                let status_detail = decision
+                                    .reason
+                                    .clone()
+                                    .unwrap_or_else(|| "unauthorized".to_string());
+                                return Ok::<_, warp::Rejection>(warp::reply::with_status(
+                                    warp::reply::json(&serde_json::json!({"status":status_detail})),
+                                    StatusCode::UNAUTHORIZED,
+                                ));
+                            }
+
+                            let requested_wallet = payload.target_wallet.clone();
+                            if let Err(err) = rotate_service
+                                .rotate_wallet(requested_wallet.as_deref())
+                                .await
+                            {
+                                return Ok::<_, warp::Rejection>(warp::reply::with_status(
+                                    warp::reply::json(&serde_json::json!({
+                                        "status": "error",
+                                        "error": err.to_string()
+                                    })),
+                                    StatusCode::BAD_REQUEST,
+                                ));
+                            }
+
+                            let status = rotate_service.get_admin_status().await;
+
+                            crate::audit_log::log_event(
+                                "wallet_rotate",
+                                remote.as_ref(),
+                                decision.subject.as_deref(),
+                                decision.static_token_valid,
+                                decision.authorized,
+                                Some(&serde_json::json!({
+                                    "target": requested_wallet,
+                                    "active_wallet": status.active_wallet,
+                                    "label": status.active_wallet_label,
+                                })),
+                            );
+
+                            Ok::<_, warp::Rejection>(warp::reply::with_status(
+                                warp::reply::json(&status),
+                                StatusCode::OK,
+                            ))
+                        }
+                    },
+                );
+            let engine_ref_wallet_transfer = Arc::clone(&engine_ref_outer);
+            let admin_auth_wallet_transfer = Arc::clone(&admin_auth_context);
+            let wallet_service_transfer = Arc::clone(&wallet_service_handle);
+            let rl_wallet_transfer = Arc::clone(&rate_limiter);
+            let wallet_transfer_route = warp::path!("admin" / "wallet" / "transfer")
+                .and(warp::post())
+                .and(warp::addr::remote())
+                .and(warp::header::optional::<String>("x-admin-token"))
+                .and(warp::header::optional::<String>("x-client-subject"))
+                .and(warp::header::optional::<String>("authorization"))
+                .and(warp::body::json())
+                .and_then(
+                    move |remote: Option<SocketAddr>,
+                          provided: Option<String>,
+                          client_subj: Option<String>,
+                          authorization: Option<String>,
+                          payload: WalletTransferRequest| {
+                        let engine_clone = Arc::clone(&engine_ref_wallet_transfer);
+                        let admin_auth = Arc::clone(&admin_auth_wallet_transfer);
+                        let transfer_service = Arc::clone(&wallet_service_transfer);
+                        let rl_inner = Arc::clone(&rl_wallet_transfer);
+                        async move {
+                            let metrics = engine_clone.metrics();
+                            metrics.admin_requests_total.inc();
+
+                            if let Some(addr) = remote {
+                                if !allow(&addr.ip().to_string(), &rl_inner, 30, 60) {
+                                    metrics.admin_rate_limited_total.inc();
+                                    return Ok::<_, warp::Rejection>(warp::reply::with_status(
+                                        warp::reply::json(
+                                            &serde_json::json!({"status":"rate_limited"}),
+                                        ),
+                                        StatusCode::TOO_MANY_REQUESTS,
+                                    ));
+                                }
+                            }
+
+                            let decision = admin_auth
+                                .authorize(provided, client_subj.clone(), authorization)
+                                .await;
+
+                            record_admin_metrics(metrics, &decision);
+
+                            if let Some(err) = &decision.clerk_error {
+                                log::warn!(
+                                    "clerk_admin_auth_failed action=wallet_transfer err={}",
+                                    err
+                                );
+                            }
+
+                            if !decision.authorized {
+                                let status_detail = decision
+                                    .reason
+                                    .clone()
+                                    .unwrap_or_else(|| "unauthorized".to_string());
+                                return Ok::<_, warp::Rejection>(warp::reply::with_status(
+                                    warp::reply::json(&serde_json::json!({"status":status_detail})),
+                                    StatusCode::UNAUTHORIZED,
+                                ));
+                            }
+
+                            if payload.amount_sol <= 0.0 {
+                                return Ok::<_, warp::Rejection>(warp::reply::with_status(
+                                    warp::reply::json(&serde_json::json!({
+                                        "status": "error",
+                                        "error": "amount_sol must be positive"
+                                    })),
+                                    StatusCode::BAD_REQUEST,
+                                ));
+                            }
+
+                            let transfer_result = match transfer_service
+                                .transfer_sol(
+                                    &payload.destination,
+                                    payload.amount_sol,
+                                    payload.skip_preflight,
+                                )
+                                .await
+                            {
+                                Ok(result) => result,
+                                Err(err) => {
+                                    return Ok::<_, warp::Rejection>(warp::reply::with_status(
+                                        warp::reply::json(&serde_json::json!({
+                                            "status": "error",
+                                            "error": err.to_string()
+                                        })),
+                                        StatusCode::BAD_REQUEST,
+                                    ));
+                                }
+                            };
+
+                            let audit_extra = serde_json::json!({
+                                "destination": transfer_result.destination,
+                                "lamports": transfer_result.lamports,
+                                "recent_blockhash": transfer_result.recent_blockhash
+                            });
+
+                            crate::audit_log::log_event(
+                                "wallet_transfer",
+                                remote.as_ref(),
+                                decision.subject.as_deref(),
+                                decision.static_token_valid,
+                                decision.authorized,
+                                Some(&audit_extra),
+                            );
+
+                            Ok::<_, warp::Rejection>(warp::reply::with_status(
+                                warp::reply::json(&serde_json::json!({
+                                    "status": "ok",
+                                    "signature": transfer_result.signature,
+                                    "destination": transfer_result.destination,
+                                    "source": transfer_result.source,
+                                    "lamports": transfer_result.lamports,
+                                    "amount_sol": payload.amount_sol,
+                                    "skip_preflight": payload.skip_preflight
+                                })),
+                                StatusCode::OK,
+                            ))
+                        }
+                    },
+                );
+            let engine_ref_wallet_airdrop = Arc::clone(&engine_ref_outer);
+            let admin_auth_wallet_airdrop = Arc::clone(&admin_auth_context);
+            let wallet_service_airdrop = Arc::clone(&wallet_service_handle);
+            let rl_wallet_airdrop = Arc::clone(&rate_limiter);
+            let wallet_airdrop_route = warp::path!("admin" / "wallet" / "airdrop")
+                .and(warp::post())
+                .and(warp::addr::remote())
+                .and(warp::header::optional::<String>("x-admin-token"))
+                .and(warp::header::optional::<String>("x-client-subject"))
+                .and(warp::header::optional::<String>("authorization"))
+                .and(warp::body::json())
+                .and_then(
+                    move |remote: Option<SocketAddr>,
+                          provided: Option<String>,
+                          client_subj: Option<String>,
+                          authorization: Option<String>,
+                          payload: WalletAirdropRequest| {
+                        let engine_clone = Arc::clone(&engine_ref_wallet_airdrop);
+                        let admin_auth = Arc::clone(&admin_auth_wallet_airdrop);
+                        let airdrop_service = Arc::clone(&wallet_service_airdrop);
+                        let rl_inner = Arc::clone(&rl_wallet_airdrop);
+                        async move {
+                            let metrics = engine_clone.metrics();
+                            metrics.admin_requests_total.inc();
+
+                            if let Some(addr) = remote {
+                                if !allow(&addr.ip().to_string(), &rl_inner, 30, 60) {
+                                    metrics.admin_rate_limited_total.inc();
+                                    return Ok::<_, warp::Rejection>(warp::reply::with_status(
+                                        warp::reply::json(&serde_json::json!({"status":"rate_limited"})),
+                                        StatusCode::TOO_MANY_REQUESTS,
+                                    ));
+                                }
+                            }
+
+                            let decision = admin_auth
+                                .authorize(provided, client_subj.clone(), authorization)
+                                .await;
+
+                            record_admin_metrics(metrics, &decision);
+
+                            if let Some(err) = &decision.clerk_error {
+                                log::warn!(
+                                    "clerk_admin_auth_failed action=wallet_airdrop err={}",
+                                    err
+                                );
+                            }
+
+                            if !decision.authorized {
+                                let status_detail = decision
+                                    .reason
+                                    .clone()
+                                    .unwrap_or_else(|| "unauthorized".to_string());
+                                return Ok::<_, warp::Rejection>(warp::reply::with_status(
+                                    warp::reply::json(
+                                        &serde_json::json!({"status":status_detail}),
+                                    ),
+                                    StatusCode::UNAUTHORIZED,
+                                ));
+                            }
+
+                            let amount_sol = payload.amount_sol.unwrap_or(1.0);
+                            if amount_sol <= 0.0 {
+                                return Ok::<_, warp::Rejection>(warp::reply::with_status(
+                                    warp::reply::json(&serde_json::json!({
+                                        "status": "error",
+                                        "error": "amount_sol must be positive"
+                                    })),
+                                    StatusCode::BAD_REQUEST,
+                                ));
+                            }
+                            if amount_sol > MAX_AIRDROP_SOL {
+                                return Ok::<_, warp::Rejection>(warp::reply::with_status(
+                                    warp::reply::json(&serde_json::json!({
+                                        "status": "error",
+                                        "error": format!("amount_sol exceeds {} SOL limit", MAX_AIRDROP_SOL)
+                                    })),
+                                    StatusCode::BAD_REQUEST,
+                                ));
+                            }
+
+                            let cluster = payload
+                                .cluster
+                                .as_deref()
+                                .unwrap_or("devnet");
+                            if matches!(cluster.to_ascii_lowercase().as_str(), "mainnet" | "mainnet-beta" | "mainnet_beta") {
+                                return Ok::<_, warp::Rejection>(warp::reply::with_status(
+                                    warp::reply::json(&serde_json::json!({
+                                        "status": "error",
+                                        "error": "airdrop is not supported on mainnet"
+                                    })),
+                                    StatusCode::BAD_REQUEST,
+                                ));
+                            }
+
+                            let rpc_url = if let Some(url) = payload.rpc_url.clone() {
+                                url
+                            } else if let Some(default_url) = default_airdrop_url(cluster) {
+                                default_url.to_string()
+                            } else {
+                                return Ok::<_, warp::Rejection>(warp::reply::with_status(
+                                    warp::reply::json(&serde_json::json!({
+                                        "status": "error",
+                                        "error": format!("unsupported cluster '{}'" , cluster)
+                                    })),
+                                    StatusCode::BAD_REQUEST,
+                                ));
+                            };
+
+                            let wallet_address = payload
+                                .wallet
+                                .clone()
+                                .unwrap_or_else(|| airdrop_service.get_active_wallet());
+
+                            let lamports = sol_to_lamports(amount_sol);
+                            let airdrop_result = match airdrop_service
+                                .request_airdrop(&wallet_address, lamports, &rpc_url)
+                                .await
+                            {
+                                Ok(result) => result,
+                                Err(err) => {
+                                    return Ok::<_, warp::Rejection>(warp::reply::with_status(
+                                        warp::reply::json(&serde_json::json!({
+                                            "status": "error",
+                                            "error": err.to_string()
+                                        })),
+                                        StatusCode::BAD_REQUEST,
+                                    ));
+                                }
+                            };
+
+                            let audit_extra = serde_json::json!({
+                                "cluster": cluster,
+                                "rpc_url": rpc_url,
+                                "lamports": lamports,
+                                "amount_sol": amount_sol
+                            });
+
+                            crate::audit_log::log_event(
+                                "wallet_airdrop",
+                                remote.as_ref(),
+                                decision.subject.as_deref(),
+                                decision.static_token_valid,
+                                decision.authorized,
+                                Some(&audit_extra),
+                            );
+
+                            Ok::<_, warp::Rejection>(warp::reply::with_status(
+                                warp::reply::json(&serde_json::json!({
+                                    "status": "ok",
+                                    "signature": airdrop_result.signature,
+                                    "wallet": airdrop_result.wallet,
+                                    "lamports": airdrop_result.lamports,
+                                    "amount_sol": amount_sol,
+                                    "rpc_url": airdrop_result.rpc_url
+                                })),
+                                StatusCode::OK,
+                            ))
+                        }
+                    },
+                );
+            let engine_ref_wallet_deactivate = Arc::clone(&engine_ref_outer);
+            let admin_auth_wallet_deactivate = Arc::clone(&admin_auth_context);
+            let wallet_service_deactivate = Arc::clone(&wallet_service_handle);
+            let rl_wallet_deactivate = Arc::clone(&rate_limiter);
+            let wallet_deactivate_route = warp::path!("admin" / "wallet" / "deactivate")
+                .and(warp::post())
+                .and(warp::addr::remote())
+                .and(warp::header::optional::<String>("x-admin-token"))
+                .and(warp::header::optional::<String>("x-client-subject"))
+                .and(warp::header::optional::<String>("authorization"))
+                .and(warp::body::json())
+                .and_then(
+                    move |remote: Option<SocketAddr>,
+                          provided: Option<String>,
+                          client_subj: Option<String>,
+                          authorization: Option<String>,
+                          payload: WalletDeactivateRequest| {
+                        let engine_clone = Arc::clone(&engine_ref_wallet_deactivate);
+                        let admin_auth = Arc::clone(&admin_auth_wallet_deactivate);
+                        let deactivate_service = Arc::clone(&wallet_service_deactivate);
+                        let rl_inner = Arc::clone(&rl_wallet_deactivate);
+                        async move {
+                            let metrics = engine_clone.metrics();
+                            metrics.admin_requests_total.inc();
+
+                            if let Some(addr) = remote {
+                                if !allow(&addr.ip().to_string(), &rl_inner, 30, 60) {
+                                    metrics.admin_rate_limited_total.inc();
+                                    return Ok::<_, warp::Rejection>(warp::reply::with_status(
+                                        warp::reply::json(
+                                            &serde_json::json!({"status":"rate_limited"}),
+                                        ),
+                                        StatusCode::TOO_MANY_REQUESTS,
+                                    ));
+                                }
+                            }
+
+                            let decision = admin_auth
+                                .authorize(provided, client_subj.clone(), authorization)
+                                .await;
+
+                            record_admin_metrics(metrics, &decision);
+
+                            if let Some(err) = &decision.clerk_error {
+                                log::warn!(
+                                    "clerk_admin_auth_failed action=wallet_deactivate err={}",
+                                    err
+                                );
+                            }
+
+                            if !decision.authorized {
+                                let status_detail = decision
+                                    .reason
+                                    .clone()
+                                    .unwrap_or_else(|| "unauthorized".to_string());
+                                return Ok::<_, warp::Rejection>(warp::reply::with_status(
+                                    warp::reply::json(&serde_json::json!({"status":status_detail})),
+                                    StatusCode::UNAUTHORIZED,
+                                ));
+                            }
+
+                            let wallet_to_deactivate = payload.wallet.clone();
+                            if let Err(err) = deactivate_service
+                                .deactivate_wallet(&wallet_to_deactivate)
+                                .await
+                            {
+                                return Ok::<_, warp::Rejection>(warp::reply::with_status(
+                                    warp::reply::json(&serde_json::json!({
+                                        "status": "error",
+                                        "error": err.to_string()
+                                    })),
+                                    StatusCode::BAD_REQUEST,
+                                ));
+                            }
+
+                            let status = deactivate_service.get_admin_status().await;
+
+                            crate::audit_log::log_event(
+                                "wallet_deactivate",
+                                remote.as_ref(),
+                                decision.subject.as_deref(),
+                                decision.static_token_valid,
+                                decision.authorized,
+                                Some(&serde_json::json!({
+                                    "requested_wallet": wallet_to_deactivate,
+                                    "active_wallet": status.active_wallet,
+                                    "label": status.active_wallet_label,
+                                })),
+                            );
+
+                            Ok::<_, warp::Rejection>(warp::reply::with_status(
+                                warp::reply::json(&status),
+                                StatusCode::OK,
+                            ))
+                        }
+                    },
+                );
             let route = get_token
                 .or(refresh)
                 .or(trading_status)
                 .or(trading_enable)
-                .or(trading_disable);
+                .or(trading_disable)
+                .or(wallet_status_route)
+                .or(wallet_rotate_route)
+                .or(wallet_transfer_route)
+                .or(wallet_airdrop_route)
+                .or(wallet_deactivate_route);
             let port = std::env::var("TOKEN_REGISTRY_PORT")
                 .ok()
                 .and_then(|v| v.parse::<u16>().ok())

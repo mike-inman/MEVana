@@ -1,102 +1,181 @@
 Self‑Hosted Deployment Strategy & Workflows (Production Server)
 
-Last updated: 2025-09-22
+Last updated: 2025-02-14
+
+## Quickstart for the next helper
+
+1. **Start with `docs/operations/ADMIN_CONTROL_PANEL.md`.** It explains the Clerk JWT setup, Grafana button requirements, per-wallet metrics, and audit expectations you must validate immediately after a deploy.
+2. Ensure `/etc/mevana/common.env` and `/etc/mevana/executor.env` define `WALLET_LABELS=/opt/MEVana/keys/id.json=prod,...` so Prometheus exports `mevana_wallet_balance_sol{wallet="prod"}` and Grafana panels light up without guesswork.
+3. After rolling new binaries, run `systemctl status executor-service` and curl the metrics endpoint (`curl -s http://127.0.0.1:9904/metrics | rg mevana_wallet_balance_sol`) to confirm the active wallet label reports the live balance and backups show `0`.
 
 Overview
-- Goal: Fast, predictable, one‑click server builds and deploys. Build images on the server (Linux) to avoid cross‑arch issues; keep compose + env in a canonical path.
-- Where: Self‑hosted GitHub Actions runner on the server executes workflows you trigger from GitHub.
-- Canonical paths:
-  - Project root: `/opt/MEVana`
-  - Compose files: `/opt/MEVana/infrastructure/*.yml`
-  - Env files (hotpath): `/opt/MEVana/.env` and `/opt/MEVana/infrastructure/.env`
-  - Persisted image tag: `/opt/MEVana/.mevana_tag`
-  - Docker network: `mevana_net`
+- Goal: Keep the hotpath, normalizer, discovery, and executor binaries as close to the metal as possible while leaving supporting infrastructure (Kafka, Redis, Postgres, Prometheus, Grafana) in Docker for easy parity with local development.
+- What changed: the GitHub Actions runner now builds release binaries in-place and installs them under `/opt/MEVana/bin/`, managed by dedicated systemd units. No container rebuild loops for the Rust services.
+- Benefits: deployments land in minutes, systemd restarts mirror local cargo runs, and production matches the host-based workflow you use during development.
 
-Secrets & Env
-- Provide endpoint + token via GitHub Actions secrets (repo → Settings → Secrets and variables → Actions):
-  - Accepted: `HOTPATH_ENDPOINT` or `ENDPOINT`
-  - Accepted: `HOTPATH_X_TOKEN` or `X_TOKEN`
-- Provide the flash-loan config path via `FLASH_LOAN_PROVIDERS_CONFIG` (points to `/opt/MEVana/config/flash_loan_providers.mainnet.json` after deploy). The workflow copies `config/flash_loan_providers.mainnet.template.json` to that location; update it with production reserves before first launch.
-- Workflows write both `/opt/MEVana/.env` and `/opt/MEVana/infrastructure/.env`:
-  - `ENDPOINT=...`
-  - `X_TOKEN=...`
-  - `FLASH_LOAN_PROVIDERS_CONFIG=/opt/MEVana/config/flash_loan_providers.mainnet.json`
+Canonical Paths & Users
+- Application root: `/opt/MEVana`
+  - `bin/` compiled binaries (`hotpath_arb_engine`, `normalizer-service`, `discovery-service`, `executor-service`)
+  - `config/` runtime JSON/config files (`flash_loan_providers.mainnet.json`, etc.)
+  - `keys/` executor wallet keypair (`id.json`)
+  - `state/`, `logs/`, `releases/` writable by the `mevana` user
+- Environment files: `/etc/mevana/common.env` plus `/etc/mevana/{hotpath,normalizer,discovery,executor}.env`
+- System user: `mevana` (created by the bootstrap helper)
 
-Services & Ports
-- hotpath‑arb‑engine (metrics): 8088 (Prometheus exporter `/metrics`)
-- Prometheus UI: 9090 (`/-/healthy`)
-- Grafana UI: 3000 (`/api/health`)
-- Kafka UI: 8080 (metrics at `/actuator/prometheus`)
+Bootstrap (first run or whenever provisioning a new server)
+```bash
+# Run from the repository root on the target host
+sudo scripts/deployment/bootstrap-host.sh
+```
+What it does:
+1. Creates the `mevana` system user (home `/opt/MEVana`) and standard directories.
+2. Seeds `/opt/MEVana/config/flash_loan_providers.*.json` and copies env samples into `/etc/mevana/*.env.sample`.
+3. Installs/refreshes the four systemd unit files under `/etc/systemd/system/` and reloads systemd.
+4. Copies `infrastructure/keys/id.json` to `/opt/MEVana/keys/id.json` if the key is missing (one-time convenience).
 
-Prometheus Scraping
-- File: `infrastructure/prometheus.core.yml`
-- Hotpath: `hotpath-arb-engine:8088` (path `/metrics`)
-- Kafka UI: `kafka-ui:8080` (path `/actuator/prometheus`)
+Secrets & Environment Configuration
+1. Edit `/etc/mevana/common.env` using `config/environments/common.env.sample` as the template (shared values such as `DATABASE_URL`, `KAFKA_BROKER`, `FLASH_LOAN_PROVIDERS_CONFIG`, `WALLET_KEYPAIR_PATH`).
+2. Keep `common.env` as the single source of truth for shared values; the copy in your repo root should match so future deploys don’t overwrite server edits. Key host mappings we set:
+   - `KAFKA_BROKER=KAFKA_BOOTSTRAP_SERVERS=localhost:29092`
+   - `REDIS_URL=redis://127.0.0.1:6380/0`
+   - `FLASH_LOAN_PROVIDERS_CONFIG=/opt/MEVana/config/flash_loan_providers.mainnet.json`
+   - `WALLET_KEYPAIR_PATH=/opt/MEVana/keys/id.json`
+   - `JITO_AUTH_KEYPAIR_PATH=/opt/MEVana/keys/jito-keypair.json`
+3. Layer service-specific overrides only where needed:
+   - `/etc/mevana/hotpath.env` → `METRICS_PORT=8088` (API is `8089` automatically) and `PROPERTY_STORE_PERSISTENCE_PATH=/opt/MEVana/state/property_store.json`.
+   - `/etc/mevana/normalizer.env` → Kafka topics (`dex-transactions` → `orca-swaps.parsed.v2`), `REDIS_URL=redis://127.0.0.1:6380/0`, metrics port `9901` (default).
+   - `/etc/mevana/executor.env` → `METRICS_PORT=9904`, `HEALTH_CHECK_PORT=9898`, and set `ALLOW_EMPTY_SHYFT_API=1` only if you intentionally leave the API key blank.
+   - `/etc/mevana/discovery.env` can stay empty unless you want non-default Kafka groups or topics.
+4. Prime the data stores (idempotent; safe to run before every deploy):
+   ```bash
+   sudo ./scripts/deployment/bootstrap_database.sh             # applies schema + seeds vault_config
+   sudo ./scripts/deployment/bootstrap_kafka.sh kafka:9092     # creates trading topics if missing
+   ```
+   Both helpers are invoked automatically by `start_system.sh`/`release-services.sh`, but running them during initial provisioning guarantees Postgres and Kafka are ready before services start.
+5. Permissions: keep every env file `root:mevana` with mode `640` so systemd can read while unprivileged users cannot.
+6. Ensure `/opt/MEVana/keys/id.json` (executor wallet) and `/opt/MEVana/keys/jito-keypair.json` exist and are owned by `mevana:mevana` with mode `600` before enabling live services.
 
-Grafana Dashboards
-- Canonical: `infrastructure/grafana/dashboards/` (provisioned into container)
-- Hygiene blocks any `monitoring/grafana/dashboards/**` or top‑level `dashboards/` files.
+Infrastructure Endpoints & Firewall Rules
+- Application services listen on the host network while infrastructure stays in Docker. Open these ports locally (UFW rules shown):
+  ```bash
+  sudo ufw allow 8088/tcp  # hotpath metrics
+  sudo ufw allow 8089/tcp  # hotpath API
+  sudo ufw allow 9901/tcp  # normalizer metrics
+  sudo ufw allow 9102/tcp  # discovery metrics
+  sudo ufw allow 9904/tcp  # executor metrics
+  ```
+- Prometheus runs in Docker but scrapes host services at `host.docker.internal:<port>`. The bundled configs already target those endpoints (`infrastructure/prometheus.{core,prod}.yml`).
 
-Workflows (GitHub → Actions)
-- Build and Deploy (Self-Hosted)
-  - Always builds these images locally on the server: hotpath, normalizer, discovery, executor
-  - Rsyncs `infrastructure/` → `/opt/MEVana/infrastructure`
-  - Writes env files and persists tag to `/opt/MEVana/.mevana_tag`
-  - Runs compose from `/opt/MEVana`
-  - **Tip:** supply the `services` input (e.g. `hotpath normalizer`) when dispatching the workflow to rebuild only those services and skip the rest
+Kafka Topics (bare metal services)
+- Managed by `scripts/deployment/bootstrap_kafka.sh`. For manual validation:
+  ```bash
+  docker exec mevana-kafka-1 kafka-topics --bootstrap-server localhost:9092 --list
+  ```
+  You should see `dex-transactions`, `orca-swaps.parsed.v2`, `orca-tickarrays.parsed.v2`, `edge.delta.v1`, `edge.snapshot.v1`, `normalized-swaps.v1`, `unknown-programs`, `arb.opportunities.v1`.
 
-- Restart (Self‑Hosted)
-  - Runs compose from `/opt/MEVana`
-  - Re‑uses `/opt/MEVana/.mevana_tag` (avoids `:dev` pulls)
-  - Input: `services` (e.g., `prometheus`, `hotpath`, etc.)
+Infrastructure Services (Docker, once per host)
+```bash
+# Keep Kafka/Redis/Postgres/Grafana in Docker for parity
+cd /opt/MEVana
+sudo docker compose -p mevana -f infrastructure/docker-compose.server.yml up -d \
+  zookeeper kafka redis postgres adminer prometheus grafana kafka-ui
+```
+- Grafana: `http://<server-ip>:3000` (admin/admin123)
+- Prometheus: `http://<server-ip>:9090`
+- Kafka broker exposed internally as `kafka:9092` (compose network `mevana_net`)
+- Database forwarded on `localhost:5433` via compose
 
-- Diagnostics (Self‑Hosted)
-  - Runs compose ps and tails logs for selected services
-  - HTTP checks (Grafana/Prometheus/Hotpath)
-  - Prints `/opt/MEVana/.env`, `/opt/MEVana/infrastructure/.env` (redacted) and the hotpath container env (redacted)
-  - Prints `/opt/MEVana/.mevana_tag`
+Systemd Services (hotpath + companions)
+```bash
+# Once env files are in place
+sudo systemctl enable --now hotpath-arb-engine.service normalizer-service.service \
+  discovery-service.service executor-service.service
 
-- Cargo Check (Self‑Hosted)
-  - Installs build prerequisites and runs `cargo +nightly check --workspace` on the server
-  - Use to surface compile errors fast before building images
+# Common operations
+sudo systemctl restart hotpath-arb-engine.service
+sudo systemctl status hotpath-arb-engine.service
+sudo journalctl -u hotpath-arb-engine.service -n 200 --no-pager
+```
+- Units run from `/opt/MEVana`, inherit shared env files, and write to `/opt/MEVana/logs` & `/opt/MEVana/state`.
+- `hotpath-arb-engine` exposes readiness on `8089` and metrics on `8088` (set `METRICS_PORT` to change both).
+- `normalizer-service` executes `normalizer-service pipe ...` under systemd; adjust `/etc/mevana/normalizer.env` to change topics or the consumer group.
+- `executor-service` listens for admin/health on `9898` and metrics on `9904`; keep `ALLOW_EMPTY_SHYFT_API=1` only if you intentionally skip Shyft credentials.
+- `release-services.sh` (see below) automatically enables and restarts the units when deploying.
 
-Server Expectations
-- Docker + docker compose installed
-- Runner service installed at `/opt/actions-runner` and online (GitHub → Settings → Actions → Runners)
-- Docker network `mevana_net` exists (workflow creates if missing)
+Fast Deploy Cycle (manual)
+```bash
+# Build and deploy selected services (run from repo root on the server)
+sudo scripts/deployment/release-services.sh hotpath executor
+# Build everything
+sudo scripts/deployment/release-services.sh
+```
+- Builds `cargo --release` for each requested service, installs binaries into `/opt/MEVana/bin/`, writes the short commit hash to `/opt/MEVana/.mevana_tag`, and restarts the relevant systemd units.
+- Set `SKIP_RESTART=1` to install binaries without touching running services (useful for staging or manual restarts).
+- Override `INSTALL_PREFIX` or `MEVANA_USER` if you are targeting a non-standard path/user (e.g., local experiments): `sudo INSTALL_PREFIX=/srv/mevana scripts/deployment/release-services.sh hotpath`.
 
-Fast Path (MVP)
-1) Run “Cargo Check (Self‑Hosted)” until green.
-2) Run “Build and Deploy (Self‑Hosted)” (no inputs).
-3) If a service restarts, run “Diagnostics (Self‑Hosted)” and inspect:
-   - Env values present
-   - container logs (auth/connectivity)
-   - Prometheus targets show Up
+CI/CD Workflow (`self-hosted-deploy.yml`)
+- Trigger via GitHub Actions (“Build and Deploy (Self-Hosted)”) with optional `services` input (`hotpath normalizer`, etc.).
+- Steps performed:
+  1. Check out code on the self-hosted runner.
+  2. Re-run `bootstrap-host.sh` (idempotent) to refresh unit files and config samples.
+  3. Execute `release-services.sh` with the resolved service list.
+  4. Run `scripts/ci/post-deployment-diagnostics.sh` against systemd + HTTP endpoints.
+  5. Always print `systemctl --no-pager status ...`; on failure, tail the last 200 journal entries per service.
+- Expected runtime: ~3–4 minutes for hotpath-only changes; ~6–7 minutes when rebuilding all binaries from scratch.
 
-Guardrails for Contributors & AI Assistants
-- Must follow file placement rules (hygiene enforced):
-  - Dashboards only in `infrastructure/grafana/dashboards/`
-  - Do not create new top‑level directories without approval
-  - No archives/OS files in repo
-- Use workflows; do not hand‑edit server state except for verified hotfixes.
-- For deviations (“color outside the lines”):
-  - Open an Issue or PR comment summarizing the reason, scope, and rollback plan
-  - Wait for explicit approval before structural changes
+-Validation & Diagnostics
+- `scripts/ci/post-deployment-diagnostics.sh` now checks:
+  - Grafana/Prometheus/Kafka/Adminer health (HTTP)
+  - Application metrics endpoints (`8088`, `8089`, `9901`, `9102`, `9904`)
+  - Prometheus target coverage against `host.docker.internal:<port>`
+  - Grafana datasource connectivity (script logs in with admin/admin123) and warns if dashboards are missing
+  - Systemd unit status for the four MEVana services
+- Run manually on the host after changes:
+  ```bash
+  cd /opt/MEVana
+  ./scripts/ci/post-deployment-diagnostics.sh
+  ```
 
-Required Reading for New Helpers
-- `AGENTS.md` — repo rules and placement
-- `docs/ai/ONBOARDING_AI.md` — 2‑minute orientation
-- `docs/operations/SELF_HOSTED_DEPLOYMENT_GUIDE.md` (this)
-- `docs/DOCUMENTATION_INDEX.md` — critical runbooks and quick links
-- `docs/development/RUST_STYLE.md` — Rust code conventions
+Local Development Parity
+- Dependencies: run the same Docker Compose infrastructure stack locally (`docker compose -f infrastructure/docker-compose.server.yml up -d ...`).
+- Application binaries: run with Cargo for hot reload:
+  ```bash
+  # Example: hotpath
+  source config/environments/common.env.sample   # or export selectively
+  source config/environments/hotpath.env.sample  # override ports/tokens locally
+  cargo run -p hotpath_arb_engine --bin hotpath_arb_engine
+  ```
+- For faster rebuilds mirroring production, you can point the release script at a local prefix:
+  ```bash
+  sudo INSTALL_PREFIX=/opt/MEVana-local MEVANA_USER=$USER \
+    scripts/deployment/bootstrap-host.sh
+  sudo env INSTALL_PREFIX=/opt/MEVana-local SYSTEMCTL=false SKIP_RESTART=1 \
+    scripts/deployment/release-services.sh hotpath
+  ```
+  (When `SYSTEMCTL=false`, the script will still build/install but you restart the binary manually.)
 
-Pre‑flight Checklist (local or server)
-- `cargo fmt --all -- --check`
-- `cargo clippy --workspace --all-targets -- -D warnings`
-- `bash scripts/ci/repo_hygiene.sh`
+Operational Checklist Before Enabling Live Execution
+- Ensure `/opt/MEVana/keys/id.json` is the intended wallet (permissions `600`, owner `mevana`).
+- Populate `/etc/mevana/executor.env` with `EXECUTION_DRY_RUN=false` only when ready and keep `EXECUTION_ALLOW_LIVE=false` until final go/no-go.
+- Confirm Prometheus target `executor-service:9904` is `UP` and Grafana can query Prometheus.
+- Run `journalctl -u executor-service.service -f` while flipping execution flags to observe any runtime errors.
 
-Common Issues & Fixes
-- Exec format error (Restarting 255): Build images locally on the server via the self‑hosted deploy; avoid host‑built binaries.
-- 404 from Prometheus endpoint link: Link points to the internal Docker address; use Prometheus query/targets instead.
-- Kafka UI metrics down: Ensure scrape path is `/actuator/prometheus`; restart Prometheus.
-- Env not picked up: Re‑run “Build and Deploy (Self‑Hosted)” so env files are rewritten to `/opt/MEVana/.env` and `/opt/MEVana/infrastructure/.env`.
+Rollback & Troubleshooting
+- Older binaries remain available under `/opt/MEVana/releases/` (if you copy them manually before overwriting).
+- To roll back quickly:
+  ```bash
+  sudo cp /opt/MEVana/releases/<timestamp>/hotpath_arb_engine /opt/MEVana/bin/
+  sudo systemctl restart hotpath-arb-engine.service
+  ```
+- Reset a failing service:
+  ```bash
+  sudo systemctl stop hotpath-arb-engine.service
+  sudo rm -rf /opt/MEVana/state/*
+  sudo systemctl start hotpath-arb-engine.service
+  ```
+- If diagnostics flag Grafana/Prometheus connectivity, re-run the Docker infrastructure compose stack; for executor restarts, verify the wallet key path first.
+
+Summary
+- Host-based systemd units deliver the speed boost required for tight development loops.
+- Docker is still used for shared infra to keep the monitoring pipeline identical across environments.
+- The new scripts (`bootstrap-host.sh`, `release-services.sh`) are the single source of truth for provisioning and deploys—both locally and in CI.

@@ -232,6 +232,47 @@ impl ShyftClient {
             .ok_or_else(|| anyhow::anyhow!("No result in simulation response"))
     }
 
+    /// Submit a signed transaction (base64) to the RPC endpoint
+    pub async fn send_transaction(
+        &self,
+        transaction: &str,
+        skip_preflight: bool,
+    ) -> Result<String> {
+        let request = ShyftRpcRequest {
+            jsonrpc: "2.0".to_string(),
+            id: self.next_request_id(),
+            method: "sendTransaction".to_string(),
+            params: serde_json::json!([
+                transaction,
+                {
+                    "encoding": "base64",
+                    "maxRetries": 2,
+                    "skipPreflight": skip_preflight
+                }
+            ]),
+        };
+
+        let response = self.send_rpc_request(request).await?;
+
+        if let Some(error) = response.error {
+            anyhow::bail!("sendTransaction RPC error: {}", error);
+        }
+
+        let result = response
+            .result
+            .ok_or_else(|| anyhow::anyhow!("No result in sendTransaction response"))?;
+
+        if let Some(signature) = result.as_str() {
+            return Ok(signature.to_string());
+        }
+
+        if let Some(signature) = result.get("result").and_then(|value| value.as_str()) {
+            return Ok(signature.to_string());
+        }
+
+        anyhow::bail!("unexpected sendTransaction response format: {}", result)
+    }
+
     /// Get recent blockhash
     pub async fn get_recent_blockhash(&self) -> Result<String> {
         let request = ShyftRpcRequest {
