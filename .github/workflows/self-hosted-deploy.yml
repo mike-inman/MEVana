@@ -192,6 +192,21 @@ jobs:
           echo "🔍 Verifying infrastructure health..."
           docker compose -p mevana -f infrastructure/docker-compose.server.yml ps
 
+          # Bootstrap database schema and Kafka topics
+          echo "🗄️ Bootstrapping database schema..."
+          ./scripts/deployment/bootstrap_database.sh || {
+            echo "❌ Database bootstrap failed"
+            exit 1
+          }
+
+          echo "📡 Bootstrapping Kafka topics..."
+          ./scripts/deployment/bootstrap_kafka.sh localhost:29092 || {
+            echo "❌ Kafka bootstrap failed"
+            exit 1
+          }
+
+          echo "✅ Database and Kafka bootstrap completed successfully"
+
       - name: Clean Complete Deployment - MEVana Services
         env:
           MEVANA_TAG: ${{ steps.vars.outputs.tag }}
