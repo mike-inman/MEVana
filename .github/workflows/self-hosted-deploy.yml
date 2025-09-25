@@ -15,6 +15,16 @@ on:
         description: "Services to deploy (hotpath normalizer discovery executor). Empty = all services"
         required: false
         default: "hotpath normalizer discovery executor"
+      skip_build:
+        description: "Skip Docker build (use existing images for faster deployment)"
+        required: false
+        default: false
+        type: boolean
+      infrastructure_only:
+        description: "Deploy only infrastructure services (faster for config changes)"
+        required: false
+        default: false
+        type: boolean
 
 jobs:
   deploy:
@@ -33,6 +43,8 @@ jobs:
           rsync -a --delete infrastructure/ /opt/MEVana/infrastructure/
           mkdir -p /opt/MEVana/scripts
           rsync -a --delete scripts/ /opt/MEVana/scripts/
+          mkdir -p /opt/MEVana/database
+          rsync -a --delete database/ /opt/MEVana/database/
           rm -f /opt/MEVana/docker-compose.mevana.yml
 
       - name: Write infra env (optional)
@@ -84,9 +96,10 @@ jobs:
           echo "services=${svc_list}" >> "$GITHUB_OUTPUT"
           echo "tag=${GITHUB_SHA}" >> "$GITHUB_OUTPUT"
 
-      # We always build locally on the server to avoid registry/auth issues
+      # Conditional build - skip if requested for faster deployments
 
       - name: Build locally (explicit per-service)
+        if: ${{ inputs.skip_build != true }}
         env:
           TAG: ${{ steps.vars.outputs.tag }}
         run: |
@@ -208,6 +221,7 @@ jobs:
           echo "✅ Database and Kafka bootstrap completed successfully"
 
       - name: Clean Complete Deployment - MEVana Services
+        if: ${{ inputs.infrastructure_only != true }}
         env:
           MEVANA_TAG: ${{ steps.vars.outputs.tag }}
           HOTPATH_IMAGE: ghcr.io/mike-inman/mevana-hotpath-arb-engine:${{ steps.vars.outputs.tag }}
