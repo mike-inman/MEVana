@@ -102,14 +102,21 @@ jobs:
           echo "services=${svc_list}" >> "$GITHUB_OUTPUT"
           echo "tag=${GITHUB_SHA}" >> "$GITHUB_OUTPUT"
 
-      # Install build dependencies and Rust toolchain
-      - name: Install Build Dependencies
+      # Install dependencies, build, and deploy services in one step
+      - name: Install Dependencies and Build Services
         if: ${{ inputs.skip_build != true }}
+        env:
+          TAG: ${{ steps.vars.outputs.tag }}
+          INSTALL_PREFIX: /opt/MEVana
         run: |
+          set -euo pipefail
+
+          echo "=== Installing system dependencies ==="
           # Install system dependencies needed for Rust builds
           apt-get update -qq
           apt-get install -y -qq build-essential pkg-config libssl-dev libpq-dev protobuf-compiler curl
 
+          echo "=== Installing/updating Rust toolchain ==="
           # Check if rustup is already installed
           if ! command -v rustup >/dev/null 2>&1; then
             echo "Installing Rust toolchain..."
@@ -124,35 +131,14 @@ jobs:
           fi
           export PATH="$HOME/.cargo/bin:$PATH"
 
-          # Verify installation
-          cargo --version
-
-          # Create a persistent cargo path file for subsequent steps
-          echo 'export PATH="$HOME/.cargo/bin:$PATH"' >> $HOME/.bash_profile
-          echo "$HOME/.cargo/bin" >> $GITHUB_PATH
-
-      # Build and install bare-metal services
-      - name: Build and Install Services (Bare Metal)
-        if: ${{ inputs.skip_build != true }}
-        env:
-          TAG: ${{ steps.vars.outputs.tag }}
-          INSTALL_PREFIX: /opt/MEVana
-        run: |
-          set -euo pipefail
-
-          # Source cargo environment and ensure it's in PATH
-          if [ -f "$HOME/.cargo/env" ]; then
-            source "$HOME/.cargo/env"
-          fi
-          export PATH="$HOME/.cargo/bin:$PATH"
-
           # Set CARGO_CMD for the release script
           export CARGO_CMD="$HOME/.cargo/bin/cargo"
 
-          # Verify cargo is available
-          echo "Using cargo at: $(which cargo)"
+          echo "=== Verifying Rust installation ==="
+          echo "Cargo path: $(which cargo)"
           cargo --version
 
+          echo "=== Building and installing services ==="
           # Run from git repository root, not /opt/MEVana
           # Use release-services.sh to build and deploy bare-metal binaries
           svcs="${{ steps.vars.outputs.services }}"
@@ -162,8 +148,8 @@ jobs:
             ./scripts/deployment/release-services.sh $svcs
           fi
 
+          echo "=== Installing systemd service files ==="
           # Install systemd service files for new services
-          echo "Installing systemd service files..."
           if [[ " $svcs " == *" wallet-vault "* ]]; then
             cp /opt/MEVana/infrastructure/systemd/wallet-vault.service /etc/systemd/system/
             systemctl daemon-reload
@@ -172,6 +158,8 @@ jobs:
             cp /opt/MEVana/infrastructure/systemd/monitoring-service.service /etc/systemd/system/
             systemctl daemon-reload
           fi
+
+          echo "=== Build and installation complete ==="
 
       - name: Clean Complete Deployment - Infrastructure
         env:
