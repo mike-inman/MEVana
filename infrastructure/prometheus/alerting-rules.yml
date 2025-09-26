@@ -1,0 +1,69 @@
+# Alert rules for Prometheus (server + self-hosted runner)
+# Copy mounted path into Prometheus containers via docker-compose.
+groups:
+  - name: service-health
+    rules:
+      - alert: ServiceDown
+        expr: up{job=~"hotpath|normalizer|discovery|executor|monitoring|wallet_vault|arb_engine|api_service"} == 0
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "{{ $labels.job }} is down"
+          description: "Prometheus has not scraped {{ $labels.instance }} for 2 minutes (job={{ $labels.job }})."
+
+      - alert: HighErrorRate
+        expr: rate(mevana_errors_total[5m]) > 5
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High error rate for {{ $labels.service }}"
+          description: "Error rate {{ $value | printf "%.2f" }} errors/sec on {{ $labels.service }}."
+
+      - alert: WalletVaultUnhealthy
+        expr: absent(up{job="wallet_vault"}) or (up{job="wallet_vault"} == 0)
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "wallet-vault service unreachable"
+          description: "wallet-vault health check failed for more than 2 minutes."
+
+      - alert: KafkaConsumerLag
+        expr: max_over_time(mevana_kafka_consumer_lag[5m]) > 5000
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Kafka consumer lag high"
+          description: "Lag {{ $value }} detected on {{ $labels.consumer_group }}."
+
+      - alert: ExecutorBacklog
+        expr: rate(mevana_executor_queue_length[5m]) > 100
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Executor queue growing"
+          description: "Executor queue length increasing ({{ $value | printf "%.2f" }}) for {{ $labels.queue }}."
+
+  - name: infrastructure
+    rules:
+      - alert: DiskSpaceLow
+        expr: (node_filesystem_avail_bytes{mountpoint="/"} / node_filesystem_size_bytes{mountpoint="/"}) < 0.15
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Disk space low on {{ $labels.instance }}"
+          description: "Remaining disk {{ $value | humanizePercentage }} on {{ $labels.instance }}."
+
+      - alert: HighLoadAverage
+        expr: node_load5 > (count(node_cpu_seconds_total{mode="idle"}) by (instance) * 2)
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High load on {{ $labels.instance }}"
+          description: "5-minute load average exceeds 2x core count."

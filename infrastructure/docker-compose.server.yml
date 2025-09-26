@@ -45,6 +45,7 @@ services:
       service: prometheus
     volumes:
       - ./prometheus.prod.yml:/etc/prometheus/prometheus.yml:ro
+      - ./prometheus/alerting-rules.yml:/etc/prometheus/alerting-rules.yml:ro
       - prometheus_data:/prometheus
     ports:
       - "9090:9090"
@@ -55,8 +56,16 @@ services:
     extends:
       file: docker-compose.core.yml
       service: grafana
+    env_file:
+      - /etc/mevana/alerts.env
     ports:
       - "3000:3000"
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./grafana/provisioning/dashboards:/etc/grafana/provisioning/dashboards
+      - ./grafana/dashboards/curated:/etc/grafana/provisioning/dashboards/mevana
+      - ./grafana/datasources:/etc/grafana/provisioning/datasources
+      - ./grafana/provisioning/alerting:/etc/grafana/provisioning/alerting:ro
 
 networks:
   mevana_net:

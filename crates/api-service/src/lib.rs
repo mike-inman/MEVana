@@ -4,6 +4,7 @@ pub mod database;
 pub mod gateway;
 pub mod handlers;
 pub mod kafka_consumer;
+pub mod metrics;
 pub mod middleware;
 pub mod models;
 

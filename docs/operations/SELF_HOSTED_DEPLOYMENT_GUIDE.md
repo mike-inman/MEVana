@@ -1,6 +1,6 @@
 Self‑Hosted Deployment Strategy & Workflows (Production Server)
 
-Last updated: 2025-02-14
+Last updated: 2025-09-26
 
 ## Quickstart for the next helper
 
@@ -46,6 +46,7 @@ Secrets & Environment Configuration
    - `/etc/mevana/normalizer.env` → Kafka topics (`dex-transactions` → `orca-swaps.parsed.v2`), `REDIS_URL=redis://127.0.0.1:6380/0`, metrics port `9901` (default).
    - `/etc/mevana/executor.env` → `METRICS_PORT=9904`, `HEALTH_CHECK_PORT=9898`, and set `ALLOW_EMPTY_SHYFT_API=1` only if you intentionally leave the API key blank.
    - `/etc/mevana/discovery.env` can stay empty unless you want non-default Kafka groups or topics.
+   - `/etc/mevana/api-service.env` → `PORT=8092`, `MEVANA_GATEWAY_ENABLE=true`, and gateway topic overrides when the UI requires a different Kafka fan-out.
 4. Prime the data stores (idempotent; safe to run before every deploy):
    ```bash
    sudo ./scripts/deployment/bootstrap_database.sh             # applies schema + seeds vault_config
@@ -54,6 +55,7 @@ Secrets & Environment Configuration
    Both helpers are invoked automatically by `start_system.sh`/`release-services.sh`, but running them during initial provisioning guarantees Postgres and Kafka are ready before services start.
 5. Permissions: keep every env file `root:mevana` with mode `640` so systemd can read while unprivileged users cannot.
 6. Ensure `/opt/MEVana/keys/id.json` (executor wallet) and `/opt/MEVana/keys/jito-keypair.json` exist and are owned by `mevana:mevana` with mode `600` before enabling live services.
+7. Copy `config/environments/alerts.env.sample` to `/etc/mevana/alerts.env` and populate `SLACK_WEBHOOK_URL` (or other contact points) so the Grafana/Prometheus alerting stack can notify ops.
 
 Infrastructure Endpoints & Firewall Rules
 - Application services listen on the host network while infrastructure stays in Docker. Open these ports locally (UFW rules shown):
@@ -63,6 +65,8 @@ Infrastructure Endpoints & Firewall Rules
   sudo ufw allow 9901/tcp  # normalizer metrics
   sudo ufw allow 9102/tcp  # discovery metrics
   sudo ufw allow 9904/tcp  # executor metrics
+  sudo ufw allow 8092/tcp  # REST gateway (api-service)
+  sudo ufw allow 8095/tcp  # WebSocket gateway (api-service)
   ```
 - Prometheus runs in Docker but scrapes host services at `host.docker.internal:<port>`. The bundled configs already target those endpoints (`infrastructure/prometheus.{core,prod}.yml`).
 
@@ -89,7 +93,7 @@ Systemd Services (hotpath + companions)
 ```bash
 # Once env files are in place
 sudo systemctl enable --now hotpath-arb-engine.service normalizer-service.service \
-  discovery-service.service executor-service.service
+  discovery-service.service executor-service.service api-service.service
 
 # Common operations
 sudo systemctl restart hotpath-arb-engine.service
@@ -100,6 +104,7 @@ sudo journalctl -u hotpath-arb-engine.service -n 200 --no-pager
 - `hotpath-arb-engine` exposes readiness on `8089` and metrics on `8088` (set `METRICS_PORT` to change both).
 - `normalizer-service` executes `normalizer-service pipe ...` under systemd; adjust `/etc/mevana/normalizer.env` to change topics or the consumer group.
 - `executor-service` listens for admin/health on `9898` and metrics on `9904`; keep `ALLOW_EMPTY_SHYFT_API=1` only if you intentionally skip Shyft credentials.
+- `api-service` binds to `8092` (REST) and `8095` (gateway). Make sure the UI’s `NEXT_PUBLIC_GATEWAY_BASE_URL` matches and that Kafka topics configured in `/etc/mevana/api-service.env` align with normalizer output.
 - `release-services.sh` (see below) automatically enables and restarts the units when deploying.
 
 Fast Deploy Cycle (manual)
@@ -126,10 +131,10 @@ CI/CD Workflow (`self-hosted-deploy.yml`)
 -Validation & Diagnostics
 - `scripts/ci/post-deployment-diagnostics.sh` now checks:
   - Grafana/Prometheus/Kafka/Adminer health (HTTP)
-  - Application metrics endpoints (`8088`, `8089`, `9901`, `9102`, `9904`)
+  - Application metrics endpoints (`8088`, `8089`, `9901`, `9102`, `9904`, `8092`, `8095`)
   - Prometheus target coverage against `host.docker.internal:<port>`
   - Grafana datasource connectivity (script logs in with admin/admin123) and warns if dashboards are missing
-  - Systemd unit status for the four MEVana services
+  - Systemd unit status for the bare-metal services, including the API gateway
 - Run manually on the host after changes:
   ```bash
   cd /opt/MEVana

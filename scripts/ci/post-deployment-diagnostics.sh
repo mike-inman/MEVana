@@ -20,6 +20,9 @@ HOTPATH_API_PORT="${MEVANA_HOTPATH_API_PORT:-8089}"
 NORMALIZER_METRICS_PORT="${MEVANA_NORMALIZER_PORT:-9901}"
 DISCOVERY_METRICS_PORT="${MEVANA_DISCOVERY_PORT:-9102}"
 EXECUTOR_METRICS_PORT="${MEVANA_EXECUTOR_PORT:-9904}"
+API_SERVICE_PORT="${MEVANA_API_SERVICE_HTTP_PORT:-8092}"
+GATEWAY_HTTP_PORT="${MEVANA_WEBSOCKET_GATEWAY_PORT:-8095}"
+WALLET_VAULT_PORT="${MEVANA_WALLET_VAULT_PORT:-8089}"
 
 # Internal ports scraped by Prometheus (container network)
 HOTPATH_INTERNAL_PORT="${MEVANA_HOTPATH_INTERNAL_PORT:-8088}"
@@ -254,6 +257,9 @@ run_test "Hotpath Ready" test_endpoint "${SERVER_BASE}:${HOTPATH_API_PORT}/healt
 run_test "Hotpath Metrics" test_endpoint_content "${SERVER_BASE}:${HOTPATH_METRICS_PORT}/metrics" "Hotpath metrics endpoint" "mevana_|hotpath_transactions_processed_total" 5 10
 run_test "Normalizer Metrics" test_endpoint "${SERVER_BASE}:${NORMALIZER_METRICS_PORT}/metrics" "Normalizer metrics endpoint" 200 5 10
 run_test "Discovery Metrics" test_endpoint "${SERVER_BASE}:${DISCOVERY_METRICS_PORT}/metrics" "Discovery metrics endpoint" 200 5 10
+run_test "API Service Health" test_endpoint "${SERVER_BASE}:${API_SERVICE_PORT}/health" "API service health endpoint" 200 5 10
+run_test optional "Gateway Health" test_endpoint "${SERVER_BASE}:${GATEWAY_HTTP_PORT}/gateway/health" "Gateway HTTP status" 200 5 10
+run_test optional "Wallet Vault Metrics" test_endpoint "${SERVER_BASE}:${WALLET_VAULT_PORT}/metrics" "Wallet vault metrics endpoint" 200 5 10
 
 echo -e "\n${BLUE}📊 Phase 3: Prometheus Data Collection${NC}"
 echo "======================================"

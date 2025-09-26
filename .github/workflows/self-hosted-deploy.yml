@@ -12,9 +12,9 @@ on:
   workflow_dispatch:
     inputs:
       services:
-        description: "Services to deploy (hotpath normalizer discovery executor wallet-vault monitoring). Empty = all services"
+        description: "Services to deploy (hotpath normalizer discovery executor wallet-vault monitoring arb-engine api-service). Separate with spaces or commas; empty = core default"
         required: false
-        default: "hotpath normalizer discovery executor wallet-vault monitoring"
+        default: "hotpath normalizer discovery executor wallet-vault monitoring api-service"
       skip_build:
         description: "Skip Docker build (use existing images for faster deployment)"
         required: false
@@ -79,16 +79,26 @@ jobs:
               normalizer|normalizer-service) echo normalizer-service ;;
               discovery|discovery-service) echo discovery-service ;;
               executor|executor-service) echo executor-service ;;
-              wallet-vault) echo wallet-vault ;;
+              wallet|vault|wallet-vault) echo wallet-vault ;;
               monitoring|monitoring-service) echo monitoring-service ;;
+              arb|arb-engine|arb_engine) echo arb-engine ;;
+              api|api-service|gateway) echo api-service ;;
               *) echo "$1" ;;
             esac
           }
 
-          if [ -n "${{ inputs.services }}" ]; then
+          normalize_input(){
+            printf '%s' "$1" | tr ',\n\r' '   ' | xargs
+          }
+
+          raw_input="$(normalize_input "${{ inputs.services }}")"
+          if [ -n "$raw_input" ]; then
             svc_list=""
-            for raw in ${{ inputs.services }}; do
+            for raw in $raw_input; do
               mapped=$(map_service "$raw")
+              if [ -z "$mapped" ]; then
+                continue
+              fi
               if [ -z "$svc_list" ]; then
                 svc_list="$mapped"
               else
@@ -96,8 +106,10 @@ jobs:
               fi
             done
           else
-            svc_list="hotpath-arb-engine normalizer-service discovery-service executor-service wallet-vault monitoring-service"
+            svc_list="hotpath-arb-engine normalizer-service discovery-service executor-service wallet-vault monitoring-service api-service"
           fi
+
+          svc_list=$(printf '%s' "$svc_list" | xargs)
 
           echo "services=${svc_list}" >> "$GITHUB_OUTPUT"
           echo "tag=${GITHUB_SHA}" >> "$GITHUB_OUTPUT"
@@ -143,7 +155,8 @@ jobs:
 
           echo "=== Installing systemd service files ==="
           svcs="${{ steps.vars.outputs.services }}"
-          echo "Services to process: '$svcs'"
+          svcs=$(printf '%s' "$svcs" | tr '\n' ' ' | xargs)
+          echo "Services to process: [$svcs]"
 
           # Install systemd service files BEFORE building services
           if [[ " $svcs " == *" wallet-vault "* ]]; then
@@ -170,16 +183,43 @@ jobs:
             echo "monitoring/monitoring-service not found in services list"
           fi
 
+          if [[ " $svcs " == *" arb-engine "* ]]; then
+            echo "Installing arb-engine.service (if available)..."
+            if [ -f /opt/MEVana/infrastructure/systemd/arb-engine.service ]; then
+              cp /opt/MEVana/infrastructure/systemd/arb-engine.service /etc/systemd/system/
+              echo "arb-engine.service installed successfully"
+            else
+              echo "Warning: arb-engine.service file not found; ensure unit exists before enabling"
+            fi
+          fi
+
+          if [[ " $svcs " == *" api-service "* ]]; then
+            echo "Installing api-service.service (if available)..."
+            if [ -f /opt/MEVana/infrastructure/systemd/api-service.service ]; then
+              cp /opt/MEVana/infrastructure/systemd/api-service.service /etc/systemd/system/
+              echo "api-service.service installed successfully"
+            else
+              echo "Warning: api-service.service file not found; gateway restart will be skipped"
+            fi
+          fi
+
           # Reload systemd after installing service files
           systemctl daemon-reload
 
           echo "=== Building and installing services ==="
           # Run from git repository root, not /opt/MEVana
           # Use release-services.sh to build and deploy bare-metal binaries
-          if [ -z "$svcs" ]; then
-            ./scripts/deployment/release-services.sh
+          if command -v sudo >/dev/null 2>&1 && [ "$(id -u)" -ne 0 ]; then
+            SUDO="sudo"
           else
-            ./scripts/deployment/release-services.sh $svcs
+            SUDO=""
+          fi
+
+          if [ -z "$svcs" ]; then
+            $SUDO ./scripts/deployment/release-services.sh
+          else
+            read -r -a svc_array <<< "$svcs"
+            $SUDO ./scripts/deployment/release-services.sh "${svc_array[@]}"
           fi
 
           echo "=== Build and installation complete ==="
@@ -272,7 +312,9 @@ jobs:
 
           # Start bare-metal MEVana services using systemctl
           echo "🚀 Starting MEVana bare-metal services..."
-          services=( ${{ steps.vars.outputs.services }} )
+          services_input="${{ steps.vars.outputs.services }}"
+          services_input=$(printf '%s' "$services_input" | tr '\n' ' ' | xargs)
+          read -r -a services <<< "$services_input"
           if [ ${#services[@]} -eq 0 ]; then
             services=(hotpath-arb-engine normalizer-service discovery-service executor-service wallet-vault monitoring-service)
           fi
@@ -297,6 +339,12 @@ jobs:
                 ;;
               monitoring-service)
                 unit="monitoring-service.service"
+                ;;
+              arb-engine)
+                unit="arb-engine.service"
+                ;;
+              api-service)
+                unit="api-service.service"
                 ;;
               *)
                 echo "Unknown service '$svc' - skipping"
@@ -323,6 +371,8 @@ jobs:
               executor-service) unit="executor-service.service" ;;
               wallet-vault) unit="wallet-vault.service" ;;
               monitoring-service) unit="monitoring-service.service" ;;
+              arb-engine) unit="arb-engine.service" ;;
+              api-service) unit="api-service.service" ;;
               *) continue ;;
             esac
             systemctl --no-pager status "$unit" || echo "⚠️ $unit may have issues"

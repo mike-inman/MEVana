@@ -253,6 +253,7 @@ dependencies = [
  "jsonwebtoken",
  "log",
  "moka",
+ "once_cell",
  "prometheus",
  "rdkafka 0.38.0",
  "redis 0.25.4",
@@ -265,6 +266,7 @@ dependencies = [
  "tokio",
  "tower 0.4.13",
  "tower-http 0.5.2",
+ "tracing",
  "utoipa",
  "utoipa-swagger-ui 6.0.0",
  "uuid",
@@ -1323,6 +1325,8 @@ dependencies = [
  "compression-core",
  "flate2",
  "memchr",
+ "zstd",
+ "zstd-safe",
 ]
 
 [[package]]
@@ -10388,6 +10392,8 @@ dependencies = [
  "flate2",
  "jsonwebtoken",
  "log",
+ "once_cell",
+ "prometheus",
  "rand 0.8.5",
  "reqwest 0.11.27",
  "secrecy",
@@ -10401,6 +10407,7 @@ dependencies = [
  "tokio",
  "tower 0.4.13",
  "tower-http 0.5.2",
+ "tracing",
  "utoipa",
  "utoipa-swagger-ui 6.0.0",
  "uuid",

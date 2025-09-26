@@ -10,6 +10,7 @@ use utoipa_swagger_ui::SwaggerUi;
 
 use crate::database::DatabaseService;
 use crate::handlers::*;
+use crate::metrics::{metrics_handler, MetricsLayer};
 use crate::middleware::request_id::RequestIdLayer;
 use crate::models::*;
 
@@ -106,13 +107,15 @@ pub fn create_api_router(database: DatabaseService) -> Router {
         // Health check endpoint
         .route("/health", get(health_check))
         .route("/health/detailed", get(detailed_health_check))
+        .route("/metrics", get(metrics_handler))
         // API v1 routes
         .nest("/api/v1", create_v1_routes())
-        // Add middleware
+        // Middleware (request id -> metrics -> trace -> compression -> CORS)
+        .layer(RequestIdLayer::new())
+        .layer(MetricsLayer::new())
+        .layer(TraceLayer::new_for_http())
         .layer(CompressionLayer::new())
         .layer(CorsLayer::permissive())
-        .layer(TraceLayer::new_for_http())
-        .layer(RequestIdLayer::new())
         // Add state
         .with_state(state)
 }

@@ -3,6 +3,7 @@ pub mod auth;
 pub mod backup;
 pub mod encryption;
 pub mod error;
+pub mod metrics;
 pub mod vault;
 pub mod wallet;
 

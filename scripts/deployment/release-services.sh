@@ -42,10 +42,14 @@ map_service() {
       echo "discovery" ;;
     executor|executor-service)
       echo "executor" ;;
-    wallet-vault)
+    wallet|vault|wallet-vault)
       echo "wallet-vault" ;;
     monitoring|monitoring-service)
       echo "monitoring" ;;
+    arb|arb-engine|arb_engine)
+      echo "arb-engine" ;;
+    api|api-service|gateway)
+      echo "api-service" ;;
     *)
       echo "unknown" ;;
   esac
@@ -53,7 +57,7 @@ map_service() {
 
 # Default to all services when no arguments provided
 if [[ $# -eq 0 ]]; then
-  set -- hotpath normalizer discovery executor wallet-vault monitoring
+  set -- hotpath normalizer discovery executor wallet-vault monitoring api-service
 fi
 
 services_to_build=()
@@ -121,6 +125,16 @@ for svc in "${unique_services[@]}"; do
       bin="monitoring-service"
       unit="monitoring-service.service"
       ;;
+    arb-engine)
+      crate="arb-engine"
+      bin="arb-engine"
+      unit="arb-engine.service"
+      ;;
+    api-service)
+      crate="api-service"
+      bin="api-server"
+      unit="api-service.service"
+      ;;
   esac
 
   echo "Building $svc (crate=$crate, bin=$bin)"
@@ -136,19 +150,32 @@ for svc in "${unique_services[@]}"; do
   echo "Installing $bin to $dest_path"
   install -Dm755 -o "$MEVANA_USER" -g "$MEVANA_GROUP" "$src_path" "$dest_path"
 
-  units_to_restart+=("$unit")
+  if [[ -n "$unit" ]]; then
+    units_to_restart+=("$unit")
+  fi
 done
 
 if [[ ${#units_to_restart[@]} -gt 0 && $USE_SYSTEMCTL -eq 1 ]]; then
   "$SYSTEMCTL" daemon-reload
   if [[ "$SKIP_RESTART" -ne 1 ]]; then
+    valid_units=()
     for unit in "${units_to_restart[@]}"; do
+      if [[ -z "$unit" ]]; then
+        continue
+      fi
+      if [[ ! -f "/etc/systemd/system/$unit" && ! -f "/lib/systemd/system/$unit" ]]; then
+        echo "Warning: systemd unit $unit not installed; skipping restart" >&2
+        continue
+      fi
       echo "Restarting $unit"
       "$SYSTEMCTL" enable "$unit" >/dev/null 2>&1 || true
       "$SYSTEMCTL" restart "$unit"
+      valid_units+=("$unit")
     done
     echo "Deployment complete"
-    "$SYSTEMCTL" --no-pager status "${units_to_restart[@]}"
+    if [[ ${#valid_units[@]} -gt 0 ]]; then
+      "$SYSTEMCTL" --no-pager status "${valid_units[@]}"
+    fi
   else
     echo "SKIP_RESTART=1 set; skipping systemd restarts"
   fi

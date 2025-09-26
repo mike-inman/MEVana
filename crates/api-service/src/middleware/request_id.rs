@@ -1,4 +1,7 @@
-use axum::{extract::Request, http::HeaderValue, response::Response};
+use axum::{
+    extract::Request,
+    http::{self, HeaderValue},
+};
 use tower::{Layer, Service};
 use uuid::Uuid;
 
@@ -30,12 +33,13 @@ pub struct RequestIdService<S> {
     inner: S,
 }
 
-impl<S> Service<Request> for RequestIdService<S>
+impl<S, B> Service<Request> for RequestIdService<S>
 where
-    S: Service<Request, Response = Response> + Clone + Send + 'static,
+    S: Service<Request, Response = http::Response<B>> + Clone + Send + 'static,
     S::Future: Send + 'static,
+    B: Send + 'static,
 {
-    type Response = S::Response;
+    type Response = http::Response<B>;
     type Error = S::Error;
     type Future = std::pin::Pin<
         Box<dyn std::future::Future<Output = Result<Self::Response, Self::Error>> + Send>,

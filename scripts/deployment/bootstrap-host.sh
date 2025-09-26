@@ -71,6 +71,8 @@ install -m 0640 -o root -g "$MEVANA_GROUP" "$REPO_ROOT/config/environments/disco
   "$ENV_DIR/discovery.env.sample"
 install -m 0640 -o root -g "$MEVANA_GROUP" "$REPO_ROOT/config/environments/executor.env.sample" \
   "$ENV_DIR/executor.env.sample"
+install -m 0640 -o root -g "$MEVANA_GROUP" "$REPO_ROOT/config/environments/api-service.env.sample" \
+  "$ENV_DIR/api-service.env.sample"
 
 # Install/refresh systemd unit files
 install -m 0644 "$REPO_ROOT/infrastructure/systemd/hotpath-arb-engine.service" \
@@ -81,6 +83,8 @@ install -m 0644 "$REPO_ROOT/infrastructure/systemd/discovery-service.service" \
   "$SERVICE_DIR/discovery-service.service"
 install -m 0644 "$REPO_ROOT/infrastructure/systemd/executor-service.service" \
   "$SERVICE_DIR/executor-service.service"
+install -m 0644 "$REPO_ROOT/infrastructure/systemd/api-service.service" \
+  "$SERVICE_DIR/api-service.service"
 
 systemctl daemon-reload
 
