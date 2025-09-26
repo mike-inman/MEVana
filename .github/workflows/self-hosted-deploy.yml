@@ -102,6 +102,29 @@ jobs:
           echo "services=${svc_list}" >> "$GITHUB_OUTPUT"
           echo "tag=${GITHUB_SHA}" >> "$GITHUB_OUTPUT"
 
+      # Install build dependencies and Rust toolchain
+      - name: Install Build Dependencies
+        if: ${{ inputs.skip_build != true }}
+        run: |
+          # Install system dependencies needed for Rust builds
+          apt-get update -qq
+          apt-get install -y -qq build-essential pkg-config libssl-dev libpq-dev protobuf-compiler curl
+
+          # Check if rustup is already installed
+          if ! command -v rustup >/dev/null 2>&1; then
+            echo "Installing Rust toolchain..."
+            curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
+            source ~/.cargo/env
+          else
+            echo "Rust toolchain already installed"
+          fi
+
+          # Ensure cargo is in PATH
+          export PATH="$HOME/.cargo/bin:$PATH"
+
+          # Verify installation
+          cargo --version
+
       # Build and install bare-metal services
       - name: Build and Install Services (Bare Metal)
         if: ${{ inputs.skip_build != true }}
@@ -110,6 +133,12 @@ jobs:
           INSTALL_PREFIX: /opt/MEVana
         run: |
           set -euo pipefail
+
+          # Ensure cargo is in PATH
+          export PATH="$HOME/.cargo/bin:$PATH"
+
+          # Set CARGO_CMD for the release script
+          export CARGO_CMD="$HOME/.cargo/bin/cargo"
 
           # Run from git repository root, not /opt/MEVana
           # Use release-services.sh to build and deploy bare-metal binaries
