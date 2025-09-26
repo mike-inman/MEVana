@@ -152,14 +152,28 @@ jobs:
           fi
 
           echo "=== Installing systemd service files ==="
+          echo "Services to process: '$svcs'"
+
           # Install systemd service files for new services
           if [[ " $svcs " == *" wallet-vault "* ]]; then
+            echo "Installing wallet-vault.service..."
             cp /opt/MEVana/infrastructure/systemd/wallet-vault.service /etc/systemd/system/
             systemctl daemon-reload
+          else
+            echo "wallet-vault not found in services list"
           fi
+
           if [[ " $svcs " == *" monitoring-service "* ]] || [[ " $svcs " == *" monitoring "* ]]; then
-            cp /opt/MEVana/infrastructure/systemd/monitoring-service.service /etc/systemd/system/
-            systemctl daemon-reload
+            echo "Installing monitoring-service.service..."
+            if [ -f /opt/MEVana/infrastructure/systemd/monitoring-service.service ]; then
+              cp /opt/MEVana/infrastructure/systemd/monitoring-service.service /etc/systemd/system/
+              systemctl daemon-reload
+              echo "monitoring-service.service installed successfully"
+            else
+              echo "ERROR: monitoring-service.service file not found!"
+            fi
+          else
+            echo "monitoring/monitoring-service not found in services list"
           fi
 
           echo "=== Build and installation complete ==="
