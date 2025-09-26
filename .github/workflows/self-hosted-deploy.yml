@@ -111,6 +111,9 @@ jobs:
         run: |
           set -euo pipefail
 
+          # Set HOME if not set (GitHub Actions issue)
+          export HOME=${HOME:-/root}
+
           echo "=== Installing system dependencies ==="
           # Install system dependencies needed for Rust builds
           apt-get update -qq
