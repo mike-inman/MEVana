@@ -141,24 +141,19 @@ jobs:
           echo "Cargo path: $(which cargo)"
           cargo --version
 
-          echo "=== Building and installing services ==="
-          # Run from git repository root, not /opt/MEVana
-          # Use release-services.sh to build and deploy bare-metal binaries
-          svcs="${{ steps.vars.outputs.services }}"
-          if [ -z "$svcs" ]; then
-            ./scripts/deployment/release-services.sh
-          else
-            ./scripts/deployment/release-services.sh $svcs
-          fi
-
           echo "=== Installing systemd service files ==="
+          svcs="${{ steps.vars.outputs.services }}"
           echo "Services to process: '$svcs'"
 
-          # Install systemd service files for new services
+          # Install systemd service files BEFORE building services
           if [[ " $svcs " == *" wallet-vault "* ]]; then
             echo "Installing wallet-vault.service..."
-            cp /opt/MEVana/infrastructure/systemd/wallet-vault.service /etc/systemd/system/
-            systemctl daemon-reload
+            if [ -f /opt/MEVana/infrastructure/systemd/wallet-vault.service ]; then
+              cp /opt/MEVana/infrastructure/systemd/wallet-vault.service /etc/systemd/system/
+              echo "wallet-vault.service installed successfully"
+            else
+              echo "ERROR: wallet-vault.service file not found!"
+            fi
           else
             echo "wallet-vault not found in services list"
           fi
@@ -167,13 +162,24 @@ jobs:
             echo "Installing monitoring-service.service..."
             if [ -f /opt/MEVana/infrastructure/systemd/monitoring-service.service ]; then
               cp /opt/MEVana/infrastructure/systemd/monitoring-service.service /etc/systemd/system/
-              systemctl daemon-reload
               echo "monitoring-service.service installed successfully"
             else
               echo "ERROR: monitoring-service.service file not found!"
             fi
           else
             echo "monitoring/monitoring-service not found in services list"
+          fi
+
+          # Reload systemd after installing service files
+          systemctl daemon-reload
+
+          echo "=== Building and installing services ==="
+          # Run from git repository root, not /opt/MEVana
+          # Use release-services.sh to build and deploy bare-metal binaries
+          if [ -z "$svcs" ]; then
+            ./scripts/deployment/release-services.sh
+          else
+            ./scripts/deployment/release-services.sh $svcs
           fi
 
           echo "=== Build and installation complete ==="
