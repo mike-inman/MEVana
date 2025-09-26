@@ -181,19 +181,15 @@ jobs:
 
           echo "✅ Database and Kafka bootstrap completed successfully"
 
-      - name: Clean Complete Deployment - MEVana Services
+      - name: Start Bare-Metal MEVana Services
         if: ${{ inputs.infrastructure_only != true }}
         env:
           MEVANA_TAG: ${{ steps.vars.outputs.tag }}
-          HOTPATH_IMAGE: ghcr.io/mike-inman/mevana-hotpath-arb-engine:${{ steps.vars.outputs.tag }}
-          NORMALIZER_IMAGE: ghcr.io/mike-inman/mevana-normalizer-service:${{ steps.vars.outputs.tag }}
-          DISCOVERY_IMAGE: ghcr.io/mike-inman/mevana-discovery-service:${{ steps.vars.outputs.tag }}
-          EXECUTOR_IMAGE: ghcr.io/mike-inman/mevana-executor-service:${{ steps.vars.outputs.tag }}
         run: |
           set -euo pipefail
           cd /opt/MEVana
 
-          # Verify infrastructure is ready before deploying MEVana services
+          # Verify infrastructure is ready before starting MEVana services
           echo "🔍 Verifying infrastructure readiness..."
           if ! curl -s --connect-timeout 5 http://localhost:9090/-/healthy >/dev/null; then
             echo "❌ Prometheus not ready - infrastructure deployment may have failed"
@@ -205,47 +201,63 @@ jobs:
           fi
           echo "✅ Infrastructure is ready for MEVana services"
 
-          # Deploy MEVana application services with coordinated configuration
-          echo "🚀 Starting MEVana arbitrage detection services..."
-          svcs=( ${{ steps.vars.outputs.services }} )
-          if [ ${#svcs[@]} -eq 0 ]; then svcs=(hotpath-arb-engine normalizer-service discovery-service executor-service wallet-vault monitoring-service); fi
-          available=$(docker compose -p mevana -f infrastructure/docker-compose.server.yml \
-            -f infrastructure/docker-compose.full.yml config --services)
-          echo "Available compose services:"; echo "$available"
+          # Start bare-metal MEVana services using systemctl
+          echo "🚀 Starting MEVana bare-metal services..."
+          services=( ${{ steps.vars.outputs.services }} )
+          if [ ${#services[@]} -eq 0 ]; then
+            services=(hotpath-arb-engine normalizer-service discovery-service executor-service wallet-vault monitoring-service)
+          fi
 
-          select_service() {
-            local fallback="$1"; shift
-            for candidate in "$@" "$fallback"; do
-              if echo "$available" | grep -qx "$candidate"; then
-                echo "$candidate"; return 0
-              fi
-            done
-            echo "$fallback"
-          }
+          # Map service names to systemd units and start them
+          for svc in "${services[@]}"; do
+            case "$svc" in
+              hotpath-arb-engine)
+                unit="hotpath-arb-engine.service"
+                ;;
+              normalizer-service)
+                unit="normalizer-service.service"
+                ;;
+              discovery-service)
+                unit="discovery-service.service"
+                ;;
+              executor-service)
+                unit="executor-service.service"
+                ;;
+              wallet-vault)
+                unit="wallet-vault.service"
+                ;;
+              monitoring-service)
+                unit="monitoring-service.service"
+                ;;
+              *)
+                echo "Unknown service '$svc' - skipping"
+                continue
+                ;;
+            esac
 
-          resolved=(
-            $(select_service hotpath-arb-engine mevana-hotpath)
-            $(select_service normalizer-service mevana-normalizer)
-            $(select_service discovery-service mevana-discovery)
-            $(select_service executor-service)
-          )
-          echo "🚀 Target application services: ${resolved[*]}"
-          docker compose -p mevana -f infrastructure/docker-compose.server.yml \
-            -f infrastructure/docker-compose.full.yml up -d ${resolved[@]}
+            echo "Starting $unit..."
+            systemctl enable "$unit" || true
+            systemctl restart "$unit"
+          done
 
-          # Wait for services to initialize with proper startup time
-          echo "⏳ Waiting for MEVana services to initialize and connect to Kafka..."
-          sleep 45
+          # Wait for services to initialize
+          echo "⏳ Waiting for MEVana services to initialize..."
+          sleep 30
 
-          # Verify MEVana services are healthy
-          echo "🔍 Verifying MEVana services health..."
-          docker compose -p mevana -f infrastructure/docker-compose.server.yml \
-            -f infrastructure/docker-compose.full.yml ps ${resolved[@]}
-
-          # Test Kafka connectivity specifically
-          echo "🔍 Testing Kafka connectivity from hotpath engine..."
-          docker compose -p mevana -f infrastructure/docker-compose.server.yml \
-            -f infrastructure/docker-compose.full.yml logs --tail=10 hotpath-arb-engine || true
+          # Verify services are running
+          echo "🔍 Verifying MEVana services status..."
+          for svc in "${services[@]}"; do
+            case "$svc" in
+              hotpath-arb-engine) unit="hotpath-arb-engine.service" ;;
+              normalizer-service) unit="normalizer-service.service" ;;
+              discovery-service) unit="discovery-service.service" ;;
+              executor-service) unit="executor-service.service" ;;
+              wallet-vault) unit="wallet-vault.service" ;;
+              monitoring-service) unit="monitoring-service.service" ;;
+              *) continue ;;
+            esac
+            systemctl --no-pager status "$unit" || echo "⚠️ $unit may have issues"
+          done
 
       - name: Post-Deployment Comprehensive Validation
         run: |
@@ -263,28 +275,10 @@ jobs:
             echo "📊 Service status for troubleshooting:"
             echo "Infrastructure services:"
             docker compose -p mevana -f infrastructure/docker-compose.server.yml ps
-            echo "MEVana services:"
-            available=$(docker compose -p mevana -f infrastructure/docker-compose.server.yml \
-              -f infrastructure/docker-compose.full.yml config --services)
-            resolve_service() {
-              local fallback="$1"; shift
-              for candidate in "$@" "$fallback"; do
-                if echo "$available" | grep -qx "$candidate"; then
-                  echo "$candidate"; return 0
-                fi
-              done
-              echo "$fallback"
-            }
-            resolved_svcs=(
-              $(resolve_service hotpath-arb-engine mevana-hotpath)
-              $(resolve_service normalizer-service mevana-normalizer)
-              $(resolve_service discovery-service mevana-discovery)
-              $(resolve_service executor-service)
-            )
-            docker compose -p mevana -f infrastructure/docker-compose.server.yml \
-              -f infrastructure/docker-compose.full.yml ps ${resolved_svcs[@]}
-            docker compose -p mevana -f infrastructure/docker-compose.server.yml \
-              -f infrastructure/docker-compose.full.yml logs --tail=10 hotpath-arb-engine || true
+            echo "MEVana bare-metal services:"
+            systemctl --no-pager status hotpath-arb-engine.service normalizer-service.service discovery-service.service executor-service.service wallet-vault.service monitoring-service.service || true
+            echo "Recent logs from hotpath engine:"
+            journalctl -u hotpath-arb-engine.service --lines=10 --no-pager || true
             exit 1
           }
 
@@ -302,6 +296,12 @@ jobs:
 
           echo "📊 Normalizer Metrics:"
           curl -s --connect-timeout 5 http://localhost:9901/metrics | head -5 || echo "Normalizer metrics not ready"
+
+          echo "📊 Wallet Vault Status:"
+          curl -s --connect-timeout 5 http://localhost:8089/wallets | head -5 || echo "Wallet vault not ready"
+
+          echo "📊 Monitoring Service Metrics:"
+          curl -s --connect-timeout 5 http://localhost:8090/metrics | head -5 || echo "Monitoring service metrics not ready"
 
           echo "📊 Grafana Dashboard:"
           curl -s -o /dev/null -w "Status: %{http_code}\n" --connect-timeout 5 http://localhost:3000/api/health || echo "Grafana not accessible"
