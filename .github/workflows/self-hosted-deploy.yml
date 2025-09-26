@@ -47,6 +47,10 @@ jobs:
           rsync -a --delete database/ /opt/MEVana/database/
           rm -f /opt/MEVana/docker-compose.mevana.yml
 
+          # Sync systemd service files
+          mkdir -p /opt/MEVana/infrastructure/systemd
+          rsync -a --delete infrastructure/systemd/ /opt/MEVana/infrastructure/systemd/
+
       - name: Write infra env (optional)
         env:
           EP_A: ${{ secrets.HOTPATH_ENDPOINT }}
@@ -103,16 +107,28 @@ jobs:
         if: ${{ inputs.skip_build != true }}
         env:
           TAG: ${{ steps.vars.outputs.tag }}
+          INSTALL_PREFIX: /opt/MEVana
         run: |
           set -euo pipefail
-          cd /opt/MEVana
 
+          # Run from git repository root, not /opt/MEVana
           # Use release-services.sh to build and deploy bare-metal binaries
           svcs="${{ steps.vars.outputs.services }}"
           if [ -z "$svcs" ]; then
             ./scripts/deployment/release-services.sh
           else
             ./scripts/deployment/release-services.sh $svcs
+          fi
+
+          # Install systemd service files for new services
+          echo "Installing systemd service files..."
+          if [[ " $svcs " == *" wallet-vault "* ]]; then
+            cp /opt/MEVana/infrastructure/systemd/wallet-vault.service /etc/systemd/system/
+            systemctl daemon-reload
+          fi
+          if [[ " $svcs " == *" monitoring-service "* ]] || [[ " $svcs " == *" monitoring "* ]]; then
+            cp /opt/MEVana/infrastructure/systemd/monitoring-service.service /etc/systemd/system/
+            systemctl daemon-reload
           fi
 
       - name: Clean Complete Deployment - Infrastructure
