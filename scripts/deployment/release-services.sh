@@ -42,6 +42,10 @@ map_service() {
       echo "discovery" ;;
     executor|executor-service)
       echo "executor" ;;
+    wallet-vault)
+      echo "wallet-vault" ;;
+    monitoring|monitoring-service)
+      echo "monitoring" ;;
     *)
       echo "unknown" ;;
   esac
@@ -49,7 +53,7 @@ map_service() {
 
 # Default to all services when no arguments provided
 if [[ $# -eq 0 ]]; then
-  set -- hotpath normalizer discovery executor
+  set -- hotpath normalizer discovery executor wallet-vault monitoring
 fi
 
 services_to_build=()
@@ -106,6 +110,16 @@ for svc in "${unique_services[@]}"; do
       crate="executor-service"
       bin="executor-service"
       unit="executor-service.service"
+      ;;
+    wallet-vault)
+      crate="wallet-vault"
+      bin="wallet-vault"
+      unit="wallet-vault.service"
+      ;;
+    monitoring)
+      crate="monitoring-service"
+      bin="monitoring-service"
+      unit="monitoring-service.service"
       ;;
   esac
 

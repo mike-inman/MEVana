@@ -12,9 +12,9 @@ on:
   workflow_dispatch:
     inputs:
       services:
-        description: "Services to deploy (hotpath normalizer discovery executor). Empty = all services"
+        description: "Services to deploy (hotpath normalizer discovery executor wallet-vault monitoring). Empty = all services"
         required: false
-        default: "hotpath normalizer discovery executor"
+        default: "hotpath normalizer discovery executor wallet-vault monitoring"
       skip_build:
         description: "Skip Docker build (use existing images for faster deployment)"
         required: false
@@ -75,6 +75,8 @@ jobs:
               normalizer|normalizer-service) echo normalizer-service ;;
               discovery|discovery-service) echo discovery-service ;;
               executor|executor-service) echo executor-service ;;
+              wallet-vault) echo wallet-vault ;;
+              monitoring|monitoring-service) echo monitoring-service ;;
               *) echo "$1" ;;
             esac
           }
@@ -90,69 +92,28 @@ jobs:
               fi
             done
           else
-            svc_list="hotpath-arb-engine normalizer-service discovery-service executor-service"
+            svc_list="hotpath-arb-engine normalizer-service discovery-service executor-service wallet-vault monitoring-service"
           fi
 
           echo "services=${svc_list}" >> "$GITHUB_OUTPUT"
           echo "tag=${GITHUB_SHA}" >> "$GITHUB_OUTPUT"
 
-      # Conditional build - skip if requested for faster deployments
-
-      - name: Build locally (explicit per-service)
+      # Build and install bare-metal services
+      - name: Build and Install Services (Bare Metal)
         if: ${{ inputs.skip_build != true }}
         env:
           TAG: ${{ steps.vars.outputs.tag }}
         run: |
           set -euo pipefail
-          svcs=( ${{ steps.vars.outputs.services }} )
-          if [ ${#svcs[@]} -eq 0 ]; then svcs=(hotpath-arb-engine normalizer-service discovery-service executor-service); fi
+          cd /opt/MEVana
 
-          build_one() {
-            local svc="$1"; local tag="$2"; local img=""; local df="";
-            case "$svc" in
-              hotpath-arb-engine)
-                img="ghcr.io/mike-inman/mevana-hotpath-arb-engine:${tag}";
-                df="crates/hotpath_arb_engine/Dockerfile";
-                ;;
-              normalizer-service)
-                img="ghcr.io/mike-inman/mevana-normalizer-service:${tag}";
-                df="crates/normalizer-service/Dockerfile";
-                ;;
-              discovery-service)
-                img="ghcr.io/mike-inman/mevana-discovery-service:${tag}";
-                df="crates/discovery-service/Dockerfile";
-                ;;
-              executor-service)
-                img="ghcr.io/mike-inman/mevana-executor-service:${tag}";
-                df="crates/executor-service/executor-service.Dockerfile";
-                ;;
-              edge-assembler)
-                img="ghcr.io/mike-inman/mevana-edge-assembler:${tag}";
-                df="crates/edge-assembler/Dockerfile";
-                ;;
-              arb-engine)
-                img="ghcr.io/mike-inman/mevana-arb-engine:${tag}";
-                df="crates/arb-engine/Dockerfile";
-                ;;
-              token-registry-service)
-                img="ghcr.io/mike-inman/mevana-token-registry-service:${tag}";
-                df="crates/token-registry-service/Dockerfile";
-                ;;
-              monitoring-service)
-                img="ghcr.io/mike-inman/mevana-monitoring-service:${tag}";
-                df="crates/monitoring-service/Dockerfile";
-                ;;
-              *)
-                echo "Unknown service '$svc' — skipping local build" >&2; return 0;
-                ;;
-            esac
-            echo "Building $svc -> $img using $df";
-            docker build -t "$img" -f "$df" .
-          }
-
-          for s in "${svcs[@]}"; do
-            build_one "$s" "$TAG"
-          done
+          # Use release-services.sh to build and deploy bare-metal binaries
+          svcs="${{ steps.vars.outputs.services }}"
+          if [ -z "$svcs" ]; then
+            ./scripts/deployment/release-services.sh
+          else
+            ./scripts/deployment/release-services.sh $svcs
+          fi
 
       - name: Clean Complete Deployment - Infrastructure
         env:
@@ -247,7 +208,7 @@ jobs:
           # Deploy MEVana application services with coordinated configuration
           echo "🚀 Starting MEVana arbitrage detection services..."
           svcs=( ${{ steps.vars.outputs.services }} )
-          if [ ${#svcs[@]} -eq 0 ]; then svcs=(hotpath-arb-engine normalizer-service discovery-service executor-service); fi
+          if [ ${#svcs[@]} -eq 0 ]; then svcs=(hotpath-arb-engine normalizer-service discovery-service executor-service wallet-vault monitoring-service); fi
           available=$(docker compose -p mevana -f infrastructure/docker-compose.server.yml \
             -f infrastructure/docker-compose.full.yml config --services)
           echo "Available compose services:"; echo "$available"
