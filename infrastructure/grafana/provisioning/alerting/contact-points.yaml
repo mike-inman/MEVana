@@ -3,18 +3,28 @@ contactPoints:
   - orgId: 1
     name: slack-primary
     receivers:
-      - uid: slack
+      - uid: slack-mevana
         type: slack
         settings:
-          url: ${SLACK_WEBHOOK_URL}
-          recipient: "#mevana-alerts"
-          mentionChannel: "here"
-          title: "{{ .Status | toUpper }}: {{ .Alerts | len }} active alerts"
+          # Note: Replace with your actual Slack webhook URL
+          # Can use environment variable ${SLACK_WEBHOOK_URL} if passed to container
+          url: https://hooks.slack.com/services/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
+          title: "MEVana Alert: {{ .GroupLabels.alertname }}"
           text: |
             {{ range .Alerts -}}
-            *Alert*: {{ .Labels.alertname }} ({{ .Labels.severity }})
-            {{ .Annotations.summary }}
-            {{ .Annotations.description }}
+            *Status*: {{ .Status }}
+            *Severity*: {{ if .Labels.severity }}{{ .Labels.severity }}{{ else }}warning{{ end }}
+            *Summary*: {{ if .Annotations.summary }}{{ .Annotations.summary }}{{ else }}Alert triggered{{ end }}
+            *Description*: {{ if .Annotations.description }}{{ .Annotations.description }}{{ else }}No description{{ end }}
+            *Value*: {{ if .Values }}{{ .Values }}{{ end }}
             ---
             {{ end }}
+        disableResolveMessage: false
+  - orgId: 1
+    name: grafana-default-email
+    receivers:
+      - uid: default-email
+        type: email
+        settings:
+          addresses: alerts@mevana.io
         disableResolveMessage: false
