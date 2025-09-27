@@ -42,7 +42,7 @@ scrape_configs:
     scrape_interval: 15s
     scrape_timeout: 5s
     static_configs:
-      - targets: ['host.docker.internal:8090']
+      - targets: ['host.docker.internal:8091']
 
   - job_name: 'api-service'
     metrics_path: '/metrics'
@@ -56,6 +56,6 @@ scrape_configs:
     scrape_interval: 15s
     scrape_timeout: 5s
     static_configs:
-      - targets: ['host.docker.internal:8089']
+      - targets: ['host.docker.internal:8090']
 
   # Additional service scrape configs can be appended here as new components are containerized

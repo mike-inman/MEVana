@@ -22,7 +22,8 @@ DISCOVERY_METRICS_PORT="${MEVANA_DISCOVERY_PORT:-9102}"
 EXECUTOR_METRICS_PORT="${MEVANA_EXECUTOR_PORT:-9904}"
 API_SERVICE_PORT="${MEVANA_API_SERVICE_HTTP_PORT:-8092}"
 GATEWAY_HTTP_PORT="${MEVANA_WEBSOCKET_GATEWAY_PORT:-8095}"
-WALLET_VAULT_PORT="${MEVANA_WALLET_VAULT_PORT:-8089}"
+WALLET_VAULT_PORT="${MEVANA_WALLET_VAULT_PORT:-8090}"
+MONITORING_SERVICE_PORT="${MEVANA_MONITORING_PORT:-8091}"
 
 # Internal ports scraped by Prometheus (container network)
 HOTPATH_INTERNAL_PORT="${MEVANA_HOTPATH_INTERNAL_PORT:-8088}"
@@ -260,6 +261,7 @@ run_test "Discovery Metrics" test_endpoint "${SERVER_BASE}:${DISCOVERY_METRICS_P
 run_test "API Service Health" test_endpoint "${SERVER_BASE}:${API_SERVICE_PORT}/health" "API service health endpoint" 200 5 10
 run_test optional "Gateway Health" test_endpoint "${SERVER_BASE}:${GATEWAY_HTTP_PORT}/gateway/health" "Gateway HTTP status" 200 5 10
 run_test optional "Wallet Vault Metrics" test_endpoint "${SERVER_BASE}:${WALLET_VAULT_PORT}/metrics" "Wallet vault metrics endpoint" 200 5 10
+run_test optional "Monitoring Service Health" test_endpoint "${SERVER_BASE}:${MONITORING_SERVICE_PORT}/health" "Monitoring service health endpoint" 200 5 10
 
 echo -e "\n${BLUE}📊 Phase 3: Prometheus Data Collection${NC}"
 echo "======================================"

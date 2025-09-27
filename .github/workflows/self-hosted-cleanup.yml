@@ -1,0 +1,20 @@
+name: Rogue Process Cleanup (Self-Hosted)
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  cleanup:
+    runs-on: [self-hosted, Linux, X64]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Ensure script is executable
+        run: chmod +x scripts/maintenance/cleanup_rogue_processes.sh
+
+      - name: Stop rogue processes and restart services
+        run: sudo ./scripts/maintenance/cleanup_rogue_processes.sh

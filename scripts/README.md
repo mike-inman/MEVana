@@ -1,6 +1,6 @@
 MEVana Scripts Guide
 
-Last updated: 2025-09-15
+Last updated: 2025-09-26
 
 Preferred entrypoints
 - Deployment: `scripts/deployment/deploy_vultr_compose.sh` (server compose), `scripts/deployment/build-and-ship.sh` (CI-assisted), `scripts/deployment/setup-live-trading.sh` (ops gating)
@@ -13,13 +13,8 @@ Local development helpers
 - `scripts/development/local-cargo-check.sh` — Runs `cargo +nightly check --workspace` to surface compile errors fast without Docker.
 - `scripts/development/build-images-locally.sh [tag]` — Builds Linux images for the 4 core app services using multi-stage Dockerfiles (ensures no exec-format issues). Defaults tag to the current commit SHA short hash.
 
-Legacy/Deprecated (use GHCR workflow + compose deploy instead)
-- scripts/simple-deploy.sh
-- scripts/docker-deploy.sh
-- scripts/rapid_deploy.sh
-- scripts/deploy-multi-stream.sh, scripts/deploy-multi-stream-FUTURE.sh
-- scripts/deploy-single-stream.sh
-- scripts/deploy-to-server.sh
+Legacy scripts
+- Archived under `_archive/scripts/deployment/` to preserve history without cluttering the active toolchain.
 
 Notes
 - Infrastructure dev helpers also exist under `infrastructure/scripts/` (for local/dev only).

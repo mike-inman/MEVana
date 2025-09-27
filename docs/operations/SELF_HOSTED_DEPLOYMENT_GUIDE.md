@@ -1,12 +1,21 @@
 Self‑Hosted Deployment Strategy & Workflows (Production Server)
 
-Last updated: 2025-09-26
+Last updated: 2025-09-27
 
 ## Quickstart for the next helper
 
 1. **Start with `docs/operations/ADMIN_CONTROL_PANEL.md`.** It explains the Clerk JWT setup, Grafana button requirements, per-wallet metrics, and audit expectations you must validate immediately after a deploy.
 2. Ensure `/etc/mevana/common.env` and `/etc/mevana/executor.env` define `WALLET_LABELS=/opt/MEVana/keys/id.json=prod,...` so Prometheus exports `mevana_wallet_balance_sol{wallet="prod"}` and Grafana panels light up without guesswork.
 3. After rolling new binaries, run `systemctl status executor-service` and curl the metrics endpoint (`curl -s http://127.0.0.1:9904/metrics | rg mevana_wallet_balance_sol`) to confirm the active wallet label reports the live balance and backups show `0`.
+
+### 2025-09-27 operational notes
+
+- Gateway groundwork complete: Kafka topics (`prices.latest`, `orca-swaps.parsed`, `orca-swaps.parsed.v2`) confirmed via `scripts/deployment/bootstrap_kafka.sh` and `docker exec mevana-kafka-1 kafka-topics ... --list`. `/etc/mevana/api-service.env` now enables `MEVANA_GATEWAY_ENABLE=true` with `PORT=8092` and `MEVANA_WEBSOCKET_GATEWAY_PORT=8095`; restart `api-service.service` after edits.
+- New GitHub Action (`Rogue Process Cleanup (Self-Hosted)`) runs `scripts/maintenance/cleanup_rogue_processes.sh` to kill stale MEVana binaries and restart systemd units when the host accumulates orphaned processes.
+- Pending follow-ups:
+  * Update `/etc/mevana/ui.env` so MEVana-UI consumes `http://<host>:8095/gateway/*` (keep legacy URLs until the cutover is verified).
+  * Run `scripts/ci/post-deployment-diagnostics.sh` after gateway restarts to ensure Prometheus/Grafana scrape the expected targets.
+  * Review firewall openings (8080, 3002, 3200, 8096) once the UI migration is complete and close any unused ports.
 
 Overview
 - Goal: Keep the hotpath, normalizer, discovery, and executor binaries as close to the metal as possible while leaving supporting infrastructure (Kafka, Redis, Postgres, Prometheus, Grafana) in Docker for easy parity with local development.
