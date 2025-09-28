@@ -76,14 +76,14 @@ pub struct ReporterService {
     redis_client: Option<redis::Client>,
     file_handle: Option<tokio::fs::File>,
     http_client: Option<reqwest::Client>,
-    db_pool: Option<PgPool>,
+    db_pool: Arc<tokio::sync::RwLock<Option<Arc<PgPool>>>>,
 }
 
 impl ReporterService {
     pub fn new(
         rx: mpsc::Receiver<TradingEvent>,
         config: ReporterConfig,
-        db_pool: Option<PgPool>,
+        db_pool: Arc<tokio::sync::RwLock<Option<Arc<PgPool>>>>,
     ) -> Self {
         // Initialize Kafka producer if enabled
         let kafka_producer = if config.enable_kafka {
@@ -282,10 +282,12 @@ impl ReporterService {
     }
 
     async fn write_to_database(&self, events: &[TradingEvent]) -> Result<(), sqlx::Error> {
-        let db_pool = match &self.db_pool {
-            Some(pool) => pool,
+        let pool_guard = self.db_pool.read().await;
+        let db_pool = match pool_guard.as_ref() {
+            Some(pool) => pool.clone(),
             None => return Ok(()), // Database not available
         };
+        drop(pool_guard);
 
         // Filter arbitrage events for batching
         let arb_events: Vec<&TradingEvent> = events
@@ -395,6 +397,9 @@ impl ReporterService {
         // Commit the transaction
         match tx.commit().await {
             Ok(_) => {
+                if inserted_count > 0 {
+                    metrics::counter!("event_bus_db_writes_total").increment(inserted_count as u64);
+                }
                 debug!(
                     "✅ Successfully batched {} arbitrage opportunities to database",
                     inserted_count
@@ -458,8 +463,9 @@ impl ReporterService {
     }
 
     async fn process_events(&mut self, events: &[TradingEvent]) {
-        // Record batch size for monitoring
+        // Record batch size and queue depth for monitoring
         metrics::histogram!("event_bus_batch_size").record(events.len() as f64);
+        metrics::gauge!("event_bus_pending_events").set(events.len() as f64);
         let start = std::time::Instant::now();
 
         // Process events to each destination sequentially due to borrow checker constraints
@@ -499,13 +505,15 @@ impl ReporterService {
 pub struct EventBus {
     config: ReporterConfig,
     sender: mpsc::Sender<TradingEvent>,
+    db_pool: Arc<tokio::sync::RwLock<Option<Arc<PgPool>>>>,
     _service_handle: Option<JoinHandle<()>>,
 }
 
 impl EventBus {
     pub fn new(config: ReporterConfig) -> Self {
         let (tx, rx) = mpsc::channel(10000); // Buffer size for high throughput
-        let reporter = ReporterService::new(rx, config.clone(), None);
+        let db_pool = Arc::new(tokio::sync::RwLock::new(None));
+        let reporter = ReporterService::new(rx, config.clone(), db_pool.clone());
 
         // Spawn the reporter service
         let handle = tokio::spawn(async move {
@@ -515,13 +523,15 @@ impl EventBus {
         Self {
             config,
             sender: tx,
+            db_pool,
             _service_handle: Some(handle),
         }
     }
 
-    pub fn with_database_pool(config: ReporterConfig, db_pool: PgPool) -> Self {
+    pub fn with_database_pool(config: ReporterConfig, db_pool: Arc<PgPool>) -> Self {
         let (tx, rx) = mpsc::channel(10000); // Buffer size for high throughput
-        let reporter = ReporterService::new(rx, config.clone(), Some(db_pool));
+        let db_pool_lock = Arc::new(tokio::sync::RwLock::new(Some(db_pool)));
+        let reporter = ReporterService::new(rx, config.clone(), db_pool_lock.clone());
 
         // Spawn the reporter service
         let handle = tokio::spawn(async move {
@@ -531,6 +541,7 @@ impl EventBus {
         Self {
             config,
             sender: tx,
+            db_pool: db_pool_lock,
             _service_handle: Some(handle),
         }
     }
@@ -545,12 +556,13 @@ impl EventBus {
     /// INTERNAL: Set the centralized database pool from main application
     /// This is used by the global EVENT_BUS singleton to receive the shared database pool
     /// from the main application to prevent duplicate database connections.
-    pub fn set_shared_database_pool(
+    pub async fn set_shared_database_pool(
         &self,
-        _db_pool: Arc<PgPool>,
+        db_pool: Arc<PgPool>,
     ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-        warn!("⚠️ EventBus::set_shared_database_pool not yet implemented - EventBus will use API fallback for now");
-        warn!("🔧 TODO: Implement runtime database pool injection for existing EventBus instance");
+        let mut guard = self.db_pool.write().await;
+        *guard = Some(db_pool);
+        info!("✅ EventBus database pool configured");
         Ok(())
     }
 

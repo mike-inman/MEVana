@@ -1924,8 +1924,19 @@ impl PropertyStore {
                 crash_count: 0,                                    // Will be incremented if needed
             };
 
+            if let Some(parent) = Path::new(&persistence_path).parent() {
+                if let Err(e) = std::fs::create_dir_all(parent) {
+                    error!("Failed to ensure persistence directory exists: {}", e);
+                    return;
+                }
+            }
+
             // Atomic write using temp file + rename for crash safety
-            let temp_path = format!("{}.tmp", persistence_path);
+            let unique_suffix = SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .unwrap_or_default()
+                .as_micros();
+            let temp_path = format!("{}.{}.tmp", persistence_path, unique_suffix);
             match std::fs::File::create(&temp_path) {
                 Ok(mut file) => match serde_json::to_string_pretty(&state) {
                     Ok(json_content) => match file.write_all(json_content.as_bytes()) {
@@ -1998,7 +2009,16 @@ impl PropertyStore {
         };
 
         // Atomic write using temp file + rename for crash safety
-        let temp_path = format!("{}.tmp", persistence_path);
+        if let Some(parent) = Path::new(&persistence_path).parent() {
+            std::fs::create_dir_all(parent)
+                .map_err(|e| anyhow::anyhow!("Failed to create persistence directory: {}", e))?;
+        }
+
+        let unique_suffix = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_micros();
+        let temp_path = format!("{}.{}.tmp", persistence_path, unique_suffix);
         let mut file = std::fs::File::create(&temp_path)
             .map_err(|e| anyhow::anyhow!("Failed to create temp persistence file: {}", e))?;
 
