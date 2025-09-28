@@ -3,13 +3,14 @@
 use axum::{
     extract::{Query, State},
     http::{Method, StatusCode},
-    response::Json,
+    response::{IntoResponse, Json},
     routing::get,
     Router,
 };
 use dashmap::DashMap;
 use log::{debug, error, info};
 use serde::{Deserialize, Serialize};
+use serde_json::json;
 use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::time::{interval, Duration};
@@ -435,25 +436,23 @@ async fn get_all_arbitrage_records(
     path = "/api/system/status",
     tag = "monitoring",
     responses(
-        (status = 200, description = "System status", body = LiveMetrics)
+        (status = 200, description = "System status", body = LiveMetrics),
+        (status = 503, description = "System metrics not yet available")
     )
 )]
-async fn system_status(State(state): State<AppState>) -> Json<LiveMetrics> {
+async fn system_status(State(state): State<AppState>) -> impl IntoResponse {
     if let Some(system) = state.metrics_cache.get("hotpath:stats:system") {
         if let Ok(parsed) = serde_json::from_value::<LiveMetrics>(system.clone()) {
             return Json(parsed);
         }
     }
 
-    // Mock system status
-    Json(LiveMetrics {
-        current_slot: 365_140_000,
-        streams_active: 4,
-        transactions_per_second: 2847.5,
-        cpu_cores_used: vec![0, 1, 2, 3], // Hotpath cores
-        memory_usage_mb: 512,
-        uptime_seconds: 86400,
-    })
+    (
+        StatusCode::SERVICE_UNAVAILABLE,
+        Json(json!({
+            "error": "system metrics not yet available"
+        })),
+    )
 }
 
 async fn process_detected_events(
