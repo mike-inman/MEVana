@@ -300,7 +300,10 @@
       "Bash(MEVANA_GATEWAY_ENABLE=true DATABASE_URL=\"postgresql://mev:mevpassword@localhost:5433/mevdb\" PORT=8092 KAFKA_BROKER=localhost:29092 REDIS_URL=\"redis://localhost:6380/0\" cargo run -p api-service --bin api-server)",
       "Bash(./scripts/deployment/deploy_vultr_compose.sh:*)",
       "Bash(while read timestamp filepath)",
-      "Bash(do date:*)"
+      "Bash(do date:*)",
+      "Bash(npm run build:*)",
+      "Bash(websocat:*)",
+      "Bash(./scripts/deploy-production.sh:*)"
     ],
     "deny": [],
     "ask": []

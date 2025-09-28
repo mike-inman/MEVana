@@ -13,8 +13,9 @@ use tokio::time::interval;
 
 use super::{
     config::GatewayConfig,
+    fanout::{GatewayConsumerHandles, GatewayFanout},
     proxy::DownstreamProxy,
-    websocket::{GatewayConsumerHandles, GatewayWebsocketManager},
+    sse,
 };
 use redis::Value;
 
@@ -23,24 +24,24 @@ use redis::Value;
 pub struct GatewayContext {
     pub config: Arc<GatewayConfig>,
     pub proxy: DownstreamProxy,
-    pub websocket: GatewayWebsocketManager,
+    pub fanout: GatewayFanout,
 }
 
 impl GatewayContext {
     pub fn new(config: GatewayConfig) -> Self {
         let config = Arc::new(config);
         let proxy = DownstreamProxy::new(config.clone());
-        let websocket = GatewayWebsocketManager::new(config.clone());
+        let fanout = GatewayFanout::new(config.clone());
 
         Self {
             config,
             proxy,
-            websocket,
+            fanout,
         }
     }
 
     pub fn start_kafka_consumers(&self) -> GatewayConsumerHandles {
-        self.websocket.spawn_kafka_tasks()
+        self.fanout.spawn_kafka_tasks()
     }
 }
 
@@ -60,6 +61,9 @@ pub fn build_gateway_router(context: GatewayContext) -> Router {
         .route("/gateway/ws/swaps", get(ws_swaps))
         .route("/gateway/ws/swaps.v2", get(ws_swaps_v2))
         .route("/gateway/ws/ping", get(ws_ping))
+        .route("/gateway/sse/opportunities", get(sse_opportunities))
+        .route("/gateway/sse/bundles", get(sse_bundles))
+        .route("/gateway/sse/fills", get(sse_fills))
         .route("/gateway/depth/:pool", get(http_depth))
         .layer(Extension(shared_state))
 }
@@ -69,7 +73,7 @@ struct GatewayHealthResponse {
     status: &'static str,
     gateway_port: u16,
     proxy: String,
-    websocket: String,
+    fanout: String,
 }
 
 async fn gateway_health(Extension(ctx): Extension<Arc<GatewayContext>>) -> impl IntoResponse {
@@ -77,7 +81,7 @@ async fn gateway_health(Extension(ctx): Extension<Arc<GatewayContext>>) -> impl 
         status: "readying",
         gateway_port: ctx.config.gateway_port,
         proxy: ctx.proxy.readiness_status(),
-        websocket: ctx.websocket.readiness_status(),
+        fanout: ctx.fanout.readiness_status(),
     })
 }
 
@@ -85,7 +89,7 @@ async fn ws_prices(
     ws: WebSocketUpgrade,
     Extension(ctx): Extension<Arc<GatewayContext>>,
 ) -> impl IntoResponse {
-    let rx = ctx.websocket.subscribe_prices();
+    let rx = ctx.fanout.subscribe_prices();
     upgrade_stream(ws, rx, "prices")
 }
 
@@ -93,7 +97,7 @@ async fn ws_swaps(
     ws: WebSocketUpgrade,
     Extension(ctx): Extension<Arc<GatewayContext>>,
 ) -> impl IntoResponse {
-    let rx = ctx.websocket.subscribe_swaps();
+    let rx = ctx.fanout.subscribe_swaps();
     upgrade_stream(ws, rx, "swaps")
 }
 
@@ -101,8 +105,20 @@ async fn ws_swaps_v2(
     ws: WebSocketUpgrade,
     Extension(ctx): Extension<Arc<GatewayContext>>,
 ) -> impl IntoResponse {
-    let rx = ctx.websocket.subscribe_swaps_v2();
+    let rx = ctx.fanout.subscribe_swaps_v2();
     upgrade_stream(ws, rx, "swaps.v2")
+}
+
+async fn sse_opportunities(Extension(ctx): Extension<Arc<GatewayContext>>) -> impl IntoResponse {
+    sse::into_sse(ctx.fanout.subscribe_opportunities())
+}
+
+async fn sse_bundles(Extension(ctx): Extension<Arc<GatewayContext>>) -> impl IntoResponse {
+    sse::into_sse(ctx.fanout.subscribe_bundles())
+}
+
+async fn sse_fills(Extension(ctx): Extension<Arc<GatewayContext>>) -> impl IntoResponse {
+    sse::into_sse(ctx.fanout.subscribe_fills())
 }
 
 async fn ws_ping(ws: WebSocketUpgrade) -> impl IntoResponse {

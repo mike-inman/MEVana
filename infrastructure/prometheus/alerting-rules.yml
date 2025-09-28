@@ -19,7 +19,7 @@ groups:
           severity: warning
         annotations:
           summary: "High error rate for {{ $labels.service }}"
-          description: "Error rate {{ $value | printf "%.2f" }} errors/sec on {{ $labels.service }}."
+          description: "Error rate {{ $value | printf '%.2f' }} errors/sec on {{ $labels.service }}."
 
       - alert: WalletVaultUnhealthy
         expr: absent(up{job="wallet_vault"}) or (up{job="wallet_vault"} == 0)
@@ -46,7 +46,7 @@ groups:
           severity: warning
         annotations:
           summary: "Executor queue growing"
-          description: "Executor queue length increasing ({{ $value | printf "%.2f" }}) for {{ $labels.queue }}."
+          description: "Executor queue length increasing ({{ $value | printf '%.2f' }}) for {{ $labels.queue }}."
 
   - name: infrastructure
     rules:

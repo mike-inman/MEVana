@@ -15,6 +15,7 @@ Last updated: 2025-09-27
 - Pending follow-ups:
   * Update `/etc/mevana/ui.env` so MEVana-UI consumes `http://<host>:8095/gateway/*` (keep legacy URLs until the cutover is verified).
   * Run `scripts/ci/post-deployment-diagnostics.sh` after gateway restarts to ensure Prometheus/Grafana scrape the expected targets.
+  * Execute `scripts/testing/gateway-fanout-smoke.sh` to push a sample opportunity/execution into Kafka and confirm data surfaces on `/gateway/ws/*` and `/gateway/sse/*` before cutting the UI to gateway-only mode.
   * Review firewall openings (8080, 3002, 3200, 8096) once the UI migration is complete and close any unused ports.
 
 Overview

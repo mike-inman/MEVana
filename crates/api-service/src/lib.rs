@@ -12,6 +12,6 @@ pub use api::create_api_router;
 pub use database::DatabaseService;
 pub use gateway::{
     build_gateway_router, DownstreamProxy, GatewayConfig, GatewayConsumerHandles, GatewayContext,
-    GatewayWebsocketManager,
+    GatewayFanout,
 };
 pub use kafka_consumer::ArbitrageKafkaConsumer;

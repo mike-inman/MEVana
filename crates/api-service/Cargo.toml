@@ -29,6 +29,7 @@ chrono = { version = "0.4", features = ["serde"] }
 # Async utilities
 async-trait = "0.1"
 futures = "0.3"
+tokio-stream = { version = "0.1", features = ["sync"] }
 
 # Authentication and security
 jsonwebtoken = "9.2"
