@@ -7,6 +7,8 @@ groups:
     interval: 30s
     rules:
       - alert: MEVanaServiceDown
+        uid: mevana-service-down
+        title: "MEVana service down"
         expr: up{job=~"system-orchestrator|discovery-service|arb-engine"} == 0
         for: 1m
         labels:
@@ -17,6 +19,8 @@ groups:
           description: "Service {{ $labels.job }} at {{ $labels.instance }} has been down for more than 1 minute"
           
       - alert: MEVanaUnhealthyServices
+        uid: mevana-unhealthy-services
+        title: "Multiple services unhealthy"
         expr: mevana_services_unhealthy > 2
         for: 2m
         labels:
@@ -30,6 +34,8 @@ groups:
     interval: 15s
     rules:
       - alert: LowArbitrageSuccessRate
+        uid: mevana-low-success-rate
+        title: "Low arbitrage success rate"
         expr: arb_execution_success_rate < 0.5
         for: 5m
         labels:
@@ -39,6 +45,8 @@ groups:
           description: "Arbitrage success rate is {{ $value }}%, below 50% threshold"
           
       - alert: ArbitrageOpportunitiesStalled
+        uid: mevana-opportunities-stalled
+        title: "Arbitrage opportunities stalled"
         expr: rate(arb_opportunities_detected_total[5m]) == 0
         for: 3m
         labels:
@@ -52,6 +60,8 @@ groups:
     interval: 60s
     rules:
       - alert: PrometheusTargetDown
+        uid: mevana-prometheus-down
+        title: "Prometheus target down"
         expr: up{job="prometheus"} == 0
         for: 1m
         labels:
@@ -61,6 +71,8 @@ groups:
           description: "Prometheus instance is unreachable"
           
       - alert: HighTokenEnrichmentLatency
+        uid: mevana-token-latency-high
+        title: "High token enrichment latency"
         expr: histogram_quantile(0.95, rate(token_enrich_latency_seconds_bucket[5m])) > 2
         for: 2m
         labels:
