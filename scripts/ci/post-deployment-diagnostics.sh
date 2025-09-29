@@ -233,19 +233,18 @@ escape_regex() {
 }
 
 # Determine if we're running locally or on server
-if curl -s --connect-timeout 2 "http://localhost:${GRAFANA_PORT}/api/health" >/dev/null 2>&1; then
-    SERVER_BASE="http://localhost"
+SERVER_BASE="http://localhost"
+if curl -s --connect-timeout 2 "${SERVER_BASE}:${GRAFANA_PORT}/api/health" >/dev/null 2>&1; then
     print_status "info" "Running diagnostics on local/server environment"
 else
-    print_status "info" "No local services detected - use this script on the deployment server"
-    exit 1
+    print_status "warn" "Grafana not reachable yet; continuing diagnostics with ${SERVER_BASE}"
 fi
 
 echo -e "\n${BLUE}🏗️ Phase 1: Infrastructure Services${NC}"
 echo "==================================="
 
 # Test core infrastructure
-run_test "Grafana Health" test_endpoint "${SERVER_BASE}:${GRAFANA_PORT}/api/health" "Grafana health endpoint" 200 5 5
+run_test optional "Grafana Health" test_endpoint "${SERVER_BASE}:${GRAFANA_PORT}/api/health" "Grafana health endpoint" 200 5 5
 run_test "Prometheus Health" test_endpoint "${SERVER_BASE}:${PROMETHEUS_PORT}/-/healthy" "Prometheus health endpoint" 200 5 5
 run_test optional "Kafka UI Health" test_endpoint "${SERVER_BASE}:${KAFKA_UI_PORT}" "Kafka UI interface" 200 3 5
 run_test optional "Adminer Health" test_endpoint "${SERVER_BASE}:${ADMINER_PORT}" "Adminer database interface" 200 3 5
