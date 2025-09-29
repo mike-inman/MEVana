@@ -443,7 +443,7 @@ async fn get_all_arbitrage_records(
 async fn system_status(State(state): State<AppState>) -> impl IntoResponse {
     if let Some(system) = state.metrics_cache.get("hotpath:stats:system") {
         if let Ok(parsed) = serde_json::from_value::<LiveMetrics>(system.clone()) {
-            return Json(parsed);
+            return Json(parsed).into_response();
         }
     }
 
@@ -453,6 +453,7 @@ async fn system_status(State(state): State<AppState>) -> impl IntoResponse {
             "error": "system metrics not yet available"
         })),
     )
+        .into_response()
 }
 
 async fn process_detected_events(
