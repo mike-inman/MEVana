@@ -19,7 +19,7 @@ groups:
           severity: warning
         annotations:
           summary: "High error rate for {{ $labels.service }}"
-          description: "Error rate {{ $value | printf '%.2f' }} errors/sec on {{ $labels.service }}."
+          description: "Error rate {{ printf \"%.2f\" $value }} errors/sec on {{ $labels.service }}."
 
       - alert: WalletVaultUnhealthy
         expr: absent(up{job="wallet_vault"}) or (up{job="wallet_vault"} == 0)
@@ -46,7 +46,7 @@ groups:
           severity: warning
         annotations:
           summary: "Executor queue growing"
-          description: "Executor queue length increasing ({{ $value | printf '%.2f' }}) for {{ $labels.queue }}."
+          description: "Executor queue length increasing ({{ printf \"%.2f\" $value }}) for {{ $labels.queue }}."
 
       - alert: HotpathEventBusBacklog
         expr: event_bus_pending_events > 1000
@@ -55,7 +55,7 @@ groups:
           severity: warning
         annotations:
           summary: "Hotpath event bus backlog"
-          description: "Event bus queue has {{ $value | printf '%.0f' }} pending events for over a minute."
+          description: "Event bus queue has {{ printf \"%.0f\" $value }} pending events for over a minute."
 
       - alert: HotpathEventBusNoWrites
         expr: increase(event_bus_db_writes_total[5m]) < 1
@@ -73,7 +73,7 @@ groups:
           severity: warning
         annotations:
           summary: "Hotpath event bus database errors"
-          description: "Detected database write errors on event bus (increase {{ $value | printf '%.0f' }} over 5m)."
+          description: "Detected database write errors on event bus (increase {{ printf \"%.0f\" $value }} over 5m)."
 
   - name: infrastructure
     rules:
