@@ -12,6 +12,9 @@ TOPICS=(
   normalized-swaps.v1
   unknown-programs
   arb.opportunities.v1
+  alerts.arbitrage.opportunities
+  prices.latest
+  execution.results.v1
 )
 
 log(){ printf '\033[0;34m[INFO]\033[0m %s\n' "$1"; }
