@@ -15,6 +15,36 @@ CARGO_CMD=${CARGO_CMD:-cargo}
 SKIP_RESTART=${SKIP_RESTART:-0}
 DEPLOY_TAG=${DEPLOY_TAG:-$(git rev-parse --short HEAD)}
 
+ensure_multi_venue_config() {
+  # Normalizer config for all venues. This is kept in sync with
+  # docs/operations/SELF_HOSTED_DEPLOYMENT_GUIDE.md and ensures that
+  # dependent services have their environment before we trigger restarts.
+  cat > /etc/mevana/normalizer.env <<'EOF'
+KAFKA_BROKER=localhost:29092
+DATABASE_URL=postgresql://mev:mevpassword@localhost:5433/mevdb
+IN_TOPIC=dex-transactions
+OUT_TOPIC=normalized-swaps.v1
+METRICS_PORT=9901
+RUST_LOG=info
+EOF
+
+  # API Gateway config for all venues. Defining this before restarts avoids
+  # binding conflicts with monitoring-service (8091) by pinning the API to 8092.
+  cat > /etc/mevana/api-service.env <<'EOF'
+PORT=8092
+DATABASE_URL=postgresql://mev:mevpassword@localhost:5433/mevdb
+REDIS_URL=redis://localhost:6380/0
+KAFKA_BROKER=localhost:29092
+MEVANA_GATEWAY_ENABLE=true
+MEVANA_WEBSOCKET_GATEWAY_PORT=8095
+GATEWAY_SWAPS_TOPIC=normalized-swaps.v1
+GATEWAY_SWAPS_V2_TOPIC=normalized-swaps.v1
+GATEWAY_OPPORTUNITIES_TOPIC=alerts.arbitrage.opportunities
+API_AUTH_TOKEN=mevana-api-token-2024
+RUST_LOG=info
+EOF
+}
+
 USE_SYSTEMCTL=1
 if [[ -z "$SYSTEMCTL" || "$SYSTEMCTL" == "false" ]]; then
   USE_SYSTEMCTL=0
@@ -162,6 +192,8 @@ for svc in "${unique_services[@]}"; do
   fi
 done
 
+ensure_multi_venue_config
+
 if [[ ${#units_to_restart[@]} -gt 0 && $USE_SYSTEMCTL -eq 1 ]]; then
   "$SYSTEMCTL" daemon-reload
   if [[ "$SKIP_RESTART" -ne 1 ]]; then
@@ -196,34 +228,3 @@ if [[ ${#units_to_restart[@]} -gt 0 && $USE_SYSTEMCTL -eq 0 ]]; then
 fi
 
 popd >/dev/null
-
-# Ensure multi-venue configuration for normalizer and API gateway
-ensure_multi_venue_config() {
-    # Normalizer config for ALL venues
-    cat > /etc/mevana/normalizer.env << 'EOF'
-KAFKA_BROKER=localhost:29092
-DATABASE_URL=postgresql://mev:mevpassword@localhost:5433/mevdb
-IN_TOPIC=dex-transactions
-OUT_TOPIC=normalized-swaps.v1
-METRICS_PORT=9901
-RUST_LOG=info
-EOF
-
-    # API Gateway config for ALL venues
-    cat > /etc/mevana/api-service.env << 'EOF'
-PORT=8092
-DATABASE_URL=postgresql://mev:mevpassword@localhost:5433/mevdb
-REDIS_URL=redis://localhost:6380/0
-KAFKA_BROKER=localhost:29092
-MEVANA_GATEWAY_ENABLE=true
-MEVANA_WEBSOCKET_GATEWAY_PORT=8095
-GATEWAY_SWAPS_TOPIC=normalized-swaps.v1
-GATEWAY_SWAPS_V2_TOPIC=normalized-swaps.v1
-GATEWAY_OPPORTUNITIES_TOPIC=alerts.arbitrage.opportunities
-API_AUTH_TOKEN=mevana-api-token-2024
-RUST_LOG=info
-EOF
-}
-
-# Call this function during deployment
-ensure_multi_venue_config
