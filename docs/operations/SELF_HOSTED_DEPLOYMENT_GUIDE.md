@@ -1,6 +1,6 @@
 Self‑Hosted Deployment Strategy & Workflows (Production Server)
 
-Last updated: 2025-09-27
+Last updated: 2025-09-30
 
 ## Quickstart for the next helper
 
@@ -17,6 +17,7 @@ Last updated: 2025-09-27
   * Run `scripts/ci/post-deployment-diagnostics.sh` after gateway restarts to ensure Prometheus/Grafana scrape the expected targets.
   * Execute `scripts/testing/gateway-fanout-smoke.sh` to push a sample opportunity/execution into Kafka and confirm data surfaces on `/gateway/ws/*` and `/gateway/sse/*` before cutting the UI to gateway-only mode.
   * Review firewall openings (8080, 3002, 3200, 8096) once the UI migration is complete and close any unused ports.
+- Price stream reinstated with a dedicated bare-metal service: `/etc/mevana/price-aggregator.env` feeds `price-aggregator.service`, consuming `orca-swaps.parsed.v2` and publishing rolling snapshots to `prices.latest` for the UI/Grafana gateway.
 
 Overview
 - Goal: Keep the hotpath, normalizer, discovery, and executor binaries as close to the metal as possible while leaving supporting infrastructure (Kafka, Redis, Postgres, Prometheus, Grafana) in Docker for easy parity with local development.

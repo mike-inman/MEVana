@@ -217,11 +217,14 @@ async fn handle_raw(
             .collect();
 
         let token_changes = collect_token_balance_changes(info, &keys_b58);
+        let sig_b58 = bs58::encode(&info.signature).into_string();
+        log::debug!(
+            "token balance change count={} for signature {}",
+            token_changes.len(),
+            sig_b58
+        );
         if token_changes.is_empty() {
-            log::debug!(
-                "no token balance changes detected for signature {}",
-                bs58::encode(&info.signature).into_string()
-            );
+            log::debug!("no token balance changes detected for signature {sig_b58}");
         }
 
         for (ix_index, ci) in msg.instructions.iter().enumerate() {
@@ -230,6 +233,7 @@ async fn handle_raw(
                 continue;
             }
             let pid = &keys_b58[pid_index];
+            log::debug!("processing instruction program_id={pid}");
 
             let (decoded_name, decoded_roles) = if let Some(dec) = gen::decoder_for(pid) {
                 if let Some((name, roles)) = dec(&ci.data, &ci.accounts, &keys_b58) {
@@ -240,6 +244,13 @@ async fn handle_raw(
             } else {
                 (None, None)
             };
+
+            if decoded_name.is_some() {
+                log::debug!(
+                    "decoded instruction program_id={pid} name={}",
+                    decoded_name.as_deref().unwrap()
+                );
+            }
 
             warn_no_block_time_once();
 
@@ -257,7 +268,10 @@ async fn handle_raw(
                 decoded_accounts_by_role: decoded_roles,
             };
 
+            let mut matched_extractor = false;
             for ex in extractors.iter().filter(|e| e.program_id() == pid) {
+                matched_extractor = true;
+                log::debug!("running extractor for program_id={pid}");
                 if let Some(mut ns) = ex.try_extract(&ctx) {
                     SWAPS_EXTRACTED.inc();
                     // 1) fill from decoded roles
@@ -296,6 +310,9 @@ async fn handle_raw(
                         ns.slot
                     );
                 }
+            }
+            if !matched_extractor {
+                log::debug!("no extractor matched program_id={pid}");
             }
         }
     }

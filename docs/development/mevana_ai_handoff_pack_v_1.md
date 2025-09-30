@@ -4,7 +4,9 @@ Last updated: 2025-09-30
 > **Snapshot (2025‑09‑30)**
 > - Hotpath (`hotpath_ar b_engine`) now pushes raw geyser transactions to Kafka (`dex-transactions`) via the in-process `DexKafkaPublisher`. Arbitrage detections continue to land in `alerts.arbitrage.opportunities`; live execution remains blocked by the safety gate.
 > - `normalizer-service` consumes `dex-transactions` and emits Whirlpool swaps to `orca-swaps.parsed.v2`. Extractors for Raydium/Meteora/Phoenix still return `None`, so downstream discovery/Grafana remain dry beyond Whirlpool.
-> - Focus for the next helper: finish swap extractors, restart discovery once data flows, and refresh Grafana/UI metrics for venue throughput.
+> - `price-aggregator` service added: consumes `orca-swaps.parsed.v2`, publishes rolling price snapshots to `prices.latest`, and now ships as a managed systemd unit (`price-aggregator.service`).
+> - Current blocker: geyser transaction payloads arrive without token balance deltas, so the generated extractors cannot infer swap amounts; fix requires adjusting the geyser subscription to include token balance meta before discovery/UI can light up.
+> - Focus for the next helper: restore token balance metadata for geyser transactions, finish swap extractors, restart discovery once data flows, and refresh Grafana/UI metrics for venue throughput.
 
 > Single doc for any assistant (or future you) to resume work fast. Includes current state, how to run, how to verify, and what’s next.
 
@@ -168,12 +170,12 @@ kafka-topics --bootstrap-server localhost:29092 \
 
 ## 5) Next 2–3 Steps (2025‑09‑30)
 
-1. **Finish swap extraction coverage**
-   - Implement the `extract_*_swap_event` helpers for Raydium CLMM/AMM, Meteora DLMM, and Phoenix (see `crates/normalizer-service/src/raydium_map.rs`, `meteora_map.rs`).
-   - Increment `SWAPS_EXTRACTED` when a swap is emitted and ensure the new events land in venue-specific Kafka topics (`orca-swaps.parsed.v2`, future `raydium-swaps.parsed` etc.).
+1. **Restore swap extraction coverage**
+   - Update the hotpath geyser subscription (and/or normalizer ingestion) so `SubscribeUpdateTransaction.meta` carries pre/post token balances; without them `normalizer_swaps_extracted` stays at zero and no swap events reach Kafka.
+   - Once balances flow, ensure the generated extractors surface Raydium CLMM/AMM, Meteora DLMM, Phoenix, etc. into the venue-specific Kafka topics (`orca-swaps.parsed.v2`, `raydium-swaps.parsed`, `meteora-swaps.parsed`, `phoenix-swaps.parsed`).
 
 2. **Restart & verify discovery once swaps flow**
-   - After extractors produce real data, confirm `discovery-service` metrics tick up (`http://127.0.0.1:9102/metrics`) and fix any schema drift.
+   - After swap topics carry live data, confirm `discovery-service` metrics tick up (`http://127.0.0.1:9102/metrics`) and fix any schema drift.
 
 3. **Refresh Grafana / UI observability**
    - Add charts for `multi_geyser_stream_messages_per_minute`, `dex_kafka_*`, and the normalizer swap counters.
