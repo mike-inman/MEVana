@@ -136,7 +136,17 @@ async fn handle_message(
     config: &AggregatorConfig,
     last_prices: &mut HashMap<String, f64>,
 ) -> Result<()> {
-    let swap: SwapEvent = serde_json::from_slice(payload).context("deserializing swap payload")?;
+    let swap: SwapEvent = match serde_json::from_slice(payload) {
+        Ok(value) => value,
+        Err(err) => {
+            let sample = String::from_utf8_lossy(payload);
+            warn!(
+                "⚠️ Failed to parse swap payload: {err}; payload_snippet={}",
+                truncate(&sample, 256)
+            );
+            return Ok(());
+        }
+    };
 
     let amount_in = swap
         .amount_in
@@ -207,4 +217,12 @@ async fn handle_message(
     }
 
     Ok(())
+}
+
+fn truncate(input: &str, max_len: usize) -> String {
+    if input.len() <= max_len {
+        input.to_string()
+    } else {
+        format!("{}…", &input[..max_len])
+    }
 }
