@@ -8,25 +8,9 @@ use rdkafka::{
     consumer::{Consumer, StreamConsumer},
     message::Message,
 };
-use serde::{Deserialize, Serialize};
+use serde_json::Value;
 use std::time::Duration;
 use uuid::Uuid;
-
-/// Arbitrage opportunity from Kafka - matches the format published by hotpath engine
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct KafkaArbitrageOpportunity {
-    pub signature: String,
-    pub venue_a: String,
-    pub venue_b: String,
-    pub token_a: String,
-    pub token_b: String,
-    pub profit_bps: i32,
-    pub slot: u64,
-    pub estimated_net_profit_sol: f64,
-    pub confidence_score: f64,
-    pub timestamp: String, // RFC3339 format
-    pub strategy: String,
-}
 
 /// Database model for persisting arbitrage opportunities
 #[derive(Debug, Clone, sqlx::FromRow)]
@@ -113,34 +97,29 @@ impl ArbitrageKafkaConsumer {
 
     async fn process_opportunity_message(&self, payload: &[u8]) -> Result<bool> {
         let message_str = std::str::from_utf8(payload)?;
-        let kafka_opportunity: KafkaArbitrageOpportunity = serde_json::from_str(message_str)?;
+        let payload: Value = serde_json::from_str(message_str)?;
+        let normalized = ParsedOpportunity::from_payload(&payload);
 
         debug!(
             "📨 Received arbitrage opportunity: {} (profit: {}bps, confidence: {:.2})",
-            kafka_opportunity.signature,
-            kafka_opportunity.profit_bps,
-            kafka_opportunity.confidence_score
+            normalized.signature, normalized.profit_bps, normalized.confidence_score
         );
-
-        // Parse timestamp
-        let timestamp =
-            DateTime::parse_from_rfc3339(&kafka_opportunity.timestamp)?.with_timezone(&Utc);
 
         // Insert into database using DatabaseService
         let inserted = self
             .database
             .insert_arbitrage_opportunity_from_kafka(
-                &kafka_opportunity.signature,
-                &kafka_opportunity.venue_a,
-                &kafka_opportunity.venue_b,
-                &kafka_opportunity.token_a,
-                &kafka_opportunity.token_b,
-                kafka_opportunity.profit_bps,
-                kafka_opportunity.slot as i64,
-                kafka_opportunity.estimated_net_profit_sol,
-                kafka_opportunity.confidence_score,
-                timestamp,
-                &kafka_opportunity.strategy,
+                &normalized.signature,
+                &normalized.venue_a,
+                &normalized.venue_b,
+                &normalized.token_a,
+                &normalized.token_b,
+                normalized.profit_bps,
+                normalized.slot,
+                normalized.estimated_profit_sol,
+                normalized.confidence_score,
+                normalized.timestamp,
+                &normalized.strategy,
             )
             .await?;
 
@@ -150,9 +129,238 @@ impl ArbitrageKafkaConsumer {
 
         info!(
             "💾 Persisted arbitrage opportunity: {} ({}bps profit, strategy: {})",
-            kafka_opportunity.signature, kafka_opportunity.profit_bps, kafka_opportunity.strategy
+            normalized.signature, normalized.profit_bps, normalized.strategy
         );
 
         Ok(true)
+    }
+}
+
+/// Normalised view over the arbitrage payload published by the hotpath engine.
+#[derive(Debug, Clone)]
+struct ParsedOpportunity {
+    signature: String,
+    venue_a: String,
+    venue_b: String,
+    token_a: String,
+    token_b: String,
+    profit_bps: i32,
+    slot: i64,
+    estimated_profit_sol: f64,
+    confidence_score: f64,
+    timestamp: DateTime<Utc>,
+    strategy: String,
+}
+
+impl ParsedOpportunity {
+    fn from_payload(payload: &Value) -> Self {
+        let details = payload.get("details");
+
+        let signature = details
+            .and_then(|d| d.get("signature"))
+            .and_then(Value::as_str)
+            .or_else(|| payload.get("signature").and_then(Value::as_str))
+            .unwrap_or_default()
+            .to_string();
+
+        let venues = payload
+            .get("venues")
+            .and_then(Value::as_array)
+            .cloned()
+            .unwrap_or_default();
+
+        let venue_a = details
+            .and_then(|d| d.get("venue_a"))
+            .and_then(Value::as_str)
+            .map(str::to_owned)
+            .or_else(|| {
+                payload
+                    .get("venue_a")
+                    .and_then(Value::as_str)
+                    .map(str::to_owned)
+            })
+            .or_else(|| venues.get(0).and_then(|v| v.as_str().map(str::to_owned)))
+            .unwrap_or_default();
+
+        let venue_b = details
+            .and_then(|d| d.get("venue_b"))
+            .and_then(Value::as_str)
+            .map(str::to_owned)
+            .or_else(|| {
+                payload
+                    .get("venue_b")
+                    .and_then(Value::as_str)
+                    .map(str::to_owned)
+            })
+            .or_else(|| venues.get(1).and_then(|v| v.as_str().map(str::to_owned)))
+            .unwrap_or_else(|| venue_a.clone());
+
+        let token_a = details
+            .and_then(|d| d.get("token_a"))
+            .and_then(Value::as_str)
+            .map(str::to_owned)
+            .or_else(|| {
+                payload
+                    .get("token_a")
+                    .and_then(Value::as_str)
+                    .map(str::to_owned)
+            })
+            .or_else(|| {
+                payload
+                    .get("token_pair")
+                    .and_then(Value::as_str)
+                    .and_then(|pair| pair.split_once('/').map(|(lhs, _)| lhs.to_string()))
+            })
+            .unwrap_or_default();
+
+        let token_b = details
+            .and_then(|d| d.get("token_b"))
+            .and_then(Value::as_str)
+            .map(str::to_owned)
+            .or_else(|| {
+                payload
+                    .get("token_b")
+                    .and_then(Value::as_str)
+                    .map(str::to_owned)
+            })
+            .or_else(|| {
+                payload
+                    .get("token_pair")
+                    .and_then(Value::as_str)
+                    .and_then(|pair| pair.split_once('/').map(|(_, rhs)| rhs.to_string()))
+            })
+            .unwrap_or_default();
+
+        let profit_bps = details
+            .and_then(|d| d.get("profit_bps"))
+            .and_then(Value::as_i64)
+            .or_else(|| payload.get("profit_bps").and_then(Value::as_i64))
+            .unwrap_or(0) as i32;
+
+        let slot = details
+            .and_then(|d| d.get("slot"))
+            .and_then(Value::as_u64)
+            .or_else(|| payload.get("slot").and_then(Value::as_u64))
+            .unwrap_or_default() as i64;
+
+        let estimated_profit_sol = payload
+            .get("estimated_profit_sol")
+            .and_then(Value::as_f64)
+            .or_else(|| {
+                details
+                    .and_then(|d| d.get("estimated_profit_sol"))
+                    .and_then(Value::as_f64)
+            })
+            .or_else(|| {
+                payload
+                    .get("estimated_net_profit_sol")
+                    .and_then(Value::as_f64)
+            })
+            .unwrap_or(0.0);
+
+        let confidence_score = payload
+            .get("confidence_score")
+            .and_then(Value::as_f64)
+            .unwrap_or(0.0);
+
+        let strategy = details
+            .and_then(|d| d.get("strategy"))
+            .and_then(Value::as_str)
+            .or_else(|| payload.get("strategy").and_then(Value::as_str))
+            .unwrap_or("unknown")
+            .to_string();
+
+        let timestamp = payload
+            .get("timestamp")
+            .and_then(Value::as_str)
+            .and_then(|value| DateTime::parse_from_rfc3339(value).ok())
+            .map(|dt| dt.with_timezone(&Utc))
+            .unwrap_or_else(Utc::now);
+
+        Self {
+            signature,
+            venue_a,
+            venue_b,
+            token_a,
+            token_b,
+            profit_bps,
+            slot,
+            estimated_profit_sol,
+            confidence_score,
+            timestamp,
+            strategy,
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::ParsedOpportunity;
+    use serde_json::Value;
+
+    #[test]
+    fn parses_modern_hotpath_payload() {
+        let raw = r#"{
+            "confidence_score": 0.74,
+            "details": {
+                "profit_bps": 3,
+                "signature": "test-sig",
+                "slot": 370201870,
+                "strategy": "multi-venue-atomic",
+                "token_a": "USDT",
+                "token_b": "SOL",
+                "venue_a": "phoenix-clob",
+                "venue_b": "single-venue"
+            },
+            "estimated_profit_sol": 0.000285,
+            "profit_bps": 3,
+            "signature": "test-sig",
+            "token_pair": "USDT/SOL",
+            "timestamp": "2025-09-30T06:05:22Z",
+            "venues": ["phoenix-clob", "single-venue"]
+        }"#;
+
+        let value: Value = serde_json::from_str(raw).unwrap();
+        let parsed = ParsedOpportunity::from_payload(&value);
+
+        assert_eq!(parsed.signature, "test-sig");
+        assert_eq!(parsed.venue_a, "phoenix-clob");
+        assert_eq!(parsed.venue_b, "single-venue");
+        assert_eq!(parsed.token_a, "USDT");
+        assert_eq!(parsed.token_b, "SOL");
+        assert_eq!(parsed.profit_bps, 3);
+        assert_eq!(parsed.slot, 370201870);
+        assert!((parsed.estimated_profit_sol - 0.000285).abs() < f64::EPSILON);
+        assert!((parsed.confidence_score - 0.74).abs() < f64::EPSILON);
+        assert_eq!(parsed.strategy, "multi-venue-atomic");
+    }
+
+    #[test]
+    fn parses_legacy_payload() {
+        let raw = r#"{
+            "signature": "legacy-sig",
+            "venue_a": "raydium",
+            "venue_b": "orca",
+            "token_a": "SOL",
+            "token_b": "USDC",
+            "profit_bps": 5,
+            "slot": 123456,
+            "estimated_net_profit_sol": 0.001,
+            "confidence_score": 0.5,
+            "timestamp": "2025-09-29T12:00:00Z",
+            "strategy": "legacy"
+        }"#;
+
+        let value: Value = serde_json::from_str(raw).unwrap();
+        let parsed = ParsedOpportunity::from_payload(&value);
+
+        assert_eq!(parsed.signature, "legacy-sig");
+        assert_eq!(parsed.venue_a, "raydium");
+        assert_eq!(parsed.venue_b, "orca");
+        assert_eq!(parsed.token_a, "SOL");
+        assert_eq!(parsed.token_b, "USDC");
+        assert_eq!(parsed.profit_bps, 5);
+        assert_eq!(parsed.slot, 123456);
+        assert!((parsed.estimated_profit_sol - 0.001).abs() < f64::EPSILON);
     }
 }
