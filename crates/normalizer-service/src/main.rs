@@ -15,6 +15,7 @@ use lazy_static::lazy_static;
 use normalizer_runtime::layouts::LayoutRegistry;
 use normalizer_runtime::models::SwapEvent;
 use serde::Deserialize;
+use std::collections::{HashMap, HashSet};
 use std::{fs, path::PathBuf};
 // use kafka::{make_producer, publish_json};
 use anyhow::{Context, Result};
@@ -215,6 +216,14 @@ async fn handle_raw(
             .map(|k| bs58::encode(k).into_string())
             .collect();
 
+        let token_changes = collect_token_balance_changes(info, &keys_b58);
+        if token_changes.is_empty() {
+            log::debug!(
+                "no token balance changes detected for signature {}",
+                bs58::encode(&info.signature).into_string()
+            );
+        }
+
         for (ix_index, ci) in msg.instructions.iter().enumerate() {
             let pid_index = ci.program_id_index as usize;
             if pid_index >= keys_b58.len() {
@@ -232,7 +241,6 @@ async fn handle_raw(
                 (None, None)
             };
 
-            let token_changes: Vec<rt::TokenBalanceChange> = Vec::new();
             warn_no_block_time_once();
 
             let ctx = rt::TxContext {
@@ -291,6 +299,74 @@ async fn handle_raw(
         }
     }
     Ok(())
+}
+
+fn collect_token_balance_changes(
+    info: &ypp::SubscribeUpdateTransactionInfo,
+    account_keys: &[String],
+) -> Vec<rt::TokenBalanceChange> {
+    let Some(meta) = info.meta.as_ref() else {
+        return Vec::new();
+    };
+
+    let mut pre_map: HashMap<(String, String), u128> = HashMap::new();
+    let mut post_map: HashMap<(String, String), u128> = HashMap::new();
+    let mut owners_mints: HashSet<(String, String)> = HashSet::new();
+
+    for bal in &meta.pre_token_balances {
+        let owner = resolve_owner(&bal.owner, bal.account_index as usize, account_keys);
+        let mint = bal.mint.clone();
+        let amount = bal
+            .ui_token_amount
+            .as_ref()
+            .and_then(|uta| uta.amount.parse::<u128>().ok())
+            .unwrap_or_default();
+        let key = (owner, mint);
+        owners_mints.insert(key.clone());
+        pre_map.insert(key, amount);
+    }
+
+    for bal in &meta.post_token_balances {
+        let owner = resolve_owner(&bal.owner, bal.account_index as usize, account_keys);
+        let mint = bal.mint.clone();
+        let amount = bal
+            .ui_token_amount
+            .as_ref()
+            .and_then(|uta| uta.amount.parse::<u128>().ok())
+            .unwrap_or_default();
+        let key = (owner, mint);
+        owners_mints.insert(key.clone());
+        post_map.insert(key, amount);
+    }
+
+    owners_mints
+        .into_iter()
+        .filter_map(|(owner, mint)| {
+            let key = (owner.clone(), mint.clone());
+            let pre = pre_map.get(&key).copied().unwrap_or(0);
+            let post = post_map.get(&key).copied().unwrap_or(0);
+            if pre == 0 && post == 0 {
+                return None;
+            }
+            if pre == post {
+                return None;
+            }
+            Some(rt::TokenBalanceChange {
+                owner,
+                mint,
+                pre,
+                post,
+            })
+        })
+        .collect()
+}
+
+fn resolve_owner(owner: &str, account_index: usize, account_keys: &[String]) -> String {
+    if !owner.is_empty() {
+        owner.to_string()
+    } else {
+        account_keys.get(account_index).cloned().unwrap_or_default()
+    }
 }
 
 // ---- TAIL: print a topic ----

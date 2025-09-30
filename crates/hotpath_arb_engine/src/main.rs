@@ -16,12 +16,15 @@ use std::sync::{
     Arc, Mutex,
 };
 use std::time::{Instant, SystemTime, UNIX_EPOCH};
-use tokio::time::sleep;
-use tokio::time::Duration;
+use tokio::sync::mpsc;
+use tokio::time::{sleep, Duration};
 use yellowstone_grpc_client::GeyserGrpcClient;
+use yellowstone_grpc_proto::prost::Message as _;
 use yellowstone_grpc_proto::{
     geyser::SubscribeRequestFilterTransactions,
-    prelude::{subscribe_update::UpdateOneof, CommitmentLevel, SubscribeRequest},
+    prelude::{
+        subscribe_update::UpdateOneof, CommitmentLevel, SubscribeRequest, SubscribeUpdateTransaction,
+    },
 };
 
 // KAFKA INTEGRATION - Publish viable arbitrage opportunities to shared mempool
@@ -147,6 +150,7 @@ static SERVICE_START_TIME: Lazy<Instant> = Lazy::new(Instant::now);
 
 /// Optional global database pool for readiness diagnostics
 static DATABASE_POOL: OnceCell<Arc<PgPool>> = OnceCell::new();
+static RAW_KAFKA_PUBLISHER: OnceCell<Arc<DexKafkaPublisher>> = OnceCell::new();
 
 /// Check if live trading is enabled and safe to proceed
 /// This is the MASTER SAFETY GATE - everything flows through here
@@ -332,6 +336,80 @@ struct RateCounter {
     // Store timestamps of recent events (within last minute)
     timestamps: Mutex<VecDeque<u64>>,
     window_seconds: u64,
+}
+
+#[derive(Debug)]
+struct DexKafkaPublisher {
+    topic: String,
+    sender: mpsc::Sender<Vec<u8>>,
+}
+
+impl DexKafkaPublisher {
+    fn new(broker: String, topic: String, buffer: usize) -> Result<Self> {
+        let producer: FutureProducer = ClientConfig::new()
+            .set("bootstrap.servers", &broker)
+            .set("message.timeout.ms", "1000")
+            .set("queue.buffering.max.ms", "10")
+            .set("linger.ms", "0")
+            .create()?;
+
+        let (sender, mut receiver) = mpsc::channel(buffer);
+        let topic_clone = topic.clone();
+        let producer_clone = producer.clone();
+
+        tokio::spawn(async move {
+            while let Some(payload) = receiver.recv().await {
+                let payload_arc = Arc::<[u8]>::from(payload);
+                let payload_slice: &[u8] = payload_arc.as_ref();
+                let record: FutureRecord<'_, [u8], [u8]> =
+                    FutureRecord::to(&topic_clone).payload(payload_slice);
+                match producer_clone.send(record, Duration::from_secs(0)).await {
+                    Ok(_) => {
+                        metrics::counter!("dex_kafka_published_total").increment(1);
+                    }
+                    Err((err, _)) => {
+                        warn!(
+                            "⚠️ Failed to publish raw transaction to Kafka (topic={}): {}",
+                            topic_clone, err
+                        );
+                        metrics::counter!("dex_kafka_publish_errors_total").increment(1);
+                    }
+                }
+            }
+            info!(
+                "ℹ️ Dex Kafka publisher worker exiting for topic {}",
+                topic_clone
+            );
+        });
+
+        info!(
+            "✅ Dex transaction Kafka publisher initialized (topic={}, buffer={})",
+            topic, buffer
+        );
+
+        Ok(Self { topic, sender })
+    }
+
+    fn enqueue(&self, update: &SubscribeUpdateTransaction) {
+        let payload = update.encode_to_vec();
+        match self.sender.try_send(payload) {
+            Ok(_) => {
+                metrics::counter!("dex_kafka_enqueued_total").increment(1);
+            }
+            Err(err) => {
+                metrics::counter!("dex_kafka_dropped_total").increment(1);
+                match err {
+                    mpsc::error::TrySendError::Full(_) => {
+                        warn!("⚠️ Dex Kafka publisher channel full (topic={})", self.topic)
+                    }
+                    mpsc::error::TrySendError::Closed(_) => warn!(
+                        "⚠️ Dex Kafka publisher channel closed (topic={})",
+                        self.topic
+                    ),
+                }
+            }
+        }
+    }
 }
 
 /// Performance Analytics - Comprehensive system for capturing and analyzing hot path performance
@@ -3139,6 +3217,12 @@ impl RateCounter {
     }
 }
 
+fn publish_raw_transaction(update: &SubscribeUpdateTransaction) {
+    if let Some(publisher) = RAW_KAFKA_PUBLISHER.get() {
+        publisher.enqueue(update);
+    }
+}
+
 // Global metrics tracking
 lazy_static::lazy_static! {
     static ref STREAM_COUNTERS: DashMap<u8, AtomicU64> = DashMap::new();
@@ -3482,6 +3566,7 @@ async fn process_consolidated_geyser_stream(
         match message {
             Ok(msg) => {
                 if let Some(UpdateOneof::Transaction(transaction_update)) = msg.update_oneof {
+                    publish_raw_transaction(&transaction_update);
                     _transaction_count += 1;
 
                     // Extract program IDs from the transaction
@@ -3682,6 +3767,7 @@ async fn run_stream_with_retry(
                 println!("📥 Stream {} received message", stream_id);
                 if let Some(UpdateOneof::Transaction(transaction_update)) = update_msg.update_oneof
                 {
+                    publish_raw_transaction(&transaction_update);
                     println!(
                         "💰 Stream {} processing transaction at slot {}",
                         stream_id, transaction_update.slot
@@ -4784,6 +4870,39 @@ async fn main() -> Result<()> {
     property_store
         .load_from_smart_filter_config(&smart_filter_config)
         .await;
+
+    if RAW_KAFKA_PUBLISHER.get().is_none() {
+        let enable_raw_kafka = std::env::var("ENABLE_DEX_KAFKA")
+            .unwrap_or_else(|_| "true".to_string())
+            .to_lowercase()
+            != "false";
+
+        if enable_raw_kafka {
+            let kafka_broker =
+                std::env::var("KAFKA_BROKER").unwrap_or_else(|_| "localhost:29092".to_string());
+            let kafka_topic = std::env::var("DEX_TRANSACTIONS_TOPIC")
+                .unwrap_or_else(|_| "dex-transactions".to_string());
+
+            match DexKafkaPublisher::new(kafka_broker, kafka_topic.clone(), 1024) {
+                Ok(publisher) => {
+                    let publisher = Arc::new(publisher);
+                    if RAW_KAFKA_PUBLISHER.set(publisher).is_err() {
+                        warn!(
+                            "⚠️ Dex Kafka publisher already initialised; skipping duplicate setup"
+                        );
+                    }
+                }
+                Err(e) => {
+                    warn!(
+                        "⚠️ Failed to initialise dex transaction Kafka publisher (topic={}): {}",
+                        kafka_topic, e
+                    );
+                }
+            }
+        } else {
+            info!("ℹ️ Dex transaction Kafka publishing disabled via ENABLE_DEX_KAFKA=false");
+        }
+    }
 
     // Create database pool for PostgreSQL NOTIFY integration if available
     let shared_config_state = if let Some(db_url) = &database_url {

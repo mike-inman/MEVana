@@ -1,29 +1,37 @@
-# MEVana — AI Handoff Pack (v1.1)
-Last updated: 2025-09-15
+# MEVana — AI Handoff Pack (v1.2)
+Last updated: 2025-09-30
+
+> **Snapshot (2025‑09‑30)**
+> - Hotpath (`hotpath_ar b_engine`) now pushes raw geyser transactions to Kafka (`dex-transactions`) via the in-process `DexKafkaPublisher`. Arbitrage detections continue to land in `alerts.arbitrage.opportunities`; live execution remains blocked by the safety gate.
+> - `normalizer-service` consumes `dex-transactions` and emits Whirlpool swaps to `orca-swaps.parsed.v2`. Extractors for Raydium/Meteora/Phoenix still return `None`, so downstream discovery/Grafana remain dry beyond Whirlpool.
+> - Focus for the next helper: finish swap extractors, restart discovery once data flows, and refresh Grafana/UI metrics for venue throughput.
 
 > Single doc for any assistant (or future you) to resume work fast. Includes current state, how to run, how to verify, and what’s next.
 
 ---
 
-## 0) Snapshot — What’s Running / Topics
+## 0) Snapshot — What’s Running / Topics (2025‑09‑30)
 
-**Services (Rust):**
+**Core services (Rust/systemd):**
 
-- `dex-stream-orca` → produces `` (Yellowstone Geyser → Kafka)
-- `normalizer-orca` → consumes `orca-swaps`, emits ``, DLQ to ``
-- `price-aggregator` → consumes `orca-swaps.parsed`, emits compacted ``
-- `ui-gateway` → WS fan‑out for `prices.latest` and `orca-swaps.parsed`
-- `ui-web` → React/Tailwind dashboard (Neon Carbon theme)
+- `hotpath-arb-engine` (bundles the old `multi-geyser-streams`): subscribes to Shyft, runs MEV detection, emits raw tx → `dex-transactions`, arbitrage events → `alerts.arbitrage.opportunities`.
+- `normalizer-service`: consumes `dex-transactions`, emits Whirlpool swaps → `orca-swaps.parsed.v2` (other venues pending extractor work).
+- `discovery-service`: running, waiting on expanded swap output to resume meaningful metrics.
+- `ui-gateway` / `ui-web`: dashboards expect parsed swap/price topics; refresh once data flows beyond Whirlpool.
 
-**Kafka Topics:**
+**Kafka topics in play:**
 
-- `orca-swaps` (protobuf, input)
-- `orca-swaps.parsed` (JSON, normalized swaps)
-- `orca-swaps.dlq` (JSON, errors)
-- `prices.latest` (JSON, compacted)
-- (optional) `orca-swaps.heartbeat`
+- `dex-transactions` – **active**, raw geyser feed back online.
+- `alerts.arbitrage.opportunities` – **active**, MEV detections landing here; trading still blocked by gate.
+- `orca-swaps.parsed.v2` – **active for Whirlpool**; offsets moving after normalizer restart.
+- Raydium/Meteora/Phoenix parsed topics – **empty** until extractors emit swaps.
+- Legacy topics (`normalized-swaps.v1`, `prices.latest`) — not used by the current pipeline.
 
-**Note (Kafka warning):** "Due to limitations in metric names, topics with a period (`.`) or underscore (`_`) could collide…" — benign for dev. Prefer not mixing both in new topic names.
+**Operational notes:**
+
+- Event bus config now logs parse failures and increments Kafka publish metrics (`event_bus_kafka_published_total`).
+- Hotpath metrics include `dex_kafka_enqueued_total` / `dex_kafka_published_total` plus the per-stream rate gauges (`multi_geyser_stream_messages_per_minute`). Wire these into Grafana when cycles allow.
+- Block times remain `0` because the geyser payloads omit them—plan on enriching via block stream or tolerating the default for now.
 
 ---
 
@@ -158,30 +166,26 @@ kafka-topics --bootstrap-server localhost:29092 \
 
 ---
 
-## 5) Next 2–3 Steps
+## 5) Next 2–3 Steps (2025‑09‑30)
 
-1. **Wire codegen normalizer-service** into the loop
+1. **Finish swap extraction coverage**
+   - Implement the `extract_*_swap_event` helpers for Raydium CLMM/AMM, Meteora DLMM, and Phoenix (see `crates/normalizer-service/src/raydium_map.rs`, `meteora_map.rs`).
+   - Increment `SWAPS_EXTRACTED` when a swap is emitted and ensure the new events land in venue-specific Kafka topics (`orca-swaps.parsed.v2`, future `raydium-swaps.parsed` etc.).
 
-   - Extend `normalizer-orca` to call the generated decoders (or replace with `normalizer-service` binary per‑DEX).
-   - Add output `...dex` topic for richer swap records.
+2. **Restart & verify discovery once swaps flow**
+   - After extractors produce real data, confirm `discovery-service` metrics tick up (`http://127.0.0.1:9102/metrics`) and fix any schema drift.
 
-2. **Raydium**
-
-   - Add `profiles/raydium.yml` and IDLs (AMM + CLMM), run codegen (already compiling), point a Raydium stream → same pipeline.
-
-3. **UI quality passes**
-
-   - Focus drawer chart per pair (Lightweight‑Charts)
-   - Virtualized swaps; filters (pair/DEX) with URL state
-   - Coalesced WS frames (250ms) in `ui-gateway`
+3. **Refresh Grafana / UI observability**
+   - Add charts for `multi_geyser_stream_messages_per_minute`, `dex_kafka_*`, and the normalizer swap counters.
+   - Surface arbitrage counts (`alerts.arbitrage.opportunities`) alongside the parsed swap feeds for live decision-making.
 
 ---
 
 ## 6) Known Quirks & Fixes
 
-- **Kafka metric name warning** about `.` vs `_`: harmless in dev; prefer consistent naming for new topics.
-- **Occasional null amounts** in `orca-swaps.parsed`: expected until codegen extractor is wired; DLQ captures broken frames.
-- **ESLint v9 config**: use flat `eslint.config.js` (already set up) to avoid deprecated options warnings.
+- **Block time = 0** – Geyser snapshots don’t include block timestamps; enrich later via block stream or tolerate zero for now (discovery should handle missing values).
+- **Partial extractor coverage** – Only Whirlpool swaps emit today; other venues still rely on the generated decoder stubs returning `None`.
+- **Metrics wiring** – `normalizer_swaps_extracted` counter exists but may not reflect venue hits until we increment it inside the extractor loop.
 
 ---
 
@@ -193,25 +197,24 @@ Root `` (read by `run-dev.sh`):
 KAFKA_BROKER=localhost:29092
 ENDPOINT=<geyser-grpc-url>
 X_TOKEN=<your-token>
-PRICES_TOPIC=prices.latest
-SWAPS_TOPIC=orca-swaps.parsed
-ORCA_IN=orca-swaps
-ORCA_OUT=orca-swaps.parsed
-ORCA_DLQ=orca-swaps.dlq
+ENABLE_DEX_KAFKA=true
+DEX_TRANSACTIONS_TOPIC=dex-transactions
+EVENT_BUS_CONFIG='{"enable_kafka":true,"kafka_topic":"alerts.arbitrage.opportunities", ... }'
 ```
 
-Script echoes **ENDPOINT** and **X\_TOKEN** on startup so you can confirm the right stream credentials.
+Script echoes **ENDPOINT** / **X_TOKEN** at start so you can verify the right Geyser credentials.
 
 ---
 
-## 8) If Starting Fresh (AI quick start)
+## 8) Quick Start Checklist
 
-1. Ensure Kafka running; create `prices.latest` compacted.
-2. Run `./infra/scripts/run-dev.sh` (reads `.env.dev`).
-3. Check `infra/logs/*.log` for errors; confirm WS green in UI.
-4. If no data, verify Geyser creds (ENDPOINT, X\_TOKEN). If still empty, seed mock data into gateway or UI store to validate rendering.
+1. Verify Kafka (`kafka-topics --list`) and ensure `dex-transactions`, `alerts.arbitrage.opportunities`, `orca-swaps.parsed.v2` exist.
+2. Launch hotpath + normalizer (`systemctl status hotpath-arb-engine.service`, `normalizer-service.service`); watch logs for `DexKafkaPublisher` and “→ normalized” messages.
+3. Confirm metrics:
+   - `http://127.0.0.1:8088/metrics` → `dex_kafka_*`, `multi_geyser_*`
+   - `http://127.0.0.1:9901/metrics` → `normalizer_transactions_processed`
+4. If swaps are missing, start with Whirlpool (already emitting) then implement remaining venue extractors.
 
 ---
 
-*End v1.1 — keep this at repo root under **`docs/ai-handoff.md`** as well if desired.*
-
+*End v1.2 — keep this at repo root under **`docs/ai-handoff.md`** as well if desired.*

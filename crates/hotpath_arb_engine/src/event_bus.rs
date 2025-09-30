@@ -32,6 +32,7 @@ pub struct TradingEvent {
 
 /// Destinations for event reporting
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(default)]
 pub struct ReporterConfig {
     pub enable_file_logging: bool,
     pub file_path: String,
@@ -89,15 +90,7 @@ impl ReporterService {
         let kafka_producer = if config.enable_kafka {
             match rdkafka::config::ClientConfig::new()
                 .set("bootstrap.servers", &config.kafka_broker)
-                .set("acks", "0") // Fire-and-forget (no ack wait)
-                .set("linger.ms", "1") // Batch quickly for throughput
-                .set("batch.size", "65536") // 64KB batches
-                .set("buffer.memory", "67108864") // 64MB buffer
-                .set("max.block.ms", "0") // Never block producer
-                .set("delivery.timeout.ms", "1000") // Quick timeout
-                .set("compression.type", "snappy") // Fast compression
-                .set("retries", "0") // No retries for speed
-                .set("enable.idempotence", "false") // Disable for max speed
+                .set("message.timeout.ms", "1000") // Quick timeout without broker ack wait
                 .create()
             {
                 Ok(producer) => {
@@ -226,8 +219,13 @@ impl ReporterService {
 
                 match producer.send(record, Duration::ZERO).await {
                     Ok(delivery_result) => {
+                        metrics::counter!("event_bus_kafka_published_total").increment(1);
+                        info!(
+                            "📬 Published opportunity to Kafka (topic={} signature={})",
+                            self.config.kafka_topic, event.signature
+                        );
                         debug!(
-                            "📤 Published opportunity {} to Kafka: {:?}",
+                            "📤 Kafka delivery result for {}: {:?}",
                             &event.signature[0..8],
                             delivery_result
                         );
@@ -238,6 +236,7 @@ impl ReporterService {
                             &event.signature[0..8],
                             kafka_error
                         );
+                        metrics::counter!("event_bus_kafka_publish_errors_total").increment(1);
                         return Err(kafka_error);
                     }
                 }
@@ -678,9 +677,23 @@ impl EventBus {
 lazy_static::lazy_static! {
     pub static ref EVENT_BUS: Arc<EventBus> = {
         let config = match std::env::var("EVENT_BUS_CONFIG") {
-            Ok(json) => serde_json::from_str(&json).unwrap_or_default(),
+            Ok(json) => match serde_json::from_str(&json) {
+                Ok(cfg) => cfg,
+                Err(err) => {
+                    warn!("⚠️ Failed to parse EVENT_BUS_CONFIG (falling back to defaults): {}", err);
+                    ReporterConfig::default()
+                }
+            },
             Err(_) => ReporterConfig::default(),
         };
+
+        info!(
+            "📡 EventBus configuration resolved (kafka_enabled={} topic={} broker={} sampling_rate={})",
+            config.enable_kafka,
+            config.kafka_topic,
+            config.kafka_broker,
+            config.sampling_rate
+        );
 
         // Initialize WITHOUT database pool to prevent duplicate connections
         // The main application will provide the centralized database pool via set_shared_database_pool()
