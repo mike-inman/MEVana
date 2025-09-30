@@ -1,6 +1,7 @@
 
         mod program_raydium_clmm { include!(concat!(env!("OUT_DIR"), "/program_raydium_clmm.rs")); }
 mod program_jupiter { include!(concat!(env!("OUT_DIR"), "/program_jupiter.rs")); }
+mod program_meteora_dlmm { include!(concat!(env!("OUT_DIR"), "/program_meteora_dlmm.rs")); }
 mod program_phoenix { include!(concat!(env!("OUT_DIR"), "/program_phoenix.rs")); }
 mod program_raydium_amm { include!(concat!(env!("OUT_DIR"), "/program_raydium_amm.rs")); }
 mod program_pump_amm { include!(concat!(env!("OUT_DIR"), "/program_pump_amm.rs")); }
@@ -16,6 +17,7 @@ mod program_openbook_v2 { include!(concat!(env!("OUT_DIR"), "/program_openbook_v
                 let mut map: std::collections::HashMap<&'static str, &'static str> = std::collections::HashMap::new();
                 map.insert("program_raydium_clmm", "CAMMCzo5YL8w4VFF8KVHrK22GGUsp5VTaW7grrKgrWqK");
 map.insert("program_jupiter", "JUP4Fb2cqiRUcaTHdrPC8h2gNsA2ETXiPDD33WcGuJB");
+map.insert("program_meteora_dlmm", "5Q544fKrFoe6tsEbD7S8EmxGTJYAKtTVhAW5Q5pge4j1");
 map.insert("program_phoenix", "PhoeNiXZ8ByJGLkxNfZRnkUfjvmuYqLR89jjFHGqdXY");
 map.insert("program_raydium_amm", "675kPX9MHTjS2zt1qfr1NYHuzeLXfQM9H24wFSUt1Mp8");
 map.insert("program_pump_amm", "pAMMBay6oceH9fJKBRHGP5D4bD4sWpmSwMn52FMfXEA");
@@ -32,6 +34,7 @@ map.insert("program_openbook_v2", "opnb2LAfJYbRMAHHvqjCwQxanZn7ReEHp1k81EohpZb")
             let mut boxes: Vec<Box<dyn normalizer_runtime::SwapExtractor>> = Vec::new();
             boxes.push(Box::new(program_raydium_clmm::Extractor { program_id: PROGRAM_IDS.get("program_raydium_clmm").unwrap() }));
 boxes.push(Box::new(program_jupiter::Extractor { program_id: PROGRAM_IDS.get("program_jupiter").unwrap() }));
+boxes.push(Box::new(program_meteora_dlmm::Extractor { program_id: PROGRAM_IDS.get("program_meteora_dlmm").unwrap() }));
 boxes.push(Box::new(program_phoenix::Extractor { program_id: PROGRAM_IDS.get("program_phoenix").unwrap() }));
 boxes.push(Box::new(program_raydium_amm::Extractor { program_id: PROGRAM_IDS.get("program_raydium_amm").unwrap() }));
 boxes.push(Box::new(program_pump_amm::Extractor { program_id: PROGRAM_IDS.get("program_pump_amm").unwrap() }));
@@ -50,6 +53,7 @@ boxes.push(Box::new(program_openbook_v2::Extractor { program_id: PROGRAM_IDS.get
             match pid {
                 "CAMMCzo5YL8w4VFF8KVHrK22GGUsp5VTaW7grrKgrWqK" => Some(program_raydium_clmm::decode_anchor),
 "JUP4Fb2cqiRUcaTHdrPC8h2gNsA2ETXiPDD33WcGuJB" => Some(program_jupiter::decode_anchor),
+"5Q544fKrFoe6tsEbD7S8EmxGTJYAKtTVhAW5Q5pge4j1" => Some(program_meteora_dlmm::decode_anchor),
 "PhoeNiXZ8ByJGLkxNfZRnkUfjvmuYqLR89jjFHGqdXY" => Some(program_phoenix::decode_anchor),
 "675kPX9MHTjS2zt1qfr1NYHuzeLXfQM9H24wFSUt1Mp8" => Some(program_raydium_amm::decode_anchor),
 "pAMMBay6oceH9fJKBRHGP5D4bD4sWpmSwMn52FMfXEA" => Some(program_pump_amm::decode_anchor),

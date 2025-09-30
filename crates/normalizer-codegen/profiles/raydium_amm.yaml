@@ -2,9 +2,15 @@ program_name: raydium_amm
 program_id: 675kPX9MHTjS2zt1qfr1NYHuzeLXfQM9H24wFSUt1Mp8
 idl_file: raydium_amm.json    # <— add this so codegen can find the IDL
 swap_instructions:
-  - name: swap
+  - name: swapBaseIn
     kind: CPMM
-    pool_account_roles: ["amm", "pool", "amm_info", "amm_id"]
-    user_authority_roles: ["user_owner", "userAuthority", "authority", "owner"]
-    token_accounts_roles_in:  ["user_source", "userSourceTokenAccount"]
-    token_accounts_roles_out: ["user_destination", "userDestinationTokenAccount"]
+    pool_account_roles: ["amm", "poolCoinTokenAccount", "poolPcTokenAccount"]
+    user_authority_roles: ["userSourceOwner", "authority", "userDestinationOwner"]
+    token_accounts_roles_in: ["userSourceTokenAccount"]
+    token_accounts_roles_out: ["userDestinationTokenAccount"]
+  - name: swapBaseOut
+    kind: CPMM
+    pool_account_roles: ["amm", "poolCoinTokenAccount", "poolPcTokenAccount"]
+    user_authority_roles: ["userDestinationOwner", "authority", "userSourceOwner"]
+    token_accounts_roles_in: ["userSourceTokenAccount"]
+    token_accounts_roles_out: ["userDestinationTokenAccount"]

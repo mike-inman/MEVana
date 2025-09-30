@@ -281,9 +281,10 @@ async fn handle_raw(
                     }
 
                     let swap = normalizer_runtime::adapters::to_swap_event(&ns);
+                    let target_topic = resolve_swap_topic(out_topic, &swap.dex);
                     crate::kafka::publish_json_ff(
                         producer.clone(),
-                        out_topic.to_string(),
+                        target_topic,
                         swap.pool_id.clone(),
                         swap.clone(),
                     );
@@ -424,6 +425,18 @@ fn map_ns_to_swap(ns: &rt::NormalizedSwapV1) -> SwapEvent {
             .map(|b| b as u64)
             .unwrap_or_default()
             .to_string(),
+    }
+}
+
+fn resolve_swap_topic(default_topic: &str, dex: &str) -> String {
+    match dex {
+        "whirlpool" | "orca_whirlpool" => "orca-swaps.parsed.v2".to_string(),
+        "raydium_clmm" => "raydium-swaps.parsed".to_string(),
+        "raydium_amm" => "raydium-swaps.parsed".to_string(),
+        "meteora_dlmm" => "meteora-swaps.parsed".to_string(),
+        "meteora_damm" => "meteora-swaps.parsed".to_string(),
+        "phoenix" => "phoenix-swaps.parsed".to_string(),
+        _ => default_topic.to_string(),
     }
 }
 
@@ -632,9 +645,10 @@ fn run_fixture(path: PathBuf) -> Result<()> {
             }
 
             let swap = normalizer_runtime::adapters::to_swap_event(&ns);
+            let resolved_topic = resolve_swap_topic(&topic, &swap.dex);
             crate::kafka::publish_json_ff(
                 producer.clone(),
-                topic.clone(),
+                resolved_topic,
                 swap.pool_id.clone(),
                 swap.clone(),
             );
