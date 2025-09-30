@@ -82,6 +82,7 @@ jobs:
               wallet|vault|wallet-vault) echo wallet-vault ;;
               monitoring|monitoring-service) echo monitoring-service ;;
               arb|arb-engine|arb_engine) echo arb-engine ;;
+              price-aggregator|price_aggregator) echo price-aggregator ;;
               api|api-service|gateway) echo api-service ;;
               *) echo "$1" ;;
             esac
@@ -106,7 +107,7 @@ jobs:
               fi
             done
           else
-            svc_list="hotpath-arb-engine normalizer-service discovery-service executor-service wallet-vault monitoring-service api-service"
+            svc_list="hotpath-arb-engine normalizer-service discovery-service executor-service wallet-vault monitoring-service price-aggregator api-service"
           fi
 
           svc_list=$(printf '%s' "$svc_list" | xargs)
@@ -200,6 +201,16 @@ jobs:
               echo "api-service.service installed successfully"
             else
               echo "Warning: api-service.service file not found; gateway restart will be skipped"
+            fi
+          fi
+
+          if [[ " $svcs " == *" price-aggregator "* ]]; then
+            echo "Installing price-aggregator.service (if available)..."
+            if [ -f /opt/MEVana/infrastructure/systemd/price-aggregator.service ]; then
+              cp /opt/MEVana/infrastructure/systemd/price-aggregator.service /etc/systemd/system/
+              echo "price-aggregator.service installed successfully"
+            else
+              echo "Warning: price-aggregator.service file not found; aggregator start will be skipped"
             fi
           fi
 
@@ -341,6 +352,9 @@ jobs:
               monitoring-service)
                 unit="monitoring-service.service"
                 ;;
+              price-aggregator)
+                unit="price-aggregator.service"
+                ;;
               arb-engine)
                 unit="arb-engine.service"
                 ;;
@@ -372,6 +386,7 @@ jobs:
               executor-service) unit="executor-service.service" ;;
               wallet-vault) unit="wallet-vault.service" ;;
               monitoring-service) unit="monitoring-service.service" ;;
+              price-aggregator) unit="price-aggregator.service" ;;
               arb-engine) unit="arb-engine.service" ;;
               api-service) unit="api-service.service" ;;
               *) continue ;;

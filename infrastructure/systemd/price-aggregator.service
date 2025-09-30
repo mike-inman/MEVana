@@ -1,0 +1,35 @@
+[Unit]
+Description=MEVana Price Aggregator
+After=network-online.target kafka.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=mevana
+Group=mevana
+WorkingDirectory=/opt/MEVana
+ExecStart=/opt/MEVana/bin/price-aggregator
+Restart=on-failure
+RestartSec=5
+EnvironmentFile=/etc/mevana/common.env
+EnvironmentFile=-/etc/mevana/price-aggregator.env
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=full
+ProtectHome=read-only
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+LockPersonality=true
+MemoryDenyWriteExecute=true
+RestrictRealtime=true
+RestrictSUIDSGID=true
+RestrictNamespaces=true
+RemoveIPC=true
+SystemCallFilter=@system-service @network-io @file-system @process
+SystemCallFilter=~@keyring @mount @module
+ReadWritePaths=/opt/MEVana
+LimitNOFILE=65535
+
+[Install]
+WantedBy=multi-user.target
