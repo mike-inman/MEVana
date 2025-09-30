@@ -1,43 +1,45 @@
 # MEVana System Health Assessment & Optimization Report
 
-**Date:** September 27, 2025
-**Status:** 🔧 Needs Optimization
-**Live Trading Readiness:** 65%
+**Last updated:** 2025-09-29
+**Status:** ⚠️ Data pipeline incomplete
+**Live Trading Readiness:** 55%
 
 ## Executive Summary
 
-After comprehensive analysis of both MEVana and MEVana-UI codebases, I've identified critical issues preventing reliable live trading deployment. The system has strong architectural foundations but suffers from configuration misalignment, port conflicts, incomplete gateway implementation, and CI/CD inefficiencies.
+Core services are online and the Shyft geyser feed is pumping transactions into the hotpath engine, but the Kafka pipeline is still dry. Grafana now stays up and the UI deploys cleanly, yet no arbitrage events or normalized swaps reach Kafka. The next helper must focus on restoring the ingestion chain (`hotpath → Kafka → normalizer → gateway`) before any additional features land.
 
-## 🔴 Critical Issues (Must Fix Before Live Trading)
+## 🔴 Immediate Gaps
 
-### 1. Port Configuration Mismatch
-**Problem:** MEVana-UI expects gateway on port 8096, but api-service runs on 8092/8095
-- UI configured: `http://149.28.56.125:8096/gateway`
-- API service actual: Port 8092 (REST), 8095 (WebSocket)
-- **Impact:** Complete UI-backend disconnect
+### 1. Hotpath Kafka publishing stalled
+Hotpath detects opportunities (`multi_geyser_stream_*`, `hotpath_transactions_processed_total` rising) and the event bus logs “📤 Sending arbitrage detected event…”, but the `alerts.arbitrage.opportunities` topic never advances from offset `0`. No success/error messages appear; pending events in Prometheus (`event_bus_pending_events`) keep climbing. The Kafka producer likely never flushes or the channel is backlogged.
 
-### 2. Gateway Service Not Fully Deployed
-**Problem:** api-service gateway is built but not consistently started
-- Missing from some deployment workflows
-- No systemd unit file found in infrastructure/systemd/
-- Gateway consumers not properly initialized with Kafka topics
+### 2. `dex-transactions` empty
+The geyser client no longer writes raw transactions into Kafka, leaving the normalizer and discovery services idle (`dex-transactions` offsets remain `0:0`). Without this feeder, downstream topics such as `orca-swaps.parsed.v2` will never see updates.
 
-### 3. Network Topology Issues
-**Problem:** Mixed Docker/bare-metal architecture creates routing complexity
-- Docker services use `mevana_net` network
-- Bare-metal services use `host.docker.internal`
-- Prometheus scraping through host gateway adds latency
-- Redis connection string mismatch (6379 vs 6380)
+### 3. Gateway consumers idling
+API service connects to Kafka, but the swap and opportunity topics are empty, so `/api/v1/metrics/performance` and SSE endpoints return no data. UI smoke tests must currently allow empty performance payloads.
 
-### 4. Monitoring Configuration Broken
-**Problem:** Slack alerting not working, Prometheus targets misconfigured
-- Missing `/etc/mevana/alerts.env` with `SLACK_WEBHOOK_URL`
-- Some Prometheus scrape targets pointing to wrong ports
-- Grafana dashboards not loading wallet metrics properly
+## 🟡 Secondary Concerns
 
-## 🟡 Major Issues (Impacting Reliability)
+- Grafana alert provisioning removed due to schema drift; a clean v10-compatible ruleset needs to be rebuilt.
+- Wallet vault auto-backup still logs permission denied (investigate `/opt/MEVana` ownership for backup targets).
+- UI layout emits repeated 404s for `/api/system-status`; monitoring-service proxy route needs to be wired in.
 
-### 5. CI/CD Performance
+## ✅ What’s Working
+
+- Systemd services: `hotpath-arb-engine`, `normalizer-service`, `discovery-service`, `executor-service`, `wallet-vault`, `monitoring-service`, `api-service` all healthy.
+- Grafana and Prometheus containers stay up; `/api/health` responds 200.
+- UI deploy pipeline runs (gateway smoke test now warns instead of failing when performance data is empty).
+- Rogue Next.js processes removed; only `mevana-ui.service` hosts the frontend.
+
+## Next Steps for the Helper
+
+1. **Unclog the event bus** – instrument `publish_to_kafka` to log successes/failures, confirm the `EVENT_BUS_CONFIG` is parsed correctly on startup, and ensure the mpsc queue drains. Once fixed, watch `alerts.arbitrage.opportunities` offsets climb and verify API `/metrics/performance` returns samples.
+2. **Restore `dex-transactions` producer** – restart or reintroduce the geyser-to-Kafka streamer (likely `multi-geyser-streams` or an equivalent task). After publishing resumes, `normalizer-service` should emit to `orca-swaps.parsed.v2` and discovery metrics will tick up.
+3. **Re-enable Grafana alerts** – author a new provisioning set using the v10 `condition/data` syntax, test locally, then redeploy to the server.
+4. **UI diagnostics** – once Kafka topics fill, update the gateway smoke test to enforce non-empty performance data again, and hook `/api/system-status` to the monitoring service.
+
+Document progress in this file before logging out; remove or rewrite outdated items as fixes land.
 **Current Build Time:** 6-7 minutes for full deployment
 - Rust compilation not cached between runs
 - Docker builds happening even when unnecessary
