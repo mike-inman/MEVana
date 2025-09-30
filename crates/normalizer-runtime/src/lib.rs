@@ -6,6 +6,7 @@ pub mod adapters;
 pub mod layout_parser;
 pub mod layouts;
 pub mod models;
+pub mod transaction;
 
 /// ---------- Normalized universal swap shape ----------
 

@@ -15,7 +15,6 @@ use lazy_static::lazy_static;
 use normalizer_runtime::layouts::LayoutRegistry;
 use normalizer_runtime::models::SwapEvent;
 use serde::Deserialize;
-use std::collections::{HashMap, HashSet};
 use std::{fs, path::PathBuf};
 // use kafka::{make_producer, publish_json};
 use anyhow::{Context, Result};
@@ -209,182 +208,34 @@ async fn handle_raw(
         None => return Ok(()),
     };
 
-    if let Some(msg) = info.transaction.as_ref().and_then(|t| t.message.as_ref()) {
-        let keys_b58: Vec<String> = msg
-            .account_keys
-            .iter()
-            .map(|k| bs58::encode(k).into_string())
-            .collect();
+    let swaps = normalizer_runtime::transaction::extract_swaps_from_update(
+        &update,
+        extractors,
+        &gen::decoder_for,
+        None,
+    )?;
 
-        let token_changes = collect_token_balance_changes(info, &keys_b58);
-        let sig_b58 = bs58::encode(&info.signature).into_string();
-        log::debug!(
-            "token balance change count={} for signature {}",
-            token_changes.len(),
-            sig_b58
+    warn_no_block_time_once();
+
+    for swap in swaps {
+        SWAPS_EXTRACTED.inc();
+        let target_topic = resolve_swap_topic(out_topic, &swap.dex);
+        crate::kafka::publish_json_ff(
+            producer.clone(),
+            target_topic,
+            swap.pool_id.clone(),
+            swap.clone(),
         );
-        if token_changes.is_empty() {
-            log::debug!("no token balance changes detected for signature {sig_b58}");
-        }
-
-        for (ix_index, ci) in msg.instructions.iter().enumerate() {
-            let pid_index = ci.program_id_index as usize;
-            if pid_index >= keys_b58.len() {
-                continue;
-            }
-            let pid = &keys_b58[pid_index];
-            log::debug!("processing instruction program_id={pid}");
-
-            let (decoded_name, decoded_roles) = if let Some(dec) = gen::decoder_for(pid) {
-                if let Some((name, roles)) = dec(&ci.data, &ci.accounts, &keys_b58) {
-                    (Some(name), Some(roles))
-                } else {
-                    (None, None)
-                }
-            } else {
-                (None, None)
-            };
-
-            if decoded_name.is_some() {
-                log::debug!(
-                    "decoded instruction program_id={pid} name={}",
-                    decoded_name.as_deref().unwrap()
-                );
-            }
-
-            warn_no_block_time_once();
-
-            let ctx = rt::TxContext {
-                slot: update.slot,
-                block_time_unix: 0,
-                signature: bs58::encode(&info.signature).into_string(),
-                ix_index: ix_index as u16,
-                program_id: pid.clone(),
-                meta_ok: info.meta.as_ref().map(|m| m.err.is_none()).unwrap_or(false),
-                token_balance_changes: &token_changes,
-                account_data_by_pubkey: None,
-                decoded_name,
-                decoded_args_json: None,
-                decoded_accounts_by_role: decoded_roles,
-            };
-
-            let mut matched_extractor = false;
-            for ex in extractors.iter().filter(|e| e.program_id() == pid) {
-                matched_extractor = true;
-                log::debug!("running extractor for program_id={pid}");
-                if let Some(mut ns) = ex.try_extract(&ctx) {
-                    SWAPS_EXTRACTED.inc();
-                    // 1) fill from decoded roles
-                    if ns.pool_id.is_empty() {
-                        if let Some(roles) = &ctx.decoded_accounts_by_role {
-                            if let Some(pid) = roles.get("whirlpool").or_else(|| roles.get("pool"))
-                            {
-                                ns.pool_id = pid.clone();
-                            }
-                        }
-                    }
-                    // 2) live fallback: first referenced account of this instruction
-                    if ns.pool_id.is_empty() {
-                        if let Some(first_idx) = ci.accounts.first() {
-                            if let Some(k) = keys_b58.get(*first_idx as usize) {
-                                ns.pool_id = k.clone();
-                            }
-                        } else if let Some(k) = keys_b58.first() {
-                            ns.pool_id = k.clone();
-                        }
-                    }
-
-                    let swap = normalizer_runtime::adapters::to_swap_event(&ns);
-                    let target_topic = resolve_swap_topic(out_topic, &swap.dex);
-                    crate::kafka::publish_json_ff(
-                        producer.clone(),
-                        target_topic,
-                        swap.pool_id.clone(),
-                        swap.clone(),
-                    );
-                    log::info!(
-                        "→ normalized: {} {} -> {} (slot {})",
-                        ns.dex,
-                        ns.token_in_mint,
-                        ns.token_out_mint,
-                        ns.slot
-                    );
-                }
-            }
-            if !matched_extractor {
-                log::debug!("no extractor matched program_id={pid}");
-            }
-        }
+        log::info!(
+            "→ normalized: {} {} -> {} (slot {})",
+            swap.dex,
+            swap.token_in_mint,
+            swap.token_out_mint,
+            swap.slot
+        );
     }
+
     Ok(())
-}
-
-fn collect_token_balance_changes(
-    info: &ypp::SubscribeUpdateTransactionInfo,
-    account_keys: &[String],
-) -> Vec<rt::TokenBalanceChange> {
-    let Some(meta) = info.meta.as_ref() else {
-        return Vec::new();
-    };
-
-    let mut pre_map: HashMap<(String, String), u128> = HashMap::new();
-    let mut post_map: HashMap<(String, String), u128> = HashMap::new();
-    let mut owners_mints: HashSet<(String, String)> = HashSet::new();
-
-    for bal in &meta.pre_token_balances {
-        let owner = resolve_owner(&bal.owner, bal.account_index as usize, account_keys);
-        let mint = bal.mint.clone();
-        let amount = bal
-            .ui_token_amount
-            .as_ref()
-            .and_then(|uta| uta.amount.parse::<u128>().ok())
-            .unwrap_or_default();
-        let key = (owner, mint);
-        owners_mints.insert(key.clone());
-        pre_map.insert(key, amount);
-    }
-
-    for bal in &meta.post_token_balances {
-        let owner = resolve_owner(&bal.owner, bal.account_index as usize, account_keys);
-        let mint = bal.mint.clone();
-        let amount = bal
-            .ui_token_amount
-            .as_ref()
-            .and_then(|uta| uta.amount.parse::<u128>().ok())
-            .unwrap_or_default();
-        let key = (owner, mint);
-        owners_mints.insert(key.clone());
-        post_map.insert(key, amount);
-    }
-
-    owners_mints
-        .into_iter()
-        .filter_map(|(owner, mint)| {
-            let key = (owner.clone(), mint.clone());
-            let pre = pre_map.get(&key).copied().unwrap_or(0);
-            let post = post_map.get(&key).copied().unwrap_or(0);
-            if pre == 0 && post == 0 {
-                return None;
-            }
-            if pre == post {
-                return None;
-            }
-            Some(rt::TokenBalanceChange {
-                owner,
-                mint,
-                pre,
-                post,
-            })
-        })
-        .collect()
-}
-
-fn resolve_owner(owner: &str, account_index: usize, account_keys: &[String]) -> String {
-    if !owner.is_empty() {
-        owner.to_string()
-    } else {
-        account_keys.get(account_index).cloned().unwrap_or_default()
-    }
 }
 
 // ---- TAIL: print a topic ----

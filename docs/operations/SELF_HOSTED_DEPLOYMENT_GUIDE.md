@@ -1,12 +1,14 @@
 Self‑Hosted Deployment Strategy & Workflows (Production Server)
 
-Last updated: 2025-09-30
+Last updated: 2025-10-01
 
 ## Quickstart for the next helper
 
 1. **Start with `docs/operations/ADMIN_CONTROL_PANEL.md`.** It explains the Clerk JWT setup, Grafana button requirements, per-wallet metrics, and audit expectations you must validate immediately after a deploy.
 2. Ensure `/etc/mevana/common.env` and `/etc/mevana/executor.env` define `WALLET_LABELS=/opt/MEVana/keys/id.json=prod,...` so Prometheus exports `mevana_wallet_balance_sol{wallet="prod"}` and Grafana panels light up without guesswork.
-3. After rolling new binaries, run `systemctl status executor-service` and curl the metrics endpoint (`curl -s http://127.0.0.1:9904/metrics | rg mevana_wallet_balance_sol`) to confirm the active wallet label reports the live balance and backups show `0`.
+3. Flip the PropertyStore toggles when moving to real detection: enable `edge_detection_enabled` and, once validated, disable `heuristic_detection_enabled` so the hotpath consumes Kafka `edge.delta.v1` data end-to-end.
+4. Ensure backup directories owned by service accounts. Example: `sudo chown -R mevana:mevana /opt/MEVana/vault_backups` for wallet-vault on fresh hosts.
+5. After rolling new binaries, run `systemctl status executor-service` and curl the metrics endpoint (`curl -s http://127.0.0.1:9904/metrics | rg mevana_wallet_balance_sol`) to confirm the active wallet label reports the live balance and backups show `0`.
 
 ### 2025-09-27 operational notes
 
@@ -18,6 +20,7 @@ Last updated: 2025-09-30
   * Execute `scripts/testing/gateway-fanout-smoke.sh` to push a sample opportunity/execution into Kafka and confirm data surfaces on `/gateway/ws/*` and `/gateway/sse/*` before cutting the UI to gateway-only mode.
   * Review firewall openings (8080, 3002, 3200, 8096) once the UI migration is complete and close any unused ports.
 - Price stream reinstated with a dedicated bare-metal service: `/etc/mevana/price-aggregator.env` feeds `price-aggregator.service`, consuming `orca-swaps.parsed.v2` and publishing rolling snapshots to `prices.latest` for the UI/Grafana gateway.
+- Keep `MULTI_ENDPOINT_MODE=false` in `/etc/mevana/hotpath.env`; multi-stream geyser mode is experimental and should stay disabled unless a future ADR explicitly enables it.
 
 Overview
 - Goal: Keep the hotpath, normalizer, discovery, and executor binaries as close to the metal as possible while leaving supporting infrastructure (Kafka, Redis, Postgres, Prometheus, Grafana) in Docker for easy parity with local development.
