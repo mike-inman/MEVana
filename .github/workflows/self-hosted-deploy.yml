@@ -20,6 +20,11 @@ on:
         required: false
         default: false
         type: boolean
+      refresh_infra:
+        description: "Recreate Docker infrastructure stack (Grafana, Kafka, etc.)"
+        required: false
+        default: false
+        type: boolean
       infrastructure_only:
         description: "Deploy only infrastructure services (faster for config changes)"
         required: false
@@ -32,6 +37,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Ensure Docker network
         run: docker network create mevana_net 2>/dev/null || true
@@ -92,32 +99,218 @@ jobs:
             printf '%s' "$1" | tr ',\n\r' '   ' | xargs
           }
 
+          append_service(){
+            local candidate="$1"
+            [ -z "$candidate" ] && return
+            if [[ " $services " != *" $candidate "* ]]; then
+              services="$services $candidate"
+            fi
+          }
+
           raw_input="$(normalize_input "${{ inputs.services }}")"
+          services=""
+          build_required=false
+
           if [ -n "$raw_input" ]; then
-            svc_list=""
             for raw in $raw_input; do
               mapped=$(map_service "$raw")
-              if [ -z "$mapped" ]; then
-                continue
-              fi
-              if [ -z "$svc_list" ]; then
-                svc_list="$mapped"
-              else
-                svc_list="$svc_list $mapped"
-              fi
+              append_service "$mapped"
             done
+            build_required=true
           else
-            svc_list="hotpath-arb-engine normalizer-service discovery-service executor-service wallet-vault monitoring-service price-aggregator api-service"
+            changed_files=$(git diff --name-only HEAD^ HEAD 2>/dev/null || true)
+            for file in $changed_files; do
+              case "$file" in
+                Cargo.lock|Cargo.toml|scripts/deployment/release-services.sh)
+                  services="hotpath-arb-engine normalizer-service discovery-service executor-service wallet-vault monitoring-service price-aggregator api-service"
+                  build_required=true
+                  break
+                  ;;
+                crates/hotpath_arb_engine/*|crates/hotpath_arb_engine.rs|crates/hotpath_arb_engine/**)
+                  append_service hotpath-arb-engine
+                  ;;
+                crates/normalizer-service/*|crates/normalizer-service.rs|crates/normalizer-service/**)
+                  append_service normalizer-service
+                  ;;
+                crates/discovery-service/*|crates/discovery-service.rs|crates/discovery-service/**)
+                  append_service discovery-service
+                  ;;
+                crates/executor-service/*|crates/executor-service.rs|crates/executor-service/**)
+                  append_service executor-service
+                  ;;
+                crates/wallet-vault/*|crates/wallet-vault.rs|crates/wallet-vault/**)
+                  append_service wallet-vault
+                  ;;
+                crates/monitoring-service/*|crates/monitoring-service.rs|crates/monitoring-service/**)
+                  append_service monitoring-service
+                  ;;
+                crates/arb-engine/*|crates/arb-engine.rs|crates/arb-engine/**)
+                  append_service arb-engine
+                  ;;
+                crates/price-aggregator/*|crates/price-aggregator.rs|crates/price-aggregator/**)
+                  append_service price-aggregator
+                  ;;
+                crates/api-service/*|crates/api-service.rs|crates/api-service/**)
+                  append_service api-service
+                  ;;
+                infrastructure/systemd/hotpath-arb-engine.service)
+                  append_service hotpath-arb-engine
+                  ;;
+                infrastructure/systemd/normalizer-service.service)
+                  append_service normalizer-service
+                  ;;
+                infrastructure/systemd/discovery-service.service)
+                  append_service discovery-service
+                  ;;
+                infrastructure/systemd/executor-service.service)
+                  append_service executor-service
+                  ;;
+                infrastructure/systemd/wallet-vault.service)
+                  append_service wallet-vault
+                  ;;
+                infrastructure/systemd/monitoring-service.service)
+                  append_service monitoring-service
+                  ;;
+                infrastructure/systemd/price-aggregator.service)
+                  append_service price-aggregator
+                  ;;
+                infrastructure/systemd/arb-engine.service)
+                  append_service arb-engine
+                  ;;
+                infrastructure/systemd/api-service.service)
+                  append_service api-service
+                  ;;
+                crates/shared-core/*|crates/shared-core.rs|crates/shared-core/**)
+                  services="hotpath-arb-engine normalizer-service discovery-service executor-service wallet-vault monitoring-service price-aggregator api-service"
+                  build_required=true
+                  break
+                  ;;
+              esac
+            done
+
+            if [ -n "$services" ]; then
+              build_required=true
+            fi
           fi
 
-          svc_list=$(printf '%s' "$svc_list" | xargs)
+          if [ -z "$services" ]; then
+            services="hotpath-arb-engine normalizer-service discovery-service executor-service wallet-vault monitoring-service price-aggregator api-service"
+          fi
 
-          echo "services=${svc_list}" >> "$GITHUB_OUTPUT"
+          services=$(printf '%s' "$services" | xargs)
+
+          if [ "$build_required" = true ]; then
+            echo "Detected services requiring build: $services"
+          else
+            echo "No code changes detected for services; using default service list for status checks"
+          fi
+
+          echo "services=${services}" >> "$GITHUB_OUTPUT"
           echo "tag=${GITHUB_SHA}" >> "$GITHUB_OUTPUT"
+          echo "build_required=${build_required}" >> "$GITHUB_OUTPUT"
+
+      - name: Determine build requirement
+        id: build_scope
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ "${{ inputs.skip_build }}" = "true" ]; then
+            echo "Build disabled via input"
+            echo "run_build=false" >> "$GITHUB_OUTPUT"
+          elif [ "${{ steps.vars.outputs.build_required }}" = "true" ]; then
+            echo "Detected service changes requiring rebuild"
+            echo "run_build=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "No code changes detected; skipping rebuild"
+            echo "run_build=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Prepare systemd units
+        shell: bash
+        env:
+          SERVICES: ${{ steps.vars.outputs.services }}
+        run: |
+          set -euo pipefail
+          svcs=$(printf '%s' "${SERVICES}" | tr '\n' ' ' | xargs)
+          if [ -z "$svcs" ]; then
+            echo "No services provided" >&2
+            exit 1
+          fi
+
+          echo "Services to prepare: [$svcs]"
+
+          install_unit() {
+            local svc_name="$1"
+            local unit_file="$2"
+            if [ -f "$unit_file" ]; then
+              cp "$unit_file" /etc/systemd/system/
+              echo "Installed $(basename "$unit_file")"
+            else
+              echo "Warning: $(basename "$unit_file") not found; skipping" >&2
+            fi
+          }
+
+          for svc in $svcs; do
+            case "$svc" in
+              hotpath-arb-engine)
+                install_unit "$svc" /opt/MEVana/infrastructure/systemd/hotpath-arb-engine.service
+                ;;
+              normalizer-service)
+                install_unit "$svc" /opt/MEVana/infrastructure/systemd/normalizer-service.service
+                ;;
+              discovery-service)
+                install_unit "$svc" /opt/MEVana/infrastructure/systemd/discovery-service.service
+                ;;
+              executor-service)
+                install_unit "$svc" /opt/MEVana/infrastructure/systemd/executor-service.service
+                ;;
+              wallet-vault)
+                install_unit "$svc" /opt/MEVana/infrastructure/systemd/wallet-vault.service
+                ;;
+              monitoring-service)
+                install_unit "$svc" /opt/MEVana/infrastructure/systemd/monitoring-service.service
+                ;;
+              price-aggregator)
+                install_unit "$svc" /opt/MEVana/infrastructure/systemd/price-aggregator.service
+                ;;
+              arb-engine)
+                install_unit "$svc" /opt/MEVana/infrastructure/systemd/arb-engine.service
+                ;;
+              api-service)
+                install_unit "$svc" /opt/MEVana/infrastructure/systemd/api-service.service
+                ;;
+              *)
+                echo "Unknown service identifier '$svc'; skipping" >&2
+                ;;
+            esac
+          done
+
+          systemctl daemon-reload
+
+      - name: Cache Cargo registry
+        if: ${{ steps.build_scope.outputs.run_build == 'true' }}
+        uses: actions/cache@v3
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+          key: ${{ runner.os }}-cargo-registry-${{ hashFiles('Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-registry-
+
+      - name: Cache Cargo build artifacts
+        if: ${{ steps.build_scope.outputs.run_build == 'true' }}
+        uses: actions/cache@v3
+        with:
+          path: |
+            target
+          key: ${{ runner.os }}-cargo-target-${{ hashFiles('Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-target-
 
       # Install dependencies, build, and deploy services in one step
-      - name: Install Dependencies and Build Services
-        if: ${{ inputs.skip_build != true }}
+      - name: Build and install updated binaries
+        if: ${{ steps.build_scope.outputs.run_build == 'true' }}
         env:
           TAG: ${{ steps.vars.outputs.tag }}
           INSTALL_PREFIX: /opt/MEVana
@@ -154,68 +347,9 @@ jobs:
           echo "Cargo path: $(which cargo)"
           cargo --version
 
-          echo "=== Installing systemd service files ==="
           svcs="${{ steps.vars.outputs.services }}"
           svcs=$(printf '%s' "$svcs" | tr '\n' ' ' | xargs)
-          echo "Services to process: [$svcs]"
-
-          # Install systemd service files BEFORE building services
-          if [[ " $svcs " == *" wallet-vault "* ]]; then
-            echo "Installing wallet-vault.service..."
-            if [ -f /opt/MEVana/infrastructure/systemd/wallet-vault.service ]; then
-              cp /opt/MEVana/infrastructure/systemd/wallet-vault.service /etc/systemd/system/
-              echo "wallet-vault.service installed successfully"
-            else
-              echo "ERROR: wallet-vault.service file not found!"
-            fi
-          else
-            echo "wallet-vault not found in services list"
-          fi
-
-          if [[ " $svcs " == *" monitoring-service "* ]] || [[ " $svcs " == *" monitoring "* ]]; then
-            echo "Installing monitoring-service.service..."
-            if [ -f /opt/MEVana/infrastructure/systemd/monitoring-service.service ]; then
-              cp /opt/MEVana/infrastructure/systemd/monitoring-service.service /etc/systemd/system/
-              echo "monitoring-service.service installed successfully"
-            else
-              echo "ERROR: monitoring-service.service file not found!"
-            fi
-          else
-            echo "monitoring/monitoring-service not found in services list"
-          fi
-
-          if [[ " $svcs " == *" arb-engine "* ]]; then
-            echo "Installing arb-engine.service (if available)..."
-            if [ -f /opt/MEVana/infrastructure/systemd/arb-engine.service ]; then
-              cp /opt/MEVana/infrastructure/systemd/arb-engine.service /etc/systemd/system/
-              echo "arb-engine.service installed successfully"
-            else
-              echo "Warning: arb-engine.service file not found; ensure unit exists before enabling"
-            fi
-          fi
-
-          if [[ " $svcs " == *" api-service "* ]]; then
-            echo "Installing api-service.service (if available)..."
-            if [ -f /opt/MEVana/infrastructure/systemd/api-service.service ]; then
-              cp /opt/MEVana/infrastructure/systemd/api-service.service /etc/systemd/system/
-              echo "api-service.service installed successfully"
-            else
-              echo "Warning: api-service.service file not found; gateway restart will be skipped"
-            fi
-          fi
-
-          if [[ " $svcs " == *" price-aggregator "* ]]; then
-            echo "Installing price-aggregator.service (if available)..."
-            if [ -f /opt/MEVana/infrastructure/systemd/price-aggregator.service ]; then
-              cp /opt/MEVana/infrastructure/systemd/price-aggregator.service /etc/systemd/system/
-              echo "price-aggregator.service installed successfully"
-            else
-              echo "Warning: price-aggregator.service file not found; aggregator start will be skipped"
-            fi
-          fi
-
-          # Reload systemd after installing service files
-          systemctl daemon-reload
+          echo "Services to build: [$svcs]"
 
           echo "=== Building and installing services ==="
           # Run from git repository root, not /opt/MEVana
@@ -235,7 +369,55 @@ jobs:
 
           echo "=== Build and installation complete ==="
 
+      - name: Restart services without rebuild
+        if: ${{ steps.build_scope.outputs.run_build != 'true' && inputs.skip_build == true }}
+        shell: bash
+        env:
+          SERVICES: ${{ steps.vars.outputs.services }}
+        run: |
+          set -euo pipefail
+          svcs=$(printf '%s' "${SERVICES}" | tr '\n' ' ' | xargs)
+          if [ -z "$svcs" ]; then
+            echo "No services specified for restart" >&2
+            exit 1
+          fi
+
+          map_to_unit() {
+            case "$1" in
+              hotpath-arb-engine) echo "hotpath-arb-engine.service" ;;
+              normalizer-service) echo "normalizer-service.service" ;;
+              discovery-service) echo "discovery-service.service" ;;
+              executor-service) echo "executor-service.service" ;;
+              wallet-vault) echo "wallet-vault.service" ;;
+              monitoring-service) echo "monitoring-service.service" ;;
+              price-aggregator) echo "price-aggregator.service" ;;
+              arb-engine) echo "arb-engine.service" ;;
+              api-service) echo "api-service.service" ;;
+              *) echo "" ;;
+            esac
+          }
+
+          units=()
+          for svc in $svcs; do
+            unit=$(map_to_unit "$svc")
+            if [ -n "$unit" ]; then
+              units+=("$unit")
+            else
+              echo "Skipping unknown service '$svc'" >&2
+            fi
+          done
+
+          if [ ${#units[@]} -eq 0 ]; then
+            echo "No valid systemd units resolved" >&2
+            exit 1
+          fi
+
+          echo "Restarting units: ${units[*]}"
+          systemctl enable "${units[@]}" || true
+          systemctl restart "${units[@]}"
+
       - name: Clean Complete Deployment - Infrastructure
+        if: ${{ inputs.refresh_infra == true }}
         env:
           MEVANA_TAG: ${{ steps.vars.outputs.tag }}
         run: |
@@ -301,99 +483,6 @@ jobs:
 
           echo "✅ Database and Kafka bootstrap completed successfully"
 
-      - name: Start Bare-Metal MEVana Services
-        if: ${{ inputs.infrastructure_only != true }}
-        env:
-          MEVANA_TAG: ${{ steps.vars.outputs.tag }}
-        run: |
-          set -euo pipefail
-          cd /opt/MEVana
-
-          # Verify infrastructure is ready before starting MEVana services
-          echo "🔍 Verifying infrastructure readiness..."
-          if ! curl -s --connect-timeout 5 http://localhost:9090/-/healthy >/dev/null; then
-            echo "❌ Prometheus not ready - infrastructure deployment may have failed"
-            exit 1
-          fi
-          if ! curl -s --connect-timeout 5 http://localhost:3000/api/health >/dev/null; then
-            echo "⚠️ Grafana not yet healthy - continuing anyway (will re-check later)"
-          else
-            echo "✅ Grafana responded at http://localhost:3000/api/health"
-          fi
-          echo "✅ Prometheus is ready for MEVana services"
-
-          # Start bare-metal MEVana services using systemctl
-          echo "🚀 Starting MEVana bare-metal services..."
-          services_input="${{ steps.vars.outputs.services }}"
-          services_input=$(printf '%s' "$services_input" | tr '\n' ' ' | xargs)
-          read -r -a services <<< "$services_input"
-          if [ ${#services[@]} -eq 0 ]; then
-            services=(hotpath-arb-engine normalizer-service discovery-service executor-service wallet-vault monitoring-service)
-          fi
-
-          # Map service names to systemd units and start them
-          for svc in "${services[@]}"; do
-            case "$svc" in
-              hotpath-arb-engine)
-                unit="hotpath-arb-engine.service"
-                ;;
-              normalizer-service)
-                unit="normalizer-service.service"
-                ;;
-              discovery-service)
-                unit="discovery-service.service"
-                ;;
-              executor-service)
-                unit="executor-service.service"
-                ;;
-              wallet-vault)
-                unit="wallet-vault.service"
-                ;;
-              monitoring-service)
-                unit="monitoring-service.service"
-                ;;
-              price-aggregator)
-                unit="price-aggregator.service"
-                ;;
-              arb-engine)
-                unit="arb-engine.service"
-                ;;
-              api-service)
-                unit="api-service.service"
-                ;;
-              *)
-                echo "Unknown service '$svc' - skipping"
-                continue
-                ;;
-            esac
-
-            echo "Starting $unit..."
-            systemctl enable "$unit" || true
-            systemctl restart "$unit"
-          done
-
-          # Wait for services to initialize
-          echo "⏳ Waiting for MEVana services to initialize..."
-          sleep 30
-
-          # Verify services are running
-          echo "🔍 Verifying MEVana services status..."
-          for svc in "${services[@]}"; do
-            case "$svc" in
-              hotpath-arb-engine) unit="hotpath-arb-engine.service" ;;
-              normalizer-service) unit="normalizer-service.service" ;;
-              discovery-service) unit="discovery-service.service" ;;
-              executor-service) unit="executor-service.service" ;;
-              wallet-vault) unit="wallet-vault.service" ;;
-              monitoring-service) unit="monitoring-service.service" ;;
-              price-aggregator) unit="price-aggregator.service" ;;
-              arb-engine) unit="arb-engine.service" ;;
-              api-service) unit="api-service.service" ;;
-              *) continue ;;
-            esac
-            systemctl --no-pager status "$unit" || echo "⚠️ $unit may have issues"
-          done
-
       - name: Post-Deployment Comprehensive Validation
         run: |
           set -euo pipefail
@@ -433,10 +522,10 @@ jobs:
           curl -s --connect-timeout 5 http://localhost:9901/metrics | head -5 || echo "Normalizer metrics not ready"
 
           echo "📊 Wallet Vault Status:"
-          curl -s --connect-timeout 5 http://localhost:8089/wallets | head -5 || echo "Wallet vault not ready"
+          curl -s --connect-timeout 5 http://localhost:8090/wallets | head -5 || echo "Wallet vault not ready"
 
           echo "📊 Monitoring Service Metrics:"
-          curl -s --connect-timeout 5 http://localhost:8090/metrics | head -5 || echo "Monitoring service metrics not ready"
+          curl -s --connect-timeout 5 http://localhost:8091/metrics | head -5 || echo "Monitoring service metrics not ready"
 
           echo "📊 Grafana Dashboard:"
           curl -s -o /dev/null -w "Status: %{http_code}\n" --connect-timeout 5 http://localhost:3000/api/health || echo "Grafana not accessible"
