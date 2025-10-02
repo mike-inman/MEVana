@@ -7,19 +7,16 @@ use axum::{
     Json, Router,
 };
 use serde::{Deserialize, Serialize};
-use serde_json::json;
 use std::sync::Arc;
-use tower_http::{compression::CompressionLayer, cors::CorsLayer, trace::TraceLayer};
+use tower_http::cors::CorsLayer;
 use utoipa::{OpenApi, ToSchema};
 use utoipa_swagger_ui::SwaggerUi;
 use uuid::Uuid;
 
 use crate::auth::{api_key_middleware, AuthConfig, UserContext};
 use crate::error::VaultError;
-use crate::metrics::{metrics_handler, record_key_export, record_operation, MetricsLayer};
 use crate::vault::WalletVault;
 use crate::wallet::{WalletMetadata, WalletTier};
-use chrono::Utc;
 use solana_sdk::signer::Signer;
 
 #[derive(OpenApi)]
@@ -141,7 +138,9 @@ pub fn create_api_router(vault: WalletVault) -> Router {
 
     let auth_config = Arc::new(AuthConfig::new(jwt_secret, auth_required));
 
-    let protected_routes = Router::new()
+    Router::new()
+        .merge(SwaggerUi::new("/swagger-ui").url("/api-doc/openapi.json", ApiDoc::openapi()))
+        // Protected routes require authentication
         .route("/api/wallets", post(create_wallet))
         .route("/api/wallets", get(list_wallets))
         .route("/api/wallets/:id", get(get_wallet))
@@ -152,30 +151,14 @@ pub fn create_api_router(vault: WalletVault) -> Router {
         .route("/api/backup/restore", post(restore_vault))
         .route("/api/backup/list", get(list_backups))
         .route("/api/limits/reset", post(reset_daily_limits))
+        // Add authentication middleware
         .layer(middleware::from_fn_with_state(
             auth_config.clone(),
             api_key_middleware,
-        ));
-
-    Router::new()
-        .merge(SwaggerUi::new("/swagger-ui").url("/api-doc/openapi.json", ApiDoc::openapi()))
-        .route("/metrics", get(metrics_handler))
-        .route("/health", get(health_check))
-        .merge(protected_routes)
-        .layer(MetricsLayer::new())
-        .layer(TraceLayer::new_for_http())
-        .layer(CompressionLayer::new())
+        ))
         .layer(CorsLayer::permissive())
         .with_state(app_state)
         .with_state(auth_config)
-}
-
-async fn health_check() -> Json<serde_json::Value> {
-    Json(json!({
-        "status": "healthy",
-        "service": "wallet-vault",
-        "timestamp": Utc::now(),
-    }))
 }
 
 #[utoipa::path(
@@ -201,19 +184,13 @@ async fn create_wallet(
     );
 
     match vault.create_wallet(request.tier, request.label).await {
-        Ok(metadata) => {
-            record_operation("create_wallet", true);
-            Ok(Json(WalletResponse::from(metadata)))
-        }
-        Err(e) => {
-            record_operation("create_wallet", false);
-            Err((
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Json(ErrorResponse {
-                    error: e.to_string(),
-                }),
-            ))
-        }
+        Ok(metadata) => Ok(Json(WalletResponse::from(metadata))),
+        Err(e) => Err((
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(ErrorResponse {
+                error: e.to_string(),
+            }),
+        )),
     }
 }
 
@@ -231,28 +208,19 @@ async fn create_wallet(
 )]
 async fn get_wallet(State(vault): State<AppState>, Path(id): Path<Uuid>) -> impl IntoResponse {
     match vault.get_wallet_metadata(id).await {
-        Ok(metadata) => {
-            record_operation("get_wallet", true);
-            Ok(Json(WalletResponse::from(metadata)))
-        }
-        Err(VaultError::WalletNotFound(_)) => {
-            record_operation("get_wallet", false);
-            Err((
-                StatusCode::NOT_FOUND,
-                Json(ErrorResponse {
-                    error: "Wallet not found".to_string(),
-                }),
-            ))
-        }
-        Err(e) => {
-            record_operation("get_wallet", false);
-            Err((
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Json(ErrorResponse {
-                    error: e.to_string(),
-                }),
-            ))
-        }
+        Ok(metadata) => Ok(Json(WalletResponse::from(metadata))),
+        Err(VaultError::WalletNotFound(_)) => Err((
+            StatusCode::NOT_FOUND,
+            Json(ErrorResponse {
+                error: "Wallet not found".to_string(),
+            }),
+        )),
+        Err(e) => Err((
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(ErrorResponse {
+                error: e.to_string(),
+            }),
+        )),
     }
 }
 
@@ -267,7 +235,6 @@ async fn get_wallet(State(vault): State<AppState>, Path(id): Path<Uuid>) -> impl
 async fn list_wallets(State(vault): State<AppState>) -> impl IntoResponse {
     match vault.list_wallets().await {
         Ok(wallets) => {
-            record_operation("list_wallets", true);
             let total = wallets.len();
             let wallet_responses: Vec<WalletResponse> =
                 wallets.into_iter().map(WalletResponse::from).collect();
@@ -276,15 +243,12 @@ async fn list_wallets(State(vault): State<AppState>) -> impl IntoResponse {
                 total,
             }))
         }
-        Err(e) => {
-            record_operation("list_wallets", false);
-            Err((
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Json(ErrorResponse {
-                    error: e.to_string(),
-                }),
-            ))
-        }
+        Err(e) => Err((
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(ErrorResponse {
+                error: e.to_string(),
+            }),
+        )),
     }
 }
 
@@ -302,28 +266,19 @@ async fn list_wallets(State(vault): State<AppState>) -> impl IntoResponse {
 )]
 async fn rotate_wallet(State(vault): State<AppState>, Path(id): Path<Uuid>) -> impl IntoResponse {
     match vault.rotate_wallet(id).await {
-        Ok(metadata) => {
-            record_operation("rotate_wallet", true);
-            Ok(Json(WalletResponse::from(metadata)))
-        }
-        Err(VaultError::WalletNotFound(_)) => {
-            record_operation("rotate_wallet", false);
-            Err((
-                StatusCode::NOT_FOUND,
-                Json(ErrorResponse {
-                    error: "Wallet not found".to_string(),
-                }),
-            ))
-        }
-        Err(e) => {
-            record_operation("rotate_wallet", false);
-            Err((
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Json(ErrorResponse {
-                    error: e.to_string(),
-                }),
-            ))
-        }
+        Ok(metadata) => Ok(Json(WalletResponse::from(metadata))),
+        Err(VaultError::WalletNotFound(_)) => Err((
+            StatusCode::NOT_FOUND,
+            Json(ErrorResponse {
+                error: "Wallet not found".to_string(),
+            }),
+        )),
+        Err(e) => Err((
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(ErrorResponse {
+                error: e.to_string(),
+            }),
+        )),
     }
 }
 
@@ -344,19 +299,13 @@ async fn deactivate_wallet(
     Path(id): Path<Uuid>,
 ) -> impl IntoResponse {
     match vault.deactivate_wallet(id).await {
-        Ok(_) => {
-            record_operation("deactivate_wallet", true);
-            Ok(StatusCode::NO_CONTENT)
-        }
-        Err(e) => {
-            record_operation("deactivate_wallet", false);
-            Err((
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Json(ErrorResponse {
-                    error: e.to_string(),
-                }),
-            ))
-        }
+        Ok(_) => Ok(StatusCode::NO_CONTENT),
+        Err(e) => Err((
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(ErrorResponse {
+                error: e.to_string(),
+            }),
+        )),
     }
 }
 
@@ -375,44 +324,28 @@ async fn deactivate_wallet(
 )]
 async fn get_keypair(State(vault): State<AppState>, Path(id): Path<Uuid>) -> impl IntoResponse {
     match vault.get_keypair(id).await {
-        Ok(keypair) => {
-            record_operation("get_keypair", true);
-            record_key_export(true);
-            Ok(Json(KeypairResponse {
-                pubkey: keypair.pubkey().to_string(),
-                secret_key: bs58::encode(keypair.secret().as_bytes()).into_string(),
-            }))
-        }
-        Err(VaultError::WalletNotFound(_)) => {
-            record_operation("get_keypair", false);
-            record_key_export(false);
-            Err((
-                StatusCode::NOT_FOUND,
-                Json(ErrorResponse {
-                    error: "Wallet not found".to_string(),
-                }),
-            ))
-        }
-        Err(VaultError::AccessDenied) => {
-            record_operation("get_keypair", false);
-            record_key_export(false);
-            Err((
-                StatusCode::FORBIDDEN,
-                Json(ErrorResponse {
-                    error: "Access denied".to_string(),
-                }),
-            ))
-        }
-        Err(e) => {
-            record_operation("get_keypair", false);
-            record_key_export(false);
-            Err((
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Json(ErrorResponse {
-                    error: e.to_string(),
-                }),
-            ))
-        }
+        Ok(keypair) => Ok(Json(KeypairResponse {
+            pubkey: keypair.pubkey().to_string(),
+            secret_key: bs58::encode(keypair.secret().as_bytes()).into_string(),
+        })),
+        Err(VaultError::WalletNotFound(_)) => Err((
+            StatusCode::NOT_FOUND,
+            Json(ErrorResponse {
+                error: "Wallet not found".to_string(),
+            }),
+        )),
+        Err(VaultError::AccessDenied) => Err((
+            StatusCode::FORBIDDEN,
+            Json(ErrorResponse {
+                error: "Access denied".to_string(),
+            }),
+        )),
+        Err(e) => Err((
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(ErrorResponse {
+                error: e.to_string(),
+            }),
+        )),
     }
 }
 
@@ -427,22 +360,16 @@ async fn get_keypair(State(vault): State<AppState>, Path(id): Path<Uuid>) -> imp
 )]
 async fn backup_vault(State(vault): State<AppState>) -> impl IntoResponse {
     match vault.backup().await {
-        Ok(backup_id) => {
-            record_operation("backup_vault", true);
-            Ok(Json(BackupResponse {
-                backup_id,
-                message: "Backup created successfully".to_string(),
-            }))
-        }
-        Err(e) => {
-            record_operation("backup_vault", false);
-            Err((
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Json(ErrorResponse {
-                    error: e.to_string(),
-                }),
-            ))
-        }
+        Ok(backup_id) => Ok(Json(BackupResponse {
+            backup_id,
+            message: "Backup created successfully".to_string(),
+        })),
+        Err(e) => Err((
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(ErrorResponse {
+                error: e.to_string(),
+            }),
+        )),
     }
 }
 
@@ -462,22 +389,16 @@ async fn restore_vault(
     Json(request): Json<RestoreRequest>,
 ) -> impl IntoResponse {
     match vault.restore(&request.backup_id).await {
-        Ok(count) => {
-            record_operation("restore_vault", true);
-            Ok(Json(BackupResponse {
-                backup_id: request.backup_id,
-                message: format!("Restored {} wallets successfully", count),
-            }))
-        }
-        Err(e) => {
-            record_operation("restore_vault", false);
-            Err((
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Json(ErrorResponse {
-                    error: e.to_string(),
-                }),
-            ))
-        }
+        Ok(count) => Ok(Json(BackupResponse {
+            backup_id: request.backup_id,
+            message: format!("Restored {} wallets successfully", count),
+        })),
+        Err(e) => Err((
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(ErrorResponse {
+                error: e.to_string(),
+            }),
+        )),
     }
 }
 
@@ -492,7 +413,6 @@ async fn restore_vault(
 async fn list_backups(State(vault): State<AppState>) -> impl IntoResponse {
     match vault.backup_manager.list_backups().await {
         Ok(backups) => {
-            record_operation("list_backups", true);
             let backup_infos: Vec<BackupInfo> = backups
                 .into_iter()
                 .map(|(id, created_at)| BackupInfo {
@@ -504,15 +424,12 @@ async fn list_backups(State(vault): State<AppState>) -> impl IntoResponse {
                 backups: backup_infos,
             }))
         }
-        Err(e) => {
-            record_operation("list_backups", false);
-            Err((
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Json(ErrorResponse {
-                    error: e.to_string(),
-                }),
-            ))
-        }
+        Err(e) => Err((
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(ErrorResponse {
+                error: e.to_string(),
+            }),
+        )),
     }
 }
 
@@ -526,18 +443,12 @@ async fn list_backups(State(vault): State<AppState>) -> impl IntoResponse {
 )]
 async fn reset_daily_limits(State(vault): State<AppState>) -> impl IntoResponse {
     match vault.reset_daily_limits().await {
-        Ok(_) => {
-            record_operation("reset_daily_limits", true);
-            Ok(StatusCode::OK)
-        }
-        Err(e) => {
-            record_operation("reset_daily_limits", false);
-            Err((
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Json(ErrorResponse {
-                    error: e.to_string(),
-                }),
-            ))
-        }
+        Ok(_) => Ok(StatusCode::OK),
+        Err(e) => Err((
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(ErrorResponse {
+                error: e.to_string(),
+            }),
+        )),
     }
 }
