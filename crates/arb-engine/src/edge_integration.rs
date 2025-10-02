@@ -209,6 +209,7 @@ pub struct EdgeArbitrageDetector {
     pair_stats: DashMap<String, PairEdgeStats>,
     signal_tx: SignalTx,
     // thresholds now always read from global atomics (mutable via HTTP API); legacy fields removed
+    max_edge_staleness_ns: Arc<AtomicU64>,
     brute_force_edge_limit: usize,
 }
 
@@ -227,17 +228,51 @@ pub struct PairEdgeStats {
 
 impl EdgeArbitrageDetector {
     pub fn new(signal_tx: SignalTx) -> Self {
-        Self {
+        let default_staleness_ms = std::env::var("EDGE_MAX_STALENESS_MS")
+            .ok()
+            .and_then(|v| v.parse::<u64>().ok())
+            .unwrap_or(250);
+        let default_staleness_ns = if default_staleness_ms == 0 {
+            0
+        } else {
+            default_staleness_ms.saturating_mul(1_000_000)
+        };
+
+        let detector = Self {
             edges: DashMap::new(),
             token_index: DashMap::new(),
             pool_index: DashMap::new(),
             pair_stats: DashMap::new(),
             signal_tx,
+            max_edge_staleness_ns: Arc::new(AtomicU64::new(default_staleness_ns)),
             brute_force_edge_limit: std::env::var("ARB_3HOP_BRUTE_FORCE_EDGE_LIMIT")
                 .ok()
                 .and_then(|v| v.parse().ok())
                 .unwrap_or(4),
+        };
+
+        metrics::gauge!("arb_edge_staleness_threshold_ms")
+            .set((default_staleness_ns / 1_000_000) as f64);
+
+        detector
+    }
+
+    pub fn set_max_edge_staleness_ms(&self, max_ms: Option<u64>) {
+        let ns = match max_ms {
+            Some(ms) if ms > 0 => ms.saturating_mul(1_000_000),
+            _ => 0,
+        };
+        self.max_edge_staleness_ns.store(ns, Ordering::Relaxed);
+        metrics::gauge!("arb_edge_staleness_threshold_ms").set((ns / 1_000_000) as f64);
+    }
+
+    #[inline]
+    fn edge_is_stale(&self, edge: &EdgeDelta, now_ns: u64) -> bool {
+        let threshold_ns = self.max_edge_staleness_ns.load(Ordering::Relaxed);
+        if threshold_ns == 0 || edge.updated_at_ns == 0 {
+            return false;
         }
+        now_ns.saturating_sub(edge.updated_at_ns) > threshold_ns
     }
 
     /// Process incoming edge updates from edge assembler
@@ -249,24 +284,42 @@ impl EdgeArbitrageDetector {
         // observe before mutation so we see raw input
         EDGE_VERIFIER.observe(&edge); // NEW
         capture_full_edge(&edge); // optional debug full capture
+        let now_ns = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_nanos() as u64;
+
+        if self.edge_is_stale(&edge, now_ns) {
+            metrics::counter!("arb_edge_updates_dropped_total", "reason" => "stale").increment(1);
+            return Ok(());
+        }
+
+        let arc_edge = Arc::new(edge.clone());
+
         self.edges
             .entry(pair_key.clone())
             .or_default()
-            .retain(|e| e.edge_id != edge.edge_id);
+            .retain(|existing| {
+                !self.edge_is_stale(existing, now_ns) && existing.edge_id != arc_edge.edge_id
+            });
         self.edges
             .entry(pair_key.clone())
             .or_default()
-            .push(Arc::new(edge.clone()));
+            .push(Arc::clone(&arc_edge));
 
         // Update pool index
         let pool_b58 = bs58::encode(&edge.pool_pubkey).into_string();
         self.pool_index
             .entry(pool_b58.clone())
             .and_modify(|v| {
-                v.retain(|e| e.edge_id != edge.edge_id || e.direction != edge.direction);
-                v.push(Arc::new(edge.clone()));
+                v.retain(|existing| {
+                    !self.edge_is_stale(existing, now_ns)
+                        && (existing.edge_id != arc_edge.edge_id
+                            || existing.direction != arc_edge.direction)
+                });
+                v.push(Arc::clone(&arc_edge));
             })
-            .or_insert_with(|| vec![Arc::new(edge.clone())]);
+            .or_insert_with(|| vec![Arc::clone(&arc_edge)]);
 
         // Update token index (dedup simple linear scan; small vector expected per token)
         let a = bs58::encode(&edge.token_in).into_string();
@@ -287,10 +340,6 @@ impl EdgeArbitrageDetector {
         let ts_ns = edge.updated_at_ns;
         LAST_EDGE_UPDATE_NS.store(ts_ns, Ordering::Relaxed);
         // Record wall-clock staleness (if clock drift positive)
-        let now_ns = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .unwrap()
-            .as_nanos() as u64;
         if now_ns > ts_ns {
             record_edge_staleness_ns(now_ns - ts_ns);
         }
@@ -307,9 +356,16 @@ impl EdgeArbitrageDetector {
         if guard.is_empty() {
             return None;
         }
+        let now_ns = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_nanos() as u64;
         // Choose latest edge (max updated_at_ns) per direction
         let mut latest_dir: [Option<Arc<EdgeDelta>>; 2] = [None, None];
         for e in guard.iter() {
+            if self.edge_is_stale(e, now_ns) {
+                continue;
+            }
             let slot_ts = e.updated_at_ns;
             let idx = if e.direction == 0 { 0 } else { 1 };
             let replace = latest_dir[idx]
@@ -319,6 +375,9 @@ impl EdgeArbitrageDetector {
             if replace {
                 latest_dir[idx] = Some(e.clone());
             }
+        }
+        if latest_dir.iter().all(|entry| entry.is_none()) {
+            return None;
         }
         // Helper to parse u128
         let parse_u128 = |bytes: &Vec<u8>| -> Option<u128> {
@@ -445,21 +504,41 @@ impl EdgeArbitrageDetector {
             None => return Ok(()),
         };
         let edges_ref: &Vec<Arc<EdgeDelta>> = &guard;
+        let now_ns = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_nanos() as u64;
+
         // Partition by direction for potential 2-leg cycle; 3-leg scan should proceed regardless
-        let mut dir0: Vec<&Arc<EdgeDelta>> = Vec::new(); // A->B
-        let mut dir1: Vec<&Arc<EdgeDelta>> = Vec::new(); // B->A
+        let mut dir0: Vec<Arc<EdgeDelta>> = Vec::new(); // A->B
+        let mut dir1: Vec<Arc<EdgeDelta>> = Vec::new(); // B->A
+        let mut stale_pruned = 0u64;
         for e in edges_ref.iter() {
+            if self.edge_is_stale(e, now_ns) {
+                stale_pruned += 1;
+                continue;
+            }
             if e.direction == 0 {
-                dir0.push(e);
+                dir0.push(Arc::clone(e));
             } else {
-                dir1.push(e);
+                dir1.push(Arc::clone(e));
             }
         }
+        drop(guard);
+
+        if stale_pruned > 0 {
+            metrics::counter!("arb_edge_updates_dropped_total", "reason" => "stale_cache")
+                .increment(stale_pruned);
+            if let Some(mut list) = self.edges.get_mut(pair_key) {
+                list.retain(|edge| !self.edge_is_stale(edge, now_ns));
+            }
+        }
+
         if !dir0.is_empty() && !dir1.is_empty() {
             let mut best: Option<(ArbSignal, u64, i128)> = None;
             let mut best_profit: i128 = 0;
-            for sell in &dir0 {
-                for buy in &dir1 {
+            for sell in dir0.iter() {
+                for buy in dir1.iter() {
                     if sell.venue_id == buy.venue_id {
                         continue;
                     }
@@ -793,9 +872,16 @@ impl EdgeArbitrageDetector {
             return;
         };
         let edges_ref: &Vec<Arc<EdgeDelta>> = &guard;
+        let now_ns = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_nanos() as u64)
+            .unwrap_or(0);
         let mut best_dir0: Option<(&Arc<EdgeDelta>, f64)> = None; // A->B price * fee
         let mut best_dir1: Option<(&Arc<EdgeDelta>, f64)> = None; // B->A price * fee
         for e in edges_ref.iter() {
+            if self.edge_is_stale(e, now_ns) {
+                continue;
+            }
             if let Some(p) = self.marginal_price(e) {
                 let eff = p * self.fee_factor(e);
                 if e.direction == 0 {
@@ -812,10 +898,6 @@ impl EdgeArbitrageDetector {
             if potential.is_finite() {
                 let potential_bps = (potential * 10_000.0) as i32;
                 use dashmap::mapref::entry::Entry;
-                let now_ns = std::time::SystemTime::now()
-                    .duration_since(std::time::UNIX_EPOCH)
-                    .map(|d| d.as_nanos() as u64)
-                    .unwrap_or(0);
                 match self.pair_stats.entry(pair_key.to_string()) {
                     Entry::Occupied(mut occ) => {
                         let s = occ.get_mut();

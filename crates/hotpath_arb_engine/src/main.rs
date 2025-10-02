@@ -1,7 +1,7 @@
 #![allow(warnings)]
 
 use anyhow::Result;
-use chrono::{DateTime, Timelike, Utc};
+use chrono::{DateTime, TimeZone, Timelike, Utc};
 use clap::Parser;
 use dashmap::DashMap;
 use futures::StreamExt;
@@ -30,9 +30,12 @@ use yellowstone_grpc_proto::{
 
 // KAFKA INTEGRATION - Publish viable arbitrage opportunities to shared mempool
 use rdkafka::config::ClientConfig;
+use rdkafka::consumer::{CommitMode, Consumer, StreamConsumer};
 use rdkafka::producer::{FutureProducer, FutureRecord};
+use rdkafka::Message;
 
 // HOT PATH ARBITRAGE INTEGRATION - Zero latency MEV detection
+use arb_engine::edge_integration::decode_and_validate_edge;
 use arb_engine::engine_fast::FastEngine;
 use arb_engine::hotpath::SignalQueue;
 use arb_engine::jupiter_arbitrage::{JupiterArbConfig, JupiterArbitrageScanner};
@@ -81,6 +84,7 @@ use async_history_buffer::{
 };
 use hotpath_arb_engine::orderbook_tracker::{create_arbitrage_event, ARBITRAGE_DETECTED};
 use hotpath_arb_engine::smart_filter::{SmartFilter, SmartFilterConfig};
+use shared_protocol::{ArbSignal as SharedArbSignal, ArbSignalV1};
 use sqlx::{postgres::PgListener, PgPool};
 
 // CONFIG API IMPORTS
@@ -1441,6 +1445,10 @@ impl HotPathArbitrageEngine {
 
         // Initialize fast arbitrage engine
         let fast_engine = Arc::new(FastEngine::new(tx.clone()));
+        let edge_staleness_ms = get_property_store()
+            .get_atomic_u64("max_edge_staleness_ms")
+            .and_then(|ms| if ms == 0 { None } else { Some(ms) });
+        fast_engine.set_max_edge_staleness_ms(edge_staleness_ms);
 
         // Initialize Jupiter scanner if enabled
         let enable_jupiter = std::env::var("ENABLE_JUPITER")
@@ -2473,6 +2481,18 @@ impl HotPathArbitrageEngine {
     ) -> Result<Option<ArbitrageOpportunity>> {
         let start_time = Instant::now();
 
+        if !get_property_store()
+            .get_atomic_bool("heuristic_detection_enabled")
+            .unwrap_or(true)
+        {
+            metrics::counter!(
+                "hotpath_transactions_skipped_total",
+                "reason" => "heuristic_disabled"
+            )
+            .increment(1);
+            return Ok(None);
+        }
+
         // Update last activity timestamp for health monitoring
         self.last_activity.store(
             SystemTime::now()
@@ -2512,127 +2532,137 @@ impl HotPathArbitrageEngine {
 
         self.arbitrage_signals_total.fetch_add(1, Ordering::Relaxed);
 
-        // SMART FILTER EXECUTION TRIGGER - If opportunity passes intelligent filtering, execute trade
-        if let Some(ref opp) = opportunity {
-            // Convert ArbitrageOpportunity to ArbitrageEvent for smart filter
-            let token_pair = format!("{}-{}", opp.token_a, opp.token_b);
-            let arbitrage_event = create_arbitrage_event(
-                &opp.signature,
-                opp.slot,
-                &opp.venue_a,
-                &opp.venue_b,
-                &token_pair,
-                opp.profit_bps.try_into().unwrap_or(0), // Convert u64 to i32
-                1_000_000_000.0, // Default amount (1 SOL in lamports) - this will be improved later
-                1_100_000_000.0, // Default expected out based on profit_bps
-                500, // Default execution time (500μs) - actual value from detection not available
-                true, // is_profitable (basic detection already passed)
-                None, // slippage not calculated yet
-            );
-
-            // Use smart filter to make execution decision
-            let smart_result = SMART_FILTER.should_execute(&arbitrage_event).await;
-
-            if smart_result.should_execute {
-                // Send to event bus for non-blocking reporting
-                let processing_start = std::time::Instant::now();
-                EVENT_BUS
-                    .send_arbitrage_detected(
-                        &opp.signature,
-                        &[opp.venue_a.clone(), opp.venue_b.clone()],
-                        opp.profit_bps,
-                        &format!("{}/{}", opp.token_a, opp.token_b),
-                        smart_result.estimated_net_profit_sol,
-                        smart_result.confidence_score,
-                        serde_json::json!({
-                            "signature": opp.signature,
-                            "venue_a": opp.venue_a,
-                            "venue_b": opp.venue_b,
-                            "token_a": opp.token_a,
-                            "token_b": opp.token_b,
-                            "profit_bps": opp.profit_bps,
-                            "slot": opp.slot,
-                            "strategy": opp.strategy
-                        }),
-                        processing_start.elapsed().as_micros() as u64,
-                    )
-                    .await;
-
-                debug!(
-                    "📤 Published viable arbitrage to event bus: {}",
-                    opp.signature
-                );
-
-                // ⚠️ MASTER SAFETY GATE: Check if trading is enabled and safe
-                if !is_trading_enabled_and_safe() {
-                    info!(
-                        "🛡️ Trading safety gate BLOCKED execution: Live trading disabled or unsafe"
-                    );
-                    // Still count as processed for metrics, but don't execute
-                    return Ok(None);
-                }
-
-                // Execute intelligent, high-confidence opportunities
-                if let Err(e) = self.trigger_lethal_execution(opp) {
-                    error!("Failed to trigger lethal execution: {}", e);
-                    record_execution_failure(&format!("Execution trigger failed: {}", e));
-                } else {
-                    info!(
-                        "🧠 SMART EXECUTION TRIGGERED: profit_bps={}, net_profit={:.6} SOL, confidence={:.2}",
-                        opp.profit_bps, smart_result.estimated_net_profit_sol, smart_result.confidence_score
-                    );
-                }
-
-                // Record execution for smart filter learning
-                // Note: In production, record actual result after execution completes
-                tokio::spawn(async move {
-                    SMART_FILTER
-                        .record_result(
-                            &arbitrage_event,
-                            true,
-                            smart_result.estimated_net_profit_sol,
-                        )
-                        .await;
-                });
-            } else {
-                // Log filtered opportunities for paper trading visibility
-                if let Some(ref reason) = smart_result.rejection_reason {
-                    info!(
-                        "📊 PAPER TRADE FILTERED: profit_bps={}, net_profit={:.6} SOL, reason: {}",
-                        opp.profit_bps, smart_result.estimated_net_profit_sol, reason
-                    );
-                } else {
-                    info!("📊 PAPER TRADE FILTERED: profit_bps={}, net_profit={:.6} SOL, confidence={:.2} (below threshold)", 
-                          opp.profit_bps, smart_result.estimated_net_profit_sol, smart_result.confidence_score);
-                }
-
-                // Send rejected opportunities to event bus for tracking
-                let processing_start = std::time::Instant::now();
-                EVENT_BUS.send_arbitrage_rejected(
-                    &opp.signature,
-                    &[opp.venue_a.clone(), opp.venue_b.clone()],
-                    opp.profit_bps,
-                    &format!("{}/{}", opp.token_a, opp.token_b),
-                    smart_result.estimated_net_profit_sol,
-                    smart_result.confidence_score,
-                    smart_result.rejection_reason.clone().unwrap_or_else(|| "Low confidence".to_string()),
-                    serde_json::json!({
-                        "signature": opp.signature,
-                        "venue_a": opp.venue_a,
-                        "venue_b": opp.venue_b,
-                        "token_a": opp.token_a,
-                        "token_b": opp.token_b,
-                        "profit_bps": opp.profit_bps,
-                        "slot": opp.slot,
-                        "strategy": opp.strategy,
-                        "rejection_reason": smart_result.rejection_reason.unwrap_or_else(|| "Low confidence".to_string())
-                    }),
-                    processing_start.elapsed().as_micros() as u64
-                ).await;
-            }
+        if let Some(opp) = opportunity.clone() {
+            self.handle_arbitrage_opportunity(opp).await?;
         }
 
         Ok(opportunity)
+    }
+
+    /// LETHAL EXECUTION - Convert our ArbitrageOpportunity to ExecutorOpportunity and execute
+    async fn handle_arbitrage_opportunity(&self, opportunity: ArbitrageOpportunity) -> Result<()> {
+        metrics::counter!(
+            "hotpath_opportunities_total",
+            "source" => opportunity.source.as_str()
+        )
+        .increment(1);
+
+        let signature = opportunity.signature.clone();
+        let venue_a = opportunity.venue_a.clone();
+        let venue_b = opportunity.venue_b.clone();
+        let token_a = opportunity.token_a.clone();
+        let token_b = opportunity.token_b.clone();
+        let strategy = opportunity.strategy.clone();
+
+        let token_pair = format!("{}/{}", token_a, token_b);
+        let amount_in = opportunity.amount_in_lamports as f64;
+        let amount_out = opportunity.expected_amount_out_lamports as f64;
+
+        let arbitrage_event = create_arbitrage_event(
+            &signature,
+            opportunity.slot,
+            &venue_a,
+            &venue_b,
+            &token_pair,
+            opportunity.profit_bps as i32,
+            amount_in,
+            amount_out,
+            500,
+            true,
+            None,
+        );
+
+        let smart_result = SMART_FILTER.should_execute(&arbitrage_event).await;
+
+        if smart_result.should_execute {
+            let processing_start = std::time::Instant::now();
+            EVENT_BUS
+                .send_arbitrage_detected(
+                    &signature,
+                    &[venue_a.clone(), venue_b.clone()],
+                    opportunity.profit_bps,
+                    &token_pair,
+                    smart_result.estimated_net_profit_sol,
+                    smart_result.confidence_score,
+                    serde_json::json!({
+                        "signature": signature,
+                        "venue_a": venue_a,
+                        "venue_b": venue_b,
+                        "token_a": token_a,
+                        "token_b": token_b,
+                        "profit_bps": opportunity.profit_bps,
+                        "slot": opportunity.slot,
+                        "strategy": strategy,
+                        "source": opportunity.source.as_str()
+                    }),
+                    processing_start.elapsed().as_micros() as u64,
+                )
+                .await;
+
+            if !is_trading_enabled_and_safe() {
+                info!("🛡️ Trading safety gate BLOCKED execution: Live trading disabled or unsafe");
+                return Ok(());
+            }
+
+            if let Err(e) = self.trigger_lethal_execution(&opportunity) {
+                error!("Failed to trigger lethal execution: {}", e);
+                record_execution_failure(&format!("Execution trigger failed: {}", e));
+            } else {
+                info!(
+                    "🧠 SMART EXECUTION TRIGGERED: source={} profit_bps={}, net_profit={:.6} SOL, confidence={:.2}",
+                    opportunity.source.as_str(),
+                    opportunity.profit_bps,
+                    smart_result.estimated_net_profit_sol,
+                    smart_result.confidence_score
+                );
+            }
+
+            let event_clone = arbitrage_event.clone();
+            let net_profit = smart_result.estimated_net_profit_sol;
+            tokio::spawn(async move {
+                SMART_FILTER
+                    .record_result(&event_clone, true, net_profit)
+                    .await;
+            });
+        } else {
+            metrics::counter!(
+                "hotpath_opportunities_rejected_total",
+                "source" => opportunity.source.as_str()
+            )
+            .increment(1);
+
+            let processing_start = std::time::Instant::now();
+            let reason = smart_result
+                .rejection_reason
+                .clone()
+                .unwrap_or_else(|| "Low confidence".to_string());
+            EVENT_BUS
+                .send_arbitrage_rejected(
+                    &opportunity.signature,
+                    &[opportunity.venue_a.clone(), opportunity.venue_b.clone()],
+                    opportunity.profit_bps,
+                    &format!("{}/{}", opportunity.token_a, opportunity.token_b),
+                    smart_result.estimated_net_profit_sol,
+                    smart_result.confidence_score,
+                    reason.clone(),
+                    serde_json::json!({
+                        "signature": opportunity.signature,
+                        "venue_a": opportunity.venue_a,
+                        "venue_b": opportunity.venue_b,
+                        "token_a": opportunity.token_a,
+                        "token_b": opportunity.token_b,
+                        "profit_bps": opportunity.profit_bps,
+                        "slot": opportunity.slot,
+                        "strategy": opportunity.strategy,
+                        "rejection_reason": reason,
+                        "source": opportunity.source.as_str()
+                    }),
+                    processing_start.elapsed().as_micros() as u64,
+                )
+                .await;
+        }
+
+        Ok(())
     }
 
     /// LETHAL EXECUTION - Convert our ArbitrageOpportunity to ExecutorOpportunity and execute
@@ -2648,9 +2678,9 @@ impl HotPathArbitrageEngine {
                 hash_venue_name(&opportunity.venue_b),
             ],
             profit_bps: opportunity.profit_bps,
-            max_size_in: 1_000_000_000_u128, // 1 SOL default for safety
-            total_cu_estimate: 300_000,      // Reasonable CU estimate for DEX arbitrage
-            total_fees_bps: 30,              // Estimate 0.3% total fees
+            max_size_in: opportunity.amount_in_lamports,
+            total_cu_estimate: 300_000, // Reasonable CU estimate for DEX arbitrage
+            total_fees_bps: 30,         // Estimate 0.3% total fees
             detected_at_ns: SystemTime::now().duration_since(UNIX_EPOCH)?.as_nanos() as u64,
             max_edge_age_ms: 100, // 100ms max age for fresh data
         };
@@ -2661,6 +2691,188 @@ impl HotPathArbitrageEngine {
             .map_err(|_| anyhow::anyhow!("Execution queue closed"))?;
 
         Ok(())
+    }
+
+    async fn process_edge_signal(&self, signal: SharedArbSignal) -> Result<()> {
+        match signal {
+            SharedArbSignal::V1(v1) => match opportunity_from_signal(&v1) {
+                Ok(opportunity) => {
+                    self.handle_arbitrage_opportunity(opportunity).await?;
+                }
+                Err(reason) => {
+                    metrics::counter!(
+                        "hotpath_edge_signals_rejected_total",
+                        "reason" => reason
+                    )
+                    .increment(1);
+                }
+            },
+            SharedArbSignal::Jupiter(sig) => {
+                metrics::counter!(
+                    "hotpath_edge_signals_skipped_total",
+                    "reason" => "jupiter_signal"
+                )
+                .increment(1);
+                info!(
+                    "📦 Received Jupiter arb signal ({} hops) - integration pending",
+                    sig.route_hops.len()
+                );
+            }
+            SharedArbSignal::Enhanced(_) => {
+                metrics::counter!(
+                    "hotpath_edge_signals_skipped_total",
+                    "reason" => "enhanced_signal"
+                )
+                .increment(1);
+                info!("📦 Received enhanced arbitrage signal - integration pending");
+            }
+        }
+
+        Ok(())
+    }
+
+    fn spawn_signal_consumer(self: &Arc<Self>) {
+        let rx = self.signal_queue.receiver();
+        let engine = Arc::clone(self);
+        tokio::spawn(async move {
+            let property_store = get_property_store();
+            loop {
+                let signal = rx.recv_async().await;
+                if !property_store
+                    .get_atomic_bool("edge_detection_enabled")
+                    .unwrap_or(false)
+                {
+                    metrics::counter!(
+                        "hotpath_edge_signals_skipped_total",
+                        "reason" => "disabled"
+                    )
+                    .increment(1);
+                    continue;
+                }
+
+                if let Err(e) = engine
+                    .process_edge_signal(SharedArbSignal::V1(signal))
+                    .await
+                {
+                    warn!("Failed to process edge signal: {}", e);
+                }
+            }
+        });
+    }
+
+    fn spawn_edge_consumer(self: &Arc<Self>) {
+        let fast_engine = self.fast_engine.clone();
+        let broker =
+            std::env::var("KAFKA_BROKER").unwrap_or_else(|_| "localhost:29092".to_string());
+        let edge_topic =
+            std::env::var("EDGE_DELTA_TOPIC").unwrap_or_else(|_| "edge.delta.v1".to_string());
+        let kafka_debug = std::env::var("EDGE_KAFKA_DEBUG")
+            .ok()
+            .map(|v| matches!(v.as_str(), "1" | "true" | "TRUE" | "on"))
+            .unwrap_or(false);
+
+        tokio::spawn(async move {
+            let consumer: StreamConsumer = match ClientConfig::new()
+                .set("group.id", "hotpath.edge")
+                .set("bootstrap.servers", &broker)
+                .set("enable.auto.commit", "false")
+                .set("auto.offset.reset", "latest")
+                .create()
+            {
+                Ok(c) => c,
+                Err(e) => {
+                    error!("❌ Failed to create edge delta consumer: {}", e);
+                    return;
+                }
+            };
+
+            if let Err(e) = consumer.subscribe(&[&edge_topic]) {
+                error!(
+                    "❌ Failed to subscribe to edge delta topic {}: {}",
+                    edge_topic, e
+                );
+                return;
+            }
+
+            let property_store = get_property_store();
+
+            loop {
+                match consumer.recv().await {
+                    Ok(msg) => {
+                        if let Some(payload) = msg.payload() {
+                            metrics::counter!("hotpath_edge_messages_total").increment(1);
+                            if kafka_debug {
+                                debug!(
+                                    "Received edge.delta payload (len={}, partition={}, offset={})",
+                                    payload.len(),
+                                    msg.partition(),
+                                    msg.offset()
+                                );
+                            }
+
+                            let enabled = property_store
+                                .get_atomic_bool("edge_detection_enabled")
+                                .unwrap_or(false);
+
+                            if enabled {
+                                match decode_and_validate_edge(payload) {
+                                    Ok(delta) => {
+                                        if let Err(e) = fast_engine.process_edge_update(delta) {
+                                            metrics::counter!(
+                                                "hotpath_edge_messages_rejected_total",
+                                                "reason" => "process_error"
+                                            )
+                                            .increment(1);
+                                            warn!("Failed to process edge delta: {}", e);
+                                        }
+                                    }
+                                    Err(reason) => {
+                                        metrics::counter!(
+                                            "hotpath_edge_messages_rejected_total",
+                                            "reason" => reason
+                                        )
+                                        .increment(1);
+                                    }
+                                }
+                            } else {
+                                metrics::counter!(
+                                    "hotpath_edge_messages_skipped_total",
+                                    "reason" => "disabled"
+                                )
+                                .increment(1);
+                            }
+                        }
+
+                        let _ = consumer.commit_message(&msg, CommitMode::Async);
+                    }
+                    Err(e) => {
+                        warn!("⚠️ Edge delta consumer error: {}", e);
+                        tokio::time::sleep(Duration::from_millis(50)).await;
+                    }
+                }
+            }
+        });
+    }
+
+    fn spawn_property_watchers(self: &Arc<Self>) {
+        let fast_engine = self.fast_engine.clone();
+        let mut receiver = get_property_store().subscribe();
+        tokio::spawn(async move {
+            while let Ok(event) = receiver.recv().await {
+                if event.property_key == "max_edge_staleness_ms" {
+                    if let PropertyValue::Integer(value) = event.new_value {
+                        let value = if value <= 0 { None } else { Some(value as u64) };
+                        fast_engine.set_max_edge_staleness_ms(value);
+                    }
+                }
+            }
+        });
+    }
+
+    pub fn start_background_tasks(engine: Arc<Self>) {
+        engine.spawn_signal_consumer();
+        engine.spawn_edge_consumer();
+        engine.spawn_property_watchers();
     }
 
     /// HOT PATH: Core arbitrage detection logic - Direct transaction analysis
@@ -2774,10 +2986,15 @@ impl HotPathArbitrageEngine {
             //     return Ok(None);
             // }
 
+            let profit_bps_u64 = profit_bps.max(0) as u64;
+            let amount_in = 1_000_000_000u128;
+            let expected_out =
+                amount_in.saturating_add(amount_in.saturating_mul(profit_bps_u64 as u128) / 10_000);
+
             let opportunity = ArbitrageOpportunity {
                 signature: signature.clone(),
                 slot: transaction_update.slot,
-                profit_bps: profit_bps as u64,
+                profit_bps: profit_bps_u64,
                 venue_a: venues_involved[0].to_string(),
                 venue_b: venues_involved
                     .get(1)
@@ -2787,6 +3004,9 @@ impl HotPathArbitrageEngine {
                 token_b: token_info.1,
                 strategy: "multi-venue-atomic".to_string(),
                 timestamp: chrono::Utc::now(),
+                amount_in_lamports: amount_in,
+                expected_amount_out_lamports: expected_out,
+                source: OpportunitySource::Heuristic,
             };
 
             self.arbitrage_opportunities_found
@@ -2807,16 +3027,24 @@ impl HotPathArbitrageEngine {
                     .calculate_arbitrage_profit(transaction_update, &[venue], "price-impact-arb")
                     .await?;
 
+                let profit_bps_u64 = profit_bps.max(0) as u64;
+                let amount_in = 1_000_000_000u128;
+                let expected_out = amount_in
+                    .saturating_add(amount_in.saturating_mul(profit_bps_u64 as u128) / 10_000);
+
                 let opportunity = ArbitrageOpportunity {
                     signature: signature.clone(),
                     slot: transaction_update.slot,
-                    profit_bps: profit_bps as u64,
+                    profit_bps: profit_bps_u64,
                     venue_a: venue.to_string(),
                     venue_b: "impact-arb".to_string(),
                     token_a,
                     token_b,
                     strategy: "price-impact-arb".to_string(),
                     timestamp: chrono::Utc::now(),
+                    amount_in_lamports: amount_in,
+                    expected_amount_out_lamports: expected_out,
+                    source: OpportunitySource::Heuristic,
                 };
 
                 self.arbitrage_opportunities_found
@@ -2948,16 +3176,23 @@ impl HotPathArbitrageEngine {
         // Look for Jupiter transactions that might leave arbitrage opportunities
         if current_time % 100 < 5 {
             // 5% detection rate for testing
+            let profit_bps = 18u64;
+            let amount_in = 1_000_000_000u128;
+            let expected_out =
+                amount_in.saturating_add(amount_in.saturating_mul(profit_bps as u128) / 10_000);
             return Ok(Some(ArbitrageOpportunity {
                 signature: signature.to_string(),
                 slot: _transaction_update.slot,
-                profit_bps: 18,
+                profit_bps,
                 venue_a: "jupiter-v6".to_string(),
                 venue_b: "counter-route".to_string(),
                 token_a: "ROUTE_ANALYSIS".to_string(),
                 token_b: "MULTI_HOP".to_string(),
                 strategy: "jupiter-route-arb".to_string(),
                 timestamp: chrono::Utc::now(),
+                amount_in_lamports: amount_in,
+                expected_amount_out_lamports: expected_out,
+                source: OpportunitySource::Heuristic,
             }));
         }
 
@@ -2980,16 +3215,23 @@ impl HotPathArbitrageEngine {
         // Basic detection for testing
         if signature.ends_with("c") || signature.ends_with("e") {
             // ~30% of transactions
+            let profit_bps = 12u64;
+            let amount_in = 1_000_000_000u128;
+            let expected_out =
+                amount_in.saturating_add(amount_in.saturating_mul(profit_bps as u128) / 10_000);
             return Ok(Some(ArbitrageOpportunity {
                 signature: signature.to_string(),
                 slot: transaction_update.slot,
-                profit_bps: 12,
+                profit_bps,
                 venue_a: venue.to_string(),
                 venue_b: "cl-impact-arb".to_string(),
                 token_a: "CONCENTRATED".to_string(),
                 token_b: "LIQUIDITY".to_string(),
                 strategy: "concentrated-liquidity-arb".to_string(),
                 timestamp: chrono::Utc::now(),
+                amount_in_lamports: amount_in,
+                expected_amount_out_lamports: expected_out,
+                source: OpportunitySource::Heuristic,
             }));
         }
 
@@ -3010,16 +3252,23 @@ impl HotPathArbitrageEngine {
         // Basic detection
         if signature.contains("M") || signature.contains("m") {
             // ~20% of transactions
+            let profit_bps = 8u64;
+            let amount_in = 1_000_000_000u128;
+            let expected_out =
+                amount_in.saturating_add(amount_in.saturating_mul(profit_bps as u128) / 10_000);
             return Ok(Some(ArbitrageOpportunity {
                 signature: signature.to_string(),
                 slot: transaction_update.slot,
-                profit_bps: 8,
+                profit_bps,
                 venue_a: "meteora-dlmm".to_string(),
                 venue_b: "bin-arbitrage".to_string(),
                 token_a: "BIN_TRANSITION".to_string(),
                 token_b: "DLMM_SPECIAL".to_string(),
                 strategy: "dlmm-bin-arb".to_string(),
                 timestamp: chrono::Utc::now(),
+                amount_in_lamports: amount_in,
+                expected_amount_out_lamports: expected_out,
+                source: OpportunitySource::Heuristic,
             }));
         }
 
@@ -3041,16 +3290,23 @@ impl HotPathArbitrageEngine {
         // Basic detection
         if signature.starts_with("2") || signature.starts_with("3") {
             // ~25% of transactions
+            let profit_bps = 6u64;
+            let amount_in = 1_000_000_000u128;
+            let expected_out =
+                amount_in.saturating_add(amount_in.saturating_mul(profit_bps as u128) / 10_000);
             return Ok(Some(ArbitrageOpportunity {
                 signature: signature.to_string(),
                 slot: transaction_update.slot,
-                profit_bps: 6,
+                profit_bps,
                 venue_a: "phoenix-clob".to_string(),
                 venue_b: "spread-arbitrage".to_string(),
                 token_a: "ORDER_BOOK".to_string(),
                 token_b: "SPREAD_CAPTURE".to_string(),
                 strategy: "clob-spread-arb".to_string(),
                 timestamp: chrono::Utc::now(),
+                amount_in_lamports: amount_in,
+                expected_amount_out_lamports: expected_out,
+                source: OpportunitySource::Heuristic,
             }));
         }
 
@@ -3147,6 +3403,23 @@ impl HotPathArbitrageEngine {
 }
 
 /// Arbitrage opportunity detected on the hot path
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum OpportunitySource {
+    Heuristic,
+    EdgeSignal,
+    Jupiter,
+}
+
+impl OpportunitySource {
+    fn as_str(&self) -> &'static str {
+        match self {
+            OpportunitySource::Heuristic => "heuristic",
+            OpportunitySource::EdgeSignal => "edge",
+            OpportunitySource::Jupiter => "jupiter",
+        }
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct ArbitrageOpportunity {
     pub signature: String,
@@ -3158,6 +3431,9 @@ pub struct ArbitrageOpportunity {
     pub token_b: String,
     pub strategy: String,
     pub timestamp: DateTime<Utc>,
+    pub amount_in_lamports: u128,
+    pub expected_amount_out_lamports: u128,
+    pub source: OpportunitySource,
 }
 
 /// Arbitrage engine statistics
@@ -3237,7 +3513,12 @@ lazy_static::lazy_static! {
 
     // HOT PATH ARBITRAGE ENGINE - Global singleton for zero-latency MEV detection
     static ref HOT_PATH_ENGINE: Arc<HotPathArbitrageEngine> = {
-        Arc::new(HotPathArbitrageEngine::new().expect("Failed to initialize hot path arbitrage engine"))
+        let engine = Arc::new(
+            HotPathArbitrageEngine::new()
+                .expect("Failed to initialize hot path arbitrage engine"),
+        );
+        HotPathArbitrageEngine::start_background_tasks(engine.clone());
+        engine
     };
 
     // AI OPTIMIZATION ENGINE - Global singleton for machine learning parameter optimization
@@ -5295,4 +5576,96 @@ fn hash_venue_name(venue_name: &str) -> u32 {
     let mut hasher = DefaultHasher::new();
     venue_name.hash(&mut hasher);
     hasher.finish() as u32
+}
+
+fn timestamp_from_ns(ns: u64) -> DateTime<Utc> {
+    if ns == 0 {
+        return Utc::now();
+    }
+    let secs = (ns / 1_000_000_000) as i64;
+    let nanos = (ns % 1_000_000_000) as u32;
+    Utc.timestamp_opt(secs, nanos)
+        .single()
+        .unwrap_or_else(Utc::now)
+}
+
+fn opportunity_from_signal(signal: &ArbSignalV1) -> Result<ArbitrageOpportunity, &'static str> {
+    let profit_bps = signal.profit_bps.max(0) as u64;
+    if profit_bps == 0 {
+        return Err("zero_profit");
+    }
+
+    if signal.expected_profit_out <= 0 {
+        return Err("nonpositive_profit");
+    }
+
+    if signal.amount_in == 0 {
+        return Err("zero_amount");
+    }
+
+    let expected_profit_lamports = signal.expected_profit_out.max(0) as u128;
+    let expected_out = signal.amount_in.saturating_add(expected_profit_lamports);
+
+    Ok(ArbitrageOpportunity {
+        signature: format!("edge-{}", signal.id),
+        slot: signal.slot,
+        profit_bps,
+        venue_a: signal.dex_sell.clone(),
+        venue_b: signal.dex_buy.clone(),
+        token_a: signal.pair.a.clone(),
+        token_b: signal.pair.b.clone(),
+        strategy: "edge-delta".to_string(),
+        timestamp: timestamp_from_ns(signal.emitted_at_ns),
+        amount_in_lamports: signal.amount_in,
+        expected_amount_out_lamports: expected_out,
+        source: OpportunitySource::EdgeSignal,
+    })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use shared_protocol::Pair;
+
+    fn sample_signal() -> ArbSignalV1 {
+        ArbSignalV1 {
+            pair: Pair {
+                a: "SOL".to_string(),
+                b: "USDC".to_string(),
+            },
+            dex_sell: "raydium".to_string(),
+            dex_mid: None,
+            dex_buy: "orca".to_string(),
+            amount_in: 1_000_000_000,
+            expected_profit_out: 5_000_000,
+            slot: 123,
+            sell_pool_id: "sell-pool".to_string(),
+            mid_pool_id: None,
+            buy_pool_id: "buy-pool".to_string(),
+            id: 42,
+            profit_bps: 25,
+            emitted_at_ns: 1_500_000_000,
+        }
+    }
+
+    #[test]
+    fn opportunity_from_signal_maps_amounts() {
+        let signal = sample_signal();
+        let opportunity = opportunity_from_signal(&signal).expect("conversion should succeed");
+        assert_eq!(opportunity.amount_in_lamports, signal.amount_in);
+        assert_eq!(
+            opportunity.expected_amount_out_lamports,
+            signal.amount_in + signal.expected_profit_out as u128
+        );
+        assert_eq!(opportunity.profit_bps, signal.profit_bps as u64);
+        assert_eq!(opportunity.source, OpportunitySource::EdgeSignal);
+    }
+
+    #[test]
+    fn opportunity_from_signal_rejects_nonpositive_profit() {
+        let mut signal = sample_signal();
+        signal.expected_profit_out = 0;
+        let result = opportunity_from_signal(&signal);
+        assert_eq!(result.unwrap_err(), "nonpositive_profit");
+    }
 }

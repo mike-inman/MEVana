@@ -106,6 +106,11 @@ pub struct AtomicProperties {
     pub redis_enabled: AtomicBool,
     pub kafka_enabled: AtomicBool,
     pub api_logging_enabled: AtomicBool,
+    pub max_edge_staleness_ms: AtomicU64,
+
+    // === GROUP 9: DETECTION MODE (2 properties) ===
+    pub heuristic_detection_enabled: AtomicBool,
+    pub edge_detection_enabled: AtomicBool,
 
     // === LEGACY (for backward compatibility) ===
     pub system_enabled: AtomicBool, // ✅ Keep existing
@@ -700,6 +705,11 @@ impl PropertyStore {
             redis_enabled: AtomicBool::new(true),    // SAFE: Enable caching
             kafka_enabled: AtomicBool::new(true),    // SAFE: Enable messaging
             api_logging_enabled: AtomicBool::new(true), // SAFE: Enable API logs
+            max_edge_staleness_ms: AtomicU64::new(250), // SAFE: drop edges older than 250ms
+
+            // === GROUP 9: DETECTION MODE ===
+            heuristic_detection_enabled: AtomicBool::new(true), // Start with heuristics enabled
+            edge_detection_enabled: AtomicBool::new(false),     // Edge pipeline opt-in
 
             // === LEGACY ===
             system_enabled: AtomicBool::new(true), // ✅ Keep existing
@@ -1028,6 +1038,16 @@ impl PropertyStore {
                     .store(value, Ordering::Relaxed);
                 old
             }
+            "max_edge_staleness_ms" => {
+                let old = self
+                    .atomic_properties
+                    .max_edge_staleness_ms
+                    .load(Ordering::Relaxed);
+                self.atomic_properties
+                    .max_edge_staleness_ms
+                    .store(value, Ordering::Relaxed);
+                old
+            }
             _ => return Err(anyhow::anyhow!("Unknown atomic u64 property: {}", key)),
         };
 
@@ -1184,6 +1204,26 @@ impl PropertyStore {
                     .load(Ordering::Relaxed);
                 self.atomic_properties
                     .enable_file_logging
+                    .store(value, Ordering::Relaxed);
+                old
+            }
+            "heuristic_detection_enabled" => {
+                let old = self
+                    .atomic_properties
+                    .heuristic_detection_enabled
+                    .load(Ordering::Relaxed);
+                self.atomic_properties
+                    .heuristic_detection_enabled
+                    .store(value, Ordering::Relaxed);
+                old
+            }
+            "edge_detection_enabled" => {
+                let old = self
+                    .atomic_properties
+                    .edge_detection_enabled
+                    .load(Ordering::Relaxed);
+                self.atomic_properties
+                    .edge_detection_enabled
                     .store(value, Ordering::Relaxed);
                 old
             }
@@ -1439,6 +1479,11 @@ impl PropertyStore {
                     .flush_interval_ms
                     .load(Ordering::Relaxed),
             ),
+            "max_edge_staleness_ms" => Some(
+                self.atomic_properties
+                    .max_edge_staleness_ms
+                    .load(Ordering::Relaxed),
+            ),
             _ => None,
         }
     }
@@ -1511,6 +1556,16 @@ impl PropertyStore {
             "enable_file_logging" => Some(
                 self.atomic_properties
                     .enable_file_logging
+                    .load(Ordering::Relaxed),
+            ),
+            "heuristic_detection_enabled" => Some(
+                self.atomic_properties
+                    .heuristic_detection_enabled
+                    .load(Ordering::Relaxed),
+            ),
+            "edge_detection_enabled" => Some(
+                self.atomic_properties
+                    .edge_detection_enabled
                     .load(Ordering::Relaxed),
             ),
             // System settings
@@ -1613,6 +1668,30 @@ impl PropertyStore {
                 self.atomic_properties
                     .ai_optimization_enabled
                     .load(Ordering::Relaxed),
+            ),
+        );
+        properties.insert(
+            "heuristic_detection_enabled".to_string(),
+            PropertyValue::Boolean(
+                self.atomic_properties
+                    .heuristic_detection_enabled
+                    .load(Ordering::Relaxed),
+            ),
+        );
+        properties.insert(
+            "edge_detection_enabled".to_string(),
+            PropertyValue::Boolean(
+                self.atomic_properties
+                    .edge_detection_enabled
+                    .load(Ordering::Relaxed),
+            ),
+        );
+        properties.insert(
+            "max_edge_staleness_ms".to_string(),
+            PropertyValue::Integer(
+                self.atomic_properties
+                    .max_edge_staleness_ms
+                    .load(Ordering::Relaxed) as i32,
             ),
         );
 
