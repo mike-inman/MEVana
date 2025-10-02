@@ -6,7 +6,7 @@ Last updated: 2025-10-01
 
 1. **Start with `docs/operations/ADMIN_CONTROL_PANEL.md`.** It explains the Clerk JWT setup, Grafana button requirements, per-wallet metrics, and audit expectations you must validate immediately after a deploy.
 2. Ensure `/etc/mevana/common.env` and `/etc/mevana/executor.env` define `WALLET_LABELS=/opt/MEVana/keys/id.json=prod,...` so Prometheus exports `mevana_wallet_balance_sol{wallet="prod"}` and Grafana panels light up without guesswork.
-3. Flip the PropertyStore toggles when moving to real detection: enable `edge_detection_enabled` and, once validated, disable `heuristic_detection_enabled` so the hotpath consumes Kafka `edge.delta.v1` data end-to-end.
+3. Flip the PropertyStore toggles when moving to real detection: enable `edge_detection_enabled` and, once validated, disable `heuristic_detection_enabled` so the hotpath consumes Kafka `edge.delta.v1` data end-to-end. Watch the new counters (`hotpath_edge_messages_total`, `hotpath_edge_messages_rejected_total`, `hotpath_edge_signals_skipped_total`) to confirm edges are arriving, being decoded, and not getting filtered out.
 4. Ensure backup directories owned by service accounts. Example: `sudo chown -R mevana:mevana /opt/MEVana/vault_backups` for wallet-vault on fresh hosts.
 5. After rolling new binaries, run `systemctl status executor-service` and curl the metrics endpoint (`curl -s http://127.0.0.1:9904/metrics | rg mevana_wallet_balance_sol`) to confirm the active wallet label reports the live balance and backups show `0`.
 

@@ -250,6 +250,7 @@ mod tests {
     }
 
     #[test]
+    #[allow(clippy::needless_update)]
     fn empty_update_returns_no_swaps() {
         let update = SubscribeUpdateTransaction {
             slot: 42,
@@ -270,6 +271,7 @@ mod tests {
     }
 
     #[test]
+    #[allow(clippy::needless_update)]
     fn extracts_swap_and_uses_decoder_roles() {
         let instruction = BlockCompiledInstruction {
             program_id_index: 0,

@@ -8,7 +8,10 @@
 use anyhow::{anyhow, Result};
 use reqwest::Client;
 use serde_json::Value;
-use std::time::{Duration, Instant};
+use std::{
+    env,
+    time::{Duration, Instant},
+};
 use tokio::time::timeout;
 
 /// Configuration for live data testing
@@ -18,6 +21,7 @@ const PROMETHEUS_ENDPOINT: &str = "http://localhost:9090/api/v1/query";
 const TEST_TIMEOUT_SECONDS: u64 = 30;
 const MIN_TRANSACTION_RATE_PER_SECOND: u64 = 1;
 const MIN_ARBITRAGE_OPPORTUNITIES_DETECTED: u64 = 1;
+const RUN_LIVE_TESTS_ENV: &str = "RUN_HOTPATH_LIVE_TESTS";
 
 #[derive(Debug)]
 pub struct LiveDataMetrics {
@@ -305,8 +309,26 @@ impl LiveTransactionDataTest {
     }
 }
 
+fn live_tests_enabled() -> bool {
+    match env::var(RUN_LIVE_TESTS_ENV) {
+        Ok(val) => matches!(
+            val.as_str(),
+            "1" | "true" | "TRUE" | "True" | "yes" | "YES" | "on" | "ON"
+        ),
+        Err(_) => false,
+    }
+}
+
 #[tokio::test]
 async fn test_live_transaction_data_flow_integration() -> Result<()> {
+    if !live_tests_enabled() {
+        println!(
+            "⚠️ Skipping live transaction data flow integration test (set {}=1 to enable)",
+            RUN_LIVE_TESTS_ENV
+        );
+        return Ok(());
+    }
+
     // Initialize test environment
     let test = LiveTransactionDataTest::new();
 
@@ -347,6 +369,14 @@ pub async fn run_live_data_verification() -> Result<()> {
 
 #[tokio::test]
 async fn test_geyser_endpoint_connectivity() -> Result<()> {
+    if !live_tests_enabled() {
+        println!(
+            "⚠️ Skipping Geyser endpoint connectivity test (set {}=1 to enable)",
+            RUN_LIVE_TESTS_ENV
+        );
+        return Ok(());
+    }
+
     println!(
         "🌐 Testing Geyser endpoint connectivity: {}",
         GEYSER_ENDPOINT
@@ -385,6 +415,14 @@ async fn test_geyser_endpoint_connectivity() -> Result<()> {
 
 #[tokio::test]
 async fn test_metrics_endpoint_availability() -> Result<()> {
+    if !live_tests_enabled() {
+        println!(
+            "⚠️ Skipping metrics endpoint availability test (set {}=1 to enable)",
+            RUN_LIVE_TESTS_ENV
+        );
+        return Ok(());
+    }
+
     println!(
         "📊 Testing metrics endpoint availability: {}",
         METRICS_ENDPOINT

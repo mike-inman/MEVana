@@ -179,7 +179,7 @@ impl ParsedOpportunity {
                     .and_then(Value::as_str)
                     .map(str::to_owned)
             })
-            .or_else(|| venues.get(0).and_then(|v| v.as_str().map(str::to_owned)))
+            .or_else(|| venues.first().and_then(|v| v.as_str().map(str::to_owned)))
             .unwrap_or_default();
 
         let venue_b = details

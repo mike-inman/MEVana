@@ -1,5 +1,5 @@
 # MEVana Testing & Validation Procedures
-Last updated: 2025-09-15
+Last updated: 2025-10-01
 
 **Document Version:** 1.0  
 **Created:** September 12, 2025  
@@ -12,6 +12,13 @@ Last updated: 2025-09-15
 
 ### **Testing Philosophy**
 Given that MEVana has sophisticated existing components, our testing focuses on **integration validation** rather than unit testing individual components. The primary risk is in the connections between systems, not the systems themselves.
+
+**Hotpath live-data coverage.** The `crates/hotpath_arb_engine/tests/live_transaction_data_test.rs` suite now treats live Solana + Prometheus checks as opt-in so CI and offline developers stay green. Export `RUN_HOTPATH_LIVE_TESTS=1` (any of `1/true/on/yes`, case-insensitive) before running the suite to exercise:
+- `test_live_transaction_data_flow_integration`
+- `test_geyser_endpoint_connectivity`
+- `test_metrics_endpoint_availability`
+
+When the flag is set, ensure the local hotpath binary is running with metrics on `http://localhost:8088/metrics`, Prometheus reachable at `http://localhost:9090`, and the property store toggles flipped to `edge_detection_enabled=true`, `heuristic_detection_enabled=false` so edge-driven opportunities flow.
 
 ### **Risk-Based Testing Priorities**
 1. **CRITICAL**: Execution integration (HotPath → Executor Service)

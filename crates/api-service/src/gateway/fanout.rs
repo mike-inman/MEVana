@@ -76,28 +76,25 @@ impl GatewayFanout {
     /// Spawn background Kafka consumers that publish payloads into broadcast
     /// channels for downstream WebSocket and SSE handlers.
     pub fn spawn_kafka_tasks(&self) -> GatewayConsumerHandles {
-        let mut handles = Vec::with_capacity(5);
-
-        handles.push(self.spawn_passthrough_consumer(
-            self.config.prices_topic.clone(),
-            self.prices_tx.clone(),
-            "prices",
-        ));
-
-        handles.push(self.spawn_passthrough_consumer(
-            self.config.swaps_topic.clone(),
-            self.swaps_tx.clone(),
-            "swaps",
-        ));
-
-        handles.push(self.spawn_passthrough_consumer(
-            self.config.swaps_v2_topic.clone(),
-            self.swaps_v2_tx.clone(),
-            "swaps_v2",
-        ));
-
-        handles.push(self.spawn_opportunities_consumer());
-        handles.push(self.spawn_execution_consumer());
+        let handles = vec![
+            self.spawn_passthrough_consumer(
+                self.config.prices_topic.clone(),
+                self.prices_tx.clone(),
+                "prices",
+            ),
+            self.spawn_passthrough_consumer(
+                self.config.swaps_topic.clone(),
+                self.swaps_tx.clone(),
+                "swaps",
+            ),
+            self.spawn_passthrough_consumer(
+                self.config.swaps_v2_topic.clone(),
+                self.swaps_v2_tx.clone(),
+                "swaps_v2",
+            ),
+            self.spawn_opportunities_consumer(),
+            self.spawn_execution_consumer(),
+        ];
 
         GatewayConsumerHandles::new(handles)
     }
@@ -373,7 +370,7 @@ fn transform_opportunity(raw: &str) -> Option<String> {
         .and_then(Value::as_array)
         .cloned()
         .unwrap_or_default();
-    let venue_a = venues.get(0).and_then(Value::as_str).unwrap_or("VenueA");
+    let venue_a = venues.first().and_then(Value::as_str).unwrap_or("VenueA");
     let venue_b = venues.get(1).and_then(Value::as_str).unwrap_or(venue_a);
 
     let profit_bps = value.get("profit_bps").and_then(as_f64).unwrap_or(0.0);
@@ -476,7 +473,7 @@ fn transform_execution_for_fill(value: &Value) -> Option<String> {
     let sig = value
         .get("transaction_signatures")
         .and_then(Value::as_array)
-        .and_then(|arr| arr.get(0))
+        .and_then(|arr| arr.first())
         .and_then(Value::as_str)
         .unwrap_or("UNKNOWN");
 
