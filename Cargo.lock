@@ -3077,6 +3077,7 @@ dependencies = [
  "log",
  "metrics",
  "metrics-exporter-prometheus",
+ "normalizer-generated",
  "normalizer-runtime",
  "once_cell",
  "prometheus",

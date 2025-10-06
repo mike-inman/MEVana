@@ -1,35 +1,17 @@
-AI Assistants Guidelines (MEVana)
+# Repository Guidelines
+Last updated: 2025-10-09
 
-Your outputs must follow these rules to keep the repo consistent:
+## Project Structure & Module Organization
+MEVana is a multi-crate Rust workspace; primary services live under `crates/` (e.g., `hotpath_arb_engine`, `executor-service`, `normalizer-service`). Shared libraries reside in `crates/shared-*`, while generated normalizer artifacts sit in `crates/normalizer-generated`. Keep Docker Compose, Prometheus, and Grafana assets inside `infrastructure/` (dashboards under `infrastructure/grafana/dashboards/`, datasources in `infrastructure/grafana/datasources/`). Place operational scripts inside `scripts/` using the existing subfolders (`deployment/`, `maintenance/`, `monitoring/`, `testing/`). Documentation belongs in `docs/` and should reuse the established subdirectories.
 
-Start Here for AI Agents
-- Pre‑flight checklist: docs/ai/RUN_FIRST.md
-- 2‑minute orientation: docs/ai/ONBOARDING_AI.md
-- Self‑Hosted Deploy: docs/operations/SELF_HOSTED_DEPLOYMENT_GUIDE.md (must read)
+## Build, Test, and Development Commands
+Run `cargo build --workspace` for a full workspace build and `cargo run -p hotpath_arb_engine --bin hotpath_arb_engine` to exercise the hotpath locally (export env overrides from `config/environments/*.env.sample`). Use `cargo fmt --all` and `cargo clippy --workspace --all-targets -- -D warnings` before every PR; these match CI. Execute `cargo test --workspace` for unit and integration coverage, and `bash scripts/ci/repo_hygiene.sh` to mirror the CI hygiene gate. Spin up the supporting stack with `docker compose -f infrastructure/docker-compose.core.yml up -d --build` when you need Kafka/Redis/Postgres.
 
-Do
-- Place Grafana dashboards only in `infrastructure/grafana/dashboards/`.
-- Place Grafana datasources only in `infrastructure/grafana/datasources/`.
-- Put all Docker Compose and monitoring config under `infrastructure/`.
-- Put operational scripts in `scripts/` (subfolders: `deployment/`, `maintenance/`, `monitoring/`, `testing/`).
-- Put documentation only in `docs/` (and organize under `docs/operations/`, `docs/deployment/`, `docs/architecture/`, `docs/strategy/`, `docs/reference/`).
-- Use path-agnostic shell: prefer `tar -C`, `repo_root=$(git rev-parse --show-toplevel)`.
+## Coding Style & Naming Conventions
+Follow `docs/development/RUST_STYLE.md`: types use CamelCase, functions and modules use snake_case, constants are SCREAMING_SNAKE_CASE. Keep `main.rs` thin, prefer structured `tracing` logs, and avoid `unwrap()` in production paths. Stick to four-space indentation, group imports explicitly, and document public APIs with rustdoc examples. Justify any lint suppressions and scope them narrowly.
 
-Rust code requirements
-- Follow `docs/development/RUST_STYLE.md` for naming, error handling, logging, and async patterns.
-- Format and lint before proposing patches: `cargo fmt --all` and `cargo clippy --workspace --all-targets -- -D warnings`.
+## Testing Guidelines
+Co-locate unit tests in each crate and add cross-crate scenarios under `tests/`. Heavy integration suites should be marked with `#[ignore]` and documented with run instructions. For Kafka or infrastructure-dependent checks, leverage helpers in `scripts/testing/` or the `scripts/deployment/bootstrap_kafka.sh` workflow. Confirm coverage for new metrics or endpoints by adding assertions or snapshot tests where feasible.
 
-Documentation timestamps
-- When creating or updating any Markdown under `docs/**`, include a prominent timestamp near the top:
-  - `Last updated: YYYY-MM-DD` for modifications
-  - `Created: YYYY-MM-DD` for new docs
-
-Don’t
-- Don’t create new top-level directories without an approved issue/ADR.
-- Don’t put dashboards in `dashboards/` at the repo root.
-- Don’t commit archives (`*.tgz`, `*.zip`), OS files (`.DS_Store`, `._*`), or secrets.
-- Don’t fork documentation structures (no `docs-new/`).
-
-PR hygiene
-- Explain directory choices and confirm they match these rules.
-- Keep changes minimal and focused; avoid unrelated edits.
+## Commit & Pull Request Guidelines
+Write commits in a concise imperative voice (`docs: add rebuild plan`, `Integrate edge delta pipeline`). Squash unrelated work, explain directory placement when adding files, and mention any follow-up tasks. Pull requests should include a summary, test evidence (`cargo fmt`, `cargo clippy`, `cargo test`), and links to issues or runbooks touched. Attach screenshots for UI-facing changes and note deployment or rollback considerations when relevant.

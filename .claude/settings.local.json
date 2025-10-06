@@ -303,7 +303,12 @@
       "Bash(do date:*)",
       "Bash(npm run build:*)",
       "Bash(websocat:*)",
-      "Bash(./scripts/deploy-production.sh:*)"
+      "Bash(./scripts/deploy-production.sh:*)",
+      "Read(//Users/michaelinman/Repos/solana-defi/**)",
+      "Read(//Users/michaelinman/Repos/solana-awesome/**)",
+      "Read(//Users/michaelinman/Repos/Solana-Arbitrage-Bot1/**)",
+      "Bash(env DATABASE_URL=\"postgresql://mev:mevpassword@localhost:5433/mevdb\" cargo check --workspace)",
+      "Bash(tee:*)"
     ],
     "deny": [],
     "ask": []

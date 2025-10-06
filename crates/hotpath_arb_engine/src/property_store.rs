@@ -634,6 +634,71 @@ impl Default for EmergencySafeValues {
 }
 
 impl PropertyStore {
+    pub async fn set_property_value(
+        &self,
+        key: &str,
+        value: PropertyValue,
+        source: PropertySource,
+    ) -> Result<()> {
+        match value.clone() {
+            PropertyValue::Boolean(val) => return self.set_atomic_bool(key, val, source),
+            PropertyValue::Float(val) => {
+                if self.set_atomic_f64(key, val, source).is_ok() {
+                    return Ok(());
+                }
+
+                let mut complex = self.complex_properties.write().await;
+                let old_value = complex
+                    .get(key)
+                    .cloned()
+                    .unwrap_or(PropertyValue::Float(val));
+                complex.insert(key.to_string(), PropertyValue::Float(val));
+                drop(complex);
+
+                self.notify_change(key, old_value, PropertyValue::Float(val), source);
+                return Ok(());
+            }
+            PropertyValue::Integer(val) => {
+                if self.set_atomic_i32(key, val, source).is_ok() {
+                    return Ok(());
+                }
+
+                if val < 0 {
+                    // Unsigned properties cannot accept negative numbers
+                    return Err(anyhow::anyhow!(
+                        "Property {} expects a non-negative value",
+                        key
+                    ));
+                }
+
+                if self.set_atomic_u32(key, val as u32, source).is_ok() {
+                    return Ok(());
+                }
+
+                if self.set_atomic_u64(key, val as u64, source).is_ok() {
+                    return Ok(());
+                }
+
+                // Fall back to complex property map
+                let mut complex = self.complex_properties.write().await;
+                let old_value = complex
+                    .get(key)
+                    .cloned()
+                    .unwrap_or(PropertyValue::Integer(val));
+                complex.insert(key.to_string(), PropertyValue::Integer(val));
+                drop(complex);
+
+                self.notify_change(key, old_value, PropertyValue::Integer(val), source);
+                return Ok(());
+            }
+            PropertyValue::String(_) => {
+                return Err(anyhow::anyhow!(
+                    "String property updates are not supported via API yet"
+                ))
+            }
+        }
+    }
+
     /// Create new property store with default values from SmartFilterConfig
     pub fn new() -> Self {
         let (event_broadcaster, _) = broadcast::channel(1000); // 1000 event buffer
