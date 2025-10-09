@@ -2329,6 +2329,7 @@ dependencies = [
  "jsonwebtoken",
  "libc",
  "log",
+ "metrics",
  "once_cell",
  "parking_lot",
  "prometheus",
@@ -10391,6 +10392,24 @@ checksum = "29790946404f91d9c5d06f9874efddea1dc06c5efe94541a7d6863108e3a5e4b"
 dependencies = [
  "same-file",
  "winapi-util",
+]
+
+[[package]]
+name = "wallet-metrics-exporter"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "chrono",
+ "env_logger 0.10.2",
+ "executor-service",
+ "log",
+ "once_cell",
+ "prometheus",
+ "reqwest 0.12.23",
+ "serde",
+ "serde_json",
+ "tokio",
+ "warp",
 ]
 
 [[package]]
