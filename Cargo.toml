@@ -14,6 +14,7 @@ members = [
   
   # SUPPORTING SERVICES
   "crates/monitoring-service",           # Performance monitoring and APIs
+  "crates/wallet-metrics-exporter",      # Wallet balance metrics for Prometheus
   "crates/price-aggregator",             # Kafka swap -> rolling price feed
   "crates/kafka_db_writer",              # Kafka-to-database writer service
   "crates/dex-registry",                 # DEX metadata registry
