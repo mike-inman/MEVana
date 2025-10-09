@@ -14,7 +14,7 @@ WorkingDirectory=/opt/MEVana
 EnvironmentFile=/etc/mevana/wallet-metrics.env
 
 # Binary location
-ExecStart=/opt/MEVana/target/release/wallet-metrics-exporter
+ExecStart=/opt/MEVana/bin/wallet-metrics-exporter
 
 # Restart policy
 Restart=always
