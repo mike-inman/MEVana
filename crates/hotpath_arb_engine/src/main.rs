@@ -306,58 +306,23 @@ static NORMALIZER_EXTRACTORS: Lazy<Vec<Box<dyn SwapExtractor>>> =
     Lazy::new(|| normalizer_registry::registry());
 
 /// Check if live trading is enabled and safe to proceed
-/// This is the MASTER SAFETY GATE - everything flows through here
+/// Simplified safety gate - opportunities are ALWAYS published to Kafka
+/// This gate ONLY blocks direct HotPath execution (executor handles most trades)
 fn is_trading_enabled_and_safe() -> bool {
-    let property_store = get_property_store();
+    // LAYER 1: Circuit breaker (prevent runaway failures)
+    let consecutive_failures = EMERGENCY_CONTROLS
+        .consecutive_failures
+        .load(Ordering::Relaxed);
 
-    // LAYER 1: Check enable_live_execution flag
-    let live_execution_enabled = property_store
-        .get_atomic_bool("enable_live_execution")
-        .unwrap_or(false);
-
-    if !live_execution_enabled {
-        return false; // Trading disabled
+    if consecutive_failures >= 3 {
+        warn!(
+            "🚨 Circuit breaker ACTIVE: {} consecutive failures (max: 3)",
+            consecutive_failures
+        );
+        return false;
     }
 
-    // LAYER 2: Check dry_run flag
-    let dry_run = property_store.get_atomic_bool("dry_run").unwrap_or(true);
-
-    if dry_run {
-        return false; // In dry run mode
-    }
-
-    // LAYER 3: Check simulation_mode flag
-    let simulation_mode = property_store
-        .get_atomic_bool("simulation_mode")
-        .unwrap_or(true);
-
-    if simulation_mode {
-        return false; // In simulation mode
-    }
-
-    // LAYER 4: Check circuit breaker
-    let circuit_breaker_enabled = property_store
-        .get_atomic_bool("circuit_breaker_enabled")
-        .unwrap_or(true);
-
-    if circuit_breaker_enabled {
-        let consecutive_failures = EMERGENCY_CONTROLS
-            .consecutive_failures
-            .load(Ordering::Relaxed);
-        let max_failures = property_store
-            .get_atomic_u32("max_consecutive_failures")
-            .unwrap_or(3);
-
-        if consecutive_failures >= max_failures {
-            warn!(
-                "🚨 Circuit breaker ACTIVE: {} consecutive failures (max: {})",
-                consecutive_failures, max_failures
-            );
-            return false; // Circuit breaker triggered
-        }
-    }
-
-    // LAYER 5: Check system health
+    // LAYER 2: System health (emergency stop capability)
     if let Ok(health) = EMERGENCY_CONTROLS.system_health_status.lock() {
         match &*health {
             SystemHealthStatus::EmergencyStop { reason } => {
