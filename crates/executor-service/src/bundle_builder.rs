@@ -565,7 +565,6 @@ impl BundleBuilder {
                 metrics::counter!("mevana_preflight_simulations_total", "result" => "failure").increment(1);
             }
         }
-        }
         Ok(result)
     }
 }
