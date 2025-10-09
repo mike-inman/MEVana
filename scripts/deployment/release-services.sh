@@ -52,6 +52,8 @@ map_service() {
       echo "price-aggregator" ;;
     api|api-service|gateway)
       echo "api-service" ;;
+    wallet-metrics|wallet-metrics-exporter)
+      echo "wallet-metrics" ;;
     *)
       echo "unknown" ;;
   esac
@@ -141,6 +143,11 @@ for svc in "${unique_services[@]}"; do
       crate="api-service"
       bin="api-server"
       unit="api-service.service"
+      ;;
+    wallet-metrics)
+      crate="wallet-metrics-exporter"
+      bin="wallet-metrics-exporter"
+      unit="wallet-metrics-exporter.service"
       ;;
   esac
 
