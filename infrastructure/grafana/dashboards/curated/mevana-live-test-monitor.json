@@ -623,12 +623,86 @@
       "type": "timeseries"
     },
     {
+      "datasource": {
+        "type": "postgres",
+        "uid": "mevana-postgres"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 24,
+        "x": 0,
+        "y": 26
+      },
+      "id": 16,
+      "options": {
+        "cellHeight": "sm",
+        "footer": {
+          "countRows": true,
+          "fields": "",
+          "reducer": [
+            "count"
+          ],
+          "show": true
+        },
+        "showHeader": true
+      },
+      "pluginVersion": "10.4.5",
+      "targets": [
+        {
+          "datasource": {
+            "type": "postgres",
+            "uid": "mevana-postgres"
+          },
+          "format": "table",
+          "group": [],
+          "metricColumn": "none",
+          "rawSql": "SELECT timestamp AS \"Time\", opportunity_id, token_pair, profit_bps, amount_in, expected_amount_out, venue_sell, venue_buy, strategy_type FROM arbitrage_opportunities ORDER BY timestamp DESC LIMIT 100;",
+          "refId": "A"
+        }
+      ],
+      "title": "Recent Arbitrage Opportunities",
+      "transformations": [
+        {
+          "id": "organize",
+          "options": {
+            "excludeByName": {},
+            "renameByName": {
+              "opportunity_id": "Opportunity",
+              "token_pair": "Token Pair",
+              "profit_bps": "Profit (bps)",
+              "amount_in": "Amount In",
+              "expected_amount_out": "Expected Out",
+              "venue_sell": "Sell Venue",
+              "venue_buy": "Buy Venue",
+              "strategy_type": "Strategy"
+            }
+          }
+        }
+      ],
+      "type": "table"
+    },
+    {
       "collapsed": false,
       "gridPos": {
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 26
+        "y": 34
       },
       "id": 300,
       "panels": [],
@@ -667,7 +741,7 @@
         "h": 6,
         "w": 6,
         "x": 0,
-        "y": 27
+        "y": 35
       },
       "id": 7,
       "options": {
@@ -741,7 +815,7 @@
         "h": 6,
         "w": 6,
         "x": 6,
-        "y": 27
+        "y": 35
       },
       "id": 8,
       "options": {
@@ -863,7 +937,7 @@
         "h": 6,
         "w": 12,
         "x": 12,
-        "y": 27
+        "y": 35
       },
       "id": 9,
       "options": {
@@ -910,7 +984,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 33
+        "y": 41
       },
       "id": 400,
       "panels": [],
@@ -958,7 +1032,7 @@
         "h": 6,
         "w": 6,
         "x": 0,
-        "y": 34
+        "y": 42
       },
       "id": 10,
       "options": {
@@ -1051,7 +1125,7 @@
         "h": 6,
         "w": 9,
         "x": 6,
-        "y": 34
+        "y": 42
       },
       "id": 11,
       "options": {
@@ -1121,7 +1195,7 @@
         "h": 6,
         "w": 9,
         "x": 15,
-        "y": 34
+        "y": 42
       },
       "id": 12,
       "options": {
@@ -1162,7 +1236,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 40
+        "y": 48
       },
       "id": 500,
       "panels": [],
@@ -1216,7 +1290,7 @@
         "h": 6,
         "w": 12,
         "x": 0,
-        "y": 41
+        "y": 49
       },
       "id": 13,
       "options": {
@@ -1287,7 +1361,7 @@
         "h": 6,
         "w": 12,
         "x": 12,
-        "y": 41
+        "y": 49
       },
       "id": 14,
       "options": {

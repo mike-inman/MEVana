@@ -141,6 +141,7 @@ Document actions and results.
    - Manually ensure required topics exist: `unknown-programs`, `dex-transactions`, etc.
    - Set retention: `kafka-configs --alter --entity-type topics --entity-name <topic> --add-config retention.ms=604800000`.
 3. Prometheus retention: verify `--storage.tsdb.retention.time=7d` in compose/environment.
+4. Ensure Grafana Postgres datasource (`infrastructure/grafana/datasources/postgres.yml`) points to `postgres:5432` and reload Grafana before dashboards are accessed.
 
 ### Phase 5 – Build & Install Services
 1. Ensure Rust toolchain available (`cargo --version`).

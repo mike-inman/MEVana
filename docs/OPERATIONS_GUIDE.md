@@ -23,3 +23,8 @@
 - Build Grafana visuals for opportunity detection and preflight checks (table + chart) without enabling live trading.
 - Ensure preflight pipeline captures full details (slippage, gas, net profit) and reports them in dashboards.
 
+
+## Opportunity Visualization Work
+- Provisioned Grafana Postgres datasource (`infrastructure/grafana/datasources/postgres.yml`) so dashboards can query `arbitrage_opportunities`.
+- Added "Recent Arbitrage Opportunities" table to the live test dashboard (shows latest 100 rows with venues, profit, amounts).
+- Next iteration: surface preflight outcomes by joining `execution_results` (status, fees, simulated deltas) once data is produced, then chart detection counts vs. preflight pass/fail.
