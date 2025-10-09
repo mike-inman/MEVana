@@ -77,3 +77,4 @@ volumes:
   prometheus_data:
   grafana_data:
   redis_data:
+  kafka_data:
