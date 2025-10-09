@@ -347,7 +347,7 @@ impl ShyftClient {
                     account["account"]["data"]["parsed"]["info"]["tokenAmount"]["amount"].as_str(),
                 ) {
                     if let Ok(balance) = amount.parse::<u64>() {
-                        token_balances.insert(mint.to_string(), balance);
+                        *token_balances.entry(mint.to_string()).or_insert(0) += balance;
                     }
                 }
             }
