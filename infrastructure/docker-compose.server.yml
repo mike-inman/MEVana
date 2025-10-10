@@ -58,6 +58,8 @@ services:
       service: grafana
     env_file:
       - /etc/mevana/alerts.env
+    environment:
+      GF_SECURITY_DISABLE_SANITIZE_HTML: "true"
     ports:
       - "3000:3000"
     volumes:
