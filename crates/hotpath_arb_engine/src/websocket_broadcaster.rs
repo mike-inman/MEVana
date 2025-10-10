@@ -338,42 +338,9 @@ impl WebSocketBroadcaster {
 
                 // Validate and set property through PropertyStore
                 let property_store = get_property_store();
-                let result = match value {
-                    PropertyValue::Boolean(val) => {
-                        property_store.set_atomic_bool(&property_key, val, PropertySource::HumanUI)
-                    }
-                    PropertyValue::Integer(val) => {
-                        if property_key.ends_with("_lamports")
-                            || property_key.ends_with("_ms")
-                            || property_key.ends_with("_seconds")
-                            || property_key.contains("_u64")
-                        {
-                            property_store.set_atomic_u64(
-                                &property_key,
-                                val as u64,
-                                PropertySource::HumanUI,
-                            )
-                        } else if property_key.ends_with("_bps") {
-                            property_store.set_atomic_i32(
-                                &property_key,
-                                val,
-                                PropertySource::HumanUI,
-                            )
-                        } else {
-                            property_store.set_atomic_u32(
-                                &property_key,
-                                val as u32,
-                                PropertySource::HumanUI,
-                            )
-                        }
-                    }
-                    PropertyValue::Float(val) => {
-                        property_store.set_atomic_f64(&property_key, val, PropertySource::HumanUI)
-                    }
-                    PropertyValue::String(_) => Err(anyhow::anyhow!(
-                        "String properties not yet supported via WebSocket"
-                    )),
-                };
+                let result = property_store
+                    .set_property_value(&property_key, value.clone(), PropertySource::HumanUI)
+                    .await;
 
                 // Send response back to client
                 let response = match result {

@@ -66,6 +66,12 @@ static START_TIME_SECONDS: Lazy<IntGauge> = Lazy::new(|| {
 #[derive(Clone)]
 pub struct MetricsLayer;
 
+impl Default for MetricsLayer {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl MetricsLayer {
     pub fn new() -> Self {
         // Initialise statics early so registration errors surface fast

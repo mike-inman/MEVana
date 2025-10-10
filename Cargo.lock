@@ -2329,6 +2329,7 @@ dependencies = [
  "jsonwebtoken",
  "libc",
  "log",
+ "metrics",
  "once_cell",
  "parking_lot",
  "prometheus",
@@ -3077,6 +3078,7 @@ dependencies = [
  "log",
  "metrics",
  "metrics-exporter-prometheus",
+ "normalizer-generated",
  "normalizer-runtime",
  "once_cell",
  "prometheus",
@@ -10393,6 +10395,24 @@ dependencies = [
 ]
 
 [[package]]
+name = "wallet-metrics-exporter"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "chrono",
+ "env_logger 0.10.2",
+ "executor-service",
+ "log",
+ "once_cell",
+ "prometheus",
+ "reqwest 0.12.23",
+ "serde",
+ "serde_json",
+ "tokio",
+ "warp",
+]
+
+[[package]]
 name = "wallet-vault"
 version = "0.1.0"
 dependencies = [
@@ -10410,8 +10430,6 @@ dependencies = [
  "flate2",
  "jsonwebtoken",
  "log",
- "once_cell",
- "prometheus",
  "rand 0.8.5",
  "reqwest 0.11.27",
  "secrecy",
@@ -10425,7 +10443,6 @@ dependencies = [
  "tokio",
  "tower 0.4.13",
  "tower-http 0.5.2",
- "tracing",
  "utoipa",
  "utoipa-swagger-ui 6.0.0",
  "uuid",

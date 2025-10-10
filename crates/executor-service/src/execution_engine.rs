@@ -76,6 +76,7 @@ pub enum ExecutionStatus {
     FlashLoanQuoted,
     BundleBuilt,
     Simulated,
+    PreflightSuccess, // Preflight passed but not submitted (STOP_AFTER_PREFLIGHT mode)
     Submitted,
     LandedPendingProfit,
     Confirmed, // initial landing confirmation
@@ -1149,6 +1150,27 @@ impl ExecutionEngine {
             opportunity.venues.len(),
             execution_result.flash_loan_provider
         );
+
+        // PREFLIGHT-ONLY MODE: Stop before submitting to blockchain
+        let stop_after_preflight = std::env::var("STOP_AFTER_PREFLIGHT")
+            .unwrap_or_else(|_| "false".to_string())
+            .eq_ignore_ascii_case("true");
+
+        if stop_after_preflight {
+            info!(
+                "🛑 STOP_AFTER_PREFLIGHT enabled - Preflight passed but NOT submitting to blockchain. exec_id={} opp_id={} profit_bps={} est_profit_lamports={}",
+                execution_id,
+                opportunity.opportunity_id,
+                opportunity.profit_bps,
+                execution_result.estimated_profit_lamports
+            );
+            execution_result.status = ExecutionStatus::PreflightSuccess;
+            self.metrics.record_bundle_confirmation(true); // Count as "success" for metrics
+            execution_result.execution_time_ms = start_time.elapsed().as_millis() as u64;
+            self.publish_execution_result(execution_result).await?;
+            return Ok(());
+        }
+
         match self
             .shyft_client
             .submit_jito_bundle(

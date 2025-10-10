@@ -66,3 +66,12 @@ scrape_configs:
     scrape_timeout: 5s
     static_configs:
       - targets: ['host.docker.internal:8090']
+
+  - job_name: 'wallet-metrics'
+    metrics_path: '/metrics'
+    scrape_interval: 5s
+    scrape_timeout: 3s
+    static_configs:
+      - targets: ['host.docker.internal:9905']
+        labels:
+          service: 'wallet-metrics-exporter'

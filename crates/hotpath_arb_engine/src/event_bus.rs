@@ -51,12 +51,26 @@ pub struct ReporterConfig {
 
 impl Default for ReporterConfig {
     fn default() -> Self {
+        // Read individual environment variables for easier configuration
+        let enable_kafka = std::env::var("EVENT_BUS_ENABLE_KAFKA")
+            .or_else(|_| std::env::var("REPORTER_ENABLE_KAFKA"))
+            .unwrap_or("false".to_string())
+            .eq_ignore_ascii_case("true");
+
+        let kafka_broker = std::env::var("EVENT_BUS_KAFKA_BROKER")
+            .or_else(|_| std::env::var("REPORTER_KAFKA_BROKER"))
+            .unwrap_or("localhost:29092".to_string());
+
+        let kafka_topic = std::env::var("EVENT_BUS_KAFKA_TOPIC")
+            .or_else(|_| std::env::var("REPORTER_KAFKA_TOPIC"))
+            .unwrap_or("alerts.arbitrage.opportunities".to_string());
+
         Self {
             enable_file_logging: true,
             file_path: "/tmp/mevana_trades.log".to_string(),
-            enable_kafka: false,
-            kafka_broker: "localhost:29092".to_string(),
-            kafka_topic: "alerts.arbitrage.opportunities".to_string(),
+            enable_kafka,
+            kafka_broker,
+            kafka_topic,
             enable_api_logging: true,
             api_base_url: "http://localhost:8092".to_string(),
             api_auth_token: std::env::var("API_AUTH_TOKEN").ok(),

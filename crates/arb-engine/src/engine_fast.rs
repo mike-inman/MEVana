@@ -41,6 +41,10 @@ impl FastEngine {
         }
     }
 
+    pub fn set_max_edge_staleness_ms(&self, max_ms: Option<u64>) {
+        self.edge_detector.set_max_edge_staleness_ms(max_ms);
+    }
+
     #[inline]
     pub fn upsert_quotes(&self, qs: &[Quote]) {
         for q in qs {

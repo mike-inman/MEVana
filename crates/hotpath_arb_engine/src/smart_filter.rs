@@ -506,6 +506,20 @@ impl SmartFilter {
         self.record_opportunity(&venue_pair, opportunity, should_execute)
             .await;
 
+        // Record Prometheus metrics for Grafana dashboard
+        metrics::counter!("mevana_arbitrage_opportunities_detected_total").increment(1);
+
+        if should_execute {
+            // Only record execution metrics for opportunities that passed all filters
+            let gas_cost_lamports = (gas_cost_sol * 1_000_000_000.0) as u64;
+            let net_profit_bps = ((net_profit_sol / trade_size_sol) * 10000.0) as i64;
+
+            metrics::gauge!("mevana_estimated_gas_cost_lamports").set(gas_cost_lamports as f64);
+            metrics::gauge!("mevana_estimated_slippage_bps").set(opportunity.profit_bps as f64 * 0.1); // Estimate ~10% of profit as slippage
+            metrics::gauge!("mevana_net_profit_after_costs_bps").set(net_profit_bps as f64);
+            metrics::gauge!("mevana_arbitrage_opportunity_size_sol").set(trade_size_sol);
+        }
+
         SmartOpportunity {
             original: opportunity.clone(),
             estimated_gas_cost_sol: gas_cost_sol,

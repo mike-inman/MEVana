@@ -557,6 +557,15 @@ impl BundleBuilder {
         };
         if let Some(m) = &self.metrics {
             m.record_simulation(result.success, started.elapsed().as_secs_f64());
+
+            // Record preflight metrics for Grafana dashboard
+            if result.success {
+                metrics::counter!("mevana_preflight_simulations_total", "result" => "success")
+                    .increment(1);
+            } else {
+                metrics::counter!("mevana_preflight_simulations_total", "result" => "failure")
+                    .increment(1);
+            }
         }
         Ok(result)
     }

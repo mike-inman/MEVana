@@ -303,7 +303,13 @@
       "Bash(do date:*)",
       "Bash(npm run build:*)",
       "Bash(websocat:*)",
-      "Bash(./scripts/deploy-production.sh:*)"
+      "Bash(./scripts/deploy-production.sh:*)",
+      "Read(//Users/michaelinman/Repos/solana-defi/**)",
+      "Read(//Users/michaelinman/Repos/solana-awesome/**)",
+      "Read(//Users/michaelinman/Repos/Solana-Arbitrage-Bot1/**)",
+      "Bash(env DATABASE_URL=\"postgresql://mev:mevpassword@localhost:5433/mevdb\" cargo check --workspace)",
+      "Bash(tee:*)",
+      "Bash(PAPER_TRADING=true DATABASE_URL=\"postgresql://mev:mevpassword@localhost:5433/mevdb\" GEYSER_ENDPOINT=\"https://grpc.ny.shyft.to\" X_TOKEN=\"efff2d23-97ae-4c5f-8b8b-9a6265001189\" METRICS_PORT=8088 RUST_LOG=info timeout 30s cargo run -p hotpath_arb_engine --bin hotpath_arb_engine)"
     ],
     "deny": [],
     "ask": []

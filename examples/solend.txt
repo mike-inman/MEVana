@@ -123,6 +123,8 @@ AI responses may include mistakes.
   That should register the 1 SOL you just transferred.
 
 • Ran spl-token sync-native --fee-payer ~/.config/solana/id.json --address AJVS4MHtdmwnKAkKbuX7FUKVwhuEM1woVRVctS4Gi33S
+• Ran spl-token sync-native --fee-payer ~/.config/solana/id.json --address FvmBWiV16DGKt1uA4h86h3Y8G2DyQaMwGSv8uzmppMoD
+
 
 > Great—sync succeeded. Check the wrapped balance:
 

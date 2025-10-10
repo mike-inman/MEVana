@@ -1,7 +1,7 @@
 #![allow(warnings)]
 
-use anyhow::Result;
-use chrono::{DateTime, Timelike, Utc};
+use anyhow::{anyhow, Result};
+use chrono::{DateTime, TimeZone, Timelike, Utc};
 use clap::Parser;
 use dashmap::DashMap;
 use futures::StreamExt;
@@ -10,13 +10,14 @@ use once_cell::sync::{Lazy, OnceCell};
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 use shared_core::port_manager::get_port_with_fallback;
-use std::collections::{HashMap, VecDeque};
+use std::collections::{HashMap, HashSet, VecDeque};
+use std::path::PathBuf;
 use std::sync::{
     atomic::{AtomicI32, AtomicU32, AtomicU64, Ordering},
     Arc, Mutex,
 };
 use std::time::{Instant, SystemTime, UNIX_EPOCH};
-use tokio::sync::mpsc;
+use tokio::sync::{mpsc, Mutex as AsyncMutex};
 use tokio::time::{sleep, Duration};
 use yellowstone_grpc_client::GeyserGrpcClient;
 use yellowstone_grpc_proto::prost::Message as _;
@@ -37,9 +38,8 @@ use rdkafka::Message;
 // HOT PATH ARBITRAGE INTEGRATION - Zero latency MEV detection
 use arb_engine::edge_integration::decode_and_validate_edge;
 use arb_engine::engine_fast::FastEngine;
-use arb_engine::hotpath::{SignalQueue, SignalRx};
+use arb_engine::hotpath::SignalQueue;
 use arb_engine::jupiter_arbitrage::{JupiterArbConfig, JupiterArbitrageScanner};
-use arb_engine::models::ArbSignal;
 
 // LETHAL EXECUTION SYSTEM - Direct executor integration for instant trade execution
 use executor_service::config::ExecutorConfig;
@@ -66,18 +66,158 @@ mod config_api;
 // AI STRATEGY ENGINE - Intelligent execution decision making
 mod ai_strategy_engine;
 
+mod network;
+mod wallet_inventory;
+
 // Re-export smart filter from lib to make it available to config_api
 pub use hotpath_arb_engine::smart_filter;
 
-use solana_sdk::signature::Keypair;
+use solana_sdk::signature::{read_keypair_file, Keypair};
 use solana_sdk::signer::Signer;
 use uuid::Uuid;
+
+#[derive(Debug, Clone)]
+struct BoundPorts {
+    metrics_port: u16,
+    aux_port: u16,
+}
+
+impl BoundPorts {
+    fn load() -> Self {
+        let metrics_port = std::env::var("HOTPATH_METRICS_PORT")
+            .ok()
+            .and_then(|v| v.parse().ok())
+            .unwrap_or(8088);
+        let aux_port = std::env::var("HOTPATH_AUX_PORT")
+            .ok()
+            .and_then(|v| v.parse().ok())
+            .unwrap_or(metrics_port + 1);
+
+        let documented_metrics_port = 8088u16;
+        let documented_aux_port = 8089u16;
+
+        if metrics_port != documented_metrics_port {
+            error!(
+                "❌ HOTPATH_METRICS_PORT mismatch ({} vs documented {}) — update docs/operations/PORT_MAPPING.md or fix env",
+                metrics_port, documented_metrics_port
+            );
+            panic!("Metrics port mismatch with documented allocation");
+        }
+
+        if aux_port != documented_aux_port {
+            error!(
+                "❌ HOTPATH_AUX_PORT mismatch ({} vs documented {}) — update docs/operations/PORT_MAPPING.md or fix env",
+                aux_port, documented_aux_port
+            );
+            panic!("Auxiliary API port mismatch with documented allocation");
+        }
+
+        Self {
+            metrics_port,
+            aux_port,
+        }
+    }
+}
+
+const DEFAULT_NOTIONAL_LAMPORTS: u128 = 1_000_000_000;
+
+#[derive(Debug, Clone)]
+pub(crate) struct SwapSummary {
+    venues: Vec<String>,
+    token_in: String,
+    token_out: String,
+    amount_in: u128,
+    amount_out: u128,
+    derived_profit_bps: u64,
+    slot: u64,
+    block_time_unix: Option<i64>,
+}
+
+#[derive(Debug, Clone)]
+struct ProfitEstimation {
+    profit_bps: i32,
+    token_a: String,
+    token_b: String,
+    amount_in: Option<u128>,
+    amount_out: Option<u128>,
+}
+
+struct InventoryCache {
+    last_updated: Instant,
+    values: HashMap<String, f64>,
+}
+
+impl InventoryCache {
+    fn new() -> Self {
+        Self {
+            last_updated: Instant::now() - Duration::from_secs(3600),
+            values: HashMap::new(),
+        }
+    }
+}
+
+impl Default for InventoryCache {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+fn summarize_swaps(swaps: &[NormalizedSwapV1]) -> Option<SwapSummary> {
+    let first = swaps.first()?;
+    let last = swaps.last()?;
+
+    let mut venues = Vec::new();
+    for swap in swaps {
+        if !venues.iter().any(|existing| existing == &swap.dex) {
+            venues.push(swap.dex.clone());
+        }
+    }
+
+    let amount_in = first.amount_in;
+    let amount_out = last.amount_out;
+
+    let derived_profit_bps = if first.token_in_mint == last.token_out_mint && amount_in > 0 {
+        if amount_out > amount_in {
+            let gain = amount_out - amount_in;
+            (gain.saturating_mul(10_000) / amount_in) as u64
+        } else {
+            0
+        }
+    } else {
+        0
+    };
+
+    Some(SwapSummary {
+        venues,
+        token_in: first.token_in_mint.clone(),
+        token_out: last.token_out_mint.clone(),
+        amount_in,
+        amount_out,
+        derived_profit_bps,
+        slot: last.slot,
+        block_time_unix: if first.block_time_unix > 0 {
+            Some(first.block_time_unix)
+        } else {
+            None
+        },
+    })
+}
+
+fn timestamp_from_summary(summary: Option<&SwapSummary>) -> DateTime<Utc> {
+    if let Some(summary) = summary {
+        if let Some(block_time) = summary.block_time_unix {
+            if let chrono::LocalResult::Single(ts) = Utc.timestamp_opt(block_time, 0) {
+                return ts;
+            }
+        }
+    }
+    Utc::now()
+}
 
 // Executor service integration
 extern crate executor_service;
 use event_bus::{EventType, TradingEvent, EVENT_BUS};
-use wallet_manager::generate_demo_wallets;
-use wallet_security::{SecurityPolicy, WalletSecurityManager};
+use wallet_security::{SecurityPolicy, WalletSecurityManager, WalletSecurityTier};
 
 // ORDERBOOK HISTORY SYSTEM - Off-hotpath database tracking
 use async_history_buffer::{
@@ -85,7 +225,13 @@ use async_history_buffer::{
 };
 use hotpath_arb_engine::orderbook_tracker::{create_arbitrage_event, ARBITRAGE_DETECTED};
 use hotpath_arb_engine::smart_filter::{SmartFilter, SmartFilterConfig};
+use shared_protocol::{ArbSignal as SharedArbSignal, ArbSignalV1};
 use sqlx::{postgres::PgListener, PgPool};
+
+use normalizer_generated::registry as normalizer_registry;
+use normalizer_runtime::{transaction::extract_swaps_from_update, NormalizedSwapV1, SwapExtractor};
+use network::NetworkTelemetry;
+use wallet_inventory::WalletInventoryFetcher;
 
 // CONFIG API IMPORTS
 use config_api::{PerformanceTracker, SharedConfigState};
@@ -109,8 +255,6 @@ use transaction_templates::TransactionTemplateCache;
 
 // REDIS METRICS PUBLISHING - Real-time metrics for monitoring service
 use redis_publisher::RedisMetricsPublisher;
-
-const LAMPORTS_PER_SOL: f64 = 1_000_000_000.0;
 
 // ========================================================================
 // BULLETPROOF PROPERTY STORE INTEGRATION
@@ -158,60 +302,27 @@ static SERVICE_START_TIME: Lazy<Instant> = Lazy::new(Instant::now);
 /// Optional global database pool for readiness diagnostics
 static DATABASE_POOL: OnceCell<Arc<PgPool>> = OnceCell::new();
 static RAW_KAFKA_PUBLISHER: OnceCell<Arc<DexKafkaPublisher>> = OnceCell::new();
+static NORMALIZER_EXTRACTORS: Lazy<Vec<Box<dyn SwapExtractor>>> =
+    Lazy::new(|| normalizer_registry::registry());
 
 /// Check if live trading is enabled and safe to proceed
-/// This is the MASTER SAFETY GATE - everything flows through here
+/// Simplified safety gate - opportunities are ALWAYS published to Kafka
+/// This gate ONLY blocks direct HotPath execution (executor handles most trades)
 fn is_trading_enabled_and_safe() -> bool {
-    let property_store = get_property_store();
+    // LAYER 1: Circuit breaker (prevent runaway failures)
+    let consecutive_failures = EMERGENCY_CONTROLS
+        .consecutive_failures
+        .load(Ordering::Relaxed);
 
-    // LAYER 1: Check enable_live_execution flag
-    let live_execution_enabled = property_store
-        .get_atomic_bool("enable_live_execution")
-        .unwrap_or(false);
-
-    if !live_execution_enabled {
-        return false; // Trading disabled
+    if consecutive_failures >= 3 {
+        warn!(
+            "🚨 Circuit breaker ACTIVE: {} consecutive failures (max: 3)",
+            consecutive_failures
+        );
+        return false;
     }
 
-    // LAYER 2: Check dry_run flag
-    let dry_run = property_store.get_atomic_bool("dry_run").unwrap_or(true);
-
-    if dry_run {
-        return false; // In dry run mode
-    }
-
-    // LAYER 3: Check simulation_mode flag
-    let simulation_mode = property_store
-        .get_atomic_bool("simulation_mode")
-        .unwrap_or(true);
-
-    if simulation_mode {
-        return false; // In simulation mode
-    }
-
-    // LAYER 4: Check circuit breaker
-    let circuit_breaker_enabled = property_store
-        .get_atomic_bool("circuit_breaker_enabled")
-        .unwrap_or(true);
-
-    if circuit_breaker_enabled {
-        let consecutive_failures = EMERGENCY_CONTROLS
-            .consecutive_failures
-            .load(Ordering::Relaxed);
-        let max_failures = property_store
-            .get_atomic_u32("max_consecutive_failures")
-            .unwrap_or(3);
-
-        if consecutive_failures >= max_failures {
-            warn!(
-                "🚨 Circuit breaker ACTIVE: {} consecutive failures (max: {})",
-                consecutive_failures, max_failures
-            );
-            return false; // Circuit breaker triggered
-        }
-    }
-
-    // LAYER 5: Check system health
+    // LAYER 2: System health (emergency stop capability)
     if let Ok(health) = EMERGENCY_CONTROLS.system_health_status.lock() {
         match &*health {
             SystemHealthStatus::EmergencyStop { reason } => {
@@ -1423,6 +1534,8 @@ pub struct HotPathArbitrageEngine {
     // LETHAL EXECUTION SYSTEM - Zero-latency trade execution pipeline
     execution_orchestrator: Option<Arc<ExecutionOrchestrator>>,
     execution_queue: Arc<tokio::sync::mpsc::UnboundedSender<ExecutorOpportunity>>,
+    execution_receiver:
+        AsyncMutex<Option<tokio::sync::mpsc::UnboundedReceiver<ExecutorOpportunity>>>,
     successful_executions: AtomicU64,
     failed_executions: AtomicU64,
 
@@ -1435,6 +1548,11 @@ pub struct HotPathArbitrageEngine {
 
     // KAFKA PUBLISHER - Publish viable arbitrage opportunities to shared mempool
     kafka_producer: Option<Arc<rdkafka::producer::FutureProducer>>,
+
+    // INVENTORY + NETWORK TELEMETRY
+    wallet_inventory_fetcher: Option<Arc<WalletInventoryFetcher>>,
+    inventory_cache: Arc<AsyncMutex<InventoryCache>>,
+    network_telemetry: Arc<Mutex<NetworkTelemetry>>,
 }
 
 impl HotPathArbitrageEngine {
@@ -1447,9 +1565,10 @@ impl HotPathArbitrageEngine {
 
         // Initialize fast arbitrage engine
         let fast_engine = Arc::new(FastEngine::new(tx.clone()));
-
-        // Launch edge delta consumer to feed the real arbitrage detector
-        Self::spawn_edge_consumer(Arc::clone(&fast_engine));
+        let edge_staleness_ms = get_property_store()
+            .get_atomic_u64("max_edge_staleness_ms")
+            .and_then(|ms| if ms == 0 { None } else { Some(ms) });
+        fast_engine.set_max_edge_staleness_ms(edge_staleness_ms);
 
         // Initialize Jupiter scanner if enabled
         let enable_jupiter = std::env::var("ENABLE_JUPITER")
@@ -1496,72 +1615,13 @@ impl HotPathArbitrageEngine {
         info!("💰 Initializing LIVE Trading Engine with Jito bundles and flash loans");
         let live_trading_engine = Arc::new(LiveTradingEngine::new()?);
 
-        let (execution_tx, mut execution_rx) =
+        let (execution_tx, execution_rx) =
             tokio::sync::mpsc::unbounded_channel::<ExecutorOpportunity>();
         let execution_queue = Arc::new(execution_tx);
 
-        // Start execution worker task for background trade execution
+        // Execution tracking counters
         let successful_executions_counter = AtomicU64::new(0);
         let failed_executions_counter = AtomicU64::new(0);
-
-        tokio::spawn(async move {
-            info!("⚔️  LETHAL Execution Worker started - ready to execute trades");
-            while let Some(opportunity) = execution_rx.recv().await {
-                let execution_start = Instant::now();
-
-                info!(
-                    "🎯 EXECUTING LETHAL TRADE: opportunity={} profit_bps={} max_size={}",
-                    opportunity.opportunity_id, opportunity.profit_bps, opportunity.max_size_in
-                );
-
-                // TODO: Initialize ExecutionOrchestrator when ready
-                // For now, simulate execution to test the pipeline
-                let _execution_mode = ExecutionMode::Test {
-                    simulate_success_rate: 0.85,
-                    simulate_latency_ms: 250,
-                    enable_logging: true,
-                };
-
-                // Simulate execution result
-                let success = fastrand::f64() < 0.85;
-                let execution_time = execution_start.elapsed();
-                let execution_time_ms = execution_time.as_millis();
-                let execution_time_us = execution_time.as_micros() as u64;
-
-                // PERFORMANCE ANALYTICS - Record execution performance
-                PERFORMANCE_ANALYTICS.record_execution(execution_time_us, success);
-
-                if success {
-                    metrics::counter!("lethal_executions_successful_total").increment(1);
-                    info!(
-                        "✅ LETHAL EXECUTION SUCCESS: opportunity={} time={}ms profit_captured={}bps",
-                        opportunity.opportunity_id, execution_time_ms, opportunity.profit_bps
-                    );
-
-                    // Call execute_live_trade to trigger event bus logging
-                    let _trade_details = format!(
-                        "SIMULATED_SUCCESS: {} - profit: {}bps, size: {}, time: {}ms",
-                        opportunity.opportunity_id,
-                        opportunity.profit_bps,
-                        opportunity.max_size_in,
-                        execution_time_ms
-                    );
-                    // execute_live_trade(&opportunity.opportunity_id, &trade_details).await;
-                    info!(
-                        "📋 PAPER TRADE: Would execute live trade for {}",
-                        opportunity.opportunity_id
-                    );
-                } else {
-                    metrics::counter!("lethal_executions_failed_total").increment(1);
-                    warn!(
-                        "❌ LETHAL EXECUTION FAILED: opportunity={} time={}ms reason=simulated_failure",
-                        opportunity.opportunity_id, execution_time_ms
-                    );
-                }
-
-                metrics::histogram!("lethal_execution_time_ms").record(execution_time_ms as f64);
-            }
-        });
 
         // Initialize Kafka producer for publishing viable arbitrage opportunities
         let kafka_producer = Self::initialize_kafka_producer();
@@ -1585,280 +1645,17 @@ impl HotPathArbitrageEngine {
             last_activity: AtomicU64::new(0),
             execution_orchestrator,
             execution_queue,
+            execution_receiver: AsyncMutex::new(Some(execution_rx)),
             successful_executions: successful_executions_counter,
             failed_executions: failed_executions_counter,
             live_trading_engine,
             wallet_security_manager: Self::initialize_wallet_security(),
             kafka_producer,
             ai_strategy_engine,
+            wallet_inventory_fetcher: None,
+            inventory_cache: Arc::new(AsyncMutex::new(InventoryCache::default())),
+            network_telemetry: Arc::new(Mutex::new(NetworkTelemetry::default())),
         })
-    }
-
-    fn spawn_edge_consumer(fast_engine: Arc<FastEngine>) {
-        let broker = std::env::var("EDGE_KAFKA_BROKER")
-            .or_else(|_| std::env::var("KAFKA_BROKER"))
-            .unwrap_or_else(|_| "localhost:29092".to_string());
-        let topic =
-            std::env::var("EDGE_DELTA_TOPIC").unwrap_or_else(|_| "edge.delta.v1".to_string());
-        let group = std::env::var("EDGE_CONSUMER_GROUP")
-            .unwrap_or_else(|_| "hotpath-edge-consumer".to_string());
-        let debug_logging = std::env::var("EDGE_KAFKA_DEBUG")
-            .ok()
-            .map(|v| matches!(v.to_lowercase().as_str(), "1" | "true" | "yes" | "on"))
-            .unwrap_or(false);
-
-        tokio::spawn(async move {
-            let consumer: StreamConsumer = match ClientConfig::new()
-                .set("group.id", &group)
-                .set("bootstrap.servers", &broker)
-                .set("enable.auto.commit", "false")
-                .set("auto.offset.reset", "latest")
-                .create()
-            {
-                Ok(c) => c,
-                Err(e) => {
-                    warn!("edge_consumer_init_failed broker={} err={:?}", broker, e);
-                    return;
-                }
-            };
-
-            if let Err(e) = consumer.subscribe(&[&topic]) {
-                warn!("edge_consumer_subscribe_failed topic={} err={:?}", topic, e);
-                return;
-            }
-
-            info!(
-                "edge_consumer_started broker={} topic={} group={}",
-                broker, topic, group
-            );
-
-            let store = get_property_store();
-
-            loop {
-                match consumer.recv().await {
-                    Ok(msg) => {
-                        if let Some(payload) = msg.payload() {
-                            let enabled = store
-                                .get_atomic_bool("edge_detection_enabled")
-                                .unwrap_or(false);
-
-                            if enabled {
-                                match decode_and_validate_edge(payload) {
-                                    Ok(delta) => {
-                                        if let Err(e) = fast_engine.process_edge_update(delta) {
-                                            warn!("edge_process_failed err={:?}", e);
-                                            metrics::counter!(
-                                                "edge_messages_rejected_total",
-                                                "reason" => "process_error"
-                                            )
-                                            .increment(1);
-                                        } else {
-                                            metrics::counter!("edge_messages_processed_total")
-                                                .increment(1);
-                                        }
-                                    }
-                                    Err(reason) => {
-                                        metrics::counter!(
-                                            "edge_messages_rejected_total",
-                                            "reason" => reason
-                                        )
-                                        .increment(1);
-                                        if debug_logging {
-                                            warn!("edge_decode_failed reason={}", reason);
-                                        }
-                                    }
-                                }
-                            } else if debug_logging {
-                                debug!("edge_detection_disabled_skipping_message");
-                            }
-                        }
-
-                        let _ = consumer.commit_message(&msg, CommitMode::Async);
-                    }
-                    Err(e) => {
-                        warn!("edge_consumer_recv_error err={:?}", e);
-                        tokio::time::sleep(tokio::time::Duration::from_millis(50)).await;
-                    }
-                }
-            }
-        });
-    }
-
-    fn start_background_tasks(engine: Arc<Self>) {
-        let receiver = engine.signal_queue.receiver();
-        tokio::spawn(async move {
-            Self::run_signal_consumer(engine, receiver).await;
-        });
-    }
-
-    async fn run_signal_consumer(engine: Arc<Self>, receiver: SignalRx) {
-        loop {
-            let signal = receiver.recv_async().await;
-            metrics::counter!("hotpath_signals_received_total", "source" => "edge").increment(1);
-            if let Err(err) = engine.handle_arb_signal(signal).await {
-                warn!("edge_signal_processing_failed err={:?}", err);
-                metrics::counter!("hotpath_signals_rejected_total", "source" => "edge")
-                    .increment(1);
-            } else {
-                metrics::counter!("hotpath_signals_processed_total", "source" => "edge")
-                    .increment(1);
-            }
-        }
-    }
-
-    async fn handle_arb_signal(&self, signal: ArbSignal) -> Result<()> {
-        self.arbitrage_signals_total.fetch_add(1, Ordering::Relaxed);
-
-        self.process_traditional_signal(signal).await
-    }
-
-    async fn process_traditional_signal(&self, signal: ArbSignal) -> Result<()> {
-        let profit_bps_u64 = if signal.profit_bps >= 0 {
-            signal.profit_bps as u64
-        } else {
-            0
-        };
-
-        let opportunity = ArbitrageOpportunity {
-            signature: format!("edge-{}-{}", signal.slot, signal.id),
-            slot: signal.slot,
-            profit_bps: profit_bps_u64,
-            venue_a: signal.dex_sell.clone(),
-            venue_b: signal.dex_buy.clone(),
-            token_a: signal.pair.a.clone(),
-            token_b: signal.pair.b.clone(),
-            strategy: signal
-                .dex_mid
-                .as_ref()
-                .filter(|mid| !mid.is_empty())
-                .map(|mid| format!("{}->{}->{}", signal.dex_sell, mid, signal.dex_buy))
-                .unwrap_or_else(|| format!("{}->{}", signal.dex_sell, signal.dex_buy)),
-            timestamp: Utc::now(),
-        };
-
-        self.arbitrage_opportunities_found
-            .fetch_add(1, Ordering::Relaxed);
-
-        let amount_in_sol = signal.amount_in as f64 / LAMPORTS_PER_SOL;
-        let profit_sol = (signal.expected_profit_out as f64) / LAMPORTS_PER_SOL;
-        let amount_out_sol = (amount_in_sol + profit_sol).max(0.0);
-        let token_pair = format!("{}/{}", signal.pair.a, signal.pair.b);
-
-        let arbitrage_event = create_arbitrage_event(
-            &opportunity.signature,
-            opportunity.slot,
-            &opportunity.venue_a,
-            &opportunity.venue_b,
-            &token_pair,
-            signal.profit_bps,
-            amount_in_sol,
-            amount_out_sol,
-            0,
-            true,
-            None,
-        );
-
-        let _ = self
-            .evaluate_opportunity_with_source(&opportunity, arbitrage_event, "edge")
-            .await?;
-        Ok(())
-    }
-
-    async fn evaluate_opportunity_with_source(
-        &self,
-        opportunity: &ArbitrageOpportunity,
-        arbitrage_event: ArbitrageEvent,
-        source: &'static str,
-    ) -> Result<bool> {
-        metrics::counter!("hotpath_opportunities_evaluated_total", "source" => source).increment(1);
-
-        let smart_result = SMART_FILTER.should_execute(&arbitrage_event).await;
-        let venues = vec![opportunity.venue_a.clone(), opportunity.venue_b.clone()];
-        let token_pair = arbitrage_event.token_pair.clone();
-
-        if smart_result.should_execute {
-            metrics::counter!("hotpath_opportunities_accepted_total", "source" => source)
-                .increment(1);
-
-            let processing_start = Instant::now();
-            EVENT_BUS
-                .send_arbitrage_detected(
-                    &opportunity.signature,
-                    &venues,
-                    opportunity.profit_bps,
-                    &token_pair,
-                    smart_result.estimated_net_profit_sol,
-                    smart_result.confidence_score,
-                    serde_json::json!({
-                        "strategy": opportunity.strategy,
-                        "source": source,
-                    }),
-                    processing_start.elapsed().as_micros() as u64,
-                )
-                .await;
-
-            if !is_trading_enabled_and_safe() {
-                metrics::counter!(
-                    "hotpath_opportunities_blocked_total",
-                    "source" => source
-                )
-                .increment(1);
-                info!("🛡️ Trading safety gate BLOCKED execution: Live trading disabled or unsafe");
-                return Ok(false);
-            }
-
-            if let Err(e) = self.trigger_lethal_execution(opportunity) {
-                error!("Failed to trigger lethal execution: {}", e);
-                record_execution_failure(&format!("Execution trigger failed: {}", e));
-            } else {
-                info!(
-                    "🧠 SMART EXECUTION TRIGGERED [{}]: profit_bps={} confidence={:.2}",
-                    source, opportunity.profit_bps, smart_result.confidence_score
-                );
-            }
-
-            let event_clone = arbitrage_event.clone();
-            let profit_estimate = smart_result.estimated_net_profit_sol;
-            tokio::spawn(async move {
-                SMART_FILTER
-                    .record_result(&event_clone, true, profit_estimate)
-                    .await;
-            });
-
-            Ok(true)
-        } else {
-            metrics::counter!("hotpath_opportunities_rejected_total", "source" => source)
-                .increment(1);
-
-            let processing_start = Instant::now();
-            let rejection_reason = smart_result
-                .rejection_reason
-                .clone()
-                .unwrap_or_else(|| "Low confidence".to_string());
-            EVENT_BUS
-                .send_arbitrage_rejected(
-                    &opportunity.signature,
-                    &venues,
-                    opportunity.profit_bps,
-                    &token_pair,
-                    smart_result.estimated_net_profit_sol,
-                    smart_result.confidence_score,
-                    rejection_reason.clone(),
-                    serde_json::json!({
-                        "strategy": opportunity.strategy,
-                        "source": source,
-                    }),
-                    processing_start.elapsed().as_micros() as u64,
-                )
-                .await;
-
-            debug!(
-                "📊 PAPER TRADE FILTERED [{}]: profit_bps={} reason={}",
-                source, opportunity.profit_bps, rejection_reason
-            );
-
-            Ok(true)
-        }
     }
 
     /// Initialize wallet security system with hot/warm/cold wallets
@@ -1877,13 +1674,9 @@ impl HotPathArbitrageEngine {
         let manager = Arc::new(WalletSecurityManager::new(security_policy));
         info!("🔐 Wallet security system initialized with enterprise-grade protection");
 
-        // Generate demo wallets for immediate testing
         let manager_clone = Arc::clone(&manager);
         tokio::spawn(async move {
-            tokio::time::sleep(tokio::time::Duration::from_secs(1)).await;
-            if let Ok(wallets) = generate_demo_wallets(&manager_clone).await {
-                info!("🎯 Generated {} demo wallets for testing", wallets.len());
-            }
+            load_configured_wallets(manager_clone).await;
         });
 
         manager
@@ -1997,29 +1790,6 @@ impl HotPathArbitrageEngine {
     ) -> Result<bool> {
         use executor_service::execution_engine::ArbitrageOpportunity;
 
-        // Convert to executor service format
-        let arb_opportunity = ArbitrageOpportunity {
-            opportunity_id: Uuid::new_v4(),
-            token_in: vec![0u8; 32], // Placeholder - need proper token mint parsing
-            token_out: vec![1u8; 32], // Placeholder - need proper token mint parsing
-            edges: opportunity
-                .venues
-                .iter()
-                .map(|_| fastrand::u64(..))
-                .collect(),
-            venues: opportunity
-                .venues
-                .iter()
-                .map(|_| fastrand::u32(..))
-                .collect(),
-            profit_bps: opportunity.profit_bps,
-            max_size_in: opportunity.max_size_in,
-            total_cu_estimate: 200_000,
-            total_fees_bps: 50,
-            detected_at_ns: chrono::Utc::now().timestamp_nanos_opt().unwrap_or(0) as u64,
-            max_edge_age_ms: 1000,
-        };
-
         // Execute via ExecutionOrchestrator
         info!("🔄 Executing real trade via ExecutionOrchestrator...");
         info!(
@@ -2043,7 +1813,7 @@ impl HotPathArbitrageEngine {
 
         // Execute the trade
         match orchestrator
-            .execute_opportunity(arb_opportunity, execution_mode.clone())
+            .execute_opportunity(opportunity.clone(), execution_mode.clone())
             .await
         {
             Ok(result) => {
@@ -2749,6 +2519,18 @@ impl HotPathArbitrageEngine {
     ) -> Result<Option<ArbitrageOpportunity>> {
         let start_time = Instant::now();
 
+        if !get_property_store()
+            .get_atomic_bool("heuristic_detection_enabled")
+            .unwrap_or(true)
+        {
+            metrics::counter!(
+                "hotpath_transactions_skipped_total",
+                "reason" => "heuristic_disabled"
+            )
+            .increment(1);
+            return Ok(None);
+        }
+
         // Update last activity timestamp for health monitoring
         self.last_activity.store(
             SystemTime::now()
@@ -2769,26 +2551,17 @@ impl HotPathArbitrageEngine {
 
         // FAST PATH: DIRECT ARBITRAGE DETECTION - ZERO SERIALIZATION OVERHEAD
         // This is where the magic happens - direct analysis without Kafka overhead
-        let heuristics_enabled = get_property_store()
-            .get_atomic_bool("heuristic_detection_enabled")
-            .unwrap_or(true);
-
-        let opportunity = if heuristics_enabled {
-            log::debug!(
-                "🔥 HOT_PATH: Calling detect_arbitrage_opportunity for {}",
-                &signature[0..8]
-            );
-            let opp = self
-                .detect_arbitrage_opportunity(transaction_update)
-                .await?;
-            log::debug!(
-                "🔥 HOT_PATH: detect_arbitrage_opportunity returned: {:?}",
-                opp.as_ref().map(|o| format!("{}bps", o.profit_bps))
-            );
-            opp
-        } else {
-            None
-        };
+        log::debug!(
+            "🔥 HOT_PATH: Calling detect_arbitrage_opportunity for {}",
+            &signature[0..8]
+        );
+        let opportunity = self
+            .detect_arbitrage_opportunity(transaction_update)
+            .await?;
+        log::debug!(
+            "🔥 HOT_PATH: detect_arbitrage_opportunity returned: {:?}",
+            opportunity.as_ref().map(|o| format!("{}bps", o.profit_bps))
+        );
 
         // Record metrics
         metrics::counter!("hotpath_transactions_processed_total").increment(1);
@@ -2797,55 +2570,208 @@ impl HotPathArbitrageEngine {
 
         self.arbitrage_signals_total.fetch_add(1, Ordering::Relaxed);
 
-        // SMART FILTER EXECUTION TRIGGER - If opportunity passes intelligent filtering, execute trade
-        if heuristics_enabled {
-            if let Some(ref opp) = opportunity {
-                let token_pair = format!("{}-{}", opp.token_a, opp.token_b);
-                let arbitrage_event = create_arbitrage_event(
-                    &opp.signature,
-                    opp.slot,
-                    &opp.venue_a,
-                    &opp.venue_b,
-                    &token_pair,
-                    opp.profit_bps.try_into().unwrap_or(0),
-                    1_000_000_000.0,
-                    1_100_000_000.0,
-                    500,
-                    true,
-                    None,
-                );
-
-                let should_continue = self
-                    .evaluate_opportunity_with_source(opp, arbitrage_event, "heuristic")
-                    .await?;
-
-                if !should_continue {
-                    return Ok(None);
-                }
-            }
+        if let Some(opp) = opportunity.clone() {
+            self.handle_arbitrage_opportunity(opp).await?;
         }
 
         Ok(opportunity)
     }
 
     /// LETHAL EXECUTION - Convert our ArbitrageOpportunity to ExecutorOpportunity and execute
+    async fn handle_arbitrage_opportunity(&self, opportunity: ArbitrageOpportunity) -> Result<()> {
+        metrics::counter!(
+            "hotpath_opportunities_total",
+            "source" => opportunity.source.as_str()
+        )
+        .increment(1);
+
+        let signature = opportunity.signature.clone();
+        let venue_a = opportunity.venue_a.clone();
+        let venue_b = opportunity.venue_b.clone();
+        let token_a = opportunity.token_a.clone();
+        let token_b = opportunity.token_b.clone();
+        let strategy = opportunity.strategy.clone();
+
+        let token_pair = format!("{}/{}", token_a, token_b);
+        let amount_in = opportunity.amount_in_lamports as f64;
+        let amount_out = opportunity.expected_amount_out_lamports as f64;
+
+        let arbitrage_event = create_arbitrage_event(
+            &signature,
+            opportunity.slot,
+            &venue_a,
+            &venue_b,
+            &token_pair,
+            opportunity.profit_bps as i32,
+            amount_in,
+            amount_out,
+            500,
+            true,
+            None,
+        );
+
+        let smart_result = SMART_FILTER.should_execute(&arbitrage_event).await;
+
+        if smart_result.should_execute {
+            let processing_start = std::time::Instant::now();
+            EVENT_BUS
+                .send_arbitrage_detected(
+                    &signature,
+                    &[venue_a.clone(), venue_b.clone()],
+                    opportunity.profit_bps,
+                    &token_pair,
+                    smart_result.estimated_net_profit_sol,
+                    smart_result.confidence_score,
+                    serde_json::json!({
+                        "signature": signature,
+                        "venue_a": venue_a,
+                        "venue_b": venue_b,
+                        "token_a": token_a,
+                        "token_b": token_b,
+                        "profit_bps": opportunity.profit_bps,
+                        "slot": opportunity.slot,
+                        "strategy": strategy,
+                        "source": opportunity.source.as_str()
+                    }),
+                    processing_start.elapsed().as_micros() as u64,
+                )
+                .await;
+
+            if !is_trading_enabled_and_safe() {
+                info!("🛡️ Trading safety gate BLOCKED execution: Live trading disabled or unsafe");
+                return Ok(());
+            }
+
+            if let Err(e) = self.trigger_lethal_execution(&opportunity) {
+                error!("Failed to trigger lethal execution: {}", e);
+                record_execution_failure(&format!("Execution trigger failed: {}", e));
+            } else {
+                info!(
+                    "🧠 SMART EXECUTION TRIGGERED: source={} profit_bps={}, net_profit={:.6} SOL, confidence={:.2}",
+                    opportunity.source.as_str(),
+                    opportunity.profit_bps,
+                    smart_result.estimated_net_profit_sol,
+                    smart_result.confidence_score
+                );
+            }
+
+            let event_clone = arbitrage_event.clone();
+            let net_profit = smart_result.estimated_net_profit_sol;
+            tokio::spawn(async move {
+                SMART_FILTER
+                    .record_result(&event_clone, true, net_profit)
+                    .await;
+            });
+        } else {
+            metrics::counter!(
+                "hotpath_opportunities_rejected_total",
+                "source" => opportunity.source.as_str()
+            )
+            .increment(1);
+
+            let processing_start = std::time::Instant::now();
+            let reason = smart_result
+                .rejection_reason
+                .clone()
+                .unwrap_or_else(|| "Low confidence".to_string());
+            EVENT_BUS
+                .send_arbitrage_rejected(
+                    &opportunity.signature,
+                    &[opportunity.venue_a.clone(), opportunity.venue_b.clone()],
+                    opportunity.profit_bps,
+                    &format!("{}/{}", opportunity.token_a, opportunity.token_b),
+                    smart_result.estimated_net_profit_sol,
+                    smart_result.confidence_score,
+                    reason.clone(),
+                    serde_json::json!({
+                        "signature": opportunity.signature,
+                        "venue_a": opportunity.venue_a,
+                        "venue_b": opportunity.venue_b,
+                        "token_a": opportunity.token_a,
+                        "token_b": opportunity.token_b,
+                        "profit_bps": opportunity.profit_bps,
+                        "slot": opportunity.slot,
+                        "strategy": opportunity.strategy,
+                        "rejection_reason": reason,
+                        "source": opportunity.source.as_str()
+                    }),
+                    processing_start.elapsed().as_micros() as u64,
+                )
+                .await;
+        }
+
+        Ok(())
+    }
+
+    /// LETHAL EXECUTION - Convert our ArbitrageOpportunity to ExecutorOpportunity and execute
     fn trigger_lethal_execution(&self, opportunity: &ArbitrageOpportunity) -> Result<()> {
-        // Convert our lightweight opportunity to the executor's format
+        let token_in = bs58::decode(&opportunity.token_a)
+            .into_vec()
+            .map_err(|e| anyhow!("Failed to decode token_a {}: {}", opportunity.token_a, e))?;
+        if token_in.len() != 32 {
+            return Err(anyhow!(
+                "token_a decoded length {} != 32 bytes",
+                token_in.len()
+            ));
+        }
+
+        let token_out = bs58::decode(&opportunity.token_b)
+            .into_vec()
+            .map_err(|e| anyhow!("Failed to decode token_b {}: {}", opportunity.token_b, e))?;
+        if token_out.len() != 32 {
+            return Err(anyhow!(
+                "token_b decoded length {} != 32 bytes",
+                token_out.len()
+            ));
+        }
+
+        let edge_id = opportunity
+            .signature
+            .strip_prefix("edge-")
+            .and_then(|value| value.parse::<u64>().ok())
+            .unwrap_or_else(|| {
+                use std::collections::hash_map::DefaultHasher;
+                use std::hash::{Hash, Hasher};
+                let mut hasher = DefaultHasher::new();
+                opportunity.signature.hash(&mut hasher);
+                hasher.finish()
+            });
+
+        let detected_at_ns = opportunity
+            .timestamp
+            .timestamp_nanos_opt()
+            .unwrap_or_else(|| {
+                SystemTime::now()
+                    .duration_since(UNIX_EPOCH)
+                    .unwrap_or_default()
+                    .as_nanos() as i64
+            }) as u64;
+
+        let property_store = get_property_store();
+        let max_edge_age_ms = property_store
+            .get_atomic_u64("max_edge_staleness_ms")
+            .unwrap_or(250);
+
+        let estimated_fee_pct = property_store
+            .get_atomic_f64("max_gas_budget_pct")
+            .unwrap_or(30.0);
+        let total_fees_bps = (estimated_fee_pct * 100.0).round() as u32;
+
         let executor_opportunity = ExecutorOpportunity {
             opportunity_id: Uuid::new_v4(),
-            token_in: opportunity.signature.as_bytes().to_vec(),
-            token_out: opportunity.token_a.as_bytes().to_vec(),
-            edges: vec![opportunity.slot], // Use slot as edge ID for now
+            token_in,
+            token_out,
+            edges: vec![edge_id],
             venues: vec![
                 hash_venue_name(&opportunity.venue_a),
                 hash_venue_name(&opportunity.venue_b),
             ],
             profit_bps: opportunity.profit_bps,
-            max_size_in: 1_000_000_000_u128, // 1 SOL default for safety
-            total_cu_estimate: 300_000,      // Reasonable CU estimate for DEX arbitrage
-            total_fees_bps: 30,              // Estimate 0.3% total fees
-            detected_at_ns: SystemTime::now().duration_since(UNIX_EPOCH)?.as_nanos() as u64,
-            max_edge_age_ms: 100, // 100ms max age for fresh data
+            max_size_in: opportunity.amount_in_lamports,
+            total_cu_estimate: 300_000,
+            total_fees_bps,
+            detected_at_ns,
+            max_edge_age_ms,
         };
 
         // Send to execution queue for immediate processing
@@ -2854,6 +2780,270 @@ impl HotPathArbitrageEngine {
             .map_err(|_| anyhow::anyhow!("Execution queue closed"))?;
 
         Ok(())
+    }
+
+    async fn process_edge_signal(&self, signal: SharedArbSignal) -> Result<()> {
+        match signal {
+            SharedArbSignal::V1(v1) => match opportunity_from_signal(&v1) {
+                Ok(opportunity) => {
+                    self.handle_arbitrage_opportunity(opportunity).await?;
+                }
+                Err(reason) => {
+                    metrics::counter!(
+                        "hotpath_edge_signals_rejected_total",
+                        "reason" => reason
+                    )
+                    .increment(1);
+                }
+            },
+            SharedArbSignal::Jupiter(sig) => {
+                metrics::counter!(
+                    "hotpath_edge_signals_skipped_total",
+                    "reason" => "jupiter_signal"
+                )
+                .increment(1);
+                info!(
+                    "📦 Received Jupiter arb signal ({} hops) - integration pending",
+                    sig.route_hops.len()
+                );
+            }
+            SharedArbSignal::Enhanced(_) => {
+                metrics::counter!(
+                    "hotpath_edge_signals_skipped_total",
+                    "reason" => "enhanced_signal"
+                )
+                .increment(1);
+                info!("📦 Received enhanced arbitrage signal - integration pending");
+            }
+        }
+
+        Ok(())
+    }
+
+    fn spawn_signal_consumer(self: &Arc<Self>) {
+        let rx = self.signal_queue.receiver();
+        let engine = Arc::clone(self);
+        tokio::spawn(async move {
+            let property_store = get_property_store();
+            loop {
+                let signal = rx.recv_async().await;
+                if !property_store
+                    .get_atomic_bool("edge_detection_enabled")
+                    .unwrap_or(false)
+                {
+                    metrics::counter!(
+                        "hotpath_edge_signals_skipped_total",
+                        "reason" => "disabled"
+                    )
+                    .increment(1);
+                    continue;
+                }
+
+                if let Err(e) = engine
+                    .process_edge_signal(SharedArbSignal::V1(signal))
+                    .await
+                {
+                    warn!("Failed to process edge signal: {}", e);
+                }
+            }
+        });
+    }
+
+    fn spawn_edge_consumer(self: &Arc<Self>) {
+        let fast_engine = self.fast_engine.clone();
+        let broker =
+            std::env::var("KAFKA_BROKER").unwrap_or_else(|_| "localhost:29092".to_string());
+        let edge_topic =
+            std::env::var("EDGE_DELTA_TOPIC").unwrap_or_else(|_| "edge.delta.v1".to_string());
+        let kafka_debug = std::env::var("EDGE_KAFKA_DEBUG")
+            .ok()
+            .map(|v| matches!(v.as_str(), "1" | "true" | "TRUE" | "on"))
+            .unwrap_or(false);
+
+        tokio::spawn(async move {
+            let consumer: StreamConsumer = match ClientConfig::new()
+                .set("group.id", "hotpath.edge")
+                .set("bootstrap.servers", &broker)
+                .set("enable.auto.commit", "false")
+                .set("auto.offset.reset", "latest")
+                .create()
+            {
+                Ok(c) => c,
+                Err(e) => {
+                    error!("❌ Failed to create edge delta consumer: {}", e);
+                    return;
+                }
+            };
+
+            if let Err(e) = consumer.subscribe(&[&edge_topic]) {
+                error!(
+                    "❌ Failed to subscribe to edge delta topic {}: {}",
+                    edge_topic, e
+                );
+                return;
+            }
+
+            let property_store = get_property_store();
+
+            loop {
+                match consumer.recv().await {
+                    Ok(msg) => {
+                        if let Some(payload) = msg.payload() {
+                            metrics::counter!("hotpath_edge_messages_total").increment(1);
+                            if kafka_debug {
+                                debug!(
+                                    "Received edge.delta payload (len={}, partition={}, offset={})",
+                                    payload.len(),
+                                    msg.partition(),
+                                    msg.offset()
+                                );
+                            }
+
+                            let enabled = property_store
+                                .get_atomic_bool("edge_detection_enabled")
+                                .unwrap_or(false);
+
+                            if enabled {
+                                match decode_and_validate_edge(payload) {
+                                    Ok(delta) => {
+                                        if let Err(e) = fast_engine.process_edge_update(delta) {
+                                            metrics::counter!(
+                                                "hotpath_edge_messages_rejected_total",
+                                                "reason" => "process_error"
+                                            )
+                                            .increment(1);
+                                            warn!("Failed to process edge delta: {}", e);
+                                        }
+                                    }
+                                    Err(reason) => {
+                                        metrics::counter!(
+                                            "hotpath_edge_messages_rejected_total",
+                                            "reason" => reason
+                                        )
+                                        .increment(1);
+                                    }
+                                }
+                            } else {
+                                metrics::counter!(
+                                    "hotpath_edge_messages_skipped_total",
+                                    "reason" => "disabled"
+                                )
+                                .increment(1);
+                            }
+                        }
+
+                        let _ = consumer.commit_message(&msg, CommitMode::Async);
+                    }
+                    Err(e) => {
+                        warn!("⚠️ Edge delta consumer error: {}", e);
+                        tokio::time::sleep(Duration::from_millis(50)).await;
+                    }
+                }
+            }
+        });
+    }
+
+    fn spawn_execution_worker(self: &Arc<Self>) {
+        let engine = Arc::clone(self);
+        tokio::spawn(async move {
+            let mut receiver = {
+                let mut guard = engine.execution_receiver.lock().await;
+                guard.take()
+            };
+
+            if receiver.is_none() {
+                warn!("⚠️ Execution worker already running or receiver unavailable");
+                return;
+            }
+
+            info!("⚔️  LETHAL Execution Worker started - ready to execute trades");
+            let mut receiver = receiver.take().unwrap();
+
+            while let Some(opportunity) = receiver.recv().await {
+                if let Err(err) = engine.process_execution_opportunity(opportunity).await {
+                    warn!("❌ Execution attempt failed: {}", err);
+                }
+            }
+
+            info!("⚔️  Execution worker exiting - channel closed");
+        });
+    }
+
+    async fn process_execution_opportunity(&self, opportunity: ExecutorOpportunity) -> Result<()> {
+        let start = Instant::now();
+
+        if !is_trading_enabled_and_safe() {
+            info!(
+                "🛑 Skipping execution {} - trading currently disabled",
+                opportunity.opportunity_id
+            );
+            return Ok(());
+        }
+
+        let property_store = get_property_store();
+        let flash_loan_enabled = property_store
+            .get_atomic_bool("flash_loan_enabled")
+            .unwrap_or(false);
+        let jito_tip = property_store
+            .get_atomic_u64("jito_tip_lamports")
+            .unwrap_or(10_000);
+
+        info!(
+            "🎯 EXECUTING LETHAL TRADE: opportunity={} profit_bps={} max_size={} flash_loan={}",
+            opportunity.opportunity_id,
+            opportunity.profit_bps,
+            opportunity.max_size_in,
+            flash_loan_enabled
+        );
+
+        let execution_result = self
+            .execute_real_trade(&opportunity, flash_loan_enabled, jito_tip)
+            .await;
+
+        let elapsed = start.elapsed();
+
+        match execution_result {
+            Ok(true) => {
+                PERFORMANCE_ANALYTICS.record_execution(elapsed.as_micros() as u64, true);
+                metrics::counter!("lethal_executions_successful_total").increment(1);
+                metrics::histogram!("lethal_execution_time_ms").record(elapsed.as_millis() as f64);
+                Ok(())
+            }
+            Ok(false) => {
+                PERFORMANCE_ANALYTICS.record_execution(elapsed.as_micros() as u64, false);
+                metrics::counter!("lethal_executions_failed_total").increment(1);
+                metrics::histogram!("lethal_execution_time_ms").record(elapsed.as_millis() as f64);
+                Err(anyhow!("Execution reported failure"))
+            }
+            Err(e) => {
+                PERFORMANCE_ANALYTICS.record_execution(elapsed.as_micros() as u64, false);
+                metrics::counter!("execution_errors_total").increment(1);
+                metrics::histogram!("lethal_execution_time_ms").record(elapsed.as_millis() as f64);
+                Err(e)
+            }
+        }
+    }
+
+    fn spawn_property_watchers(self: &Arc<Self>) {
+        let fast_engine = self.fast_engine.clone();
+        let mut receiver = get_property_store().subscribe();
+        tokio::spawn(async move {
+            while let Ok(event) = receiver.recv().await {
+                if event.property_key == "max_edge_staleness_ms" {
+                    if let PropertyValue::Integer(value) = event.new_value {
+                        let value = if value <= 0 { None } else { Some(value as u64) };
+                        fast_engine.set_max_edge_staleness_ms(value);
+                    }
+                }
+            }
+        });
+    }
+
+    pub fn start_background_tasks(engine: Arc<Self>) {
+        engine.spawn_signal_consumer();
+        engine.spawn_edge_consumer();
+        engine.spawn_property_watchers();
+        engine.spawn_execution_worker();
     }
 
     /// HOT PATH: Core arbitrage detection logic - Direct transaction analysis
@@ -2882,6 +3072,23 @@ impl HotPathArbitrageEngine {
             None => return Ok(None),
         };
 
+        // Attempt to decode swaps using the normalizer pipeline
+        let normalized_swaps = match extract_swaps_from_update(
+            transaction_update,
+            NORMALIZER_EXTRACTORS.as_slice(),
+            &normalizer_registry::decoder_for,
+            None,
+        ) {
+            Ok(swaps) => swaps,
+            Err(err) => {
+                debug!("Normalizer extraction failed for {}: {err:?}", signature);
+                Vec::new()
+            }
+        };
+
+        let swap_summary = summarize_swaps(&normalized_swaps);
+        let swap_summary_ref = swap_summary.as_ref();
+
         // HOT PATH ANALYSIS - Direct instruction parsing for DEX trades
         // Look for swap instructions across different venues to detect price discrepancies
 
@@ -2893,45 +3100,48 @@ impl HotPathArbitrageEngine {
             .collect();
 
         // Fast venue identification without string matching
-        let mut venues_involved = Vec::new();
-        let _token_swaps = Vec::<String>::new(); // TODO: Use for detailed swap analysis
-
-        // Check for known DEX program IDs and extract swap data
-        for program_id in &program_ids {
-            match program_id.as_str() {
-                // Whirlpool
-                "whirLbMiicVdio4qvUfM5KAg6Ct8VwpYzGff3uctyCc" => {
-                    venues_involved.push("whirlpool");
-                    // TODO: Parse Whirlpool swap data from transaction
+        let mut venues_involved: Vec<String> = if let Some(summary) = swap_summary_ref {
+            summary.venues.clone()
+        } else {
+            let mut venues = Vec::new();
+            for program_id in &program_ids {
+                match program_id.as_str() {
+                    // Whirlpool
+                    "whirLbMiicVdio4qvUfM5KAg6Ct8VwpYzGff3uctyCc" => {
+                        venues.push("whirlpool".to_string())
+                    }
+                    // Raydium AMM
+                    "675kPX9MHTjS2zt1qfr1NYHuzeLXfQM9H24wFSUt1Mp8" => {
+                        venues.push("raydium-amm".to_string())
+                    }
+                    // Raydium CLMM
+                    "CAMMCzo5YL8w4VFF8KVHrK22GGUsp5VTaW7grrKgrWqK" => {
+                        venues.push("raydium-clmm".to_string())
+                    }
+                    // Jupiter V6 (aggregator - may contain multiple swaps)
+                    "JUP6LkbZbafMNUBhDSDueet2ApgUKPKodDhqWFLVvZpg" => {
+                        venues.push("jupiter-v6".to_string())
+                    }
+                    // Meteora DLMM
+                    "LBUZKhRxPF3XUpBCjp4YzTKgLccjZhTSDM9YuVaPwxo" => {
+                        venues.push("meteora-dlmm".to_string())
+                    }
+                    // Phoenix CLOB
+                    "PhoeNiXZ8ByJGLkxNfZRnkUfjvmuYqLR89jjFHGqdXY" => {
+                        venues.push("phoenix-clob".to_string())
+                    }
+                    _ => {}
                 }
-                // Raydium AMM
-                "675kPX9MHTjS2zt1qfr1NYHuzeLXfQM9H24wFSUt1Mp8" => {
-                    venues_involved.push("raydium-amm");
-                    // TODO: Parse Raydium AMM swap data
-                }
-                // Raydium CLMM
-                "CAMMCzo5YL8w4VFF8KVHrK22GGUsp5VTaW7grrKgrWqK" => {
-                    venues_involved.push("raydium-clmm");
-                    // TODO: Parse Raydium CLMM swap data
-                }
-                // Jupiter V6 (aggregator - may contain multiple swaps)
-                "JUP6LkbZbafMNUBhDSDueet2ApgUKPKodDhqWFLVvZpg" => {
-                    venues_involved.push("jupiter-v6");
-                    // TODO: Parse Jupiter aggregate swap data - this is complex!
-                }
-                // Meteora DLMM
-                "LBUZKhRxPF3XUpBCjp4YzTKgLccjZhTSDM9YuVaPwxo" => {
-                    venues_involved.push("meteora-dlmm");
-                    // TODO: Parse Meteora DLMM swap data
-                }
-                // Phoenix CLOB
-                "PhoeNiXZ8ByJGLkxNfZRnkUfjvmuYqLR89jjFHGqdXY" => {
-                    venues_involved.push("phoenix-clob");
-                    // TODO: Parse Phoenix CLOB trade data
-                }
-                _ => {}
             }
+            venues
+        };
+
+        if !venues_involved.is_empty() {
+            let mut seen = HashSet::new();
+            venues_involved.retain(|venue| seen.insert(venue.clone()));
         }
+
+        let venue_refs: Vec<&str> = venues_involved.iter().map(|venue| venue.as_str()).collect();
 
         // 🎯 ADVANCED ARBITRAGE DETECTION - MULTIPLE STRATEGIES
 
@@ -2942,7 +3152,7 @@ impl HotPathArbitrageEngine {
         );
 
         // STRATEGY 1: Multi-venue atomic arbitrage (within same tx) - NOW DETECTS SINGLE VENUE TOO
-        if venues_involved.len() >= 1 {
+        if !venues_involved.is_empty() {
             metrics::counter!("hotpath_multi_venue_transactions").increment(1);
             log::info!(
                 "🎯 OPPORTUNITY: Detected potential arbitrage with {} venues",
@@ -2950,36 +3160,56 @@ impl HotPathArbitrageEngine {
             );
 
             // Calculate real profit based on transaction analysis
-            let (profit_bps, token_info) = match self
+            let profit_est = self
                 .calculate_arbitrage_profit(
                     transaction_update,
-                    &venues_involved,
+                    &venue_refs,
                     "multi-venue-atomic",
+                    swap_summary_ref,
                 )
-                .await
-            {
-                Ok(result) => result,
-                Err(_) => (0, ("UNKNOWN".to_string(), "UNKNOWN".to_string())),
-            };
+                .await?;
 
-            // Let everything through for now - no profit filtering
-            // if profit_bps == 0 {
-            //     return Ok(None);
-            // }
+            let mut profit_bps_u64 = profit_est.profit_bps.max(0) as u64;
+            if let Some(summary) = swap_summary_ref {
+                if summary.derived_profit_bps > 0 {
+                    profit_bps_u64 = profit_bps_u64.max(summary.derived_profit_bps);
+                }
+            }
+
+            let amount_in = profit_est
+                .amount_in
+                .or_else(|| swap_summary_ref.map(|s| s.amount_in))
+                .unwrap_or(DEFAULT_NOTIONAL_LAMPORTS);
+            let expected_out = profit_est
+                .amount_out
+                .or_else(|| swap_summary_ref.map(|s| s.amount_out))
+                .unwrap_or_else(|| {
+                    amount_in
+                        .saturating_add(amount_in.saturating_mul(profit_bps_u64 as u128) / 10_000)
+                });
+
+            let slot = swap_summary_ref
+                .map(|s| s.slot)
+                .unwrap_or(transaction_update.slot);
+            let venue_a = venues_involved[0].clone();
+            let venue_b = venues_involved
+                .get(1)
+                .map(|s| s.clone())
+                .unwrap_or_else(|| "single-venue".to_string());
 
             let opportunity = ArbitrageOpportunity {
                 signature: signature.clone(),
-                slot: transaction_update.slot,
-                profit_bps: profit_bps as u64,
-                venue_a: venues_involved[0].to_string(),
-                venue_b: venues_involved
-                    .get(1)
-                    .unwrap_or(&"single-venue")
-                    .to_string(),
-                token_a: token_info.0,
-                token_b: token_info.1,
+                slot,
+                profit_bps: profit_bps_u64,
+                venue_a,
+                venue_b,
+                token_a: profit_est.token_a,
+                token_b: profit_est.token_b,
                 strategy: "multi-venue-atomic".to_string(),
-                timestamp: chrono::Utc::now(),
+                timestamp: timestamp_from_summary(swap_summary_ref),
+                amount_in_lamports: amount_in,
+                expected_amount_out_lamports: expected_out,
+                source: OpportunitySource::Heuristic,
             };
 
             self.arbitrage_opportunities_found
@@ -2992,24 +3222,57 @@ impl HotPathArbitrageEngine {
             let venue = &venues_involved[0];
 
             // Check for large trades that create price impact opportunities
-            if self.detect_price_impact_opportunity(venue, transaction_update)? {
+            if self.detect_price_impact_opportunity(venue.as_str(), transaction_update)? {
                 metrics::counter!("hotpath_price_impact_opportunities").increment(1);
 
                 // Calculate real profit instead of hardcoded value
-                let (profit_bps, (token_a, token_b)) = self
-                    .calculate_arbitrage_profit(transaction_update, &[venue], "price-impact-arb")
+                let single_venue_refs = [venue.as_str()];
+                let profit_est = self
+                    .calculate_arbitrage_profit(
+                        transaction_update,
+                        &single_venue_refs,
+                        "price-impact-arb",
+                        swap_summary_ref,
+                    )
                     .await?;
+
+                let mut profit_bps_u64 = profit_est.profit_bps.max(0) as u64;
+                if let Some(summary) = swap_summary_ref {
+                    if summary.derived_profit_bps > 0 {
+                        profit_bps_u64 = profit_bps_u64.max(summary.derived_profit_bps);
+                    }
+                }
+
+                let amount_in = profit_est
+                    .amount_in
+                    .or_else(|| swap_summary_ref.map(|s| s.amount_in))
+                    .unwrap_or(DEFAULT_NOTIONAL_LAMPORTS);
+                let expected_out = profit_est
+                    .amount_out
+                    .or_else(|| swap_summary_ref.map(|s| s.amount_out))
+                    .unwrap_or_else(|| {
+                        amount_in.saturating_add(
+                            amount_in.saturating_mul(profit_bps_u64 as u128) / 10_000,
+                        )
+                    });
+
+                let slot = swap_summary_ref
+                    .map(|s| s.slot)
+                    .unwrap_or(transaction_update.slot);
 
                 let opportunity = ArbitrageOpportunity {
                     signature: signature.clone(),
-                    slot: transaction_update.slot,
-                    profit_bps: profit_bps as u64,
-                    venue_a: venue.to_string(),
+                    slot,
+                    profit_bps: profit_bps_u64,
+                    venue_a: venue.clone(),
                     venue_b: "impact-arb".to_string(),
-                    token_a,
-                    token_b,
+                    token_a: profit_est.token_a,
+                    token_b: profit_est.token_b,
                     strategy: "price-impact-arb".to_string(),
-                    timestamp: chrono::Utc::now(),
+                    timestamp: timestamp_from_summary(swap_summary_ref),
+                    amount_in_lamports: amount_in,
+                    expected_amount_out_lamports: expected_out,
+                    source: OpportunitySource::Heuristic,
                 };
 
                 self.arbitrage_opportunities_found
@@ -3021,7 +3284,7 @@ impl HotPathArbitrageEngine {
         // STRATEGY 3: Cross-stream arbitrage detection (comparing with other streams)
         // This is where multi-hop strategies shine!
         let cross_stream_opportunity =
-            self.detect_cross_stream_arbitrage(&venues_involved, transaction_update)?;
+            self.detect_cross_stream_arbitrage(&venue_refs, transaction_update)?;
         if cross_stream_opportunity.is_some() {
             metrics::counter!("hotpath_cross_stream_arbitrage").increment(1);
             self.arbitrage_opportunities_found
@@ -3141,16 +3404,23 @@ impl HotPathArbitrageEngine {
         // Look for Jupiter transactions that might leave arbitrage opportunities
         if current_time % 100 < 5 {
             // 5% detection rate for testing
+            let profit_bps = 18u64;
+            let amount_in = 1_000_000_000u128;
+            let expected_out =
+                amount_in.saturating_add(amount_in.saturating_mul(profit_bps as u128) / 10_000);
             return Ok(Some(ArbitrageOpportunity {
                 signature: signature.to_string(),
                 slot: _transaction_update.slot,
-                profit_bps: 18,
+                profit_bps,
                 venue_a: "jupiter-v6".to_string(),
                 venue_b: "counter-route".to_string(),
                 token_a: "ROUTE_ANALYSIS".to_string(),
                 token_b: "MULTI_HOP".to_string(),
                 strategy: "jupiter-route-arb".to_string(),
                 timestamp: chrono::Utc::now(),
+                amount_in_lamports: amount_in,
+                expected_amount_out_lamports: expected_out,
+                source: OpportunitySource::Heuristic,
             }));
         }
 
@@ -3173,16 +3443,23 @@ impl HotPathArbitrageEngine {
         // Basic detection for testing
         if signature.ends_with("c") || signature.ends_with("e") {
             // ~30% of transactions
+            let profit_bps = 12u64;
+            let amount_in = 1_000_000_000u128;
+            let expected_out =
+                amount_in.saturating_add(amount_in.saturating_mul(profit_bps as u128) / 10_000);
             return Ok(Some(ArbitrageOpportunity {
                 signature: signature.to_string(),
                 slot: transaction_update.slot,
-                profit_bps: 12,
+                profit_bps,
                 venue_a: venue.to_string(),
                 venue_b: "cl-impact-arb".to_string(),
                 token_a: "CONCENTRATED".to_string(),
                 token_b: "LIQUIDITY".to_string(),
                 strategy: "concentrated-liquidity-arb".to_string(),
                 timestamp: chrono::Utc::now(),
+                amount_in_lamports: amount_in,
+                expected_amount_out_lamports: expected_out,
+                source: OpportunitySource::Heuristic,
             }));
         }
 
@@ -3203,16 +3480,23 @@ impl HotPathArbitrageEngine {
         // Basic detection
         if signature.contains("M") || signature.contains("m") {
             // ~20% of transactions
+            let profit_bps = 8u64;
+            let amount_in = 1_000_000_000u128;
+            let expected_out =
+                amount_in.saturating_add(amount_in.saturating_mul(profit_bps as u128) / 10_000);
             return Ok(Some(ArbitrageOpportunity {
                 signature: signature.to_string(),
                 slot: transaction_update.slot,
-                profit_bps: 8,
+                profit_bps,
                 venue_a: "meteora-dlmm".to_string(),
                 venue_b: "bin-arbitrage".to_string(),
                 token_a: "BIN_TRANSITION".to_string(),
                 token_b: "DLMM_SPECIAL".to_string(),
                 strategy: "dlmm-bin-arb".to_string(),
                 timestamp: chrono::Utc::now(),
+                amount_in_lamports: amount_in,
+                expected_amount_out_lamports: expected_out,
+                source: OpportunitySource::Heuristic,
             }));
         }
 
@@ -3234,16 +3518,23 @@ impl HotPathArbitrageEngine {
         // Basic detection
         if signature.starts_with("2") || signature.starts_with("3") {
             // ~25% of transactions
+            let profit_bps = 6u64;
+            let amount_in = 1_000_000_000u128;
+            let expected_out =
+                amount_in.saturating_add(amount_in.saturating_mul(profit_bps as u128) / 10_000);
             return Ok(Some(ArbitrageOpportunity {
                 signature: signature.to_string(),
                 slot: transaction_update.slot,
-                profit_bps: 6,
+                profit_bps,
                 venue_a: "phoenix-clob".to_string(),
                 venue_b: "spread-arbitrage".to_string(),
                 token_a: "ORDER_BOOK".to_string(),
                 token_b: "SPREAD_CAPTURE".to_string(),
                 strategy: "clob-spread-arb".to_string(),
                 timestamp: chrono::Utc::now(),
+                amount_in_lamports: amount_in,
+                expected_amount_out_lamports: expected_out,
+                source: OpportunitySource::Heuristic,
             }));
         }
 
@@ -3257,20 +3548,45 @@ impl HotPathArbitrageEngine {
         transaction_update: &yellowstone_grpc_proto::prelude::SubscribeUpdateTransaction,
         venues_involved: &[&str],
         strategy: &str,
-    ) -> Result<(i32, (String, String))> {
+        swap_summary: Option<&SwapSummary>,
+    ) -> Result<ProfitEstimation> {
         let tx_info = match &transaction_update.transaction {
             Some(tx) => tx,
-            None => return Ok((0, ("NO_TX".to_string(), "NO_TX".to_string()))),
+            None => {
+                return Ok(ProfitEstimation {
+                    profit_bps: 0,
+                    token_a: "NO_TX".to_string(),
+                    token_b: "NO_TX".to_string(),
+                    amount_in: None,
+                    amount_out: None,
+                })
+            }
         };
 
         let inner_tx = match &tx_info.transaction {
             Some(tx) => tx,
-            None => return Ok((0, ("NO_INNER".to_string(), "NO_INNER".to_string()))),
+            None => {
+                return Ok(ProfitEstimation {
+                    profit_bps: 0,
+                    token_a: "NO_INNER".to_string(),
+                    token_b: "NO_INNER".to_string(),
+                    amount_in: None,
+                    amount_out: None,
+                })
+            }
         };
 
         let message = match &inner_tx.message {
             Some(msg) => msg,
-            None => return Ok((0, ("NO_MSG".to_string(), "NO_MSG".to_string()))),
+            None => {
+                return Ok(ProfitEstimation {
+                    profit_bps: 0,
+                    token_a: "NO_MSG".to_string(),
+                    token_b: "NO_MSG".to_string(),
+                    amount_in: None,
+                    amount_out: None,
+                })
+            }
         };
 
         // ZERO-LATENCY: Read configuration from atomic cache instead of hardcoded values
@@ -3280,36 +3596,49 @@ impl HotPathArbitrageEngine {
 
         let account_count = message.account_keys.len();
 
-        // Dynamic profit calculation based on complexity and real-time configuration
-        if account_count >= 1 {
-            let profit_bps = match account_count {
-                1..=5 => min_profit,                            // Use min_profit from database
-                6..=10 => min_profit + 1, // Slightly higher for moderate complexity
-                11..=15 => min_profit + 2, // Higher for complex transactions
-                16..=20 => min_profit + 3, // Even higher for very complex
-                _ => std::cmp::min(min_profit + 5, max_profit), // Cap at max_profit from database
+        let mut profit_bps = if account_count >= 1 {
+            let base = match account_count {
+                1..=5 => min_profit,
+                6..=10 => min_profit + 1,
+                11..=15 => min_profit + 2,
+                16..=20 => min_profit + 3,
+                _ => std::cmp::min(min_profit + 5, max_profit),
             };
 
-            // Apply strategy-specific multipliers using atomic configuration
-            let final_profit = match strategy {
-                "multi-venue-atomic-arb" => profit_bps,
-                "price-impact-arb" => (profit_bps * 80) / 100, // 20% lower for impact arb
-                "cross-stream-arb" => (profit_bps * 120) / 100, // 20% higher for cross-stream
-                _ => profit_bps,
-            };
+            match strategy {
+                "multi-venue-atomic" | "multi-venue-atomic-arb" => base,
+                "price-impact-arb" => (base * 80) / 100,
+                "cross-stream-arb" => (base * 120) / 100,
+                _ => base,
+            }
+        } else {
+            store.get_atomic_i32("min_profit_bps").unwrap_or(5)
+        };
 
-            // Extract basic token info
-            let (token_a, token_b) = self.extract_basic_token_info(message).await;
-
-            return Ok((final_profit, (token_a, token_b)));
+        if let Some(summary) = swap_summary {
+            if summary.derived_profit_bps > 0 {
+                profit_bps = profit_bps.max(summary.derived_profit_bps as i32);
+            }
         }
 
-        // Even if no accounts, use min_profit from atomic cache
-        let fallback_profit = store.get_atomic_i32("min_profit_bps").unwrap_or(5);
-        Ok((
-            fallback_profit,
-            ("ANY_TOKEN".to_string(), "ANY_TOKEN".to_string()),
-        ))
+        let mut token_a;
+        let mut token_b;
+        if let Some(summary) = swap_summary {
+            token_a = summary.token_in.clone();
+            token_b = summary.token_out.clone();
+        } else {
+            let basic = self.extract_basic_token_info(message).await;
+            token_a = basic.0;
+            token_b = basic.1;
+        }
+
+        Ok(ProfitEstimation {
+            profit_bps,
+            token_a,
+            token_b,
+            amount_in: swap_summary.map(|s| s.amount_in),
+            amount_out: swap_summary.map(|s| s.amount_out),
+        })
     }
 
     /// Extract basic token information from transaction (simplified for now)
@@ -3340,6 +3669,23 @@ impl HotPathArbitrageEngine {
 }
 
 /// Arbitrage opportunity detected on the hot path
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum OpportunitySource {
+    Heuristic,
+    EdgeSignal,
+    Jupiter,
+}
+
+impl OpportunitySource {
+    fn as_str(&self) -> &'static str {
+        match self {
+            OpportunitySource::Heuristic => "heuristic",
+            OpportunitySource::EdgeSignal => "edge",
+            OpportunitySource::Jupiter => "jupiter",
+        }
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct ArbitrageOpportunity {
     pub signature: String,
@@ -3351,6 +3697,9 @@ pub struct ArbitrageOpportunity {
     pub token_b: String,
     pub strategy: String,
     pub timestamp: DateTime<Utc>,
+    pub amount_in_lamports: u128,
+    pub expected_amount_out_lamports: u128,
+    pub source: OpportunitySource,
 }
 
 /// Arbitrage engine statistics
@@ -3417,6 +3766,74 @@ fn publish_raw_transaction(update: &SubscribeUpdateTransaction) {
     }
 }
 
+async fn load_configured_wallets(manager: Arc<WalletSecurityManager>) {
+    let property_store = get_property_store();
+
+    let hot_max = property_store
+        .get_atomic_u64("hot_wallet_max_balance_lamports")
+        .unwrap_or(100_000_000);
+    let warm_max = property_store
+        .get_atomic_u64("warm_wallet_max_balance_lamports")
+        .unwrap_or(5_000_000_000);
+    let cold_max = property_store
+        .get_atomic_u64("cold_wallet_max_balance_lamports")
+        .unwrap_or(u64::MAX);
+
+    let configs = [
+        ("HOT_WALLET_KEYPAIR_PATH", WalletSecurityTier::Hot, hot_max),
+        (
+            "WARM_WALLET_KEYPAIR_PATH",
+            WalletSecurityTier::Warm,
+            warm_max,
+        ),
+        (
+            "COLD_WALLET_KEYPAIR_PATH",
+            WalletSecurityTier::Cold,
+            cold_max,
+        ),
+    ];
+
+    for (env_var, tier, max_balance) in configs {
+        match std::env::var(env_var) {
+            Ok(path) if !path.trim().is_empty() => {
+                let expanded_path = PathBuf::from(path.trim());
+                let keypair_result =
+                    read_keypair_file(&expanded_path).map_err(|err| err.to_string());
+
+                match keypair_result {
+                    Ok(keypair) => {
+                        let registration =
+                            manager.register_wallet(keypair, tier, max_balance).await;
+
+                        match registration {
+                            Ok(pubkey) => info!(
+                                "🔑 Loaded {:?} wallet from {} (pubkey: {})",
+                                tier, env_var, pubkey
+                            ),
+                            Err(err) => warn!(
+                                "⚠️ Failed to register {:?} wallet from {}: {}",
+                                tier, env_var, err
+                            ),
+                        }
+                    }
+                    Err(err) => warn!(
+                        "⚠️ Could not read keypair file for {} ({}): {}",
+                        env_var,
+                        expanded_path.display(),
+                        err
+                    ),
+                }
+            }
+            Ok(_) => {
+                warn!("⚠️ {} specified but empty - skipping wallet load", env_var);
+            }
+            Err(_) => {
+                debug!("{} not set - no wallet registered", env_var);
+            }
+        }
+    }
+}
+
 // Global metrics tracking
 lazy_static::lazy_static! {
     static ref STREAM_COUNTERS: DashMap<u8, AtomicU64> = DashMap::new();
@@ -3431,9 +3848,10 @@ lazy_static::lazy_static! {
     // HOT PATH ARBITRAGE ENGINE - Global singleton for zero-latency MEV detection
     static ref HOT_PATH_ENGINE: Arc<HotPathArbitrageEngine> = {
         let engine = Arc::new(
-            HotPathArbitrageEngine::new().expect("Failed to initialize hot path arbitrage engine"),
+            HotPathArbitrageEngine::new()
+                .expect("Failed to initialize hot path arbitrage engine"),
         );
-        HotPathArbitrageEngine::start_background_tasks(Arc::clone(&engine));
+        HotPathArbitrageEngine::start_background_tasks(engine.clone());
         engine
     };
 
@@ -3467,17 +3885,7 @@ lazy_static::lazy_static! {
 
     // SMART FILTER - Profit-first opportunity filtering system
     static ref SMART_FILTER: Arc<SmartFilter> = {
-        let config = SmartFilterConfig {
-            min_net_profit_sol: 0.0005,   // $0.10 minimum profit (reduced)
-            min_profit_bps: 5,            // 5 bps minimum (reduced for demo)
-            max_profit_bps: 100,          // Skip suspiciously high opportunities
-            min_venue_success_rate: 0.0,  // Start with no filtering, learn over time
-            max_gas_budget_pct: 30.0,     // Don't spend more than 30% of profit on gas
-            max_concurrent_opportunities: 3,   // Skip if more than 3 similar opportunities recently
-            competition_lookback_ms: 5000,    // Look back 5 seconds for competition
-            learning_rate: 0.1,               // How fast to adapt to new data
-            min_samples_for_learning: 5,      // Minimum attempts before trusting success rates
-        };
+        let config = SmartFilterConfig::staging_defaults();
         Arc::new(SmartFilter::new(config))
     };
 }
@@ -4341,7 +4749,7 @@ async fn update_metrics_task() {
 
 async fn start_auxiliary_api_server(port: u16, config_state: Option<SharedConfigState>) {
     use axum::{
-        routing::{get, post},
+        routing::{get, post, put},
         Json, Router,
     };
 
@@ -4372,6 +4780,7 @@ async fn start_auxiliary_api_server(port: u16, config_state: Option<SharedConfig
         .route("/ws/properties", get(websocket_handler))
         .route("/properties/all", get(serve_all_properties))
         .route("/properties/stats", get(serve_property_stats))
+        .route("/properties/:key", put(update_property_handler))
         .with_state(Arc::clone(&websocket_broadcaster));
 
     // Add smart filter configuration API if config state is provided
@@ -5123,15 +5532,17 @@ async fn main() -> Result<()> {
 
     // Initialize metrics server with smart filter configuration API
     // Initialize industry-standard Prometheus metrics exporter
+    let ports = BoundPorts::load();
+
     info!(
         "🔧 Initializing industry-standard Prometheus exporter on port {}",
-        args.metrics_port
+        ports.metrics_port
     );
 
     use metrics_exporter_prometheus::PrometheusBuilder;
     let _prometheus_handle = PrometheusBuilder::new()
         .with_http_listener(
-            format!("0.0.0.0:{}", args.metrics_port)
+            format!("0.0.0.0:{}", ports.metrics_port)
                 .parse::<std::net::SocketAddr>()
                 .unwrap(),
         )
@@ -5141,7 +5552,7 @@ async fn main() -> Result<()> {
     info!("✅ Prometheus metrics exporter installed - standard /metrics endpoint active");
 
     // Start auxiliary API server on metrics_port + 1 for other endpoints
-    let api_port = args.metrics_port + 1;
+    let api_port = ports.aux_port;
     let config_state_clone = shared_config_state.clone();
     tokio::spawn(async move {
         start_auxiliary_api_server(api_port, Some(config_state_clone)).await;
@@ -5149,7 +5560,7 @@ async fn main() -> Result<()> {
 
     info!(
         "✅ Prometheus metrics: port {} | API endpoints: port {} (smart filter, performance, AI, wallet)",
-        args.metrics_port, args.metrics_port + 1
+        ports.metrics_port, ports.aux_port
     );
 
     // Initialize OrderBook History System (OFF-HOTPATH)
@@ -5484,6 +5895,105 @@ async fn serve_property_stats() -> axum::Json<serde_json::Value> {
     axum::Json(stats)
 }
 
+#[derive(Debug, Serialize)]
+struct PropertyUpdateResponse {
+    property_key: String,
+    previous_value: crate::property_store::PropertyValue,
+    value: crate::property_store::PropertyValue,
+    source: crate::property_store::PropertySource,
+}
+
+#[derive(Debug, Deserialize)]
+struct PropertyUpdateRequest {
+    value: serde_json::Value,
+    source: Option<crate::property_store::PropertySource>,
+}
+
+async fn update_property_handler(
+    axum::extract::Path(property_key): axum::extract::Path<String>,
+    axum::Json(payload): axum::Json<PropertyUpdateRequest>,
+) -> Result<axum::Json<PropertyUpdateResponse>, axum::http::StatusCode> {
+    use crate::property_store::{get_property_store, PropertySource, PropertyValue};
+
+    let property_store = get_property_store();
+    let current_properties = property_store.get_all_properties().await;
+    let current_value = current_properties
+        .get(&property_key)
+        .cloned()
+        .ok_or(axum::http::StatusCode::NOT_FOUND)?;
+
+    let desired_value =
+        coerce_json_to_property_value(payload.value, &current_value).map_err(|err| {
+            warn!(
+                "Failed to parse property {} update payload: {}",
+                property_key, err
+            );
+            axum::http::StatusCode::BAD_REQUEST
+        })?;
+
+    let source = payload.source.unwrap_or(PropertySource::HumanUI);
+
+    property_store
+        .set_property_value(&property_key, desired_value.clone(), source)
+        .await
+        .map_err(|err| {
+            warn!("Failed to update property {}: {}", property_key, err);
+            axum::http::StatusCode::BAD_REQUEST
+        })?;
+
+    Ok(axum::Json(PropertyUpdateResponse {
+        property_key,
+        previous_value: current_value,
+        value: desired_value,
+        source,
+    }))
+}
+
+fn coerce_json_to_property_value(
+    json_value: serde_json::Value,
+    template: &crate::property_store::PropertyValue,
+) -> Result<crate::property_store::PropertyValue, String> {
+    use crate::property_store::PropertyValue;
+
+    match template {
+        PropertyValue::Boolean(_) => json_value
+            .as_bool()
+            .map(PropertyValue::Boolean)
+            .ok_or_else(|| "expected boolean value".to_string()),
+        PropertyValue::Float(_) => json_value
+            .as_f64()
+            .or_else(|| json_value.as_i64().map(|v| v as f64))
+            .map(PropertyValue::Float)
+            .ok_or_else(|| "expected numeric value".to_string()),
+        PropertyValue::Integer(_) => {
+            if let Some(int_value) = json_value.as_i64() {
+                if int_value < i32::MIN as i64 || int_value > i32::MAX as i64 {
+                    Err("integer value out of range".to_string())
+                } else {
+                    Ok(PropertyValue::Integer(int_value as i32))
+                }
+            } else if let Some(float_value) = json_value.as_f64() {
+                if !float_value.is_finite() {
+                    Err("non-finite numeric value provided".to_string())
+                } else {
+                    let int_value = float_value.round() as i64;
+                    if int_value < i32::MIN as i64 || int_value > i32::MAX as i64 {
+                        Err("integer value out of range".to_string())
+                    } else {
+                        Ok(PropertyValue::Integer(int_value as i32))
+                    }
+                }
+            } else {
+                Err("expected numeric value".to_string())
+            }
+        }
+        PropertyValue::String(_) => json_value
+            .as_str()
+            .map(|s| PropertyValue::String(s.to_string()))
+            .ok_or_else(|| "expected string value".to_string()),
+    }
+}
+
 /// Helper function to convert venue name to hash for execution system
 fn hash_venue_name(venue_name: &str) -> u32 {
     use std::collections::hash_map::DefaultHasher;
@@ -5492,4 +6002,96 @@ fn hash_venue_name(venue_name: &str) -> u32 {
     let mut hasher = DefaultHasher::new();
     venue_name.hash(&mut hasher);
     hasher.finish() as u32
+}
+
+fn timestamp_from_ns(ns: u64) -> DateTime<Utc> {
+    if ns == 0 {
+        return Utc::now();
+    }
+    let secs = (ns / 1_000_000_000) as i64;
+    let nanos = (ns % 1_000_000_000) as u32;
+    Utc.timestamp_opt(secs, nanos)
+        .single()
+        .unwrap_or_else(Utc::now)
+}
+
+fn opportunity_from_signal(signal: &ArbSignalV1) -> Result<ArbitrageOpportunity, &'static str> {
+    let profit_bps = signal.profit_bps.max(0) as u64;
+    if profit_bps == 0 {
+        return Err("zero_profit");
+    }
+
+    if signal.expected_profit_out <= 0 {
+        return Err("nonpositive_profit");
+    }
+
+    if signal.amount_in == 0 {
+        return Err("zero_amount");
+    }
+
+    let expected_profit_lamports = signal.expected_profit_out.max(0) as u128;
+    let expected_out = signal.amount_in.saturating_add(expected_profit_lamports);
+
+    Ok(ArbitrageOpportunity {
+        signature: format!("edge-{}", signal.id),
+        slot: signal.slot,
+        profit_bps,
+        venue_a: signal.dex_sell.clone(),
+        venue_b: signal.dex_buy.clone(),
+        token_a: signal.pair.a.clone(),
+        token_b: signal.pair.b.clone(),
+        strategy: "edge-delta".to_string(),
+        timestamp: timestamp_from_ns(signal.emitted_at_ns),
+        amount_in_lamports: signal.amount_in,
+        expected_amount_out_lamports: expected_out,
+        source: OpportunitySource::EdgeSignal,
+    })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use shared_protocol::Pair;
+
+    fn sample_signal() -> ArbSignalV1 {
+        ArbSignalV1 {
+            pair: Pair {
+                a: "SOL".to_string(),
+                b: "USDC".to_string(),
+            },
+            dex_sell: "raydium".to_string(),
+            dex_mid: None,
+            dex_buy: "orca".to_string(),
+            amount_in: 1_000_000_000,
+            expected_profit_out: 5_000_000,
+            slot: 123,
+            sell_pool_id: "sell-pool".to_string(),
+            mid_pool_id: None,
+            buy_pool_id: "buy-pool".to_string(),
+            id: 42,
+            profit_bps: 25,
+            emitted_at_ns: 1_500_000_000,
+        }
+    }
+
+    #[test]
+    fn opportunity_from_signal_maps_amounts() {
+        let signal = sample_signal();
+        let opportunity = opportunity_from_signal(&signal).expect("conversion should succeed");
+        assert_eq!(opportunity.amount_in_lamports, signal.amount_in);
+        assert_eq!(
+            opportunity.expected_amount_out_lamports,
+            signal.amount_in + signal.expected_profit_out as u128
+        );
+        assert_eq!(opportunity.profit_bps, signal.profit_bps as u64);
+        assert_eq!(opportunity.source, OpportunitySource::EdgeSignal);
+    }
+
+    #[test]
+    fn opportunity_from_signal_rejects_nonpositive_profit() {
+        let mut signal = sample_signal();
+        signal.expected_profit_out = 0;
+        let result = opportunity_from_signal(&signal);
+        assert_eq!(result.unwrap_err(), "nonpositive_profit");
+    }
 }

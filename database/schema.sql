@@ -504,6 +504,84 @@ COMMENT ON TABLE dead_letter_queue IS 'Failed events queue for retry processing'
 COMMENT ON TABLE audit_log IS 'Security and operational audit trail';
 
 -- ==============================================================================
+-- REPORTING VIEWS
+-- ==============================================================================
+
+CREATE OR REPLACE VIEW realtime_preflight_metrics AS
+SELECT
+    ao.timestamp,
+    ao.opportunity_id,
+    ao.token_pair,
+    ao.venue_sell,
+    ao.venue_buy,
+    ao.profit_bps,
+    ao.amount_in,
+    ao.expected_amount_out,
+    er.status,
+    er.estimated_profit_lamports,
+    er.estimated_bundle_fees_lamports,
+    er.estimated_priority_fee_lamports,
+    er.estimated_cu_cost_lamports,
+    er.flash_loan_fee_lamports,
+    er.min_profit_threshold_lamports,
+    er.error_message,
+    er.executed_at,
+    er.simulated_token_deltas,
+    (COALESCE(er.estimated_bundle_fees_lamports, 0)
+     + COALESCE(er.estimated_priority_fee_lamports, 0)
+     + COALESCE(er.estimated_cu_cost_lamports, 0)
+     + COALESCE(er.flash_loan_fee_lamports, 0)) AS total_estimated_cost_lamports,
+    (COALESCE(er.estimated_profit_lamports, 0)::numeric / 1e9) AS estimated_profit_sol,
+    (COALESCE(er.min_profit_threshold_lamports, 0)::numeric / 1e9) AS min_profit_threshold_sol
+FROM arbitrage_opportunities ao
+LEFT JOIN LATERAL (
+    SELECT er_inner.*
+    FROM execution_results er_inner
+    WHERE er_inner.opportunity_id::text = ao.opportunity_id
+    ORDER BY er_inner.executed_at DESC
+    LIMIT 1
+) er ON TRUE;
+
+CREATE OR REPLACE VIEW preflight_hourly_summary AS
+SELECT
+    date_trunc('hour', er.executed_at) AS hour_bucket,
+    COUNT(*) FILTER (WHERE er.status = 'PreflightSuccess') AS preflight_passes,
+    COUNT(*) FILTER (WHERE er.status <> 'PreflightSuccess') AS preflight_rejections,
+    AVG(er.estimated_profit_lamports)::numeric / 1e9 AS avg_profit_sol,
+    AVG((COALESCE(er.estimated_bundle_fees_lamports, 0)
+        + COALESCE(er.estimated_priority_fee_lamports, 0)
+        + COALESCE(er.estimated_cu_cost_lamports, 0)
+        + COALESCE(er.flash_loan_fee_lamports, 0)))::numeric / 1e9 AS avg_cost_sol,
+    AVG((er.estimated_profit_lamports
+        - COALESCE(er.estimated_bundle_fees_lamports, 0)
+        - COALESCE(er.estimated_priority_fee_lamports, 0)
+        - COALESCE(er.estimated_cu_cost_lamports, 0)
+        - COALESCE(er.flash_loan_fee_lamports, 0)))::numeric / 1e9 AS avg_net_sol
+FROM execution_results er
+WHERE er.executed_at >= NOW() - INTERVAL '48 hours'
+GROUP BY hour_bucket
+ORDER BY hour_bucket DESC;
+
+CREATE OR REPLACE VIEW preflight_route_breakdown AS
+SELECT
+    ao.token_pair,
+    ao.venue_sell || '→' || ao.venue_buy AS route,
+    COUNT(*) FILTER (WHERE er.status = 'PreflightSuccess') AS passes,
+    COUNT(*) FILTER (WHERE er.status <> 'PreflightSuccess') AS rejections,
+    AVG((er.estimated_profit_lamports
+        - COALESCE(er.estimated_bundle_fees_lamports, 0)
+        - COALESCE(er.estimated_priority_fee_lamports, 0)
+        - COALESCE(er.estimated_cu_cost_lamports, 0)
+        - COALESCE(er.flash_loan_fee_lamports, 0)))::bigint AS avg_net_lamports,
+    AVG(er.estimated_cu_cost_lamports)::bigint AS avg_cu_cost_lamports,
+    AVG(er.estimated_priority_fee_lamports)::bigint AS avg_priority_fee_lamports
+FROM arbitrage_opportunities ao
+JOIN execution_results er ON er.opportunity_id::text = ao.opportunity_id
+WHERE er.executed_at >= NOW() - INTERVAL '48 hours'
+GROUP BY ao.token_pair, route
+ORDER BY passes DESC, avg_net_lamports DESC;
+
+-- ==============================================================================
 -- GRANT PERMISSIONS
 -- ==============================================================================
 

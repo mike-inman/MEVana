@@ -67,6 +67,7 @@ shellexpand = "3.1"
 
 # Metrics and monitoring
 prometheus = "0.13"
+metrics = "0.23"
 warp = { version = "0.3", features = ["default"] }
 hyper = { version = "0.14", features = ["http1","server","backports"] }
 tokio-stream = { version = "0.1", features = ["net"] }

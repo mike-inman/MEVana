@@ -51,6 +51,7 @@ rdkafka = { version = "0.38", features = ["tokio", "ssl-vendored"] }
 arb-engine = { path = "../arb-engine" }
 edge-assembler = { path = "../edge-assembler" }
 normalizer-runtime = { path = "../normalizer-runtime" }
+normalizer-generated = { path = "../normalizer-generated" }
 shared-core = { path = "../shared-core" }
 shared-protocol = { path = "../shared-protocol" }
 whirlpool-core = { path = "../whirlpool-core" }

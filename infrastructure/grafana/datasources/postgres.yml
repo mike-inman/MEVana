@@ -1,0 +1,19 @@
+apiVersion: 1
+
+datasources:
+  - name: MEVana Postgres
+    uid: mevana-postgres
+    type: postgres
+    access: proxy
+    url: postgres:5432
+    database: mevdb
+    user: mev
+    secureJsonData:
+      password: mevpassword
+    jsonData:
+      sslmode: disable
+      postgresVersion: 1500
+      timescaledb: false
+      maxOpenConns: 10
+      maxIdleConns: 5
+      connMaxLifetime: 14400
