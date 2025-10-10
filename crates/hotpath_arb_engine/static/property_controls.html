@@ -1,0 +1,301 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8" />
+    <title>MEVana Property Controls</title>
+    <style>
+        :root {
+            color-scheme: light dark;
+        }
+        body {
+            font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+            margin: 0;
+            padding: 24px;
+            background: var(--bg, #111);
+        }
+        h1 {
+            margin-top: 0;
+            font-size: 1.6rem;
+        }
+        p {
+            max-width: 680px;
+            line-height: 1.4;
+        }
+        .controls {
+            display: grid;
+            gap: 16px;
+            max-width: 720px;
+        }
+        .control-card {
+            border: 1px solid rgba(128,128,128,0.3);
+            border-radius: 8px;
+            padding: 16px;
+            background: rgba(0,0,0,0.04);
+        }
+        .control-card h2 {
+            margin: 0 0 8px 0;
+            font-size: 1.1rem;
+        }
+        .control-card label {
+            display: block;
+            margin-bottom: 4px;
+            font-weight: 600;
+        }
+        .control-card input[type="number"] {
+            width: 160px;
+            padding: 6px 8px;
+            font-size: 1rem;
+            border-radius: 4px;
+            border: 1px solid rgba(128,128,128,0.4);
+        }
+        .actions {
+            margin-top: 12px;
+            display: flex;
+            gap: 8px;
+            align-items: center;
+        }
+        button {
+            cursor: pointer;
+            padding: 6px 14px;
+            font-size: 0.95rem;
+            border-radius: 4px;
+            border: none;
+            background-color: #3b82f6;
+            color: white;
+        }
+        button.secondary {
+            background-color: rgba(128,128,128,0.3);
+            color: inherit;
+        }
+        .status {
+            font-size: 0.85rem;
+            min-height: 1.2rem;
+        }
+        .status.success {
+            color: #16a34a;
+        }
+        .status.error {
+            color: #dc2626;
+        }
+        .hint {
+            font-size: 0.85rem;
+            opacity: 0.8;
+            margin-top: 6px;
+        }
+    </style>
+</head>
+<body>
+    <h1>MEVana Property Controls</h1>
+    <p>
+        Adjust the live hotpath thresholds directly. Changes apply immediately and the Grafana metrics
+        update within a few seconds. Watch the opportunity flow & rejection panels as you tune each knob.
+    </p>
+
+    <section class="controls" id="controls"></section>
+
+    <script>
+        const CONTROLS = [
+            {
+                key: "min_profit_bps",
+                label: "Minimum Net Profit (bps)",
+                type: "int",
+                step: 1,
+                min: 0,
+                max: 1000,
+                description: "Opportunities below this estimated profit are rejected."
+            },
+            {
+                key: "max_gas_budget_pct",
+                label: "Max Gas Budget (% of profit)",
+                type: "float",
+                step: 0.5,
+                min: 0,
+                max: 100,
+                description: "Reject opportunities if estimated gas exceeds this share of profit."
+            },
+            {
+                key: "max_edge_staleness_ms",
+                label: "Max Edge Staleness (ms)",
+                type: "int",
+                step: 50,
+                min: 50,
+                max: 2000,
+                description: "Older edge signals than this window are treated as stale."
+            }
+        ];
+
+        const controlContainer = document.getElementById("controls");
+
+        function renderControls() {
+            controlContainer.innerHTML = "";
+            CONTROLS.forEach(ctrl => {
+                const card = document.createElement("div");
+                card.className = "control-card";
+
+                const title = document.createElement("h2");
+                title.textContent = ctrl.label;
+                card.appendChild(title);
+
+                const label = document.createElement("label");
+                label.setAttribute("for", `input-${ctrl.key}`);
+                label.textContent = ctrl.label;
+                card.appendChild(label);
+
+                const input = document.createElement("input");
+                input.type = "number";
+                input.id = `input-${ctrl.key}`;
+                input.step = ctrl.step;
+                if (ctrl.min !== undefined) input.min = ctrl.min;
+                if (ctrl.max !== undefined) input.max = ctrl.max;
+                card.appendChild(input);
+
+                const hint = document.createElement("div");
+                hint.className = "hint";
+                hint.textContent = ctrl.description;
+                card.appendChild(hint);
+
+                const actions = document.createElement("div");
+                actions.className = "actions";
+
+                const applyButton = document.createElement("button");
+                applyButton.textContent = "Apply";
+                applyButton.addEventListener("click", () => submitProperty(ctrl));
+                actions.appendChild(applyButton);
+
+                const refreshButton = document.createElement("button");
+                refreshButton.textContent = "Refresh";
+                refreshButton.className = "secondary";
+                refreshButton.addEventListener("click", () => loadSingleProperty(ctrl));
+                actions.appendChild(refreshButton);
+
+                const status = document.createElement("div");
+                status.id = `status-${ctrl.key}`;
+                status.className = "status";
+                actions.appendChild(status);
+
+                card.appendChild(actions);
+                controlContainer.appendChild(card);
+            });
+        }
+
+        function propertyValueToNumber(value) {
+            if (value == null || typeof value !== "object") return undefined;
+            if ("Integer" in value) return value.Integer;
+            if ("Float" in value) return value.Float;
+            if ("Boolean" in value) return value.Boolean ? 1 : 0;
+            return undefined;
+        }
+
+        async function loadProperties() {
+            try {
+                const response = await fetch("/properties/all");
+                if (!response.ok) throw new Error(`HTTP ${response.status}`);
+                const data = await response.json();
+                CONTROLS.forEach(ctrl => {
+                    const value = propertyValueToNumber(data[ctrl.key]);
+                    const input = document.getElementById(`input-${ctrl.key}`);
+                    if (input && value !== undefined) {
+                        input.value = value;
+                    }
+                });
+            } catch (err) {
+                console.error("Failed to load properties", err);
+                showStatus("global", `Failed to load properties: ${err.message}`, "error");
+            }
+        }
+
+        async function loadSingleProperty(ctrl) {
+            try {
+                const response = await fetch("/properties/all");
+                if (!response.ok) throw new Error(`HTTP ${response.status}`);
+                const data = await response.json();
+                const value = propertyValueToNumber(data[ctrl.key]);
+                const input = document.getElementById(`input-${ctrl.key}`);
+                if (input && value !== undefined) {
+                    input.value = value;
+                }
+                showStatus(ctrl.key, "Refreshed", "success");
+            } catch (err) {
+                showStatus(ctrl.key, `Failed to refresh: ${err.message}`, "error");
+            }
+        }
+
+        function validateInput(ctrl, raw) {
+            if (raw === "" || raw === null || raw === undefined) {
+                throw new Error("Value is required");
+            }
+            let numericValue;
+            if (ctrl.type === "int") {
+                numericValue = parseInt(raw, 10);
+            } else {
+                numericValue = parseFloat(raw);
+            }
+            if (Number.isNaN(numericValue)) {
+                throw new Error("Invalid number");
+            }
+            if (ctrl.min !== undefined && numericValue < ctrl.min) {
+                throw new Error(`Must be ≥ ${ctrl.min}`);
+            }
+            if (ctrl.max !== undefined && numericValue > ctrl.max) {
+                throw new Error(`Must be ≤ ${ctrl.max}`);
+            }
+            return numericValue;
+        }
+
+        async function submitProperty(ctrl) {
+            const input = document.getElementById(`input-${ctrl.key}`);
+            const status = document.getElementById(`status-${ctrl.key}`);
+            if (!input || !status) return;
+
+            status.textContent = "Saving…";
+            status.className = "status";
+
+            let parsedValue;
+            try {
+                parsedValue = validateInput(ctrl, input.value);
+            } catch (err) {
+                showStatus(ctrl.key, err.message, "error");
+                return;
+            }
+
+            try {
+                const response = await fetch(`/properties/${ctrl.key}`, {
+                    method: "PUT",
+                    headers: {
+                        "Content-Type": "application/json",
+                    },
+                    body: JSON.stringify({ value: parsedValue }),
+                });
+
+                if (!response.ok) {
+                    const errorText = await response.text();
+                    throw new Error(errorText || `HTTP ${response.status}`);
+                }
+
+                showStatus(ctrl.key, "Updated", "success");
+                // Re-sync in case backend coerced/rounded the value
+                loadSingleProperty(ctrl);
+            } catch (err) {
+                console.error("Property update failed", err);
+                showStatus(ctrl.key, `Failed: ${err.message}`, "error");
+            }
+        }
+
+        function showStatus(key, message, type) {
+            const status = document.getElementById(`status-${key}`) || document.getElementById("status-global");
+            if (!status) return;
+            status.textContent = message;
+            status.className = `status ${type}`;
+            setTimeout(() => {
+                if (status.textContent === message) {
+                    status.textContent = "";
+                    status.className = "status";
+                }
+            }, type === "success" ? 2500 : 4000);
+        }
+
+        renderControls();
+        loadProperties();
+    </script>
+</body>
+</html>

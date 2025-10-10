@@ -4,6 +4,7 @@ use anyhow::{anyhow, Result};
 use chrono::{DateTime, TimeZone, Timelike, Utc};
 use clap::Parser;
 use dashmap::DashMap;
+use axum::response::Html;
 use futures::StreamExt;
 use log::{debug, error, info, warn};
 use once_cell::sync::{Lazy, OnceCell};
@@ -4762,6 +4763,7 @@ async fn update_metrics_task() {
 
 async fn start_auxiliary_api_server(port: u16, config_state: Option<SharedConfigState>) {
     use axum::{
+        response::Html,
         routing::{get, post, put},
         Json, Router,
     };
@@ -4793,6 +4795,7 @@ async fn start_auxiliary_api_server(port: u16, config_state: Option<SharedConfig
         .route("/ws/properties", get(websocket_handler))
         .route("/properties/all", get(serve_all_properties))
         .route("/properties/stats", get(serve_property_stats))
+        .route("/ui/property-controls", get(serve_property_control_page))
         .route("/properties/:key", put(update_property_handler))
         .with_state(Arc::clone(&websocket_broadcaster));
 
@@ -5906,6 +5909,10 @@ async fn serve_property_stats() -> axum::Json<serde_json::Value> {
     });
 
     axum::Json(stats)
+}
+
+async fn serve_property_control_page() -> Html<&'static str> {
+    Html(include_str!("../static/property_controls.html"))
 }
 
 #[derive(Debug, Serialize)]
