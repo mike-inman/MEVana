@@ -560,9 +560,11 @@ impl BundleBuilder {
 
             // Record preflight metrics for Grafana dashboard
             if result.success {
-                metrics::counter!("mevana_preflight_simulations_total", "result" => "success").increment(1);
+                metrics::counter!("mevana_preflight_simulations_total", "result" => "success")
+                    .increment(1);
             } else {
-                metrics::counter!("mevana_preflight_simulations_total", "result" => "failure").increment(1);
+                metrics::counter!("mevana_preflight_simulations_total", "result" => "failure")
+                    .increment(1);
             }
         }
         Ok(result)

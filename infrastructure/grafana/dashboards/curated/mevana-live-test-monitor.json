@@ -671,7 +671,7 @@
           "format": "table",
           "group": [],
           "metricColumn": "none",
-          "rawSql": "SELECT timestamp AS \"Time\", opportunity_id, token_pair, profit_bps, amount_in, expected_amount_out, venue_sell, venue_buy, strategy_type FROM arbitrage_opportunities ORDER BY timestamp DESC LIMIT 100;",
+      "rawSql": "SELECT rpm.timestamp AS \"Time\", rpm.opportunity_id, rpm.token_pair, COALESCE(rpm.status, 'Pending') AS status, rpm.profit_bps, COALESCE(rpm.estimated_profit_lamports, 0) / 1e9 AS estimated_profit_sol, COALESCE(rpm.total_estimated_cost_lamports, 0) / 1e9 AS total_cost_sol, rpm.min_profit_threshold_sol, rpm.venue_sell, rpm.venue_buy, rpm.error_message FROM realtime_preflight_metrics rpm ORDER BY rpm.timestamp DESC LIMIT 100;",
           "refId": "A"
         }
       ],
@@ -681,16 +681,18 @@
           "id": "organize",
           "options": {
             "excludeByName": {},
-            "renameByName": {
-              "opportunity_id": "Opportunity",
-              "token_pair": "Token Pair",
-              "profit_bps": "Profit (bps)",
-              "amount_in": "Amount In",
-              "expected_amount_out": "Expected Out",
-              "venue_sell": "Sell Venue",
-              "venue_buy": "Buy Venue",
-              "strategy_type": "Strategy"
-            }
+        "renameByName": {
+          "opportunity_id": "Opportunity",
+          "token_pair": "Token Pair",
+          "status": "Status",
+          "profit_bps": "Profit (bps)",
+          "estimated_profit_sol": "Est Profit (SOL)",
+          "total_cost_sol": "Est Cost (SOL)",
+          "min_profit_threshold_sol": "Min Profit (SOL)",
+          "venue_sell": "Sell Venue",
+          "venue_buy": "Buy Venue",
+          "error_message": "Error"
+        }
           }
         }
       ],
@@ -1389,12 +1391,215 @@
           },
           "expr": "(time() - mevana_last_balance_update_timestamp)",
           "interval": "",
-          "legendFormat": "Seconds since last update",
+      "legendFormat": "Seconds since last update",
+      "refId": "A"
+    }
+  ],
+  "title": "Time Since Last Balance Update",
+  "type": "stat"
+    },
+    {
+      "title": "Preflight Diagnostics",
+      "id": 600,
+      "type": "row",
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 55
+      },
+      "panels": []
+    },
+    {
+      "datasource": {
+        "type": "postgres",
+        "uid": "mevana-postgres"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 56
+      },
+      "id": 17,
+      "options": {
+        "cellHeight": "sm",
+        "footer": {
+          "countRows": true,
+          "fields": "",
+          "reducer": [
+            "count"
+          ],
+          "show": true
+        },
+        "showHeader": true
+      },
+      "pluginVersion": "10.4.5",
+      "targets": [
+        {
+          "datasource": {
+            "type": "postgres",
+            "uid": "mevana-postgres"
+          },
+          "format": "table",
+          "metricColumn": "none",
+          "rawSql": "SELECT hour_bucket AS \"Time\", preflight_passes, preflight_rejections, avg_profit_sol, avg_cost_sol, avg_net_sol FROM preflight_hourly_summary ORDER BY hour_bucket DESC LIMIT 24;",
           "refId": "A"
         }
       ],
-      "title": "Time Since Last Balance Update",
-      "type": "stat"
+      "title": "Hourly Preflight Summary",
+      "transformations": [
+        {
+          "id": "organize",
+          "options": {
+            "excludeByName": {},
+            "renameByName": {
+              "preflight_passes": "Passes",
+              "preflight_rejections": "Rejections",
+              "avg_profit_sol": "Avg Profit (SOL)",
+              "avg_cost_sol": "Avg Cost (SOL)",
+              "avg_net_sol": "Avg Net (SOL)"
+            }
+          }
+        }
+      ],
+      "type": "table"
+    },
+    {
+      "datasource": {
+        "type": "postgres",
+        "uid": "mevana-postgres"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 56
+      },
+      "id": 18,
+      "options": {
+        "cellHeight": "sm",
+        "footer": {
+          "countRows": true,
+          "fields": "",
+          "reducer": [
+            "count"
+          ],
+          "show": true
+        },
+        "showHeader": true
+      },
+      "pluginVersion": "10.4.5",
+      "targets": [
+        {
+          "datasource": {
+            "type": "postgres",
+            "uid": "mevana-postgres"
+          },
+          "format": "table",
+          "metricColumn": "none",
+          "rawSql": "SELECT token_pair, route, passes, rejections, avg_net_lamports / 1e9 AS avg_net_sol, avg_cu_cost_lamports, avg_priority_fee_lamports FROM preflight_route_breakdown LIMIT 20;",
+          "refId": "A"
+        }
+      ],
+      "title": "Route Performance (48h)",
+      "transformations": [
+        {
+          "id": "organize",
+          "options": {
+            "excludeByName": {},
+            "renameByName": {
+              "token_pair": "Token Pair",
+              "route": "Route",
+              "passes": "Passes",
+              "rejections": "Rejections",
+              "avg_net_sol": "Avg Net (SOL)",
+              "avg_cu_cost_lamports": "Avg CU Cost (lamports)",
+              "avg_priority_fee_lamports": "Avg Priority Fee (lamports)"
+            }
+          }
+        }
+      ],
+      "type": "table"
+    },
+    {
+      "datasource": {
+        "type": "postgres",
+        "uid": "mevana-postgres"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "mappings": [],
+          "unit": "none"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 24,
+        "x": 0,
+        "y": 64
+      },
+      "id": 19,
+      "options": {
+        "legend": {
+          "calcs": [],
+          "displayMode": "table",
+          "placement": "right"
+        },
+        "tooltip": {
+          "mode": "single"
+        }
+      },
+      "pluginVersion": "10.4.5",
+      "targets": [
+        {
+          "datasource": {
+            "type": "postgres",
+            "uid": "mevana-postgres"
+          },
+          "format": "time_series",
+          "metricColumn": "none",
+          "rawSql": "SELECT hour_bucket AS \"Time\", avg_net_sol FROM preflight_hourly_summary ORDER BY hour_bucket ASC;",
+          "refId": "A"
+        }
+      ],
+      "title": "Avg Net Profit (SOL) by Hour",
+      "type": "timeseries"
     }
   ],
   "refresh": "5s",

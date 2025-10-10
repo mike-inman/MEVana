@@ -53,6 +53,18 @@ sum(rate(mevana_tx_total{status="err"}[1m]))
 histogram_quantile(0.90, sum by (le) (rate(mevana_e2e_latency_ms_bucket[2m])))
 ```
 
+For the new preflight decision table, verify Postgres has data:
+
+```sql
+SELECT status,
+       estimated_profit_sol,
+       total_estimated_cost_lamports / 1e9 AS total_cost_sol,
+       error_message
+FROM realtime_preflight_metrics
+ORDER BY timestamp DESC
+LIMIT 5;
+```
+
 ## Current Live Data:
 ```bash
 # Check metrics are flowing:
@@ -63,3 +75,9 @@ curl -s "http://localhost:9090/api/v1/query?query=mevana_tx_total"
 # - Block height: 280000308+
 # - Service uptime: 5+ minutes
 ```
+
+## Preflight Diagnostics Row
+- Panel 17: Hourly Preflight Summary (uses `preflight_hourly_summary`).
+- Panel 18: Route Performance (48h window via `preflight_route_breakdown`).
+- Panel 19: Avg Net Profit (SOL) by Hour trendline.
+If panels are empty, ensure the reporting views exist (`psql -f database/migrations/create_preflight_summary_views.sql`).

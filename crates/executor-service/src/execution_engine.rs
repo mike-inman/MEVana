@@ -1166,6 +1166,8 @@ impl ExecutionEngine {
             );
             execution_result.status = ExecutionStatus::PreflightSuccess;
             self.metrics.record_bundle_confirmation(true); // Count as "success" for metrics
+            execution_result.execution_time_ms = start_time.elapsed().as_millis() as u64;
+            self.publish_execution_result(execution_result).await?;
             return Ok(());
         }
 
