@@ -28,6 +28,7 @@ async fn main() {
         0.102, // Expected out
         500,   // 500μs detection time
         true,
+        "heuristic",
         None,
     );
     
@@ -51,6 +52,7 @@ async fn main() {
         0.051,
         300,
         true,
+        "heuristic",
         None,
     );
     
@@ -74,6 +76,7 @@ async fn main() {
         1.15,
         100,
         true,
+        "heuristic",
         None,
     );
     

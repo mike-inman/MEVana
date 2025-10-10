@@ -518,7 +518,8 @@ impl SmartFilter {
         metrics::counter!(
             "mevana_token_pair_evaluations_total",
             "token_pair" => opportunity.token_pair.clone(),
-            "venue_pair" => venue_pair.clone()
+            "venue_pair" => venue_pair.clone(),
+            "source" => opportunity.source.clone()
         )
         .increment(1);
 
@@ -535,7 +536,8 @@ impl SmartFilter {
             metrics::counter!(
                 "mevana_opportunities_passed_total",
                 "token_pair" => opportunity.token_pair.clone(),
-                "venue_pair" => venue_pair.clone()
+                "venue_pair" => venue_pair.clone(),
+                "source" => opportunity.source.clone()
             )
             .increment(1);
         }
@@ -545,7 +547,8 @@ impl SmartFilter {
                 "mevana_opportunity_rejections_total",
                 "reason" => reason.to_string(),
                 "token_pair" => opportunity.token_pair.clone(),
-                "venue_pair" => venue_pair.clone()
+                "venue_pair" => venue_pair.clone(),
+                "source" => opportunity.source.clone()
             )
             .increment(1);
         }

@@ -82,6 +82,26 @@
             opacity: 0.8;
             margin-top: 6px;
         }
+        .toggle-wrapper {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            margin: 8px 0;
+        }
+        .toggle-state {
+            font-size: 0.95rem;
+            font-weight: 600;
+        }
+        .toggle-state.on {
+            color: #16a34a;
+        }
+        .toggle-state.off {
+            color: #dc2626;
+        }
+        .control-card input[type="checkbox"] {
+            width: 20px;
+            height: 20px;
+        }
     </style>
 </head>
 <body>
@@ -95,6 +115,18 @@
 
     <script>
         const CONTROLS = [
+            {
+                key: "heuristic_detection_enabled",
+                label: "Heuristic Detection",
+                type: "boolean",
+                description: "Toggle the legacy heuristic ingest path. Leave on unless validating edge-only flow."
+            },
+            {
+                key: "edge_detection_enabled",
+                label: "Edge Detection",
+                type: "boolean",
+                description: "Enable opportunities sourced from the edge discovery pipeline."
+            },
             {
                 key: "min_profit_bps",
                 label: "Minimum Net Profit (bps)",
@@ -138,16 +170,38 @@
 
                 const label = document.createElement("label");
                 label.setAttribute("for", `input-${ctrl.key}`);
-                label.textContent = ctrl.label;
+                label.textContent =
+                    ctrl.type === "boolean" ? `${ctrl.label} Toggle` : ctrl.label;
                 card.appendChild(label);
 
-                const input = document.createElement("input");
-                input.type = "number";
-                input.id = `input-${ctrl.key}`;
-                input.step = ctrl.step;
-                if (ctrl.min !== undefined) input.min = ctrl.min;
-                if (ctrl.max !== undefined) input.max = ctrl.max;
-                card.appendChild(input);
+                let input;
+                if (ctrl.type === "boolean") {
+                    input = document.createElement("input");
+                    input.type = "checkbox";
+                    input.id = `input-${ctrl.key}`;
+                    input.setAttribute("role", "switch");
+                    input.addEventListener("change", () => syncToggleState(ctrl));
+
+                    const toggleWrapper = document.createElement("div");
+                    toggleWrapper.className = "toggle-wrapper";
+                    toggleWrapper.appendChild(input);
+
+                    const state = document.createElement("span");
+                    state.id = `state-${ctrl.key}`;
+                    state.className = "toggle-state";
+                    state.textContent = "Disabled";
+                    toggleWrapper.appendChild(state);
+
+                    card.appendChild(toggleWrapper);
+                } else {
+                    input = document.createElement("input");
+                    input.type = "number";
+                    input.id = `input-${ctrl.key}`;
+                    input.step = ctrl.step;
+                    if (ctrl.min !== undefined) input.min = ctrl.min;
+                    if (ctrl.max !== undefined) input.max = ctrl.max;
+                    card.appendChild(input);
+                }
 
                 const hint = document.createElement("div");
                 hint.className = "hint";
@@ -178,12 +232,34 @@
             });
         }
 
-        function propertyValueToNumber(value) {
+        function propertyValueToNative(value) {
             if (value == null || typeof value !== "object") return undefined;
+            if ("Boolean" in value) return value.Boolean;
             if ("Integer" in value) return value.Integer;
             if ("Float" in value) return value.Float;
-            if ("Boolean" in value) return value.Boolean ? 1 : 0;
             return undefined;
+        }
+
+        function syncToggleState(ctrl) {
+            const input = document.getElementById(`input-${ctrl.key}`);
+            const state = document.getElementById(`state-${ctrl.key}`);
+            if (!input || !state) return;
+            const isEnabled = Boolean(input.checked);
+            state.textContent = isEnabled ? "Enabled" : "Disabled";
+            state.classList.remove("on", "off");
+            state.classList.add(isEnabled ? "on" : "off");
+        }
+
+        function applyValueToControl(ctrl, value) {
+            const input = document.getElementById(`input-${ctrl.key}`);
+            if (!input || value === undefined) return;
+            if (ctrl.type === "boolean") {
+                const isEnabled = value === true || value === 1;
+                input.checked = isEnabled;
+                syncToggleState(ctrl);
+            } else {
+                input.value = value;
+            }
         }
 
         async function loadProperties() {
@@ -192,11 +268,8 @@
                 if (!response.ok) throw new Error(`HTTP ${response.status}`);
                 const data = await response.json();
                 CONTROLS.forEach(ctrl => {
-                    const value = propertyValueToNumber(data[ctrl.key]);
-                    const input = document.getElementById(`input-${ctrl.key}`);
-                    if (input && value !== undefined) {
-                        input.value = value;
-                    }
+                    const value = propertyValueToNative(data[ctrl.key]);
+                    applyValueToControl(ctrl, value);
                 });
             } catch (err) {
                 console.error("Failed to load properties", err);
@@ -209,27 +282,31 @@
                 const response = await fetch("/properties/all");
                 if (!response.ok) throw new Error(`HTTP ${response.status}`);
                 const data = await response.json();
-                const value = propertyValueToNumber(data[ctrl.key]);
-                const input = document.getElementById(`input-${ctrl.key}`);
-                if (input && value !== undefined) {
-                    input.value = value;
-                }
+                const value = propertyValueToNative(data[ctrl.key]);
+                applyValueToControl(ctrl, value);
                 showStatus(ctrl.key, "Refreshed", "success");
             } catch (err) {
                 showStatus(ctrl.key, `Failed to refresh: ${err.message}`, "error");
             }
         }
 
-        function validateInput(ctrl, raw) {
+        function extractSubmissionValue(ctrl, input) {
+            if (ctrl.type === "boolean") {
+                return Boolean(input.checked);
+            }
+
+            const raw = input.value;
             if (raw === "" || raw === null || raw === undefined) {
                 throw new Error("Value is required");
             }
+
             let numericValue;
             if (ctrl.type === "int") {
                 numericValue = parseInt(raw, 10);
             } else {
                 numericValue = parseFloat(raw);
             }
+
             if (Number.isNaN(numericValue)) {
                 throw new Error("Invalid number");
             }
@@ -252,7 +329,7 @@
 
             let parsedValue;
             try {
-                parsedValue = validateInput(ctrl, input.value);
+                parsedValue = extractSubmissionValue(ctrl, input);
             } catch (err) {
                 showStatus(ctrl.key, err.message, "error");
                 return;

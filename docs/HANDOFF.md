@@ -14,6 +14,8 @@ _Last updated: 2025-10-10_
   - `min_profit_bps`
   - `max_gas_budget_pct`
   - `max_edge_staleness_ms`
+  - `edge_detection_enabled`
+  - `heuristic_detection_enabled`
 - **Prometheus Metrics:**  
   - `mevana_property_value{property="..."}` — reflects latest knob values.
   - `mevana_opportunities_passed_total`, `mevana_opportunity_rejections_total` — per token/venue flow, with `reason` labels (e.g., `competition_high`).
@@ -29,7 +31,7 @@ _Last updated: 2025-10-10_
 ## High-Value Observations
 - Phoenix CLOB pairs (`USDT-SOL`, `USDC-SOL`) deliver the most consistent passes with minimal competition rejects—excellent dry-run candidates.
 - Meteora/Raydium routes are heavily filtered by `competition_high`; relaxing competition thresholds or increasing `max_edge_staleness_ms` will surface more of them.
-- Heuristics remain enabled (`heuristic_detection_enabled=true`) while edge detection is still off by default. When ready, flip `edge_detection_enabled=true` via the control UI, monitor `mevana_token_pair_evaluations_total`, and adjust competition knobs accordingly.
+- Heuristics (`heuristic_detection_enabled`) and edge detection (`edge_detection_enabled`) can be toggled independently from the control UI or via the property API. Default posture: heuristics on, edge off until the stream is validated. Use `mevana_token_pair_evaluations_total` / `mevana_opportunity_rejections_total{source="edge"}` to monitor the impact when enabling edge data.
 
 ## Suggested Next Steps
 1. **Embed live control iframe (done)** – Verify the Grafana panel renders; adjust values from within Grafana to confirm end-to-end workflow.
@@ -37,6 +39,47 @@ _Last updated: 2025-10-10_
 3. **Fine-tune competition heuristics** – Once edge data flows, lower thresholds incrementally and watch `competition_high` rejection counts to avoid overwhelming the pipeline.
 4. **Document control workflow** – Update the operations guide with steps for using `/ui/property-controls` and interpreting the Grafana panels.
 5. **Optional** – Extend the control page with additional properties (e.g., `min_venue_success_rate`) or integrate auth (use `ADMIN_API_TOKEN` header).
+
+## Production Deployment Checklist
+1. **Prep locally**
+   - Confirm `git status` is clean; run `cargo fmt` and `cargo test -p hotpath_arb_engine`.
+2. **Package the current HEAD**
+   ```bash
+   git archive --format=tar HEAD | gzip > /tmp/mevana-build.tar.gz
+   scp /tmp/mevana-build.tar.gz root@149.28.56.125:/tmp/
+   ```
+3. **Build on the server**
+   ```bash
+   ssh root@149.28.56.125 '
+     rm -rf /tmp/mevana-build &&
+     mkdir -p /tmp/mevana-build &&
+     tar -xzf /tmp/mevana-build.tar.gz -C /tmp/mevana-build &&
+     PATH=/root/.cargo/bin:$PATH &&
+     cd /tmp/mevana-build &&
+     cargo build --release -p hotpath_arb_engine
+   '
+   ```
+4. **Deploy binaries**
+   ```bash
+   ssh root@149.28.56.125 '
+     systemctl stop hotpath-arb-engine.service &&
+     cp /tmp/mevana-build/target/release/hotpath_arb_engine /opt/MEVana/bin/hotpath_arb_engine &&
+     chmod +x /opt/MEVana/bin/hotpath_arb_engine &&
+     systemctl start hotpath-arb-engine.service
+   '
+   ```
+5. **Refresh Grafana assets (if dashboards changed)**
+   ```bash
+   scp infrastructure/grafana/dashboards/curated/mevana-dry-run-insights.json \
+       root@149.28.56.125:/opt/MEVana/infrastructure/grafana/dashboards/curated/
+   ssh root@149.28.56.125 'docker restart mevana-grafana-1'
+   ```
+6. **Post-deploy sanity**
+   - `systemctl status hotpath-arb-engine.service`
+   - `curl -I http://127.0.0.1:8089/ui/property-controls`
+   - Verify Grafana panels update (`mevana_property_value{…}`)
+
+_Do not touch docker port mappings or external network names unless coordinated with ops; the self-hosted layout assumes the current values._
 
 ## Quick Reference Commands
 - Restart hotpath:  

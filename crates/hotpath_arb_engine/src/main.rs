@@ -1,10 +1,10 @@
 #![allow(warnings)]
 
 use anyhow::{anyhow, Result};
+use axum::response::Html;
 use chrono::{DateTime, TimeZone, Timelike, Utc};
 use clap::Parser;
 use dashmap::DashMap;
-use axum::response::Html;
 use futures::StreamExt;
 use log::{debug, error, info, warn};
 use once_cell::sync::{Lazy, OnceCell};
@@ -1922,6 +1922,7 @@ impl HotPathArbitrageEngine {
                     * (1.0 + opportunity.profit_bps as f64 / 10000.0),
                 execution_time_us: 0,
                 success: false,
+                source: "ai_strategy".to_string(),
                 reason: None,
             },
             estimated_gas_cost_sol: 0.005, // Estimated gas cost
@@ -2608,6 +2609,7 @@ impl HotPathArbitrageEngine {
             amount_out,
             500,
             true,
+            opportunity.source.as_str(),
             None,
         );
 
@@ -4444,6 +4446,7 @@ async fn run_stream_with_retry(
                             0.0, // amount_out not available in this struct
                             arbitrage_time_us,
                             true, // Assume success for detected opportunities
+                            opportunity.source.as_str(),
                             None,
                         );
                         ARBITRAGE_DETECTED.push(arb_event.clone());

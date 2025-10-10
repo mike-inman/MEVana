@@ -52,6 +52,7 @@ pub struct ArbitrageEvent {
     pub amount_out: f64,
     pub execution_time_us: u64,
     pub success: bool,
+    pub source: String,
     pub reason: Option<String>,
 }
 
@@ -355,6 +356,7 @@ pub fn create_arbitrage_event(
     amount_out: f64,
     execution_time_us: u64,
     success: bool,
+    source: &str,
     reason: Option<&str>,
 ) -> ArbitrageEvent {
     let timestamp = SystemTime::now()
@@ -374,6 +376,7 @@ pub fn create_arbitrage_event(
         amount_out,
         execution_time_us,
         success,
+        source: source.to_string(),
         reason: reason.map(|s| s.to_string()),
     }
 }
