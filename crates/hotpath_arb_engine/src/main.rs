@@ -228,9 +228,9 @@ use hotpath_arb_engine::smart_filter::{SmartFilter, SmartFilterConfig};
 use shared_protocol::{ArbSignal as SharedArbSignal, ArbSignalV1};
 use sqlx::{postgres::PgListener, PgPool};
 
+use network::NetworkTelemetry;
 use normalizer_generated::registry as normalizer_registry;
 use normalizer_runtime::{transaction::extract_swaps_from_update, NormalizedSwapV1, SwapExtractor};
-use network::NetworkTelemetry;
 use wallet_inventory::WalletInventoryFetcher;
 
 // CONFIG API IMPORTS
@@ -2642,7 +2642,11 @@ impl HotPathArbitrageEngine {
                 return Ok(());
             }
 
-            if let Err(e) = self.trigger_lethal_execution(&opportunity) {
+            if let Err(e) = self.trigger_lethal_execution(
+                &opportunity,
+                smart_result.estimated_net_profit_sol,
+                smart_result.confidence_score,
+            ) {
                 error!("Failed to trigger lethal execution: {}", e);
                 record_execution_failure(&format!("Execution trigger failed: {}", e));
             } else {
@@ -2704,7 +2708,12 @@ impl HotPathArbitrageEngine {
     }
 
     /// LETHAL EXECUTION - Convert our ArbitrageOpportunity to ExecutorOpportunity and execute
-    fn trigger_lethal_execution(&self, opportunity: &ArbitrageOpportunity) -> Result<()> {
+    fn trigger_lethal_execution(
+        &self,
+        opportunity: &ArbitrageOpportunity,
+        estimated_net_profit_sol: f64,
+        confidence_score: f64,
+    ) -> Result<()> {
         let token_in = bs58::decode(&opportunity.token_a)
             .into_vec()
             .map_err(|e| anyhow!("Failed to decode token_a {}: {}", opportunity.token_a, e))?;
@@ -2759,6 +2768,7 @@ impl HotPathArbitrageEngine {
 
         let executor_opportunity = ExecutorOpportunity {
             opportunity_id: Uuid::new_v4(),
+            source_signature: Some(opportunity.signature.clone()),
             token_in,
             token_out,
             edges: vec![edge_id],
@@ -2772,6 +2782,9 @@ impl HotPathArbitrageEngine {
             total_fees_bps,
             detected_at_ns,
             max_edge_age_ms,
+            estimated_profit_sol: estimated_net_profit_sol,
+            confidence_score,
+            rejection_reason: None,
         };
 
         // Send to execution queue for immediate processing

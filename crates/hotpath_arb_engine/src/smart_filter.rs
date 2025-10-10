@@ -515,7 +515,8 @@ impl SmartFilter {
             let net_profit_bps = ((net_profit_sol / trade_size_sol) * 10000.0) as i64;
 
             metrics::gauge!("mevana_estimated_gas_cost_lamports").set(gas_cost_lamports as f64);
-            metrics::gauge!("mevana_estimated_slippage_bps").set(opportunity.profit_bps as f64 * 0.1); // Estimate ~10% of profit as slippage
+            metrics::gauge!("mevana_estimated_slippage_bps")
+                .set(opportunity.profit_bps as f64 * 0.1); // Estimate ~10% of profit as slippage
             metrics::gauge!("mevana_net_profit_after_costs_bps").set(net_profit_bps as f64);
             metrics::gauge!("mevana_arbitrage_opportunity_size_sol").set(trade_size_sol);
         }

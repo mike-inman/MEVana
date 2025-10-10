@@ -33,9 +33,19 @@ impl OpportunityProcessor {
         debug!("Validating opportunity {}", opportunity.opportunity_id);
 
         // Check if trading is enabled
+        let dry_run_enabled = std::env::var("EXECUTION_DRY_RUN")
+            .map(|v| matches!(v.as_str(), "1" | "true" | "TRUE"))
+            .unwrap_or(true);
+
         if !self.wallet_service.is_trading_enabled() {
-            info!("Trading disabled - skipping opportunity");
-            return Ok(false);
+            if dry_run_enabled {
+                info!(
+                    "Trading disabled but EXECUTION_DRY_RUN enabled – continuing with preflight only"
+                );
+            } else {
+                info!("Trading disabled - skipping opportunity");
+                return Ok(false);
+            }
         }
 
         // Check opportunity age
@@ -74,8 +84,12 @@ impl OpportunityProcessor {
             .can_execute_trade(&token_in_mint, opportunity.max_size_in as u64)?;
 
         if !can_afford {
-            info!("Insufficient balance for trade");
-            return Ok(false);
+            if dry_run_enabled {
+                info!("Dry run mode - bypassing balance enforcement");
+            } else {
+                info!("Insufficient balance for trade");
+                return Ok(false);
+            }
         }
 
         // All checks passed

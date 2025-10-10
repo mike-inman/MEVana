@@ -15,6 +15,7 @@ use std::sync::Arc;
 fn map_signal(sig: ArbSignalV1) -> ArbitrageOpportunity {
     ArbitrageOpportunity {
         opportunity_id: Uuid::new_v4(),
+        source_signature: Some(format!("signal-{}", sig.id)),
         token_in: bs58::decode(&sig.pair.a).into_vec().unwrap_or_default(),
         token_out: bs58::decode(&sig.pair.b).into_vec().unwrap_or_default(),
         edges: vec![],
@@ -25,6 +26,9 @@ fn map_signal(sig: ArbSignalV1) -> ArbitrageOpportunity {
         total_fees_bps: 0,
         detected_at_ns: sig.emitted_at_ns,
         max_edge_age_ms: 0,
+        estimated_profit_sol: 0.0,
+        confidence_score: 0.0,
+        rejection_reason: None,
     }
 }
 

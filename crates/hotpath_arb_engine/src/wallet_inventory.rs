@@ -1,8 +1,4 @@
-use std::{
-    collections::HashMap,
-    sync::Arc,
-    time::Duration,
-};
+use std::{collections::HashMap, sync::Arc, time::Duration};
 
 use anyhow::{anyhow, Result};
 use executor_service::shyft_client::ShyftClient;
@@ -82,8 +78,8 @@ impl WalletVaultClient {
             (false, None) => None,
         };
 
-        let user_id = std::env::var("WALLET_VAULT_USER_ID")
-            .unwrap_or_else(|_| "hotpath-engine".to_string());
+        let user_id =
+            std::env::var("WALLET_VAULT_USER_ID").unwrap_or_else(|_| "hotpath-engine".to_string());
 
         Ok(Some(Self {
             base_url: api_base,
@@ -145,7 +141,10 @@ impl WalletInventoryFetcher {
     }
 
     pub fn new(vault: WalletVaultClient, shyft_client: Arc<ShyftClient>) -> Self {
-        Self { vault, shyft_client }
+        Self {
+            vault,
+            shyft_client,
+        }
     }
 
     pub async fn fetch_inventory(&self) -> Result<HashMap<String, f64>> {
@@ -188,10 +187,7 @@ fn accumulate_sol(totals: &mut HashMap<String, f64>, lamports: u64) {
         .or_insert(amount);
 }
 
-fn accumulate_tokens(
-    totals: &mut HashMap<String, f64>,
-    token_balances: &HashMap<String, u64>,
-) {
+fn accumulate_tokens(totals: &mut HashMap<String, f64>, token_balances: &HashMap<String, u64>) {
     for (mint, amount_raw) in token_balances {
         let metadata = KNOWN_TOKENS.get(mint.as_str());
         let (symbol, decimals) = metadata

@@ -1,7 +1,4 @@
-use std::{
-    collections::VecDeque,
-    time::Instant,
-};
+use std::{collections::VecDeque, time::Instant};
 
 use super::SwapSummary;
 
@@ -94,7 +91,6 @@ impl NetworkTelemetry {
             1.0
         }
     }
-
 }
 
 fn push_with_limit(deque: &mut VecDeque<f64>, value: f64) {

@@ -30,6 +30,7 @@ impl From<MockArbitrageOpportunity> for ArbitrageOpportunity {
 
         ArbitrageOpportunity {
             opportunity_id: Uuid::parse_str(&mock.opportunity_id).unwrap_or(Uuid::new_v4()),
+            source_signature: None,
             profit_bps: mock.profit_bps as u64,
             // Mock token addresses as Vec<u8> (32 bytes each for Solana pubkeys)
             token_in: vec![0u8; 32],  // Mock SOL token
@@ -44,6 +45,9 @@ impl From<MockArbitrageOpportunity> for ArbitrageOpportunity {
                 .unwrap()
                 .as_nanos() as u64,
             max_edge_age_ms: 5000, // 5 second max age
+            estimated_profit_sol: (mock.profit_bps as f64 / 10_000.0) * mock.volume_usd,
+            confidence_score: 0.75,
+            rejection_reason: None,
         }
     }
 }

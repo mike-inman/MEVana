@@ -1,6 +1,8 @@
 #![allow(clippy::items_after_test_module)]
 #![allow(dead_code)]
-use anyhow::Result;
+use ahash::AHasher;
+use anyhow::{anyhow, Result};
+use chrono::Utc;
 use log::{error, info, warn};
 use rdkafka::config::ClientConfig;
 use rdkafka::consumer::{Consumer, StreamConsumer};
@@ -8,8 +10,10 @@ use rdkafka::message::BorrowedMessage;
 use rdkafka::producer::{FutureProducer, FutureRecord};
 use rdkafka::Message as KafkaMessage;
 use serde::{Deserialize, Serialize};
+use serde_json::Value;
 use sqlx::PgPool;
 use std::collections::VecDeque;
+use std::hash::Hasher;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 use tokio::time::sleep;
@@ -32,16 +36,31 @@ use std::str::FromStr;
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ArbitrageOpportunity {
     pub opportunity_id: Uuid,
+    #[serde(default)]
+    pub source_signature: Option<String>,
+    #[serde(default)]
     pub token_in: Vec<u8>,
+    #[serde(default)]
     pub token_out: Vec<u8>,
+    #[serde(default)]
     pub edges: Vec<u64>,
+    #[serde(default)]
     pub venues: Vec<u32>,
     pub profit_bps: u64,
     pub max_size_in: u128,
+    #[serde(default)]
     pub total_cu_estimate: u32,
+    #[serde(default)]
     pub total_fees_bps: u32,
     pub detected_at_ns: u64,
+    #[serde(default)]
     pub max_edge_age_ms: u64,
+    #[serde(default)]
+    pub estimated_profit_sol: f64,
+    #[serde(default)]
+    pub confidence_score: f64,
+    #[serde(default)]
+    pub rejection_reason: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -161,6 +180,263 @@ struct ReceiverPlanPayload<'a> {
     estimated_profit_lamports: u64,
     edges: &'a [u64],
     venues: &'a [u32],
+}
+
+fn parse_arbitrage_opportunity(payload: &[u8]) -> Result<ArbitrageOpportunity> {
+    match serde_json::from_slice::<ArbitrageOpportunity>(payload) {
+        Ok(mut opp) => {
+            if opp.opportunity_id.is_nil() {
+                opp.opportunity_id = Uuid::new_v4();
+            }
+            if opp.detected_at_ns == 0 {
+                opp.detected_at_ns = current_time_ns();
+            }
+            Ok(opp)
+        }
+        Err(_) => {
+            let value: Value = serde_json::from_slice(payload)?;
+            convert_hotpath_payload(&value)
+        }
+    }
+}
+
+fn convert_hotpath_payload(value: &Value) -> Result<ArbitrageOpportunity> {
+    let signature = find_str(value, "signature")
+        .map(|s| s.to_string())
+        .unwrap_or_else(|| Uuid::new_v4().to_string());
+    let opportunity_id = stable_uuid_from_str(&signature);
+
+    let venues_str = collect_venues(value);
+    let mut mapped_venues: Vec<u32> = venues_str
+        .iter()
+        .filter_map(|v| map_venue_str_to_id(v))
+        .collect();
+    mapped_venues.sort_unstable();
+    mapped_venues.dedup();
+
+    let mut edges: Vec<u64> = Vec::new();
+    if !mapped_venues.is_empty() {
+        edges.extend(mapped_venues.iter().map(|id| *id as u64));
+    } else if !venues_str.is_empty() {
+        for v in &venues_str {
+            let mut hasher = AHasher::default();
+            hasher.write(v.as_bytes());
+            edges.push(hasher.finish());
+        }
+    }
+    if edges.is_empty() {
+        edges.push(0);
+    }
+
+    let profit_bps = find_i64(value, "profit_bps").unwrap_or(0).max(0) as u64;
+    let estimated_profit_sol = find_f64(value, "estimated_profit_sol")
+        .or_else(|| find_f64(value, "estimated_net_profit_sol"))
+        .unwrap_or(0.0);
+    let estimated_profit_lamports =
+        if estimated_profit_sol.is_finite() && estimated_profit_sol > 0.0 {
+            (estimated_profit_sol * 1_000_000_000.0) as u128
+        } else {
+            0
+        };
+    let max_size_in = if profit_bps > 0 && estimated_profit_lamports > 0 {
+        estimated_profit_lamports.saturating_mul(10_000) / profit_bps as u128
+    } else {
+        0
+    };
+
+    let mut token_a = find_str(value, "token_a").map(|s| s.to_string());
+    let mut token_b = find_str(value, "token_b").map(|s| s.to_string());
+    if token_a.is_none() || token_b.is_none() {
+        if let Some(pair) = value.get("token_pair").and_then(Value::as_str) {
+            if let Some((a, b)) = pair.split_once('/') {
+                token_a.get_or_insert_with(|| a.trim().to_string());
+                token_b.get_or_insert_with(|| b.trim().to_string());
+            }
+        }
+    }
+
+    let token_in_bytes = token_string_to_bytes(token_a.as_deref().unwrap_or("TOKEN_A"));
+    let token_out_bytes = token_string_to_bytes(token_b.as_deref().unwrap_or("TOKEN_B"));
+
+    let detected_at_ns = if let Some(ts_str) = value.get("timestamp").and_then(Value::as_str) {
+        if let Ok(dt) = chrono::DateTime::parse_from_rfc3339(ts_str) {
+            dt.timestamp_nanos_opt()
+                .unwrap_or_else(|| dt.timestamp_micros() * 1_000) as u64
+        } else {
+            current_time_ns()
+        }
+    } else {
+        current_time_ns()
+    };
+
+    let total_cu_estimate = find_u64(value, "total_cu_estimate").unwrap_or(200_000) as u32;
+    let total_fees_bps = find_u64(value, "total_fees_bps").unwrap_or(0) as u32;
+    let max_edge_age_ms = find_u64(value, "max_edge_age_ms").unwrap_or(0);
+    let confidence_score = find_f64(value, "confidence_score").unwrap_or(0.0);
+    let rejection_reason = find_str(value, "rejection_reason").map(|s| s.to_string());
+
+    Ok(ArbitrageOpportunity {
+        opportunity_id,
+        source_signature: Some(signature),
+        token_in: token_in_bytes,
+        token_out: token_out_bytes,
+        edges,
+        venues: mapped_venues,
+        profit_bps,
+        max_size_in,
+        total_cu_estimate,
+        total_fees_bps,
+        detected_at_ns,
+        max_edge_age_ms,
+        estimated_profit_sol,
+        confidence_score,
+        rejection_reason,
+    })
+}
+
+fn current_time_ns() -> u64 {
+    Utc::now()
+        .timestamp_nanos_opt()
+        .unwrap_or_else(|| Utc::now().timestamp_micros() * 1_000) as u64
+}
+
+fn collect_venues(value: &Value) -> Vec<String> {
+    let mut venues = Vec::new();
+    if let Some(arr) = value.get("venues").and_then(Value::as_array) {
+        for v in arr.iter().filter_map(Value::as_str) {
+            if !v.is_empty() {
+                venues.push(v.to_string());
+            }
+        }
+    }
+    for key in ["venue_a", "venue_b"] {
+        if let Some(v) = find_str(value, key) {
+            if !v.is_empty() {
+                venues.push(v.to_string());
+            }
+        }
+    }
+    venues.sort_unstable();
+    venues.dedup();
+    venues
+}
+
+fn find_value<'a>(root: &'a Value, key: &str) -> Option<&'a Value> {
+    if let Some(v) = root.get(key) {
+        if !v.is_null() {
+            return Some(v);
+        }
+    }
+    if let Some(details) = root.get("details") {
+        if let Some(v) = details.get(key) {
+            if !v.is_null() {
+                return Some(v);
+            }
+        }
+    }
+    if let Some(additional) = root.get("additional_data") {
+        if let Some(v) = additional.get(key) {
+            if !v.is_null() {
+                return Some(v);
+            }
+        }
+    }
+    None
+}
+
+fn find_str<'a>(root: &'a Value, key: &str) -> Option<&'a str> {
+    find_value(root, key).and_then(Value::as_str)
+}
+
+fn find_f64(root: &Value, key: &str) -> Option<f64> {
+    find_value(root, key).and_then(|v| {
+        if let Some(f) = v.as_f64() {
+            Some(f)
+        } else if let Some(i) = v.as_i64() {
+            Some(i as f64)
+        } else if let Some(u) = v.as_u64() {
+            Some(u as f64)
+        } else {
+            None
+        }
+    })
+}
+
+fn find_i64(root: &Value, key: &str) -> Option<i64> {
+    find_value(root, key).and_then(|v| {
+        if let Some(i) = v.as_i64() {
+            Some(i)
+        } else if let Some(u) = v.as_u64() {
+            Some(u as i64)
+        } else {
+            None
+        }
+    })
+}
+
+fn find_u64(root: &Value, key: &str) -> Option<u64> {
+    find_value(root, key).and_then(|v| {
+        if let Some(u) = v.as_u64() {
+            Some(u)
+        } else if let Some(i) = v.as_i64() {
+            if i >= 0 {
+                Some(i as u64)
+            } else {
+                None
+            }
+        } else if let Some(f) = v.as_f64() {
+            if f.is_finite() && f >= 0.0 {
+                Some(f as u64)
+            } else {
+                None
+            }
+        } else {
+            None
+        }
+    })
+}
+
+fn token_string_to_bytes(token: &str) -> Vec<u8> {
+    if token.is_empty() {
+        return Vec::new();
+    }
+    match bs58::decode(token).into_vec() {
+        Ok(bytes) => bytes,
+        Err(_) => token.as_bytes().to_vec(),
+    }
+}
+
+fn map_venue_str_to_id(name: &str) -> Option<u32> {
+    match name {
+        "raydium-clmm" | "raydium_clmm" => Some(0),
+        "whirlpool" | "orca-whirlpool" | "orca_clmm" => Some(1),
+        "meteora-dlmm" | "meteora_dlmm" => Some(2),
+        "phoenix-clob" | "phoenix" => Some(3),
+        "raydium-amm" | "raydium" => Some(4),
+        "jupiter-v6" => Some(5),
+        _ => None,
+    }
+}
+
+fn stable_uuid_from_str(input: &str) -> Uuid {
+    let mut hasher1 = AHasher::default();
+    hasher1.write(input.as_bytes());
+    let hash1 = hasher1.finish();
+
+    let mut hasher2 = AHasher::default();
+    hasher2.write(input.as_bytes());
+    hasher2.write_u64(0x9e37_79b9_7f4a_7c15);
+    let hash2 = hasher2.finish();
+
+    let mut bytes = [0u8; 16];
+    bytes[..8].copy_from_slice(&hash1.to_be_bytes());
+    bytes[8..].copy_from_slice(&hash2.to_be_bytes());
+
+    // Adjust to match RFC 4122 variant/version bits (version 4 style randomness)
+    bytes[6] = (bytes[6] & 0x0F) | 0x40;
+    bytes[8] = (bytes[8] & 0x3F) | 0x80;
+
+    Uuid::from_bytes(bytes)
 }
 
 impl ExecutionEngine {
@@ -693,8 +969,8 @@ impl ExecutionEngine {
             None => return Ok(()),
         };
 
-        // Parse opportunity from JSON
-        let opportunity: ArbitrageOpportunity = serde_json::from_slice(payload)?;
+        // Parse opportunity from JSON (supporting both legacy + modern hotpath payloads)
+        let opportunity = parse_arbitrage_opportunity(payload)?;
         // Dedupe: compute stable hash across core fields
         let dedupe_ttl_ms = std::env::var("OPP_DEDUPE_TTL_MS")
             .ok()
@@ -705,7 +981,6 @@ impl ExecutionEngine {
             .and_then(|v| v.parse::<usize>().ok())
             .unwrap_or(10_000);
         let mut hasher = ahash::AHasher::default();
-        use std::hash::Hasher;
         hasher.write(opportunity.token_in.as_slice());
         hasher.write(opportunity.token_out.as_slice());
         for e in &opportunity.edges {
@@ -816,101 +1091,109 @@ impl ExecutionEngine {
         let mut flash_loan_plan: Option<PlanResponse> = None;
         let token_in_mint = bs58::encode(&opportunity.token_in).into_string();
         let token_out_mint = bs58::encode(&opportunity.token_out).into_string();
-        match self
-            .flash_loan_aggregator
-            .get_best_quote(&token_in_mint, opportunity.max_size_in as u64)
-            .await
-        {
-            Ok(quote) => {
-                execution_result.status = ExecutionStatus::FlashLoanQuoted;
-                execution_result.flash_loan_provider = Some(quote.provider.as_str().to_string());
-                execution_result.flash_loan_fee_lamports = Some(quote.fee_lamports);
+        if opportunity.token_in.len() == 32 {
+            match self
+                .flash_loan_aggregator
+                .get_best_quote(&token_in_mint, opportunity.max_size_in as u64)
+                .await
+            {
+                Ok(quote) => {
+                    execution_result.status = ExecutionStatus::FlashLoanQuoted;
+                    execution_result.flash_loan_provider =
+                        Some(quote.provider.as_str().to_string());
+                    execution_result.flash_loan_fee_lamports = Some(quote.fee_lamports);
 
-                // Check if still profitable after flash loan fees
-                if let Some(fee) = execution_result.flash_loan_fee_lamports {
-                    if execution_result.estimated_profit_lamports <= fee {
-                        execution_result.status = ExecutionStatus::Rejected;
-                        execution_result.error_message =
-                            Some("Not profitable after flash loan fees".to_string());
-                        Arc::clone(self)
-                            .publish_execution_result(execution_result)
-                            .await?;
-                        return Ok(());
-                    }
-                }
-
-                // Attempt to build a concrete flash loan plan for downstream bundling
-                if matches!(
-                    quote.provider,
-                    crate::flash_loan::FlashLoanProvider::Marginfi
-                        | crate::flash_loan::FlashLoanProvider::Solend
-                        | crate::flash_loan::FlashLoanProvider::PortFinance
-                        | crate::flash_loan::FlashLoanProvider::Kamino
-                ) {
-                    let borrower_pubkey = self.wallet_service.get_active_wallet();
-                    let receiver_program_id = self
-                        .config
-                        .flash_loan_receiver_program_id
-                        .as_ref()
-                        .and_then(|pid| Pubkey::from_str(pid).ok());
-
-                    let receiver_payload = serde_json::to_vec(&ReceiverPlanPayload {
-                        opportunity_id: opportunity.opportunity_id,
-                        token_in: &token_in_mint,
-                        token_out: &token_out_mint,
-                        max_size_in: opportunity.max_size_in,
-                        estimated_profit_lamports: execution_result.estimated_profit_lamports,
-                        edges: &opportunity.edges,
-                        venues: &opportunity.venues,
-                    })
-                    .ok();
-
-                    let plan_options = FlashLoanPlanOptions {
-                        receiver_program_id,
-                        receiver_payload,
-                        reserve_hint: None,
-                    };
-
-                    match self
-                        .flash_loan_aggregator
-                        .build_plan(
-                            quote.provider,
-                            &token_in_mint,
-                            opportunity.max_size_in as u64,
-                            &borrower_pubkey,
-                            plan_options,
-                        )
-                        .await
-                    {
-                        Ok(plan) => {
-                            info!(
-                                "flash_loan_plan_ready provider={} amount={} fee_lamports={} borrow_ix={} repay_ix={}",
-                                quote.provider.as_str(),
-                                plan.amount,
-                                plan.fee_lamports,
-                                plan.instructions.borrow.len(),
-                                plan.instructions.repay.len()
-                            );
-                            flash_loan_plan = Some(plan);
-                        }
-                        Err(err) => {
-                            warn!(
-                                "flash_loan_plan_build_failed provider={} err={}",
-                                quote.provider.as_str(),
-                                err
-                            );
+                    // Check if still profitable after flash loan fees
+                    if let Some(fee) = execution_result.flash_loan_fee_lamports {
+                        if execution_result.estimated_profit_lamports <= fee {
+                            execution_result.status = ExecutionStatus::Rejected;
+                            execution_result.error_message =
+                                Some("Not profitable after flash loan fees".to_string());
+                            Arc::clone(self)
+                                .publish_execution_result(execution_result)
+                                .await?;
+                            return Ok(());
                         }
                     }
+
+                    // Attempt to build a concrete flash loan plan for downstream bundling
+                    if matches!(
+                        quote.provider,
+                        crate::flash_loan::FlashLoanProvider::Marginfi
+                            | crate::flash_loan::FlashLoanProvider::Solend
+                            | crate::flash_loan::FlashLoanProvider::PortFinance
+                            | crate::flash_loan::FlashLoanProvider::Kamino
+                    ) {
+                        let borrower_pubkey = self.wallet_service.get_active_wallet();
+                        let receiver_program_id = self
+                            .config
+                            .flash_loan_receiver_program_id
+                            .as_ref()
+                            .and_then(|pid| Pubkey::from_str(pid).ok());
+
+                        let receiver_payload = serde_json::to_vec(&ReceiverPlanPayload {
+                            opportunity_id: opportunity.opportunity_id,
+                            token_in: &token_in_mint,
+                            token_out: &token_out_mint,
+                            max_size_in: opportunity.max_size_in,
+                            estimated_profit_lamports: execution_result.estimated_profit_lamports,
+                            edges: &opportunity.edges,
+                            venues: &opportunity.venues,
+                        })
+                        .ok();
+
+                        let plan_options = FlashLoanPlanOptions {
+                            receiver_program_id,
+                            receiver_payload,
+                            reserve_hint: None,
+                        };
+
+                        match self
+                            .flash_loan_aggregator
+                            .build_plan(
+                                quote.provider,
+                                &token_in_mint,
+                                opportunity.max_size_in as u64,
+                                &borrower_pubkey,
+                                plan_options,
+                            )
+                            .await
+                        {
+                            Ok(plan) => {
+                                info!(
+                                    "flash_loan_plan_ready provider={} amount={} fee_lamports={} borrow_ix={} repay_ix={}",
+                                    quote.provider.as_str(),
+                                    plan.amount,
+                                    plan.fee_lamports,
+                                    plan.instructions.borrow.len(),
+                                    plan.instructions.repay.len()
+                                );
+                                flash_loan_plan = Some(plan);
+                            }
+                            Err(err) => {
+                                warn!(
+                                    "flash_loan_plan_build_failed provider={} err={}",
+                                    quote.provider.as_str(),
+                                    err
+                                );
+                            }
+                        }
+                    }
+                }
+                Err(e) => {
+                    execution_result.status = ExecutionStatus::Failed;
+                    execution_result.error_message = Some(format!("Flash loan quote error: {}", e));
+                    Arc::clone(self)
+                        .publish_execution_result(execution_result)
+                        .await?;
+                    return Ok(());
                 }
             }
-            Err(e) => {
-                execution_result.status = ExecutionStatus::Failed;
-                execution_result.error_message = Some(format!("Flash loan quote error: {}", e));
-                Arc::clone(self)
-                    .publish_execution_result(execution_result)
-                    .await?;
-                return Ok(());
-            }
+        } else {
+            info!(
+                "Skipping flash loan quote: token_in length {} != 32 bytes",
+                opportunity.token_in.len()
+            );
         }
 
         // Step 3: Build bundle
@@ -1799,7 +2082,6 @@ impl ExecutionEngine {
             .and_then(|v| v.parse::<usize>().ok())
             .unwrap_or(10_000);
         let mut hasher = ahash::AHasher::default();
-        use std::hash::Hasher;
         hasher.write(opportunity.token_in.as_slice());
         hasher.write(opportunity.token_out.as_slice());
         for e in &opportunity.edges {

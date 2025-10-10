@@ -58,6 +58,7 @@ pub struct MetricsServer {
     pub transactions_built: IntCounter,
     pub instructions_instantiated: IntCounter,
     pub route_template_build_time_seconds: Histogram,
+    pub preflight_simulations: prometheus::IntCounterVec,
     // Account registry
     pub account_sets_missing: IntGauge,
     pub account_sets_loaded: IntGauge,
@@ -295,6 +296,14 @@ impl MetricsServer {
             .buckets(vec![0.01, 0.02, 0.05, 0.1, 0.2, 0.5, 1.0]),
         )?;
         registry.register(Box::new(simulation_latency_seconds.clone()))?;
+        let preflight_simulations = prometheus::IntCounterVec::new(
+            prometheus::Opts::new(
+                "mevana_preflight_simulations_total",
+                "Preflight simulation results by outcome",
+            ),
+            &["result"],
+        )?;
+        registry.register(Box::new(preflight_simulations.clone()))?;
         let transactions_built = IntCounter::new(
             "mevana_transactions_built_total",
             "Total number of transactions constructed from templates",
@@ -568,6 +577,7 @@ impl MetricsServer {
             simulation_successes,
             simulation_failures,
             simulation_latency_seconds,
+            preflight_simulations,
             transactions_built,
             instructions_instantiated,
             route_template_build_time_seconds,
@@ -759,6 +769,12 @@ impl MetricsServer {
     pub fn record_instantiation(&self, instr_count: usize, tx_count: usize) {
         self.instructions_instantiated.inc_by(instr_count as u64);
         self.transactions_built.inc_by(tx_count as u64);
+    }
+
+    pub fn record_preflight_result(&self, result: &str) {
+        self.preflight_simulations
+            .with_label_values(&[result])
+            .inc();
     }
 
     pub fn observe_route_template_build_time(&self, secs: f64) {
