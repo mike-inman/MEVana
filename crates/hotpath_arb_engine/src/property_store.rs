@@ -2,6 +2,7 @@
 
 use anyhow::Result;
 use log::{debug, error, info, warn};
+use metrics::gauge;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::io::Write;
@@ -798,6 +799,40 @@ impl PropertyStore {
 
         // Note: Crash recovery can be called separately via async methods to keep hotpath clean
         info!("🏪 PropertyStore initialized with emergency safe values");
+
+        // Emit initial property metrics so dashboards reflect baseline thresholds
+        {
+            let props = &instance.atomic_properties;
+            gauge!("mevana_property_value", "property" => "min_profit_bps")
+                .set(props.min_profit_bps.load(Ordering::Relaxed) as f64);
+            gauge!("mevana_property_value", "property" => "max_profit_bps")
+                .set(props.max_profit_bps.load(Ordering::Relaxed) as f64);
+            gauge!("mevana_property_value", "property" => "max_gas_budget_pct").set(
+                f64::from_bits(props.max_gas_budget_pct.load(Ordering::Relaxed)),
+            );
+            gauge!("mevana_property_value", "property" => "min_venue_success_rate").set(
+                f64::from_bits(props.min_venue_success_rate.load(Ordering::Relaxed)),
+            );
+            gauge!("mevana_property_value", "property" => "max_edge_staleness_ms")
+                .set(props.max_edge_staleness_ms.load(Ordering::Relaxed) as f64);
+            gauge!("mevana_property_value", "property" => "min_net_profit_sol").set(
+                props.min_net_profit_lamports.load(Ordering::Relaxed) as f64 / 1_000_000_000.0,
+            );
+            gauge!("mevana_property_value", "property" => "edge_detection_enabled").set(
+                if props.edge_detection_enabled.load(Ordering::Relaxed) {
+                    1.0
+                } else {
+                    0.0
+                },
+            );
+            gauge!("mevana_property_value", "property" => "heuristic_detection_enabled").set(
+                if props.heuristic_detection_enabled.load(Ordering::Relaxed) {
+                    1.0
+                } else {
+                    0.0
+                },
+            );
+        }
 
         instance
     }
@@ -1769,6 +1804,11 @@ impl PropertyStore {
         properties
     }
 
+    pub async fn get_property_value(&self, key: &str) -> Option<PropertyValue> {
+        let properties = self.get_all_properties().await;
+        properties.get(key).cloned()
+    }
+
     /// Load properties from SmartFilterConfig (backward compatibility)
     pub async fn load_from_smart_filter_config(
         &self,
@@ -1870,6 +1910,10 @@ impl PropertyStore {
                 hist.drain(0..1000); // Remove oldest 1000 entries
             }
         });
+
+        if let Some(value) = property_value_to_f64(&event.new_value) {
+            gauge!("mevana_property_value", "property" => key.to_string()).set(value);
+        }
 
         debug!(
             "📡 Property change event broadcasted: {} = {:?}",
@@ -2183,6 +2227,15 @@ impl PropertyStore {
         info!("💾 PropertyStore state force-persisted successfully");
 
         Ok(())
+    }
+}
+
+fn property_value_to_f64(value: &PropertyValue) -> Option<f64> {
+    match value {
+        PropertyValue::Integer(v) => Some(*v as f64),
+        PropertyValue::Float(v) => Some(*v),
+        PropertyValue::Boolean(v) => Some(if *v { 1.0 } else { 0.0 }),
+        PropertyValue::String(_) => None,
     }
 }
 

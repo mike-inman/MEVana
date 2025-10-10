@@ -393,6 +393,7 @@ impl SmartFilter {
 
         // Step 3: Apply filters
         let mut rejection_reason = None;
+        let mut rejection_code: Option<&'static str> = None;
         let mut should_execute = true;
 
         // Filter 1: Minimum net profit - Using dynamic PropertyStore values
@@ -407,6 +408,7 @@ impl SmartFilter {
                 "Net profit {:.6} SOL below minimum {:.6} SOL",
                 net_profit_sol, min_net_profit_sol
             ));
+            rejection_code = Some("net_profit_below_min");
             stats.rejected_low_profit += 1;
         }
 
@@ -420,6 +422,7 @@ impl SmartFilter {
                 "Profit {}bps below minimum {}bps",
                 opportunity.profit_bps, min_profit_bps
             ));
+            rejection_code = Some("profit_bps_below_min");
             stats.rejected_low_profit += 1;
         }
 
@@ -432,6 +435,7 @@ impl SmartFilter {
                 "Profit {}bps suspiciously high (max {}bps)",
                 opportunity.profit_bps, max_profit_bps
             ));
+            rejection_code = Some("profit_bps_above_max");
             stats.rejected_suspicious += 1;
         }
 
@@ -446,6 +450,7 @@ impl SmartFilter {
                 "Gas cost {:.1}% of profit exceeds {:.1}% limit",
                 gas_pct_of_profit, max_gas_budget_pct
             ));
+            rejection_code = Some("gas_cost_exceeds_budget");
             stats.rejected_high_gas += 1;
         }
 
@@ -459,6 +464,7 @@ impl SmartFilter {
                 "High competition detected: {:.1}% (>95%)",
                 competition_score * 100.0
             ));
+            rejection_code = Some("competition_high");
             stats.rejected_competition += 1;
         }
 
@@ -479,6 +485,7 @@ impl SmartFilter {
                 success_rate * 100.0,
                 min_venue_success_rate * 100.0
             ));
+            rejection_code = Some("venue_success_rate_low");
             stats.rejected_low_success_rate += 1;
         }
 
@@ -508,6 +515,12 @@ impl SmartFilter {
 
         // Record Prometheus metrics for Grafana dashboard
         metrics::counter!("mevana_arbitrage_opportunities_detected_total").increment(1);
+        metrics::counter!(
+            "mevana_token_pair_evaluations_total",
+            "token_pair" => opportunity.token_pair.clone(),
+            "venue_pair" => venue_pair.clone()
+        )
+        .increment(1);
 
         if should_execute {
             // Only record execution metrics for opportunities that passed all filters
@@ -519,6 +532,22 @@ impl SmartFilter {
                 .set(opportunity.profit_bps as f64 * 0.1); // Estimate ~10% of profit as slippage
             metrics::gauge!("mevana_net_profit_after_costs_bps").set(net_profit_bps as f64);
             metrics::gauge!("mevana_arbitrage_opportunity_size_sol").set(trade_size_sol);
+            metrics::counter!(
+                "mevana_opportunities_passed_total",
+                "token_pair" => opportunity.token_pair.clone(),
+                "venue_pair" => venue_pair.clone()
+            )
+            .increment(1);
+        }
+        if !should_execute {
+            let reason = rejection_code.unwrap_or("unknown");
+            metrics::counter!(
+                "mevana_opportunity_rejections_total",
+                "reason" => reason.to_string(),
+                "token_pair" => opportunity.token_pair.clone(),
+                "venue_pair" => venue_pair.clone()
+            )
+            .increment(1);
         }
 
         SmartOpportunity {

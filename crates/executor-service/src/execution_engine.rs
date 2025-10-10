@@ -11,6 +11,7 @@ use rdkafka::producer::{FutureProducer, FutureRecord};
 use rdkafka::Message as KafkaMessage;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
+use sha2::{Digest, Sha256};
 use sqlx::PgPool;
 use std::collections::VecDeque;
 use std::hash::Hasher;
@@ -419,21 +420,15 @@ fn map_venue_str_to_id(name: &str) -> Option<u32> {
 }
 
 fn stable_uuid_from_str(input: &str) -> Uuid {
-    let mut hasher1 = AHasher::default();
-    hasher1.write(input.as_bytes());
-    let hash1 = hasher1.finish();
-
-    let mut hasher2 = AHasher::default();
-    hasher2.write(input.as_bytes());
-    hasher2.write_u64(0x9e37_79b9_7f4a_7c15);
-    let hash2 = hasher2.finish();
+    let mut hasher = Sha256::new();
+    hasher.update(input.as_bytes());
+    let digest = hasher.finalize();
 
     let mut bytes = [0u8; 16];
-    bytes[..8].copy_from_slice(&hash1.to_be_bytes());
-    bytes[8..].copy_from_slice(&hash2.to_be_bytes());
+    bytes.copy_from_slice(&digest[..16]);
 
-    // Adjust to match RFC 4122 variant/version bits (version 4 style randomness)
-    bytes[6] = (bytes[6] & 0x0F) | 0x40;
+    // Set RFC 4122 variant/version bits (treat as deterministic v5-style UUID)
+    bytes[6] = (bytes[6] & 0x0F) | 0x50;
     bytes[8] = (bytes[8] & 0x3F) | 0x80;
 
     Uuid::from_bytes(bytes)

@@ -5928,12 +5928,16 @@ async fn update_property_handler(
 ) -> Result<axum::Json<PropertyUpdateResponse>, axum::http::StatusCode> {
     use crate::property_store::{get_property_store, PropertySource, PropertyValue};
 
+    log::info!("⚙️ Property update requested for {}", property_key);
+
     let property_store = get_property_store();
-    let current_properties = property_store.get_all_properties().await;
-    let current_value = current_properties
-        .get(&property_key)
-        .cloned()
-        .ok_or(axum::http::StatusCode::NOT_FOUND)?;
+    let current_value = property_store
+        .get_property_value(&property_key)
+        .await
+        .ok_or_else(|| {
+            warn!("Property {} not found during update request", property_key);
+            axum::http::StatusCode::NOT_FOUND
+        })?;
 
     let desired_value =
         coerce_json_to_property_value(payload.value, &current_value).map_err(|err| {
@@ -6064,7 +6068,14 @@ fn opportunity_from_signal(signal: &ArbSignalV1) -> Result<ArbitrageOpportunity,
 #[cfg(test)]
 mod tests {
     use super::*;
+    use axum::{
+        body::Body,
+        http::{Request, StatusCode},
+        routing::{get, put},
+        Router,
+    };
     use shared_protocol::Pair;
+    use tower::ServiceExt;
 
     fn sample_signal() -> ArbSignalV1 {
         ArbSignalV1 {
@@ -6106,5 +6117,55 @@ mod tests {
         signal.expected_profit_out = 0;
         let result = opportunity_from_signal(&signal);
         assert_eq!(result.unwrap_err(), "nonpositive_profit");
+    }
+
+    #[tokio::test]
+    async fn property_update_endpoint_allows_updates() {
+        let store = crate::property_store::get_property_store();
+        store
+            .set_atomic_i32(
+                "min_profit_bps",
+                1,
+                crate::property_store::PropertySource::SystemDefault,
+            )
+            .unwrap();
+
+        let app = Router::new()
+            .route("/properties/:key", put(update_property_handler))
+            .route("/properties/all", get(serve_all_properties));
+
+        let request = Request::builder()
+            .method("PUT")
+            .uri("/properties/min_profit_bps")
+            .header("Content-Type", "application/json")
+            .body(Body::from(r#"{"value":2}"#))
+            .unwrap();
+
+        let response = app.clone().oneshot(request).await.unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+        assert_eq!(store.get_atomic_i32("min_profit_bps"), Some(2));
+
+        // restore to default
+        store
+            .set_atomic_i32(
+                "min_profit_bps",
+                1,
+                crate::property_store::PropertySource::SystemDefault,
+            )
+            .unwrap();
+    }
+
+    #[tokio::test]
+    async fn property_update_endpoint_missing_key_returns_404() {
+        let app = Router::new().route("/properties/:key", put(update_property_handler));
+        let request = Request::builder()
+            .method("PUT")
+            .uri("/properties/not_a_property")
+            .header("Content-Type", "application/json")
+            .body(Body::from(r#"{"value":1}"#))
+            .unwrap();
+
+        let response = app.oneshot(request).await.unwrap();
+        assert_eq!(response.status(), StatusCode::NOT_FOUND);
     }
 }
