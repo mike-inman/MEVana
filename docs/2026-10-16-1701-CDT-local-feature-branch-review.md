@@ -20,5 +20,18 @@ Identify useful work on older local feature branches that is absent from the rec
 
 - Current `main` passed `dotnet test dotnet/MEVana.slnx --verbosity quiet` (40 tests) and `cargo build --workspace --locked` on 2026-10-16. These checks do not validate the old branch components.
 - The reviewed feature branches diverged before the reconciled `main`; a whole-branch merge would reintroduce older or absent components.
-- The highest-value separate evaluation is the old UI as a product decision. If a UI is desired in this repository, compare it with the current UI project and define the API contract before porting code.
+- The old UI comparison is recorded below. Use the separate UI project for future UI work and verify its live API contract before changing either repository.
 - For arbitrage research, use real input data and measured outcomes before adopting any old opportunity estimator. Keep trading disabled.
+
+## Separate UI comparison — 2026-10-16
+
+The old `feature/ui-v2-toggle-pool` branch contains a Vite application in `crates/ui-web` and a Rust `crates/ui-gateway`. The separate `/Users/michaelinman/Repos/MEVana-UI` repository is a Next.js application with dashboard, swaps, geyser, and wallet pages. It was inspected read-only: its `main` was two commits ahead of `origin/main` and had existing uncommitted changes.
+
+| Old embedded UI | Current location or status | Decision |
+| --- | --- | --- |
+| Prices and swaps WebSockets at `/ws/prices`, `/ws/swaps`, and `/ws/swaps.v2` | Current `crates/api-service/src/gateway/routes.rs` serves these under `/gateway/ws/`; `MEVana-UI/src/lib/gateway.ts` points to them. | Keep the current gateway and separate UI. Live endpoint behavior remains to be verified. |
+| `SwapsPanel` and WebSocket connection status | `MEVana-UI` has a live swaps page and `SwapStream` component. | Do not port the old Vite component. |
+| `PoolPanel` | The old panel always sets its pool to `null` and displays a placeholder. Current Rust code has `/gateway/depth/:pool` and an arb-engine `/pool/:id` snapshot route. | Define a real pool data contract only if a pool detail view is requested. |
+| Old Rust UI gateway | Its main WebSocket routes are represented in the current API gateway. | Do not reintroduce a second gateway. |
+
+No files were changed in `MEVana-UI`, and no old UI code was imported into MEVana. This comparison is static; it does not establish that the live UI or gateway is deployed or operational.
