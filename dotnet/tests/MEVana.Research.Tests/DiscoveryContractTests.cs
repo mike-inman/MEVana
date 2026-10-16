@@ -163,5 +163,21 @@ namespace MEVana.Research.Tests
             var issuesRO = candidate.EvidenceIssues as ReadOnlyCollection<string?>;
             Assert.NotNull(issuesRO);
         }
+
+        [Fact]
+        public void DiscoveryObservation_SupportsNonUtcDateTimeOffset()
+        {
+            // Arrange
+            var localOffset = TimeSpan.FromHours(-5);
+            var nonUtcDateTimeOffset = new DateTimeOffset(2026, 10, 12, 10, 30, 0, localOffset);
+
+            // Act
+            var observation = new DiscoveryObservation("sourceX", "captureY", nonUtcDateTimeOffset, 1010UL);
+
+            // Assert
+            Assert.NotNull(observation.ObservedAtUtc);
+            Assert.Equal(nonUtcDateTimeOffset, observation.ObservedAtUtc);
+            Assert.Equal(localOffset, observation.ObservedAtUtc?.Offset);
+        }
     }
 }
