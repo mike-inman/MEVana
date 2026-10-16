@@ -753,29 +753,11 @@ impl ExecutionEngine {
         token_in_mint: &str,
         amount_in_smallest: u128,
     ) -> u128 {
-        if token_in_mint == "So11111111111111111111111111111111111111112" {
-            return amount_in_smallest;
-        }
-        if let Some(oracle) = self.account_registry.data.oracles.get(token_in_mint) {
-            if let Ok(raw_price) = oracle.price.parse::<u128>() {
-                let price_decimals = oracle.price_decimals.unwrap_or(9) as u32;
-                let mint_decimals = self
-                    .account_registry
-                    .mint_decimals
-                    .get(token_in_mint)
-                    .copied()
-                    .unwrap_or(9) as u32;
-                let canonical_amount = if mint_decimals < 9 {
-                    amount_in_smallest * 10u128.pow(9 - mint_decimals)
-                } else if mint_decimals > 9 {
-                    amount_in_smallest / 10u128.pow(mint_decimals - 9)
-                } else {
-                    amount_in_smallest
-                };
-                return (canonical_amount.saturating_mul(raw_price)) / 10u128.pow(price_decimals);
-            }
-        }
-        amount_in_smallest // fallback: treat as lamports equivalence
+        compute_input_notional_from_registry(
+            &self.account_registry,
+            token_in_mint,
+            amount_in_smallest,
+        )
     }
 
     // Reset daily PnL if a new UTC day has started.
@@ -1843,61 +1825,48 @@ impl ExecutionEngine {
     }
 }
 
+fn compute_input_notional_from_registry(
+    account_registry: &AccountRegistry,
+    token_in_mint: &str,
+    amount_in_smallest: u128,
+) -> u128 {
+    if token_in_mint == "So11111111111111111111111111111111111111112" {
+        return amount_in_smallest;
+    }
+    if let Some(oracle) = account_registry.data.oracles.get(token_in_mint) {
+        if let Ok(raw_price) = oracle.price.parse::<u128>() {
+            let price_decimals = oracle.price_decimals.unwrap_or(9) as u32;
+            let mint_decimals = account_registry
+                .mint_decimals
+                .get(token_in_mint)
+                .copied()
+                .unwrap_or(9) as u32;
+            let canonical_amount = if mint_decimals < 9 {
+                amount_in_smallest * 10u128.pow(9 - mint_decimals)
+            } else if mint_decimals > 9 {
+                amount_in_smallest / 10u128.pow(mint_decimals - 9)
+            } else {
+                amount_in_smallest
+            };
+            return (canonical_amount.saturating_mul(raw_price)) / 10u128.pow(price_decimals);
+        }
+    }
+    amount_in_smallest // fallback: treat as lamports equivalence
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::account_registry::{AccountRegistry, AccountRegistryData, OracleAccount};
-    use crate::metrics::MetricsServer;
-    use sqlx::PgPool;
     use std::collections::HashMap;
 
-    // Helper to build minimal engine with injected registry
-    async fn test_engine_with_oracle(
+    // Build only the registry needed for arithmetic; no database or wallet is involved.
+    fn test_registry_with_oracle(
         price: &str,
         price_decimals: u8,
         mint: &str,
         mint_decimals: u8,
-    ) -> ExecutionEngine {
-        let cfg = ExecutorConfig {
-            kafka_broker: "unused".into(),
-            opportunities_topic: "unused".into(),
-            results_topic: "unused".into(),
-            consumer_group: "unused".into(),
-            shyft_api_key: "x".into(),
-            shyft_rpc_url: "http://localhost".into(),
-            shyft_geyser_url: "http://localhost".into(),
-            shyft_jito_url: "http://localhost".into(),
-            shyft_geyser_x_token: "".into(),
-            wallet_keypair_path: "~/.config/solana/id.json".into(),
-            wallet_backup_paths: vec![],
-            wallet_label_overrides: HashMap::new(),
-            max_wallet_balance_sol: 100.0,
-            min_wallet_balance_sol: 1.0,
-            max_position_size_sol: 10.0,
-            min_profit_threshold_bps: 10,
-            max_slippage_bps: 50,
-            max_execution_time_ms: 1000,
-            flash_loan_providers: vec!["solend".into()],
-            max_flash_loan_amount_sol: 1000.0,
-            flash_loan_timeout_ms: 1000,
-            flash_loan_receiver_program_id: None,
-            daily_loss_limit_sol: 5.0,
-            max_concurrent_trades: 1,
-            cool_down_period_ms: 1000,
-            metrics_port: 0,
-            health_check_port: 0,
-            log_level: "info".into(),
-            shyft_graphql_url: None,
-            shyft_meta_api_key: None,
-        };
-        let metrics = Arc::new(MetricsServer::new(0).unwrap());
-        // Use a separate test database (requires TEST_DATABASE_URL or falls back to local) - best effort
-        let db_url = std::env::var("TEST_DATABASE_URL")
-            .unwrap_or_else(|_| "postgresql://mev:<POSTGRES_PASSWORD>@localhost:5433/mevdb".into());
-        let pool = PgPool::connect(&db_url).await.expect("pg connect");
-        let mut eng = ExecutionEngine::new(cfg, Arc::clone(&metrics), pool)
-            .await
-            .unwrap();
+    ) -> AccountRegistry {
         // Inject oracle & decimals
         let mut data = AccountRegistryData::default();
         data.oracles.insert(
@@ -1915,39 +1884,43 @@ mod tests {
             mint_decimals: HashMap::new(),
         };
         reg.mint_decimals.insert(mint.to_string(), mint_decimals);
-        eng.account_registry = Arc::new(reg);
-        eng
+        reg
     }
 
-    #[tokio::test]
-    async fn test_notional_cap_compute_sol_passthrough() {
-        let engine =
-            test_engine_with_oracle("1", 0, "So11111111111111111111111111111111111111112", 9).await;
+    #[test]
+    fn test_notional_cap_compute_sol_passthrough() {
+        let registry =
+            test_registry_with_oracle("1", 0, "So11111111111111111111111111111111111111112", 9);
         let amount = 5_000_000u128; // 0.005 SOL lamports
-        let notional = engine
-            .compute_input_notional_lamports("So11111111111111111111111111111111111111112", amount);
+        let notional = compute_input_notional_from_registry(
+            &registry,
+            "So11111111111111111111111111111111111111112",
+            amount,
+        );
         assert_eq!(notional, amount);
     }
 
-    #[tokio::test]
-    async fn test_notional_cap_compute_token_scaled_up() {
+    #[test]
+    fn test_notional_cap_compute_token_scaled_up() {
         // token with 6 decimals, price = 2 lamports per canonical 9-dec unit (price_decimals=0 for simplicity)
-        let engine = test_engine_with_oracle("2", 0, "TokenMint6Dec", 6).await;
+        let registry = test_registry_with_oracle("2", 0, "TokenMint6Dec", 6);
         let amount_smallest = 1_000_000u128; // 1 token (6 decimals)
                                              // canonical amount => multiply by 10^(9-6)=10^3=1000 -> 1_000_000 * 1000 = 1_000_000_000
                                              // notional = canonical_amount * price = 1_000_000_000 * 2 = 2_000_000_000
-        let notional = engine.compute_input_notional_lamports("TokenMint6Dec", amount_smallest);
+        let notional =
+            compute_input_notional_from_registry(&registry, "TokenMint6Dec", amount_smallest);
         assert_eq!(notional, 2_000_000_000u128);
     }
 
-    #[tokio::test]
-    async fn test_notional_cap_compute_token_scaled_down() {
+    #[test]
+    fn test_notional_cap_compute_token_scaled_down() {
         // token with 12 decimals (scale down)
-        let engine = test_engine_with_oracle("100", 2, "TokenMint12Dec", 12).await; // price=100, price_decimals=2 => effective price=1 lamport per canonical unit
+        let registry = test_registry_with_oracle("100", 2, "TokenMint12Dec", 12); // price=100, price_decimals=2 => effective price=1 lamport per canonical unit
         let amount_smallest = 1_000_000_000_000u128; // 1 token (12 decimals)
                                                      // canonical amount divide by 10^(12-9)=10^3 => 1_000_000_000_000 / 1000 = 1_000_000_000
                                                      // raw_price=100, price_decimals=2 => scale_div=10^2=100 -> (1_000_000_000 * 100)/100 = 1_000_000_000
-        let notional = engine.compute_input_notional_lamports("TokenMint12Dec", amount_smallest);
+        let notional =
+            compute_input_notional_from_registry(&registry, "TokenMint12Dec", amount_smallest);
         assert_eq!(notional, 1_000_000_000u128);
     }
 }

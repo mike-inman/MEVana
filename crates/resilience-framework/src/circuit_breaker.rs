@@ -254,10 +254,7 @@ mod tests {
         let _ = breaker.call(async { Err::<(), _>("error") }).await;
         let _ = breaker.call(async { Err::<(), _>("error") }).await;
 
-        assert_eq!(
-            breaker.get_state().await,
-            CircuitState::Open(Instant::now())
-        );
+        assert!(matches!(breaker.get_state().await, CircuitState::Open(_)));
     }
 
     #[tokio::test]

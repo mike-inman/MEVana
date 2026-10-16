@@ -302,6 +302,7 @@ mod tests {
             .register_trade("test1".to_string(), 1000)
             .await
             .unwrap();
+        manager.complete_trade("test1", true, 1000).await;
 
         // Initiate transition
         manager.initiate_transition().await.unwrap();
@@ -321,6 +322,9 @@ mod tests {
 
         // Record failures to trigger evacuation
         for i in 0..10 {
+            if !manager.can_trade().await {
+                break;
+            }
             let trade_id = format!("trade_{}", i);
             manager.register_trade(trade_id.clone(), 100).await.unwrap();
             manager.complete_trade(&trade_id, i < 3, 100).await; // Only 30% success
