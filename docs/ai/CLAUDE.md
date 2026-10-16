@@ -111,7 +111,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 #### ✅ SOLUTION IMPLEMENTED
 **Use `PAPER_TRADING=true` for arbitrage engines:**
 ```bash
-DATABASE_URL="postgresql://mev:mevpassword@localhost:5433/mevdb" RUST_LOG=info GEYSER_ENDPOINT="https://grpc.ny.shyft.to" X_TOKEN="efff2d23-97ae-4c5f-8b8b-9a6265001189" ORDERBOOK_HISTORY_ENABLED=true PAPER_TRADING=true cargo run -p hotpath_arb_engine
+DATABASE_URL="postgresql://mev:<POSTGRES_PASSWORD>@localhost:5433/mevdb" RUST_LOG=info GEYSER_ENDPOINT="https://grpc.ny.shyft.to" X_TOKEN="<SHYFT_X_TOKEN>" ORDERBOOK_HISTORY_ENABLED=true PAPER_TRADING=true cargo run -p hotpath_arb_engine
 ```
 
 #### Results After Fix
@@ -349,8 +349,8 @@ Real-time monitoring of:
 
 ### Docker Infrastructure Ports
 - **Kafka UI**: http://localhost:8080
-- **Redis UI**: http://localhost:8083 (admin/admin123)
-- **Grafana**: http://localhost:3000 (admin/admin123)
+- **Redis UI**: http://localhost:8083 (admin/<ADMIN_PASSWORD>)
+- **Grafana**: http://localhost:3000 (admin/<ADMIN_PASSWORD>)
 - **Prometheus**: http://localhost:9090
 - **Adminer (PostgreSQL)**: http://localhost:8082
 

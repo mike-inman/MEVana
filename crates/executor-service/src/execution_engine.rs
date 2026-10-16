@@ -1893,7 +1893,7 @@ mod tests {
         let metrics = Arc::new(MetricsServer::new(0).unwrap());
         // Use a separate test database (requires TEST_DATABASE_URL or falls back to local) - best effort
         let db_url = std::env::var("TEST_DATABASE_URL")
-            .unwrap_or_else(|_| "postgresql://mev:mevpassword@localhost:5433/mevdb".into());
+            .unwrap_or_else(|_| "postgresql://mev:<POSTGRES_PASSWORD>@localhost:5433/mevdb".into());
         let pool = PgPool::connect(&db_url).await.expect("pg connect");
         let mut eng = ExecutionEngine::new(cfg, Arc::clone(&metrics), pool)
             .await

@@ -112,7 +112,7 @@ services:
     image: postgres:15
     environment:
       - POSTGRES_USER=${POSTGRES_USER:-mev}
-      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-mevpassword}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-<POSTGRES_PASSWORD>}
       - POSTGRES_DB=${POSTGRES_DB:-mevdb}
       - POSTGRES_INITDB_ARGS=--encoding=UTF8 --lc-collate=C --lc-ctype=C
     healthcheck:
@@ -171,7 +171,7 @@ services:
       prometheus:
         condition: service_healthy
     environment:
-      - GF_SECURITY_ADMIN_PASSWORD=admin123
+      - GF_SECURITY_ADMIN_PASSWORD=<ADMIN_PASSWORD>
       - GF_USERS_ALLOW_SIGN_UP=false
       - GF_PLUGINS_ALLOW_LOADING_UNSIGNED_PLUGINS=grafana-metricsdrilldown-app,grafana-lokiexplore-app,grafana-pyroscope-app,grafana-exploretraces-app
       - GF_LOG_LEVEL=info

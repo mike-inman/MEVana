@@ -76,7 +76,7 @@ pkill -f "hotpath_arb_engine"
 ```bash
 # Use the working fake Geyser configuration
 FAKE_GEYSER=true PAPER_TRADING=true \
-DATABASE_URL="postgresql://mev:mevpassword@localhost:5433/mevdb" \
+DATABASE_URL="postgresql://mev:<POSTGRES_PASSWORD>@localhost:5433/mevdb" \
 METRICS_PORT=8088 RUST_LOG=info \
 cargo run -p hotpath_arb_engine --bin hotpath_arb_engine
 ```
@@ -134,7 +134,7 @@ curl http://localhost:8088/performance
 
 # 3. Start single Fake Geyser process
 FAKE_GEYSER=true PAPER_TRADING=true \
-DATABASE_URL="postgresql://mev:mevpassword@localhost:5433/mevdb" \
+DATABASE_URL="postgresql://mev:<POSTGRES_PASSWORD>@localhost:5433/mevdb" \
 METRICS_PORT=8088 RUST_LOG=info \
 cargo run -p hotpath_arb_engine --bin hotpath_arb_engine
 

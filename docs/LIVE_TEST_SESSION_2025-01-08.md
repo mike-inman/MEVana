@@ -304,7 +304,7 @@ WALLET_METRICS_PORT=9905
 WALLET_KEYPAIR_PATH=/opt/MEVana/keys/test-wallet.json
 
 # Shyft for balance queries
-SHYFT_API_KEY=efff2d23-97ae-4c5f-8b8b-9a6265001189
+SHYFT_API_KEY=<SHYFT_X_TOKEN>
 SHYFT_ENDPOINT=https://grpc.ny.shyft.to
 ```
 

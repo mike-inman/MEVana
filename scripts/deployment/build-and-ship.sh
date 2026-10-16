@@ -51,7 +51,7 @@ build_bin() {
   case "$svc" in
     hotpath)
       echo "🛠️  Building hotpath_arb_engine..."
-      DATABASE_URL="postgresql://mev:mevpassword@localhost:5433/mevdb" \
+      DATABASE_URL="postgresql://mev:<POSTGRES_PASSWORD>@localhost:5433/mevdb" \
         cargo +nightly build --release -p hotpath_arb_engine --bin hotpath_arb_engine
       ;;
     normalizer)

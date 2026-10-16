@@ -29,7 +29,7 @@ curl -X POST https://hooks.slack.com/services/T09CRV5317A/B09H7NRM8UT/lHrkLqYG3o
 
 ### Step 1: Access Grafana
 1. Navigate to: http://149.28.56.125:3000
-2. Login: admin / admin123
+2. Login: admin / <ADMIN_PASSWORD>
 
 ### Step 2: Configure Contact Point
 1. Go to **Alerting** → **Contact points**
@@ -169,7 +169,7 @@ curl -X POST <webhook_url> -H 'Content-Type: application/json' \
 
 ### Verify contact points are loaded:
 ```bash
-curl -u admin:admin123 http://localhost:3000/api/v1/provisioning/contact-points
+curl -u admin:<ADMIN_PASSWORD> http://localhost:3000/api/v1/provisioning/contact-points
 ```
 
 ## Future Improvements

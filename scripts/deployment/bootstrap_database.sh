@@ -7,7 +7,7 @@ success(){ printf '\033[0;32m[SUCCESS]\033[0m %s\n' "$1"; }
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 SCHEMA_FILE="$REPO_ROOT/../database/complete_schema.sql"
-DB_URL=${DATABASE_URL:-postgresql://mev:mevpassword@localhost:5433/mevdb}
+DB_URL=${DATABASE_URL:-postgresql://mev:<POSTGRES_PASSWORD>@localhost:5433/mevdb}
 POSTGRES_CONTAINER=${POSTGRES_CONTAINER:-mevana-postgres-1}
 POSTGRES_USER=${POSTGRES_USER:-mev}
 POSTGRES_DB=${POSTGRES_DB:-mevdb}

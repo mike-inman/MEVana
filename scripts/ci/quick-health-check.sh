@@ -60,7 +60,7 @@ else
 fi
 
 echo -e "\n${BLUE}Quick URLs:${NC}"
-echo "• Grafana:    http://localhost:3000 (admin/admin123)"
+echo "• Grafana:    http://localhost:3000 (admin/<ADMIN_PASSWORD>)"
 echo "• Prometheus: http://localhost:9090"
 echo "• Kafka UI:   http://localhost:8080"
 

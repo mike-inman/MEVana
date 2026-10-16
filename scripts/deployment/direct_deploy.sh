@@ -40,7 +40,7 @@ cargo build --release -p hotpath_arb_engine
 echo "🚀 Starting hotpath_arb_engine (Pure HotPath + Redis Metrics)..."
 nohup bash -c '
 export GEYSER_ENDPOINT="https://grpc.ny.shyft.to"
-export X_TOKEN="efff2d23-97ae-4c5f-8b8b-9a6265001189"
+export X_TOKEN="<SHYFT_X_TOKEN>"
 export METRICS_PORT=8088
 export RUST_LOG=info
 export ORDERBOOK_HISTORY_ENABLED=false

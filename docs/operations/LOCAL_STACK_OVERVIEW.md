@@ -40,7 +40,7 @@ MEVana development now mirrors production: the Rust services run directly on the
      zookeeper kafka redis postgres adminer prometheus grafana kafka-ui
    ```
    Ports:
-   - Grafana `http://localhost:3000` (admin/admin123)
+   - Grafana `http://localhost:3000` (admin/<ADMIN_PASSWORD>)
    - Prometheus `http://localhost:9090`
    - Adminer `http://localhost:8087`
    - Kafka UI `http://localhost:8084`
@@ -56,7 +56,7 @@ MEVana development now mirrors production: the Rust services run directly on the
      export $(grep -v '^#' .env.common | xargs)
      export $(grep -v '^#' .env.hotpath | xargs)
      ```
-   - Ensure `DATABASE_URL` points at the compose Postgres instance (`postgresql://mev:mevpassword@localhost:5433/mevdb`).
+   - Ensure `DATABASE_URL` points at the compose Postgres instance (`postgresql://mev:<POSTGRES_PASSWORD>@localhost:5433/mevdb`).
    - Mirror the production host wiring:
      ```env
      KAFKA_BROKER=localhost:29092
@@ -109,7 +109,7 @@ MEVana development now mirrors production: the Rust services run directly on the
 | `infrastructure/prometheus.core.yml` | Prometheus scrape config that targets the host services via `host.docker.internal` |
 
 ## Health & Diagnostics
-- `scripts/ci/post-deployment-diagnostics.sh` works locally; it exercises HTTP health endpoints, Prometheus target status, and logs in to Grafana (admin/admin123) to verify the datasource. With `SYSTEMCTL=false`, systemd checks are skipped.
+- `scripts/ci/post-deployment-diagnostics.sh` works locally; it exercises HTTP health endpoints, Prometheus target status, and logs in to Grafana (admin/<ADMIN_PASSWORD>) to verify the datasource. With `SYSTEMCTL=false`, systemd checks are skipped.
 - Prometheus targets should include `host.docker.internal:8088`, `host.docker.internal:9901`, `host.docker.internal:9102`, and `host.docker.internal:9904` — matching the production scrape configuration.
 - Grafana dashboards reside in `infrastructure/grafana/dashboards/`; live reload is easiest by restarting the Grafana container: `docker compose -f infrastructure/docker-compose.server.yml restart grafana`.
 

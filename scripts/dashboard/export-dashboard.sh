@@ -9,7 +9,7 @@ set -e
 DASHBOARD_TITLE="$1"
 LOCAL_GRAFANA="http://localhost:3300"
 GRAFANA_USER="admin"
-GRAFANA_PASS="admin123"
+GRAFANA_PASS="<ADMIN_PASSWORD>"
 OUTPUT_DIR="infrastructure/grafana/dashboards/curated"
 
 if [ -z "$DASHBOARD_TITLE" ]; then

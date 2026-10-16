@@ -220,7 +220,7 @@ impl SystemHealthMonitor {
             let event = HealthEvent::ConfigurationIssue {
                 timestamp: SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_secs(),
                 parameter: "DATABASE_URL".to_string(),
-                expected_value: "postgresql://mev:mevpassword@localhost:5433/mevdb".to_string(),
+                expected_value: "postgresql://mev:<POSTGRES_PASSWORD>@localhost:5433/mevdb".to_string(),
                 actual_value: db_url,
                 recommendation: "Use Docker PostgreSQL on port 5433 to avoid connection conflicts".to_string(),
             };

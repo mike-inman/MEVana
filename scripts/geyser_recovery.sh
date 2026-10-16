@@ -8,8 +8,8 @@ set -e
 
 # Configuration
 GEYSER_ENDPOINT="https://grpc.ny.shyft.to"
-X_TOKEN="efff2d23-97ae-4c5f-8b8b-9a6265001189"
-DATABASE_URL="postgresql://mev:mevpassword@localhost:5433/mevdb"
+X_TOKEN="<SHYFT_X_TOKEN>"
+DATABASE_URL="postgresql://mev:<POSTGRES_PASSWORD>@localhost:5433/mevdb"
 METRICS_PORT=8088
 RECOVERY_LOG_DIR="/opt/MEVana/logs/recovery"
 

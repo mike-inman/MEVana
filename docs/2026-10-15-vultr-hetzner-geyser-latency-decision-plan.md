@@ -1,7 +1,8 @@
 # MEVana: Vultr vs Hetzner latency decision
 
-**Date:** 2026-10-15  
-**Status:** Ready for implementation  
+**Date:** 2026-10-15
+
+**Status:** Ready for implementation
 **Objective:** Choose the better server for MEVana's Solana Geyser ingestion and transaction-submission hot path, without building a benchmarking platform.
 
 ## Decision in one sentence

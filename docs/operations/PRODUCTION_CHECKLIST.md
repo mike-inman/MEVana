@@ -73,10 +73,10 @@ solana transfer Gy7gXtNuCjf2rCDMucA8dNJ329nB7RZCMuLcLevheCqB 0.5 --url https://a
 4. **Start Production Instance**:
    ```bash
    echo "🚨 GOING LIVE WITH REAL MONEY 🚨" && \
-   DATABASE_URL="postgresql://mev:mevpassword@localhost:5433/mevdb" \
+   DATABASE_URL="postgresql://mev:<POSTGRES_PASSWORD>@localhost:5433/mevdb" \
    RUST_LOG=info \
    GEYSER_ENDPOINT="https://grpc.ny.shyft.to" \
-   X_TOKEN="efff2d23-97ae-4c5f-8b8b-9a6265001189" \
+   X_TOKEN="<SHYFT_X_TOKEN>" \
    ORDERBOOK_HISTORY_ENABLED=true \
    PAPER_TRADING=false \
    ENABLE_LIVE_EXECUTION=true \
@@ -145,7 +145,7 @@ solana balance AocM7RGckY8Pas5vPFvsZMTUWQbrW5JmvprtkVLkArKe --url https://api.ma
 solana balance 6SorGoKiYSwLd9jqxLtjzAR9QhDPTJ3uKjNUGVabdBqJ --url https://api.mainnet-beta.solana.com
 
 # Monitor database activity
-DATABASE_URL="postgresql://mev:mevpassword@localhost:5433/mevdb" psql -c "SELECT COUNT(*) FROM arbitrage_opportunities WHERE created_at > NOW() - INTERVAL '1 hour';"
+DATABASE_URL="postgresql://mev:<POSTGRES_PASSWORD>@localhost:5433/mevdb" psql -c "SELECT COUNT(*) FROM arbitrage_opportunities WHERE created_at > NOW() - INTERVAL '1 hour';"
 
 # Emergency stop
 pkill -f "hotpath_arb_engine"

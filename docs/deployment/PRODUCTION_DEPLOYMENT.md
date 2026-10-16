@@ -58,7 +58,7 @@ CMD ["hotpath_arb_engine"]
 
 ### Core Infrastructure
 - [ ] Docker and docker-compose installed
-- [ ] PostgreSQL database setup (port 5433): `postgresql://mev:mevpassword@localhost:5433/mevdb`
+- [ ] PostgreSQL database setup (port 5433): `postgresql://mev:<POSTGRES_PASSWORD>@localhost:5433/mevdb`
 - [ ] Kafka message broker configured (port 29092)
 - [ ] Redis caching layer
 - [ ] Prometheus monitoring (port 9090)
@@ -74,9 +74,9 @@ docker-compose up -d
 ## Environment Configuration
 
 ### Critical Environment Variables
-- [ ] `DATABASE_URL="postgresql://mev:mevpassword@localhost:5433/mevdb"`
+- [ ] `DATABASE_URL="postgresql://mev:<POSTGRES_PASSWORD>@localhost:5433/mevdb"`
 - [ ] `GEYSER_ENDPOINT="https://grpc.ny.shyft.to"`
-- [ ] `X_TOKEN="efff2d23-97ae-4c5f-8b8b-9a6265001189"`
+- [ ] `X_TOKEN="<SHYFT_X_TOKEN>"`
 - [ ] `PAPER_TRADING=true` (**CRITICAL** - prevents safety shutdown)
 - [ ] `METRICS_PORT=8088` (or 8090, 8091, etc. for multiple instances)
 - [ ] `RUST_LOG=info` (or warn/debug)
@@ -99,9 +99,9 @@ docker-compose up -d
 ```bash
 # HotPath Arbitrage Engine with full configuration
 PAPER_TRADING=true \
-DATABASE_URL="postgresql://mev:mevpassword@localhost:5433/mevdb" \
+DATABASE_URL="postgresql://mev:<POSTGRES_PASSWORD>@localhost:5433/mevdb" \
 GEYSER_ENDPOINT="https://grpc.ny.shyft.to" \
-X_TOKEN="efff2d23-97ae-4c5f-8b8b-9a6265001189" \
+X_TOKEN="<SHYFT_X_TOKEN>" \
 METRICS_PORT=8088 \
 RUST_LOG=info \
 cargo run -p hotpath_arb_engine --bin hotpath_arb_engine
@@ -116,7 +116,7 @@ docker run -d \
   -e PAPER_TRADING=true \
   -e DATABASE_URL="postgresql://host.docker.internal:5433/mevdb" \
   -e GEYSER_ENDPOINT="https://grpc.ny.shyft.to" \
-  -e X_TOKEN="efff2d23-97ae-4c5f-8b8b-9a6265001189" \
+  -e X_TOKEN="<SHYFT_X_TOKEN>" \
   -e METRICS_PORT=8088 \
   -e RUST_LOG=info \
   -v /data/mevana:/app/data \
@@ -151,7 +151,7 @@ docker run -d \
 
 ### Monitoring & Observability
 - [ ] **Prometheus Metrics**: Available at port 9090
-- [ ] **Grafana Dashboards**: Configured at port 3000 (admin/admin123)
+- [ ] **Grafana Dashboards**: Configured at port 3000 (admin/<ADMIN_PASSWORD>)
 - [ ] **Application Metrics**: `/metrics` endpoint responsive
 - [ ] **Log Aggregation**: Structured logging with RUST_LOG
 - [ ] **Performance Monitoring**: Latency, throughput, success rates

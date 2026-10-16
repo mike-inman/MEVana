@@ -17,7 +17,7 @@ echo "=================================================="
 # Check if API key is set
 if [ -z "$SHYFT_API_KEY" ]; then
     echo -e "${RED}❌ SHYFT_API_KEY environment variable not set${NC}"
-    echo "Please set: export SHYFT_API_KEY=fWrVh_mDygK358FC"
+    echo "Please set: export SHYFT_API_KEY=<SHYFT_API_KEY>"
     exit 1
 fi
 

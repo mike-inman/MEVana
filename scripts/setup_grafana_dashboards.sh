@@ -24,7 +24,7 @@ echo
 
 echo "📋 Manual Setup Instructions:"
 echo "1. Open: ${GRAFANA_URL}"
-echo "2. Login: admin / admin123"
+echo "2. Login: admin / <ADMIN_PASSWORD>"
 echo "3. Go to: Configuration > Data Sources"
 echo "4. Add Prometheus data source:"
 echo "   - Name: Prometheus"

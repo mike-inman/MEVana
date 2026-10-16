@@ -75,7 +75,7 @@ mevana-system-status.json                     # Working dashboard
 ```bash
 # Local (working):
 KAFKA_BROKER=localhost:29092
-DATABASE_URL=postgresql://mev:mevpassword@localhost:5433/mevdb
+DATABASE_URL=postgresql://mev:<POSTGRES_PASSWORD>@localhost:5433/mevdb
 
 # Server (may differ):
 # Container networking vs host networking differences
@@ -167,9 +167,9 @@ Server: mevana-system-status.json (SAME 4 panels)
 ```bash
 # Create .env.template for both environments
 GEYSER_ENDPOINT=https://grpc.ny.shyft.to
-X_TOKEN=efff2d23-97ae-4c5f-8b8b-9a6265001189
+X_TOKEN=<SHYFT_X_TOKEN>
 KAFKA_BROKER=kafka:9092                     # Docker internal name
-DATABASE_URL=postgresql://mev:mevpassword@postgres:5432/mevdb
+DATABASE_URL=postgresql://mev:<POSTGRES_PASSWORD>@postgres:5432/mevdb
 ```
 
 ## 🤖 Automated CI/CD Workflow

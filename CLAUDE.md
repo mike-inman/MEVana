@@ -10,7 +10,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 cargo build --workspace
 
 # Build specific high-performance targets
-DATABASE_URL="postgresql://mev:mevpassword@localhost:5433/mevdb" cargo build --release -p hotpath_arb_engine
+DATABASE_URL="postgresql://mev:<POSTGRES_PASSWORD>@localhost:5433/mevdb" cargo build --release -p hotpath_arb_engine
 
 # Run tests
 cargo test --workspace
@@ -30,8 +30,8 @@ cargo clippy --workspace --all-targets -- -D warnings
 cd infrastructure && docker-compose up -d
 
 # Run main HotPath arbitrage engine
-PAPER_TRADING=true DATABASE_URL="postgresql://mev:mevpassword@localhost:5433/mevdb" \
-GEYSER_ENDPOINT="https://grpc.ny.shyft.to" X_TOKEN="efff2d23-97ae-4c5f-8b8b-9a6265001189" \
+PAPER_TRADING=true DATABASE_URL="postgresql://mev:<POSTGRES_PASSWORD>@localhost:5433/mevdb" \
+GEYSER_ENDPOINT="https://grpc.ny.shyft.to" X_TOKEN="<SHYFT_X_TOKEN>" \
 METRICS_PORT=8088 RUST_LOG=info cargo run -p hotpath_arb_engine --bin hotpath_arb_engine
 
 # Graceful system shutdown
@@ -74,7 +74,7 @@ MEVana is a Solana MEV platform with three distinct architectures:
 ## Critical Configuration
 
 ### Database
-- PostgreSQL required: `postgresql://mev:mevpassword@localhost:5433/mevdb`
+- PostgreSQL required: `postgresql://mev:<POSTGRES_PASSWORD>@localhost:5433/mevdb`
 - Migrations auto-applied on service startup
 - Schema: `docs/database/complete_schema.sql`
 
@@ -83,7 +83,7 @@ MEVana is a Solana MEV platform with three distinct architectures:
 PAPER_TRADING=true                    # Enable paper trading mode
 DATABASE_URL=...                      # PostgreSQL connection
 GEYSER_ENDPOINT="https://grpc.ny.shyft.to"  # Shyft RPC endpoint
-X_TOKEN="efff2d23-97ae-4c5f-8b8b-9a6265001189"  # Auth token
+X_TOKEN="<SHYFT_X_TOKEN>"  # Auth token
 METRICS_PORT=8088                     # Prometheus metrics port
 MULTI_ENDPOINT_MODE=true              # Enable multiple Geyser endpoints
 ```
@@ -170,7 +170,7 @@ docker ps
 docker logs postgres
 
 # Check database connection
-PGPASSWORD=mevpassword psql -h localhost -p 5433 -U mev -d mevdb -c "SELECT 1"
+PGPASSWORD=<POSTGRES_PASSWORD> psql -h localhost -p 5433 -U mev -d mevdb -c "SELECT 1"
 ```
 
 ### No Data Flow
@@ -189,7 +189,7 @@ RUST_LOG=debug cargo run -p hotpath_arb_engine
 ```bash
 # Clean and rebuild
 cargo clean
-DATABASE_URL="postgresql://mev:mevpassword@localhost:5433/mevdb" cargo build --workspace
+DATABASE_URL="postgresql://mev:<POSTGRES_PASSWORD>@localhost:5433/mevdb" cargo build --workspace
 
 # Check for missing dependencies
 cargo tree -p hotpath_arb_engine

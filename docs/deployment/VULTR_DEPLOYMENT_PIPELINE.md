@@ -45,7 +45,7 @@ docker-compose ps
 ```bash
 # 1. Set environment variables
 export ENDPOINT=https://grpc.ny.shyft.to
-export X_TOKEN=efff2d23-97ae-4c5f-8b8b-9a6265001189
+export X_TOKEN=<SHYFT_X_TOKEN>
 export KAFKA_BROKER=localhost:29092
 export ARB_MIN_PROFIT_BPS=25
 export HOTPATH_LOG=true
@@ -123,7 +123,7 @@ echo "=========================="
 
 # Set environment
 export ENDPOINT=https://grpc.ny.shyft.to
-export X_TOKEN=efff2d23-97ae-4c5f-8b8b-9a6265001189
+export X_TOKEN=<SHYFT_X_TOKEN>
 export KAFKA_BROKER=localhost:29092
 export ARB_MIN_PROFIT_BPS=25
 export HOTPATH_LOG=true

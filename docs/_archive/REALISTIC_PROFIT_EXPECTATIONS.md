@@ -133,7 +133,7 @@ ps aux | grep whirlpool
 
 # If not running, start it:
 cd /Users/michaelinman/Repos/MEVana
-ENDPOINT=https://grpc.ny.shyft.to X_TOKEN=efff2d23-97ae-4c5f-8b8b-9a6265001189 KAFKA_BROKER=localhost:29092 ./target/debug/whirlpool-live-stream
+ENDPOINT=https://grpc.ny.shyft.to X_TOKEN=<SHYFT_X_TOKEN> KAFKA_BROKER=localhost:29092 ./target/debug/whirlpool-live-stream
 
 # Expected result: arb-engine should stop showing "kafka_idle" warnings
 ```

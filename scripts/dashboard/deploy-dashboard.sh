@@ -10,7 +10,7 @@ DASHBOARD_FILE="$1"
 SERVER_IP="${2:-149.28.56.125}"
 SERVER_GRAFANA="http://$SERVER_IP:3000"
 GRAFANA_USER="admin"
-GRAFANA_PASS="admin123"
+GRAFANA_PASS="<ADMIN_PASSWORD>"
 
 if [ ! -f "$DASHBOARD_FILE" ]; then
     echo "❌ Dashboard file not found: $DASHBOARD_FILE"

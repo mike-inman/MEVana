@@ -58,9 +58,9 @@ docker network create mevana_net
 ```bash
 # Environment file: .env.production
 GEYSER_ENDPOINT=https://grpc.ny.shyft.to
-X_TOKEN=efff2d23-97ae-4c5f-8b8b-9a6265001189
+X_TOKEN=<SHYFT_X_TOKEN>
 KAFKA_BROKER=kafka:9092
-DATABASE_URL=postgresql://mev:mevpassword@postgres:5432/mevdb
+DATABASE_URL=postgresql://mev:<POSTGRES_PASSWORD>@postgres:5432/mevdb
 REDIS_URL=redis://redis:6379/0
 ```
 

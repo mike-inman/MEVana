@@ -30,7 +30,7 @@ ssh root@${SERVER_IP} << 'RESET_SCRIPT'
         --name grafana \
         --network mevana_net \
         -p 3000:3000 \
-        -e GF_SECURITY_ADMIN_PASSWORD=admin123 \
+        -e GF_SECURITY_ADMIN_PASSWORD=<ADMIN_PASSWORD> \
         -v grafana_data:/var/lib/grafana \
         --restart unless-stopped \
         grafana/grafana:latest
@@ -56,7 +56,7 @@ done
 echo
 echo "🎯 Fresh Grafana Setup Instructions:"
 echo "1. Open: http://${SERVER_IP}:3000"
-echo "2. Login: admin / admin123"
+echo "2. Login: admin / <ADMIN_PASSWORD>"
 echo "3. Add Prometheus data source:"
 echo "   - Go to Configuration > Data Sources > Add data source"
 echo "   - Select Prometheus"

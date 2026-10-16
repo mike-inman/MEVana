@@ -9,7 +9,7 @@ services:
       - "8090:8090"
     environment:
       - MONITORING_PORT=8090
-      - DATABASE_URL=postgresql://mev:mevpassword@postgres:5432/mevdb
+      - DATABASE_URL=postgresql://mev:<POSTGRES_PASSWORD>@postgres:5432/mevdb
       - RUST_LOG=info
     depends_on:
       - postgres

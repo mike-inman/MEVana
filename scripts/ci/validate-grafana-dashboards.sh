@@ -183,7 +183,7 @@ if [ $issues -eq 0 ]; then
     echo -e "${GREEN}Phase 1 dashboard fixes are working correctly${NC}"
     echo ""
     echo "🎯 Next steps:"
-    echo "  • Visit Grafana: $GRAFANA_URL (admin/admin123)"
+    echo "  • Visit Grafana: $GRAFANA_URL (admin/<ADMIN_PASSWORD>)"
     echo "  • Check that dashboards display data"
     echo "  • Verify MEVana metrics are visible in dashboard panels"
     exit 0

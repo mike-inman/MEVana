@@ -29,7 +29,7 @@ async fn main() -> Result<()> {
         std::env::var("RPC_URL").unwrap_or_else(|_| "https://api.mainnet-beta.solana.com".into());
     let pg_url = std::env::var("TOKEN_REGISTRY_DATABASE_URL")
         .or_else(|_| std::env::var("DATABASE_URL"))
-        .unwrap_or_else(|_| "postgresql://mev:mevpassword@localhost:5433/mevdb".into());
+        .unwrap_or_else(|_| "postgresql://mev:<POSTGRES_PASSWORD>@localhost:5433/mevdb".into());
     let schema = std::env::var("TOKEN_REGISTRY_SCHEMA").unwrap_or_else(|_| "public".into());
     log::info!("connecting postgres at {} schema={} (set TOKEN_REGISTRY_DATABASE_URL / TOKEN_REGISTRY_SCHEMA to override)", pg_url, schema);
 

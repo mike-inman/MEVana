@@ -1,0 +1,23 @@
+# Catalog contracts and invariant tests
+
+Date: 2026-10-08 16:05 CT. Purpose: complete task-specific Core context for a smaller coding handoff; preparation only, not implementation or product acceptance.
+
+Source: docs/2026-10-07-1547-CT-Experiment-Request-API-Specification.md; SHA256 5b20103663cd3a1550221787bbca0795f209d771c876ca94841bd720a28b72b1. The host verifies that unchanged source and this exact slice document. This document is the complete selected specification for its named task, with added public interface decisions. The full source is retained locally, rather than silently shortened in a model request. Existing larger profiles remain unchanged.
+
+Scope: local .NET 10 dependency-free Core and assigned tests only. No HTTP/JSON parsing, endpoints, database, idempotency storage, dataset download, research execution, trading, wallets, Rust, deployment, network calls, credentials or MCP changes. No real dataset ships. Test fixtures never establish real availability. Five fixed host checks (SDK, solution listing, restore, build, test), fresh nonzero passing TRX and independent review are required. Read all assigned inputs in a completed response before edits/checks. Preserve unrelated work. Outputs must stay within assigned source-token caps, favoring clear concise code and meaningful tests over verbose comments.
+
+Ownership: DatasetCatalog.cs and DatasetCatalogContractTests.cs. Test project is a read-only predecessor output. Request validation and canonicalization are later tasks; no JSON loader/startup integration is implemented here.
+
+Public immutable API in MEVana.Research.Core (constructor order matches properties):
+- TokenMetadata(string id, int decimals, long maxResearchTradeSizeQuoteAtoms): Id, Decimals, MaxResearchTradeSizeQuoteAtoms.
+- PoolMetadata(string id, IReadOnlyList<string> tokenIds): Id, TokenIds (two distinct token references; pool membership supports either ordered base/quote direction).
+- DatasetMetadata(string id, string metadataVersion, string provenance, bool verifiedAvailable, string suitability, DateTimeOffset coverageStartUtc, DateTimeOffset coverageEndUtc, IReadOnlyList<string> supportedStrategyVersions, IReadOnlyList<TokenMetadata> tokens, IReadOnlyList<PoolMetadata> pools, long maxResearchTradeSizeQuoteAtoms): same PascalCase read-only properties.
+- ResearchCatalog(IReadOnlyList<DatasetMetadata> datasets): Datasets; static ResearchCatalog.Empty; DatasetMetadata? FindDataset(string id) using ordinal case-sensitive lookup. All four types sealed; constructors copy incoming collections and nested objects remain immutable. Never retain mutable collections behind IReadOnlyList.
+
+Reject invalid catalog metadata explicitly with ArgumentException (including ArgumentNullException where appropriate), never silently repair/drop entries. All IDs/versions use case-sensitive ASCII letters/digits/hyphen/underscore, length 1–64. Unique dataset IDs across catalog; unique tokens, pools and strategies within each dataset, all ordinal. Required collections and entries cannot be null. Strategies must be nonempty. Dataset needs >=2 tokens and >=2 pools. Token decimals 0–18 inclusive, quote bounds positive Int64; dataset bound also positive. Provenance and suitability must be nonblank local descriptive text, not paths/URLs/credentials. No credential detection claim: do not accept user paths, remote references or download data.
+
+Coverage must have zero UTC offset and strictly start < end. Pool has exactly two distinct token IDs present in that dataset; pools need not all support the same pair. Snapshot tokenIds/strategies/datasets/tokens/pools defensively. Invalid metadata cannot stand in for a valid startup catalog; loading/version-change/restart behavior is later application integration. Metadata changes require a new immutable dataset/metadata version, not mutation of existing objects.
+
+ResearchCatalog.Empty has zero datasets. Availability false is legitimate metadata and must remain false; no fallback examples or flag promotion. Metadata/fixtures alone never prove data correctness, coverage or suitability. Tests use explicitly named fixture data only.
+
+Tests cover empty/default behavior, case-sensitive lookup/distinctness, duplicates, null/blank/malformed IDs, decimals/bounds edges, non-UTC/reversed coverage, missing/duplicate pool token references, invalid strategy lists and defensive snapshots/read-only behavior. Keep meaningful boundary tests concise using tables/parameterization. Source trace: original Dataset catalog and honest availability plus Request contract limits; the explicit constructors, decimals bound and invariant policy are this handoff's interface decisions.

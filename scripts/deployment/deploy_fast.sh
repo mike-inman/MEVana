@@ -161,7 +161,7 @@ log "   • Starting Orca (Whirlpool) discovery..."
 nohup bash -c "
     source venue_config.env
     ENDPOINT=https://grpc.ny.shyft.to \
-    X_TOKEN=efff2d23-97ae-4c5f-8b8b-9a6265001189 \
+    X_TOKEN=<SHYFT_X_TOKEN> \
     KAFKA_BROKER=localhost:29092 \
     PROGRAM_IDS=whirLbMiicVdio4qvUfM5KAg6Ct8VwpYzGff3uctyCc \
     ./target/release/whirlpool-live-stream
@@ -252,8 +252,8 @@ log "📊 DEPLOYMENT COMPLETE - Service Status:"
 echo
 log "🏢 Infrastructure Services:"
 log "   • Kafka UI:      http://localhost:8080"
-log "   • Redis UI:      http://localhost:8083 (admin/admin123)"
-log "   • Grafana:       http://localhost:3000 (admin/admin123)"
+log "   • Redis UI:      http://localhost:8083 (admin/<ADMIN_PASSWORD>)"
+log "   • Grafana:       http://localhost:3000 (admin/<ADMIN_PASSWORD>)"
 log "   • Prometheus:    http://localhost:9090"
 log "   • Adminer:       http://localhost:8082"
 

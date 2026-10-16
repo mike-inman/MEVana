@@ -66,7 +66,7 @@ curl -s http://localhost:8088/performance | jq '.active_opportunities'
 grep -i "error\|fatal\|panic" logs/*.log | tail -20
 
 # Verify database connectivity
-psql "postgresql://mev:mevpassword@localhost:5433/mevdb" -c "SELECT COUNT(*) FROM wallets;"
+psql "postgresql://mev:<POSTGRES_PASSWORD>@localhost:5433/mevdb" -c "SELECT COUNT(*) FROM wallets;"
 ```
 
 ### 3. Data Backup Preparation
@@ -79,7 +79,7 @@ curl -s http://localhost:8088/performance > backups/shutdown_$(date +%Y%m%d_%H%M
 curl -s http://localhost:8085/ai/config > backups/shutdown_$(date +%Y%m%d_%H%M%S)/arb_config.json
 
 # Database backup (if needed)
-pg_dump "postgresql://mev:mevpassword@localhost:5433/mevdb" > backups/shutdown_$(date +%Y%m%d_%H%M%S)/database_backup.sql
+pg_dump "postgresql://mev:<POSTGRES_PASSWORD>@localhost:5433/mevdb" > backups/shutdown_$(date +%Y%m%d_%H%M%S)/database_backup.sql
 ```
 
 ---

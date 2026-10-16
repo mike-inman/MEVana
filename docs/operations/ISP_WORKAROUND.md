@@ -46,14 +46,14 @@ unset FAKE_GEYSER         # Switch back to real Geyser
 ```bash
 # Clean startup with fake data
 ./scripts/lifecycle/shutdown_system.sh
-FAKE_GEYSER=true PAPER_TRADING=true DATABASE_URL="postgresql://mev:mevpassword@localhost:5433/mevdb" METRICS_PORT=8088 RUST_LOG=info cargo run -p hotpath_arb_engine --bin hotpath_arb_engine
+FAKE_GEYSER=true PAPER_TRADING=true DATABASE_URL="postgresql://mev:<POSTGRES_PASSWORD>@localhost:5433/mevdb" METRICS_PORT=8088 RUST_LOG=info cargo run -p hotpath_arb_engine --bin hotpath_arb_engine
 ```
 
 ### Real Production Mode (when ISP allows)
 ```bash  
 # Clean startup with real Geyser data
 ./scripts/lifecycle/shutdown_system.sh
-PAPER_TRADING=true DATABASE_URL="postgresql://mev:mevpassword@localhost:5433/mevdb" GEYSER_ENDPOINT="https://grpc.va.shyft.to" X_TOKEN="efff2d23-97ae-4c5f-8b8b-9a6265001189" METRICS_PORT=8088 RUST_LOG=info cargo run -p hotpath_arb_engine --bin hotpath_arb_engine
+PAPER_TRADING=true DATABASE_URL="postgresql://mev:<POSTGRES_PASSWORD>@localhost:5433/mevdb" GEYSER_ENDPOINT="https://grpc.va.shyft.to" X_TOKEN="<SHYFT_X_TOKEN>" METRICS_PORT=8088 RUST_LOG=info cargo run -p hotpath_arb_engine --bin hotpath_arb_engine
 ```
 
 ## What Fake Geyser Provides

@@ -205,7 +205,7 @@ services:
     ports:
       - "3000:3000"
     environment:
-      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_PASSWORD:-admin123}
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_PASSWORD:-<ADMIN_PASSWORD>}
       GF_USERS_ALLOW_SIGN_UP: false
       GF_SERVER_DOMAIN: ${GRAFANA_DOMAIN:-localhost}
       GF_SMTP_ENABLED: ${SMTP_ENABLED:-false}
@@ -589,7 +589,7 @@ echo "  • API Service:        http://localhost:8091/health"
 echo ""
 echo "📊 Monitoring:"
 echo "  • Prometheus:         http://localhost:9090"
-echo "  • Grafana:            http://localhost:3000 (admin/admin123)"
+echo "  • Grafana:            http://localhost:3000 (admin/<ADMIN_PASSWORD>)"
 echo ""
 echo "🗄️ Infrastructure:"
 echo "  • Kafka UI:           http://localhost:8080"
@@ -720,7 +720,7 @@ POSTGRES_PASSWORD=dev_password_123
 # Security (less strict for dev)
 JWT_SECRET=dev_jwt_secret_change_for_prod
 WALLET_ENCRYPTION_KEY=dev_wallet_key_32_chars_long!!
-GRAFANA_PASSWORD=admin123
+GRAFANA_PASSWORD=<ADMIN_PASSWORD>
 
 # Performance (no CPU pinning for dev)
 CPU_PINNING_ENABLED=false

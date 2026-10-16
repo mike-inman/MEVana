@@ -48,7 +48,7 @@ set +a
 [[ -n "${REMOTE_DATABASE_URL:-}" ]] || fail "REMOTE_DATABASE_URL must be set in the env file."
 
 # Default local connection maps to the docker-compose Postgres service exposure.
-default_local_url="postgresql://${POSTGRES_USER:-mev}:${POSTGRES_PASSWORD:-mevpassword}@localhost:5433/${POSTGRES_DB:-mevdb}"
+default_local_url="postgresql://${POSTGRES_USER:-mev}:${POSTGRES_PASSWORD:-<POSTGRES_PASSWORD>}@localhost:5433/${POSTGRES_DB:-mevdb}"
 LOCAL_DATABASE_URL="${LOCAL_DATABASE_URL:-$default_local_url}"
 export REMOTE_DATABASE_URL
 export LOCAL_DATABASE_URL

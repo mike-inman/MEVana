@@ -299,7 +299,7 @@ let execution_mode = match ai_strategy.strategy_type {
 ### **Environment Variables**
 ```bash
 # Core Configuration
-DATABASE_URL="postgresql://mev:mevpassword@localhost:5433/mevdb"
+DATABASE_URL="postgresql://mev:<POSTGRES_PASSWORD>@localhost:5433/mevdb"
 GEYSER_ENDPOINT="https://grpc.ny.shyft.to"
 X_TOKEN="your_shyft_token"
 RUST_LOG="info"

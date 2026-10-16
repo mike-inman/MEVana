@@ -101,7 +101,7 @@ if [ $failed_tests -eq 0 ]; then
     echo -e "${GREEN}Phase 1 deployment is fully successful${NC}"
     echo ""
     echo -e "${BLUE}🎯 Your MEVana deployment is ready:${NC}"
-    echo "  • Grafana:    http://localhost:3000 (admin/admin123)"
+    echo "  • Grafana:    http://localhost:3000 (admin/<ADMIN_PASSWORD>)"
     echo "  • Prometheus: http://localhost:9090"
     echo "  • Kafka UI:   http://localhost:8080"
     echo ""
@@ -114,7 +114,7 @@ elif [ $success_rate -ge 75 ]; then
     echo "Review failed tests above - system may be functional but needs attention"
     echo ""
     echo -e "${BLUE}You can still proceed to test the deployment manually:${NC}"
-    echo "  • Grafana:    http://localhost:3000 (admin/admin123)"
+    echo "  • Grafana:    http://localhost:3000 (admin/<ADMIN_PASSWORD>)"
     echo "  • Prometheus: http://localhost:9090"
     exit 1
 

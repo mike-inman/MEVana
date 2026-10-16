@@ -7,7 +7,7 @@ services:
     environment:
       POSTGRES_DB: mevdb
       POSTGRES_USER: mev
-      POSTGRES_PASSWORD: mevpassword
+      POSTGRES_PASSWORD: <POSTGRES_PASSWORD>
     ports:
       - "5433:5432"
     volumes:
@@ -28,8 +28,8 @@ services:
     environment:
       MULTI_ENDPOINT_MODE: true
       PAPER_TRADING: true
-      DATABASE_URL: postgresql://mev:mevpassword@postgres:5432/mevdb
-      X_TOKEN: efff2d23-97ae-4c5f-8b8b-9a6265001189
+      DATABASE_URL: postgresql://mev:<POSTGRES_PASSWORD>@postgres:5432/mevdb
+      X_TOKEN: <SHYFT_X_TOKEN>
       METRICS_PORT: 8088
       RUST_LOG: info
     ports:
@@ -50,7 +50,7 @@ services:
     ports:
       - "3000:3000"
     environment:
-      GF_SECURITY_ADMIN_PASSWORD: admin123
+      GF_SECURITY_ADMIN_PASSWORD: <ADMIN_PASSWORD>
     volumes:
       - grafana_data:/var/lib/grafana
 

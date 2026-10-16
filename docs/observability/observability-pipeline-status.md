@@ -18,7 +18,7 @@ Our MEVana platform now has a **complete observability pipeline** with Prometheu
 
 ### **Grafana** ✅ **OPERATIONAL**
 - **Status**: Running and healthy on port 3000
-- **Credentials**: admin / admin123
+- **Credentials**: admin / <ADMIN_PASSWORD>
 - **Datasource**: Prometheus configured and connected
 - **Dashboard**: MEVana test dashboard ready
 
@@ -69,7 +69,7 @@ Our MEVana platform now has a **complete observability pipeline** with Prometheu
 ### **Grafana Configuration**
 - **Datasource**: Prometheus at http://prometheus:9090
 - **Dashboard Provisioning**: Automatic dashboard loading
-- **Authentication**: Basic auth with admin/admin123
+- **Authentication**: Basic auth with admin/<ADMIN_PASSWORD>
 
 ## 🧪 **Testing & Validation**
 
@@ -152,7 +152,7 @@ curl http://localhost:9090/api/v1/targets
 curl http://localhost:9091/metrics
 
 # Access Grafana
-open http://localhost:3000  # admin/admin123
+open http://localhost:3000  # admin/<ADMIN_PASSWORD>
 ```
 
 ## 🎉 **Achievement Summary**

@@ -23,7 +23,7 @@ After comprehensive code verification, the MEVana system is significantly more a
 - Latest server rollout uses tag `20250922221915` for all core services; the tag is recorded in `/opt/MEVana/.mevana_tag`.
 - Kafka topics `arb.opportunities.v1` and `execution.results.v1` exist on the server; executor is subscribing successfully.
 - SHYFT devnet credentials live in `/opt/MEVana/.env` and `/opt/MEVana/infrastructure/.env`; update those files (or repo secrets) before switching environments.
-- Grafana (`http://<server-ip>:3000`, admin/admin123) and Prometheus (`http://<server-ip>:9090`) currently show live data; normalizer charts rely on the new metrics.
+- Grafana (`http://<server-ip>:3000`, admin/<ADMIN_PASSWORD>) and Prometheus (`http://<server-ip>:9090`) currently show live data; normalizer charts rely on the new metrics.
 - Executor container now expects `/opt/MEVana/infrastructure/keys/id.json` (and `/opt/MEVana/keys/id.json`) to exist; compose mounts the entire directory to `/root/.config/solana/`. If that file is missing Docker silently creates a directory, the executor restarts on “Is a directory (os error 21)”, and Prometheus marks `executor-service:9904` down. Always seed the key before running the deploy workflow.
 
 ### 🛠️ Quick Iteration Checklist

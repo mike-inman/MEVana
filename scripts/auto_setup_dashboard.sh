@@ -29,7 +29,7 @@ ssh root@${SERVER_IP} << 'AUTO_SETUP'
             "access": "proxy",
             "isDefault": true
         }' \
-        http://admin:admin123@localhost:3000/api/datasources || echo "Data source may already exist"
+        http://admin:<ADMIN_PASSWORD>@localhost:3000/api/datasources || echo "Data source may already exist"
 
     sleep 2
 
@@ -70,14 +70,14 @@ ssh root@${SERVER_IP} << 'AUTO_SETUP'
             },
             "overwrite": true
         }' \
-        http://admin:admin123@localhost:3000/api/dashboards/db || echo "Dashboard creation may have failed"
+        http://admin:<ADMIN_PASSWORD>@localhost:3000/api/dashboards/db || echo "Dashboard creation may have failed"
 
 AUTO_SETUP
 
 echo "✅ Done! Your dashboard is ready."
 echo
 echo "🎯 Just open: http://${SERVER_IP}:3000"
-echo "   Login: admin / admin123"
+echo "   Login: admin / <ADMIN_PASSWORD>"
 echo "   Your dashboard should be there automatically!"
 echo
 echo "📊 What you'll see:"

@@ -69,15 +69,15 @@ hotpath_arb_engine (detect only) → Kafka Topic → monitoring-service → Data
 ```bash
 # Terminal 1: Start monitoring-service (handles DB writes)
 cd /Users/michaelinman/Repos/MEVana
-DATABASE_URL="postgresql://mev:mevpassword@localhost:5433/mevdb" \
+DATABASE_URL="postgresql://mev:<POSTGRES_PASSWORD>@localhost:5433/mevdb" \
 RUST_LOG=info \
 cargo run -p monitoring-service
 
 # Terminal 2: Start clean hotpath (detection only, publishes to Kafka)
-DATABASE_URL="postgresql://mev:mevpassword@localhost:5433/mevdb" \
+DATABASE_URL="postgresql://mev:<POSTGRES_PASSWORD>@localhost:5433/mevdb" \
 RUST_LOG=info \
 GEYSER_ENDPOINT="https://grpc.ny.shyft.to" \
-X_TOKEN="efff2d23-97ae-4c5f-8b8b-9a6265001189" \
+X_TOKEN="<SHYFT_X_TOKEN>" \
 KAFKA_BROKER="localhost:29092" \
 cargo run -p hotpath_arb_engine
 ```
@@ -111,10 +111,10 @@ tail -f /Users/michaelinman/Repos/MEVana/logs/hotpath_arb_engine.log
 
 ### Environment Variables (Tested & Working)
 ```bash
-DATABASE_URL="postgresql://mev:mevpassword@localhost:5433/mevdb"
+DATABASE_URL="postgresql://mev:<POSTGRES_PASSWORD>@localhost:5433/mevdb"
 RUST_LOG=info  # or debug for more detail
 GEYSER_ENDPOINT="https://grpc.ny.shyft.to"
-X_TOKEN="efff2d23-97ae-4c5f-8b8b-9a6265001189"
+X_TOKEN="<SHYFT_X_TOKEN>"
 ORDERBOOK_HISTORY_ENABLED=true
 PAPER_TRADING=false  # or true for safety
 ```
@@ -141,15 +141,15 @@ pkill -f hotpath_arb_engine  # Kill any existing instances
 ```bash
 # Terminal 1: monitoring-service
 cd /Users/michaelinman/Repos/MEVana
-DATABASE_URL="postgresql://mev:mevpassword@localhost:5433/mevdb" \
+DATABASE_URL="postgresql://mev:<POSTGRES_PASSWORD>@localhost:5433/mevdb" \
 RUST_LOG=info \
 cargo run -p monitoring-service
 
 # Terminal 2: clean hotpath  
-DATABASE_URL="postgresql://mev:mevpassword@localhost:5433/mevdb" \
+DATABASE_URL="postgresql://mev:<POSTGRES_PASSWORD>@localhost:5433/mevdb" \
 RUST_LOG=info \
 GEYSER_ENDPOINT="https://grpc.ny.shyft.to" \
-X_TOKEN="efff2d23-97ae-4c5f-8b8b-9a6265001189" \
+X_TOKEN="<SHYFT_X_TOKEN>" \
 KAFKA_BROKER="localhost:29092" \
 cargo run -p hotpath_arb_engine
 ```
@@ -245,10 +245,10 @@ Then restart the hotpath process to pick up new config.
 ### ✅ **WORKING COMMAND:**
 ```bash
 cd /Users/michaelinman/Repos/MEVana
-DATABASE_URL="postgresql://mev:mevpassword@localhost:5433/mevdb" \
+DATABASE_URL="postgresql://mev:<POSTGRES_PASSWORD>@localhost:5433/mevdb" \
 RUST_LOG=debug \
 GEYSER_ENDPOINT="https://grpc.ny.shyft.to" \
-X_TOKEN="efff2d23-97ae-4c5f-8b8b-9a6265001189" \
+X_TOKEN="<SHYFT_X_TOKEN>" \
 ORDERBOOK_HISTORY_ENABLED=true \
 PAPER_TRADING=false \
 cargo run -p hotpath_arb_engine

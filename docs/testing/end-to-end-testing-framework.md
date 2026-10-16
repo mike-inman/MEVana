@@ -94,7 +94,7 @@ Last updated: 2025-09-15
 
 ### **Observability Infrastructure** ✅ **ALREADY CONFIGURED**
 - **Prometheus**: Running on port 9090 with MEVana services configured
-- **Grafana**: Running on port 3000 with admin/admin123 credentials
+- **Grafana**: Running on port 3000 with admin/<ADMIN_PASSWORD> credentials
 - **Custom Metrics**: Service-specific performance and business metrics
 - **Alert Rules**: Performance degradation and error condition alerts
 - **AI Learning Integration**: Metrics feeding into AI agent learning systems
@@ -220,12 +220,12 @@ grafana_api = "0.1"  # ✅ **READY TO USE**
 export TEST_MODE=true
 export TEST_REDIS_URL=redis://localhost:6379/1
 export TEST_KAFKA_BROKERS=localhost:9092
-export TEST_SHYFT_API_KEY=fWrVh_mDygK358FC
+export TEST_SHYFT_API_KEY=<SHYFT_API_KEY>
 
 # Observability configuration ✅ **ALREADY CONFIGURED**
 export PROMETHEUS_URL=http://localhost:9090  # ✅ **READY**
 export GRAFANA_URL=http://localhost:3000     # ✅ **READY**
-export GRAFANA_API_KEY=admin123              # ✅ **READY**
+export GRAFANA_API_KEY=<ADMIN_PASSWORD>              # ✅ **READY**
 ```
 
 ### **Prometheus Metrics for Testing** ✅ **READY TO USE**

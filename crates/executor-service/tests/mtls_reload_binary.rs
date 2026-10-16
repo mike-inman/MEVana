@@ -150,7 +150,7 @@ async fn binary_mtls_reload_via_sighup() {
         .env(
             "DATABASE_URL",
             std::env::var("DATABASE_URL")
-                .unwrap_or_else(|_| "postgresql://mev:mevpassword@localhost:5433/mevdb".into()),
+                .unwrap_or_else(|_| "postgresql://mev:<POSTGRES_PASSWORD>@localhost:5433/mevdb".into()),
         )
         .env("TOKEN_REGISTRY_PORT", port.to_string())
         .env("ADMIN_MTLS_ENABLE", "1")
@@ -240,7 +240,7 @@ async fn binary_mtls_unauthorized_subject_rejected() {
         .env(
             "DATABASE_URL",
             std::env::var("DATABASE_URL")
-                .unwrap_or_else(|_| "postgresql://mev:mevpassword@localhost:5433/mevdb".into()),
+                .unwrap_or_else(|_| "postgresql://mev:<POSTGRES_PASSWORD>@localhost:5433/mevdb".into()),
         )
         .env("TOKEN_REGISTRY_PORT", port.to_string())
         .env("ADMIN_MTLS_ENABLE", "1")

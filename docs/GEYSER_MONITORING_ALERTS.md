@@ -283,7 +283,7 @@ Create automatic recovery mechanisms:
 # File: scripts/geyser_recovery.sh
 
 GEYSER_ENDPOINT="https://grpc.ny.shyft.to"
-X_TOKEN="efff2d23-97ae-4c5f-8b8b-9a6265001189"
+X_TOKEN="<SHYFT_X_TOKEN>"
 
 recover_geyser_stream() {
     local stream_id=$1
@@ -296,7 +296,7 @@ recover_geyser_stream() {
     # Restart with exponential backoff
     MULTI_ENDPOINT_MODE=true \
     PAPER_TRADING=true \
-    DATABASE_URL="postgresql://mev:mevpassword@localhost:5433/mevdb" \
+    DATABASE_URL="postgresql://mev:<POSTGRES_PASSWORD>@localhost:5433/mevdb" \
     GEYSER_ENDPOINT="$GEYSER_ENDPOINT" \
     X_TOKEN="$X_TOKEN" \
     METRICS_PORT=8088 \

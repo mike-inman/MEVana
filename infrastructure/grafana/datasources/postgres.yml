@@ -9,7 +9,7 @@ datasources:
     database: mevdb
     user: mev
     secureJsonData:
-      password: mevpassword
+      password: <POSTGRES_PASSWORD>
     jsonData:
       sslmode: disable
       postgresVersion: 1500

@@ -16,7 +16,7 @@ struct Args {
     to: String,
     #[arg(
         long,
-        default_value = "postgresql://mev:mevpassword@localhost:5433/mevdb"
+        default_value = "postgresql://mev:<POSTGRES_PASSWORD>@localhost:5433/mevdb"
     )]
     database_url: String,
     #[arg(long)]

@@ -7373,7 +7373,7 @@ services:
       - REDIS_HOSTS=local:redis:6379
       # Basic authentication for security
       - HTTP_USER=admin
-      - HTTP_PASSWORD=admin123
+      - HTTP_PASSWORD=<ADMIN_PASSWORD>
     ports:
       # Web interface accessible at http://localhost:8083
       # Note: Redis-Commander uses internal port 8081, mapped to host 8083
@@ -7432,14 +7432,14 @@ services:
       - KAFKA_BROKER=kafka:9092
       - TOPIC=dex-transactions
       - ENDPOINT=https://grpc.ny.shyft.to
-      - X_TOKEN=${X_TOKEN:-efff2d23-97ae-4c5f-8b8b-9a6265001189}
+      - X_TOKEN=${X_TOKEN:-<SHYFT_X_TOKEN>}
       - HEALTH_PORT=8084
       - BIND_ADDRESS=0.0.0.0
       - DEX_FILTERING=ON
       # Include all Jupiter entry programs: v4, v6, limit v1, limit v2
       - PROGRAM_IDS=JUP4Fb2cqiRUcaTHdrPC8h2gNsA2ETXiPDD33WcGuJB,JUP6LkbZbjS1jKKwapdHNy74zcZ3tLUZoi5QNyVTaV4,jupoNjAxXgZ4rjzxzPMP4oxduvQsQtZzyknqvzYNrNu,j1o2qRpjcyUwEvwtcfhEQefh773ZgjxcVRry7LDqg5X
       # PostgreSQL connection for raw transaction logging
-      - DATABASE_URL=postgresql://mev:mevpassword@postgres:5432/mevdb
+      - DATABASE_URL=postgresql://mev:<POSTGRES_PASSWORD>@postgres:5432/mevdb
     ports:
       - "8084:8084"
     networks:
@@ -7481,7 +7481,7 @@ services:
       - KAFKA_BROKER=kafka:9092
       - TOPIC=dex-transactions
       - ENDPOINT=https://grpc.ny.shyft.to
-      - X_TOKEN=${TEST_X_TOKEN:-efff2d23-97ae-4c5f-8b8b-9a6265001189}
+      - X_TOKEN=${TEST_X_TOKEN:-<SHYFT_X_TOKEN>}
       - HEALTH_PORT=8084
       - BIND_ADDRESS=0.0.0.0
       - DEX_FILTERING=OFF
@@ -7527,7 +7527,7 @@ services:
       - KAFKA_BROKER=kafka:9092
       - TOPIC=dex-transactions
       - ENDPOINT=https://grpc.ny.shyft.to
-      - X_TOKEN=${PROD_X_TOKEN:-efff2d23-97ae-4c5f-8b8b-9a6265001189}
+      - X_TOKEN=${PROD_X_TOKEN:-<SHYFT_X_TOKEN>}
       - HEALTH_PORT=8084
       - BIND_ADDRESS=0.0.0.0
       - DEX_FILTERING=ON
@@ -8315,7 +8315,7 @@ services:
       - "3000:3000"
     environment:
       # Basic Grafana admin password
-      - GF_SECURITY_ADMIN_PASSWORD=admin123
+      - GF_SECURITY_ADMIN_PASSWORD=<ADMIN_PASSWORD>
       # Disable user sign-up for security
       - GF_USERS_ALLOW_SIGN_UP=false
     volumes:
@@ -8373,7 +8373,7 @@ services:
       # PostgreSQL user for application data
       - POSTGRES_USER=${POSTGRES_USER:-mev}
       # PostgreSQL password for application data
-      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-mevpassword}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-<POSTGRES_PASSWORD>}
       # PostgreSQL database name for application data
       - POSTGRES_DB=${POSTGRES_DB:-mevdb}
       # Initialize database with UTF-8 encoding and C locale
@@ -10013,7 +10013,7 @@ services:
       - REDIS_HOSTS=local:redis:6379
       # Basic authentication for security
       - HTTP_USER=admin
-      - HTTP_PASSWORD=admin123
+      - HTTP_PASSWORD=<ADMIN_PASSWORD>
     ports:
       # Web interface accessible at http://localhost:8083
       # Note: Redis-Commander uses internal port 8081, mapped to host 8083
@@ -10072,14 +10072,14 @@ services:
       - KAFKA_BROKER=kafka:9092
       - TOPIC=dex-transactions
       - ENDPOINT=https://grpc.ny.shyft.to
-      - X_TOKEN=${X_TOKEN:-efff2d23-97ae-4c5f-8b8b-9a6265001189}
+      - X_TOKEN=${X_TOKEN:-<SHYFT_X_TOKEN>}
       - HEALTH_PORT=8084
       - BIND_ADDRESS=0.0.0.0
       - DEX_FILTERING=ON
       # Include all Jupiter entry programs: v4, v6, limit v1, limit v2
       - PROGRAM_IDS=JUP4Fb2cqiRUcaTHdrPC8h2gNsA2ETXiPDD33WcGuJB,JUP6LkbZbjS1jKKwapdHNy74zcZ3tLUZoi5QNyVTaV4,jupoNjAxXgZ4rjzxzPMP4oxduvQsQtZzyknqvzYNrNu,j1o2qRpjcyUwEvwtcfhEQefh773ZgjxcVRry7LDqg5X
       # PostgreSQL connection for raw transaction logging
-      - DATABASE_URL=postgresql://mev:mevpassword@postgres:5432/mevdb
+      - DATABASE_URL=postgresql://mev:<POSTGRES_PASSWORD>@postgres:5432/mevdb
     ports:
       - "8084:8084"
     networks:
@@ -10121,7 +10121,7 @@ services:
       - KAFKA_BROKER=kafka:9092
       - TOPIC=dex-transactions
       - ENDPOINT=https://grpc.ny.shyft.to
-      - X_TOKEN=${TEST_X_TOKEN:-efff2d23-97ae-4c5f-8b8b-9a6265001189}
+      - X_TOKEN=${TEST_X_TOKEN:-<SHYFT_X_TOKEN>}
       - HEALTH_PORT=8084
       - BIND_ADDRESS=0.0.0.0
       - DEX_FILTERING=OFF
@@ -10167,7 +10167,7 @@ services:
       - KAFKA_BROKER=kafka:9092
       - TOPIC=dex-transactions
       - ENDPOINT=https://grpc.ny.shyft.to
-      - X_TOKEN=${PROD_X_TOKEN:-efff2d23-97ae-4c5f-8b8b-9a6265001189}
+      - X_TOKEN=${PROD_X_TOKEN:-<SHYFT_X_TOKEN>}
       - HEALTH_PORT=8084
       - BIND_ADDRESS=0.0.0.0
       - DEX_FILTERING=ON
@@ -10995,7 +10995,7 @@ services:
       - "3000:3000"
     environment:
       # Basic Grafana admin password
-      - GF_SECURITY_ADMIN_PASSWORD=admin123
+      - GF_SECURITY_ADMIN_PASSWORD=<ADMIN_PASSWORD>
       # Disable user sign-up for security
       - GF_USERS_ALLOW_SIGN_UP=false
     volumes:
@@ -11053,7 +11053,7 @@ services:
       # PostgreSQL user for application data
       - POSTGRES_USER=${POSTGRES_USER:-mev}
       # PostgreSQL password for application data
-      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-mevpassword}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-<POSTGRES_PASSWORD>}
       # PostgreSQL database name for application data
       - POSTGRES_DB=${POSTGRES_DB:-mevdb}
       # Initialize database with UTF-8 encoding and C locale
@@ -12340,7 +12340,7 @@ services:
       - REDIS_HOSTS=local:redis:6379
       # Basic authentication for security
       - HTTP_USER=admin
-      - HTTP_PASSWORD=admin123
+      - HTTP_PASSWORD=<ADMIN_PASSWORD>
     ports:
       # Web interface accessible at http://localhost:8083
       # Note: Redis-Commander uses internal port 8081, mapped to host 8083
@@ -12399,14 +12399,14 @@ services:
       - KAFKA_BROKER=kafka:9092
       - TOPIC=dex-transactions
       - ENDPOINT=https://grpc.ny.shyft.to
-      - X_TOKEN=${X_TOKEN:-efff2d23-97ae-4c5f-8b8b-9a6265001189}
+      - X_TOKEN=${X_TOKEN:-<SHYFT_X_TOKEN>}
       - HEALTH_PORT=8084
       - BIND_ADDRESS=0.0.0.0
       - DEX_FILTERING=ON
       # Include all Jupiter entry programs: v4, v6, limit v1, limit v2
       - PROGRAM_IDS=JUP4Fb2cqiRUcaTHdrPC8h2gNsA2ETXiPDD33WcGuJB,JUP6LkbZbjS1jKKwapdHNy74zcZ3tLUZoi5QNyVTaV4,jupoNjAxXgZ4rjzxzPMP4oxduvQsQtZzyknqvzYNrNu,j1o2qRpjcyUwEvwtcfhEQefh773ZgjxcVRry7LDqg5X
       # PostgreSQL connection for raw transaction logging
-      - DATABASE_URL=postgresql://mev:mevpassword@postgres:5432/mevdb
+      - DATABASE_URL=postgresql://mev:<POSTGRES_PASSWORD>@postgres:5432/mevdb
     ports:
       - "8084:8084"
     networks:
@@ -12448,7 +12448,7 @@ services:
       - KAFKA_BROKER=kafka:9092
       - TOPIC=dex-transactions
       - ENDPOINT=https://grpc.ny.shyft.to
-      - X_TOKEN=${TEST_X_TOKEN:-efff2d23-97ae-4c5f-8b8b-9a6265001189}
+      - X_TOKEN=${TEST_X_TOKEN:-<SHYFT_X_TOKEN>}
       - HEALTH_PORT=8084
       - BIND_ADDRESS=0.0.0.0
       - DEX_FILTERING=OFF
@@ -12494,7 +12494,7 @@ services:
       - KAFKA_BROKER=kafka:9092
       - TOPIC=dex-transactions
       - ENDPOINT=https://grpc.ny.shyft.to
-      - X_TOKEN=${PROD_X_TOKEN:-efff2d23-97ae-4c5f-8b8b-9a6265001189}
+      - X_TOKEN=${PROD_X_TOKEN:-<SHYFT_X_TOKEN>}
       - HEALTH_PORT=8084
       - BIND_ADDRESS=0.0.0.0
       - DEX_FILTERING=ON
@@ -13354,7 +13354,7 @@ services:
       - "3000:3000"
     environment:
       # Basic Grafana admin password
-      - GF_SECURITY_ADMIN_PASSWORD=admin123
+      - GF_SECURITY_ADMIN_PASSWORD=<ADMIN_PASSWORD>
       # Disable user sign-up for security
       - GF_USERS_ALLOW_SIGN_UP=false
     volumes:
@@ -13412,7 +13412,7 @@ services:
       # PostgreSQL user for application data
       - POSTGRES_USER=${POSTGRES_USER:-mev}
       # PostgreSQL password for application data
-      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-mevpassword}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-<POSTGRES_PASSWORD>}
       # PostgreSQL database name for application data
       - POSTGRES_DB=${POSTGRES_DB:-mevdb}
       # Initialize database with UTF-8 encoding and C locale
@@ -16018,7 +16018,7 @@ services:
       - REDIS_HOSTS=local:redis:6379
       # Basic authentication for security
       - HTTP_USER=admin
-      - HTTP_PASSWORD=admin123
+      - HTTP_PASSWORD=<ADMIN_PASSWORD>
     ports:
       # Web interface accessible at http://localhost:8083
       # Note: Redis-Commander uses internal port 8081, mapped to host 8083
@@ -16077,14 +16077,14 @@ services:
       - KAFKA_BROKER=kafka:9092
       - TOPIC=dex-transactions
       - ENDPOINT=https://grpc.ny.shyft.to
-      - X_TOKEN=${X_TOKEN:-efff2d23-97ae-4c5f-8b8b-9a6265001189}
+      - X_TOKEN=${X_TOKEN:-<SHYFT_X_TOKEN>}
       - HEALTH_PORT=8084
       - BIND_ADDRESS=0.0.0.0
       - DEX_FILTERING=ON
       # Include all Jupiter entry programs: v4, v6, limit v1, limit v2
       - PROGRAM_IDS=JUP4Fb2cqiRUcaTHdrPC8h2gNsA2ETXiPDD33WcGuJB,JUP6LkbZbjS1jKKwapdHNy74zcZ3tLUZoi5QNyVTaV4,jupoNjAxXgZ4rjzxzPMP4oxduvQsQtZzyknqvzYNrNu,j1o2qRpjcyUwEvwtcfhEQefh773ZgjxcVRry7LDqg5X
       # PostgreSQL connection for raw transaction logging
-      - DATABASE_URL=postgresql://mev:mevpassword@postgres:5432/mevdb
+      - DATABASE_URL=postgresql://mev:<POSTGRES_PASSWORD>@postgres:5432/mevdb
     ports:
       - "8084:8084"
     networks:
@@ -16126,7 +16126,7 @@ services:
       - KAFKA_BROKER=kafka:9092
       - TOPIC=dex-transactions
       - ENDPOINT=https://grpc.ny.shyft.to
-      - X_TOKEN=${TEST_X_TOKEN:-efff2d23-97ae-4c5f-8b8b-9a6265001189}
+      - X_TOKEN=${TEST_X_TOKEN:-<SHYFT_X_TOKEN>}
       - HEALTH_PORT=8084
       - BIND_ADDRESS=0.0.0.0
       - DEX_FILTERING=OFF
@@ -16172,7 +16172,7 @@ services:
       - KAFKA_BROKER=kafka:9092
       - TOPIC=dex-transactions
       - ENDPOINT=https://grpc.ny.shyft.to
-      - X_TOKEN=${PROD_X_TOKEN:-efff2d23-97ae-4c5f-8b8b-9a6265001189}
+      - X_TOKEN=${PROD_X_TOKEN:-<SHYFT_X_TOKEN>}
       - HEALTH_PORT=8084
       - BIND_ADDRESS=0.0.0.0
       - DEX_FILTERING=ON
@@ -17035,7 +17035,7 @@ services:
       - "3000:3000"
     environment:
       # Basic Grafana admin password
-      - GF_SECURITY_ADMIN_PASSWORD=admin123
+      - GF_SECURITY_ADMIN_PASSWORD=<ADMIN_PASSWORD>
       # Disable user sign-up for security
       - GF_USERS_ALLOW_SIGN_UP=false
     volumes:
@@ -17093,7 +17093,7 @@ services:
       # PostgreSQL user for application data
       - POSTGRES_USER=${POSTGRES_USER:-mev}
       # PostgreSQL password for application data
-      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-mevpassword}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-<POSTGRES_PASSWORD>}
       # PostgreSQL database name for application data
       - POSTGRES_DB=${POSTGRES_DB:-mevdb}
       # Initialize database with UTF-8 encoding and C locale
@@ -17991,7 +17991,7 @@ services:
       - REDIS_HOSTS=local:redis:6379
       # Basic authentication for security
       - HTTP_USER=admin
-      - HTTP_PASSWORD=admin123
+      - HTTP_PASSWORD=<ADMIN_PASSWORD>
     ports:
       # Web interface accessible at http://localhost:8083
       # Note: Redis-Commander uses internal port 8081, mapped to host 8083
@@ -18050,14 +18050,14 @@ services:
       - KAFKA_BROKER=kafka:9092
       - TOPIC=dex-transactions
       - ENDPOINT=https://grpc.ny.shyft.to
-      - X_TOKEN=${X_TOKEN:-efff2d23-97ae-4c5f-8b8b-9a6265001189}
+      - X_TOKEN=${X_TOKEN:-<SHYFT_X_TOKEN>}
       - HEALTH_PORT=8084
       - BIND_ADDRESS=0.0.0.0
       - DEX_FILTERING=ON
       # Include all Jupiter entry programs: v4, v6, limit v1, limit v2
       - PROGRAM_IDS=JUP4Fb2cqiRUcaTHdrPC8h2gNsA2ETXiPDD33WcGuJB,JUP6LkbZbjS1jKKwapdHNy74zcZ3tLUZoi5QNyVTaV4,jupoNjAxXgZ4rjzxzPMP4oxduvQsQtZzyknqvzYNrNu,j1o2qRpjcyUwEvwtcfhEQefh773ZgjxcVRry7LDqg5X
       # PostgreSQL connection for raw transaction logging
-      - DATABASE_URL=postgresql://mev:mevpassword@postgres:5432/mevdb
+      - DATABASE_URL=postgresql://mev:<POSTGRES_PASSWORD>@postgres:5432/mevdb
     ports:
       - "8084:8084"
     networks:
@@ -18099,7 +18099,7 @@ services:
       - KAFKA_BROKER=kafka:9092
       - TOPIC=dex-transactions
       - ENDPOINT=https://grpc.ny.shyft.to
-      - X_TOKEN=${TEST_X_TOKEN:-efff2d23-97ae-4c5f-8b8b-9a6265001189}
+      - X_TOKEN=${TEST_X_TOKEN:-<SHYFT_X_TOKEN>}
       - HEALTH_PORT=8084
       - BIND_ADDRESS=0.0.0.0
       - DEX_FILTERING=OFF
@@ -18145,7 +18145,7 @@ services:
       - KAFKA_BROKER=kafka:9092
       - TOPIC=dex-transactions
       - ENDPOINT=https://grpc.ny.shyft.to
-      - X_TOKEN=${PROD_X_TOKEN:-efff2d23-97ae-4c5f-8b8b-9a6265001189}
+      - X_TOKEN=${PROD_X_TOKEN:-<SHYFT_X_TOKEN>}
       - HEALTH_PORT=8084
       - BIND_ADDRESS=0.0.0.0
       - DEX_FILTERING=ON
@@ -19034,7 +19034,7 @@ services:
       - "3000:3000"
     environment:
       # Basic Grafana admin password
-      - GF_SECURITY_ADMIN_PASSWORD=admin123
+      - GF_SECURITY_ADMIN_PASSWORD=<ADMIN_PASSWORD>
       # Disable user sign-up for security
       - GF_USERS_ALLOW_SIGN_UP=false
     volumes:
@@ -19092,7 +19092,7 @@ services:
       # PostgreSQL user for application data
       - POSTGRES_USER=${POSTGRES_USER:-mev}
       # PostgreSQL password for application data
-      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-mevpassword}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-<POSTGRES_PASSWORD>}
       # PostgreSQL database name for application data
       - POSTGRES_DB=${POSTGRES_DB:-mevdb}
       # Initialize database with UTF-8 encoding and C locale
@@ -20387,7 +20387,7 @@ services:
       - REDIS_HOSTS=local:redis:6379
       # Basic authentication for security
       - HTTP_USER=admin
-      - HTTP_PASSWORD=admin123
+      - HTTP_PASSWORD=<ADMIN_PASSWORD>
     ports:
       # Web interface accessible at http://localhost:8083
       # Note: Redis-Commander uses internal port 8081, mapped to host 8083
@@ -20446,14 +20446,14 @@ services:
       - KAFKA_BROKER=kafka:9092
       - TOPIC=dex-transactions
       - ENDPOINT=https://grpc.ny.shyft.to
-      - X_TOKEN=${X_TOKEN:-efff2d23-97ae-4c5f-8b8b-9a6265001189}
+      - X_TOKEN=${X_TOKEN:-<SHYFT_X_TOKEN>}
       - HEALTH_PORT=8084
       - BIND_ADDRESS=0.0.0.0
       - DEX_FILTERING=ON
       # Include all Jupiter entry programs: v4, v6, limit v1, limit v2
       - PROGRAM_IDS=JUP4Fb2cqiRUcaTHdrPC8h2gNsA2ETXiPDD33WcGuJB,JUP6LkbZbjS1jKKwapdHNy74zcZ3tLUZoi5QNyVTaV4,jupoNjAxXgZ4rjzxzPMP4oxduvQsQtZzyknqvzYNrNu,j1o2qRpjcyUwEvwtcfhEQefh773ZgjxcVRry7LDqg5X
       # PostgreSQL connection for raw transaction logging
-      - DATABASE_URL=postgresql://mev:mevpassword@postgres:5432/mevdb
+      - DATABASE_URL=postgresql://mev:<POSTGRES_PASSWORD>@postgres:5432/mevdb
     ports:
       - "8084:8084"
     networks:
@@ -20495,7 +20495,7 @@ services:
       - KAFKA_BROKER=kafka:9092
       - TOPIC=dex-transactions
       - ENDPOINT=https://grpc.ny.shyft.to
-      - X_TOKEN=${TEST_X_TOKEN:-efff2d23-97ae-4c5f-8b8b-9a6265001189}
+      - X_TOKEN=${TEST_X_TOKEN:-<SHYFT_X_TOKEN>}
       - HEALTH_PORT=8084
       - BIND_ADDRESS=0.0.0.0
       - DEX_FILTERING=OFF
@@ -20541,7 +20541,7 @@ services:
       - KAFKA_BROKER=kafka:9092
       - TOPIC=dex-transactions
       - ENDPOINT=https://grpc.ny.shyft.to
-      - X_TOKEN=${PROD_X_TOKEN:-efff2d23-97ae-4c5f-8b8b-9a6265001189}
+      - X_TOKEN=${PROD_X_TOKEN:-<SHYFT_X_TOKEN>}
       - HEALTH_PORT=8084
       - BIND_ADDRESS=0.0.0.0
       - DEX_FILTERING=ON
@@ -21431,7 +21431,7 @@ services:
       - "3000:3000"
     environment:
       # Basic Grafana admin password
-      - GF_SECURITY_ADMIN_PASSWORD=admin123
+      - GF_SECURITY_ADMIN_PASSWORD=<ADMIN_PASSWORD>
       # Disable user sign-up for security
       - GF_USERS_ALLOW_SIGN_UP=false
     volumes:
@@ -21489,7 +21489,7 @@ services:
       # PostgreSQL user for application data
       - POSTGRES_USER=${POSTGRES_USER:-mev}
       # PostgreSQL password for application data
-      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-mevpassword}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-<POSTGRES_PASSWORD>}
       # PostgreSQL database name for application data
       - POSTGRES_DB=${POSTGRES_DB:-mevdb}
       # Initialize database with UTF-8 encoding and C locale
@@ -22517,7 +22517,7 @@ services:
       - REDIS_HOSTS=local:redis:6379
       # Basic authentication for security
       - HTTP_USER=admin
-      - HTTP_PASSWORD=admin123
+      - HTTP_PASSWORD=<ADMIN_PASSWORD>
     ports:
       # Web interface accessible at http://localhost:8083
       # Note: Redis-Commander uses internal port 8081, mapped to host 8083
@@ -22576,14 +22576,14 @@ services:
       - KAFKA_BROKER=kafka:9092
       - TOPIC=dex-transactions
       - ENDPOINT=https://grpc.ny.shyft.to
-      - X_TOKEN=${X_TOKEN:-efff2d23-97ae-4c5f-8b8b-9a6265001189}
+      - X_TOKEN=${X_TOKEN:-<SHYFT_X_TOKEN>}
       - HEALTH_PORT=8084
       - BIND_ADDRESS=0.0.0.0
       - DEX_FILTERING=ON
       # Include all Jupiter entry programs: v4, v6, limit v1, limit v2
       - PROGRAM_IDS=JUP4Fb2cqiRUcaTHdrPC8h2gNsA2ETXiPDD33WcGuJB,JUP6LkbZbjS1jKKwapdHNy74zcZ3tLUZoi5QNyVTaV4,jupoNjAxXgZ4rjzxzPMP4oxduvQsQtZzyknqvzYNrNu,j1o2qRpjcyUwEvwtcfhEQefh773ZgjxcVRry7LDqg5X
       # PostgreSQL connection for raw transaction logging
-      - DATABASE_URL=postgresql://mev:mevpassword@postgres:5432/mevdb
+      - DATABASE_URL=postgresql://mev:<POSTGRES_PASSWORD>@postgres:5432/mevdb
     ports:
       - "8084:8084"
     networks:
@@ -22625,7 +22625,7 @@ services:
       - KAFKA_BROKER=kafka:9092
       - TOPIC=dex-transactions
       - ENDPOINT=https://grpc.ny.shyft.to
-      - X_TOKEN=${TEST_X_TOKEN:-efff2d23-97ae-4c5f-8b8b-9a6265001189}
+      - X_TOKEN=${TEST_X_TOKEN:-<SHYFT_X_TOKEN>}
       - HEALTH_PORT=8084
       - BIND_ADDRESS=0.0.0.0
       - DEX_FILTERING=OFF
@@ -22671,7 +22671,7 @@ services:
       - KAFKA_BROKER=kafka:9092
       - TOPIC=dex-transactions
       - ENDPOINT=https://grpc.ny.shyft.to
-      - X_TOKEN=${PROD_X_TOKEN:-efff2d23-97ae-4c5f-8b8b-9a6265001189}
+      - X_TOKEN=${PROD_X_TOKEN:-<SHYFT_X_TOKEN>}
       - HEALTH_PORT=8084
       - BIND_ADDRESS=0.0.0.0
       - DEX_FILTERING=ON
@@ -23561,7 +23561,7 @@ services:
       - "3000:3000"
     environment:
       # Basic Grafana admin password
-      - GF_SECURITY_ADMIN_PASSWORD=admin123
+      - GF_SECURITY_ADMIN_PASSWORD=<ADMIN_PASSWORD>
       # Disable user sign-up for security
       - GF_USERS_ALLOW_SIGN_UP=false
     volumes:
@@ -23619,7 +23619,7 @@ services:
       # PostgreSQL user for application data
       - POSTGRES_USER=${POSTGRES_USER:-mev}
       # PostgreSQL password for application data
-      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-mevpassword}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-<POSTGRES_PASSWORD>}
       # PostgreSQL database name for application data
       - POSTGRES_DB=${POSTGRES_DB:-mevdb}
       # Initialize database with UTF-8 encoding and C locale
@@ -27293,7 +27293,7 @@ services:
       - REDIS_HOSTS=local:redis:6379
       # Basic authentication for security
       - HTTP_USER=admin
-      - HTTP_PASSWORD=admin123
+      - HTTP_PASSWORD=<ADMIN_PASSWORD>
     ports:
       # Web interface accessible at http://localhost:8083
       # Note: Redis-Commander uses internal port 8081, mapped to host 8083
@@ -27352,14 +27352,14 @@ services:
       - KAFKA_BROKER=kafka:9092
       - TOPIC=dex-transactions
       - ENDPOINT=https://grpc.ny.shyft.to
-      - X_TOKEN=${X_TOKEN:-efff2d23-97ae-4c5f-8b8b-9a6265001189}
+      - X_TOKEN=${X_TOKEN:-<SHYFT_X_TOKEN>}
       - HEALTH_PORT=8084
       - BIND_ADDRESS=0.0.0.0
       - DEX_FILTERING=ON
       # Include all Jupiter entry programs: v4, v6, limit v1, limit v2
       - PROGRAM_IDS=JUP4Fb2cqiRUcaTHdrPC8h2gNsA2ETXiPDD33WcGuJB,JUP6LkbZbjS1jKKwapdHNy74zcZ3tLUZoi5QNyVTaV4,jupoNjAxXgZ4rjzxzPMP4oxduvQsQtZzyknqvzYNrNu,j1o2qRpjcyUwEvwtcfhEQefh773ZgjxcVRry7LDqg5X
       # PostgreSQL connection for raw transaction logging
-      - DATABASE_URL=postgresql://mev:mevpassword@postgres:5432/mevdb
+      - DATABASE_URL=postgresql://mev:<POSTGRES_PASSWORD>@postgres:5432/mevdb
     ports:
       - "8084:8084"
     networks:
@@ -27401,7 +27401,7 @@ services:
       - KAFKA_BROKER=kafka:9092
       - TOPIC=dex-transactions
       - ENDPOINT=https://grpc.ny.shyft.to
-      - X_TOKEN=${TEST_X_TOKEN:-efff2d23-97ae-4c5f-8b8b-9a6265001189}
+      - X_TOKEN=${TEST_X_TOKEN:-<SHYFT_X_TOKEN>}
       - HEALTH_PORT=8084
       - BIND_ADDRESS=0.0.0.0
       - DEX_FILTERING=OFF
@@ -27447,7 +27447,7 @@ services:
       - KAFKA_BROKER=kafka:9092
       - TOPIC=dex-transactions
       - ENDPOINT=https://grpc.ny.shyft.to
-      - X_TOKEN=${PROD_X_TOKEN:-efff2d23-97ae-4c5f-8b8b-9a6265001189}
+      - X_TOKEN=${PROD_X_TOKEN:-<SHYFT_X_TOKEN>}
       - HEALTH_PORT=8084
       - BIND_ADDRESS=0.0.0.0
       - DEX_FILTERING=ON
@@ -28366,7 +28366,7 @@ services:
       - "3000:3000"
     environment:
       # Basic Grafana admin password
-      - GF_SECURITY_ADMIN_PASSWORD=admin123
+      - GF_SECURITY_ADMIN_PASSWORD=<ADMIN_PASSWORD>
       # Disable user sign-up for security
       - GF_USERS_ALLOW_SIGN_UP=false
     volumes:
@@ -28424,7 +28424,7 @@ services:
       # PostgreSQL user for application data
       - POSTGRES_USER=${POSTGRES_USER:-mev}
       # PostgreSQL password for application data
-      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-mevpassword}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-<POSTGRES_PASSWORD>}
       # PostgreSQL database name for application data
       - POSTGRES_DB=${POSTGRES_DB:-mevdb}
       # Initialize database with UTF-8 encoding and C locale
@@ -34576,7 +34576,7 @@ services:
       - REDIS_HOSTS=local:redis:6379
       # Basic authentication for security
       - HTTP_USER=admin
-      - HTTP_PASSWORD=admin123
+      - HTTP_PASSWORD=<ADMIN_PASSWORD>
     ports:
       # Web interface accessible at http://localhost:8083
       # Note: Redis-Commander uses internal port 8081, mapped to host 8083
@@ -34635,14 +34635,14 @@ services:
       - KAFKA_BROKER=kafka:9092
       - TOPIC=dex-transactions
       - ENDPOINT=https://grpc.ny.shyft.to
-      - X_TOKEN=${X_TOKEN:-efff2d23-97ae-4c5f-8b8b-9a6265001189}
+      - X_TOKEN=${X_TOKEN:-<SHYFT_X_TOKEN>}
       - HEALTH_PORT=8084
       - BIND_ADDRESS=0.0.0.0
       - DEX_FILTERING=ON
       # Include all Jupiter entry programs: v4, v6, limit v1, limit v2
       - PROGRAM_IDS=JUP4Fb2cqiRUcaTHdrPC8h2gNsA2ETXiPDD33WcGuJB,JUP6LkbZbjS1jKKwapdHNy74zcZ3tLUZoi5QNyVTaV4,jupoNjAxXgZ4rjzxzPMP4oxduvQsQtZzyknqvzYNrNu,j1o2qRpjcyUwEvwtcfhEQefh773ZgjxcVRry7LDqg5X
       # PostgreSQL connection for raw transaction logging
-      - DATABASE_URL=postgresql://mev:mevpassword@postgres:5432/mevdb
+      - DATABASE_URL=postgresql://mev:<POSTGRES_PASSWORD>@postgres:5432/mevdb
     ports:
       - "8084:8084"
     networks:
@@ -34684,7 +34684,7 @@ services:
       - KAFKA_BROKER=kafka:9092
       - TOPIC=dex-transactions
       - ENDPOINT=https://grpc.ny.shyft.to
-      - X_TOKEN=${TEST_X_TOKEN:-efff2d23-97ae-4c5f-8b8b-9a6265001189}
+      - X_TOKEN=${TEST_X_TOKEN:-<SHYFT_X_TOKEN>}
       - HEALTH_PORT=8084
       - BIND_ADDRESS=0.0.0.0
       - DEX_FILTERING=OFF
@@ -34730,7 +34730,7 @@ services:
       - KAFKA_BROKER=kafka:9092
       - TOPIC=dex-transactions
       - ENDPOINT=https://grpc.ny.shyft.to
-      - X_TOKEN=${PROD_X_TOKEN:-efff2d23-97ae-4c5f-8b8b-9a6265001189}
+      - X_TOKEN=${PROD_X_TOKEN:-<SHYFT_X_TOKEN>}
       - HEALTH_PORT=8084
       - BIND_ADDRESS=0.0.0.0
       - DEX_FILTERING=ON
@@ -35676,7 +35676,7 @@ services:
       - "3000:3000"
     environment:
       # Basic Grafana admin password
-      - GF_SECURITY_ADMIN_PASSWORD=admin123
+      - GF_SECURITY_ADMIN_PASSWORD=<ADMIN_PASSWORD>
       # Disable user sign-up for security
       - GF_USERS_ALLOW_SIGN_UP=false
     volumes:
@@ -35734,7 +35734,7 @@ services:
       # PostgreSQL user for application data
       - POSTGRES_USER=${POSTGRES_USER:-mev}
       # PostgreSQL password for application data
-      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-mevpassword}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-<POSTGRES_PASSWORD>}
       # PostgreSQL database name for application data
       - POSTGRES_DB=${POSTGRES_DB:-mevdb}
       # Initialize database with UTF-8 encoding and C locale
@@ -37258,7 +37258,7 @@ services:
       - REDIS_HOSTS=local:redis:6379
       # Basic authentication for security
       - HTTP_USER=admin
-      - HTTP_PASSWORD=admin123
+      - HTTP_PASSWORD=<ADMIN_PASSWORD>
     ports:
       # Web interface accessible at http://localhost:8083
       # Note: Redis-Commander uses internal port 8081, mapped to host 8083
@@ -37317,14 +37317,14 @@ services:
       - KAFKA_BROKER=kafka:9092
       - TOPIC=dex-transactions
       - ENDPOINT=https://grpc.ny.shyft.to
-      - X_TOKEN=${X_TOKEN:-efff2d23-97ae-4c5f-8b8b-9a6265001189}
+      - X_TOKEN=${X_TOKEN:-<SHYFT_X_TOKEN>}
       - HEALTH_PORT=8084
       - BIND_ADDRESS=0.0.0.0
       - DEX_FILTERING=ON
       # Include all Jupiter entry programs: v4, v6, limit v1, limit v2
       - PROGRAM_IDS=JUP4Fb2cqiRUcaTHdrPC8h2gNsA2ETXiPDD33WcGuJB,JUP6LkbZbjS1jKKwapdHNy74zcZ3tLUZoi5QNyVTaV4,jupoNjAxXgZ4rjzxzPMP4oxduvQsQtZzyknqvzYNrNu,j1o2qRpjcyUwEvwtcfhEQefh773ZgjxcVRry7LDqg5X
       # PostgreSQL connection for raw transaction logging
-      - DATABASE_URL=postgresql://mev:mevpassword@postgres:5432/mevdb
+      - DATABASE_URL=postgresql://mev:<POSTGRES_PASSWORD>@postgres:5432/mevdb
     ports:
       - "8084:8084"
     networks:
@@ -37366,7 +37366,7 @@ services:
       - KAFKA_BROKER=kafka:9092
       - TOPIC=dex-transactions
       - ENDPOINT=https://grpc.ny.shyft.to
-      - X_TOKEN=${TEST_X_TOKEN:-efff2d23-97ae-4c5f-8b8b-9a6265001189}
+      - X_TOKEN=${TEST_X_TOKEN:-<SHYFT_X_TOKEN>}
       - HEALTH_PORT=8084
       - BIND_ADDRESS=0.0.0.0
       - DEX_FILTERING=OFF
@@ -37412,7 +37412,7 @@ services:
       - KAFKA_BROKER=kafka:9092
       - TOPIC=dex-transactions
       - ENDPOINT=https://grpc.ny.shyft.to
-      - X_TOKEN=${PROD_X_TOKEN:-efff2d23-97ae-4c5f-8b8b-9a6265001189}
+      - X_TOKEN=${PROD_X_TOKEN:-<SHYFT_X_TOKEN>}
       - HEALTH_PORT=8084
       - BIND_ADDRESS=0.0.0.0
       - DEX_FILTERING=ON
@@ -38358,7 +38358,7 @@ services:
       - "3000:3000"
     environment:
       # Basic Grafana admin password
-      - GF_SECURITY_ADMIN_PASSWORD=admin123
+      - GF_SECURITY_ADMIN_PASSWORD=<ADMIN_PASSWORD>
       # Disable user sign-up for security
       - GF_USERS_ALLOW_SIGN_UP=false
     volumes:
@@ -38416,7 +38416,7 @@ services:
       # PostgreSQL user for application data
       - POSTGRES_USER=${POSTGRES_USER:-mev}
       # PostgreSQL password for application data
-      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-mevpassword}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-<POSTGRES_PASSWORD>}
       # PostgreSQL database name for application data
       - POSTGRES_DB=${POSTGRES_DB:-mevdb}
       # Initialize database with UTF-8 encoding and C locale
@@ -40490,7 +40490,7 @@ services:
       - REDIS_HOSTS=local:redis:6379
       # Basic authentication for security
       - HTTP_USER=admin
-      - HTTP_PASSWORD=admin123
+      - HTTP_PASSWORD=<ADMIN_PASSWORD>
     ports:
       # Web interface accessible at http://localhost:8083
       # Note: Redis-Commander uses internal port 8081, mapped to host 8083
@@ -40549,14 +40549,14 @@ services:
       - KAFKA_BROKER=kafka:9092
       - TOPIC=dex-transactions
       - ENDPOINT=https://grpc.ny.shyft.to
-      - X_TOKEN=${X_TOKEN:-efff2d23-97ae-4c5f-8b8b-9a6265001189}
+      - X_TOKEN=${X_TOKEN:-<SHYFT_X_TOKEN>}
       - HEALTH_PORT=8084
       - BIND_ADDRESS=0.0.0.0
       - DEX_FILTERING=ON
       # Include all Jupiter entry programs: v4, v6, limit v1, limit v2
       - PROGRAM_IDS=JUP4Fb2cqiRUcaTHdrPC8h2gNsA2ETXiPDD33WcGuJB,JUP6LkbZbjS1jKKwapdHNy74zcZ3tLUZoi5QNyVTaV4,jupoNjAxXgZ4rjzxzPMP4oxduvQsQtZzyknqvzYNrNu,j1o2qRpjcyUwEvwtcfhEQefh773ZgjxcVRry7LDqg5X
       # PostgreSQL connection for raw transaction logging
-      - DATABASE_URL=postgresql://mev:mevpassword@postgres:5432/mevdb
+      - DATABASE_URL=postgresql://mev:<POSTGRES_PASSWORD>@postgres:5432/mevdb
     ports:
       - "8084:8084"
     networks:
@@ -40598,7 +40598,7 @@ services:
       - KAFKA_BROKER=kafka:9092
       - TOPIC=dex-transactions
       - ENDPOINT=https://grpc.ny.shyft.to
-      - X_TOKEN=${TEST_X_TOKEN:-efff2d23-97ae-4c5f-8b8b-9a6265001189}
+      - X_TOKEN=${TEST_X_TOKEN:-<SHYFT_X_TOKEN>}
       - HEALTH_PORT=8084
       - BIND_ADDRESS=0.0.0.0
       - DEX_FILTERING=OFF
@@ -40644,7 +40644,7 @@ services:
       - KAFKA_BROKER=kafka:9092
       - TOPIC=dex-transactions
       - ENDPOINT=https://grpc.ny.shyft.to
-      - X_TOKEN=${PROD_X_TOKEN:-efff2d23-97ae-4c5f-8b8b-9a6265001189}
+      - X_TOKEN=${PROD_X_TOKEN:-<SHYFT_X_TOKEN>}
       - HEALTH_PORT=8084
       - BIND_ADDRESS=0.0.0.0
       - DEX_FILTERING=ON
@@ -41594,7 +41594,7 @@ services:
       - "3000:3000"
     environment:
       # Basic Grafana admin password
-      - GF_SECURITY_ADMIN_PASSWORD=admin123
+      - GF_SECURITY_ADMIN_PASSWORD=<ADMIN_PASSWORD>
       # Disable user sign-up for security
       - GF_USERS_ALLOW_SIGN_UP=false
     volumes:
@@ -41652,7 +41652,7 @@ services:
       # PostgreSQL user for application data
       - POSTGRES_USER=${POSTGRES_USER:-mev}
       # PostgreSQL password for application data
-      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-mevpassword}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-<POSTGRES_PASSWORD>}
       # PostgreSQL database name for application data
       - POSTGRES_DB=${POSTGRES_DB:-mevdb}
       # Initialize database with UTF-8 encoding and C locale
@@ -42374,7 +42374,7 @@ services:
       - REDIS_HOSTS=local:redis:6379
       # Basic authentication for security
       - HTTP_USER=admin
-      - HTTP_PASSWORD=admin123
+      - HTTP_PASSWORD=<ADMIN_PASSWORD>
     ports:
       # Web interface accessible at http://localhost:8083
       # Note: Redis-Commander uses internal port 8081, mapped to host 8083
@@ -42433,14 +42433,14 @@ services:
       - KAFKA_BROKER=kafka:9092
       - TOPIC=dex-transactions
       - ENDPOINT=https://grpc.ny.shyft.to
-      - X_TOKEN=${X_TOKEN:-efff2d23-97ae-4c5f-8b8b-9a6265001189}
+      - X_TOKEN=${X_TOKEN:-<SHYFT_X_TOKEN>}
       - HEALTH_PORT=8084
       - BIND_ADDRESS=0.0.0.0
       - DEX_FILTERING=ON
       # Include all Jupiter entry programs: v4, v6, limit v1, limit v2
       - PROGRAM_IDS=JUP4Fb2cqiRUcaTHdrPC8h2gNsA2ETXiPDD33WcGuJB,JUP6LkbZbjS1jKKwapdHNy74zcZ3tLUZoi5QNyVTaV4,jupoNjAxXgZ4rjzxzPMP4oxduvQsQtZzyknqvzYNrNu,j1o2qRpjcyUwEvwtcfhEQefh773ZgjxcVRry7LDqg5X
       # PostgreSQL connection for raw transaction logging
-      - DATABASE_URL=postgresql://mev:mevpassword@postgres:5432/mevdb
+      - DATABASE_URL=postgresql://mev:<POSTGRES_PASSWORD>@postgres:5432/mevdb
     ports:
       - "8084:8084"
     networks:
@@ -42482,7 +42482,7 @@ services:
       - KAFKA_BROKER=kafka:9092
       - TOPIC=dex-transactions
       - ENDPOINT=https://grpc.ny.shyft.to
-      - X_TOKEN=${TEST_X_TOKEN:-efff2d23-97ae-4c5f-8b8b-9a6265001189}
+      - X_TOKEN=${TEST_X_TOKEN:-<SHYFT_X_TOKEN>}
       - HEALTH_PORT=8084
       - BIND_ADDRESS=0.0.0.0
       - DEX_FILTERING=OFF
@@ -42528,7 +42528,7 @@ services:
       - KAFKA_BROKER=kafka:9092
       - TOPIC=dex-transactions
       - ENDPOINT=https://grpc.ny.shyft.to
-      - X_TOKEN=${PROD_X_TOKEN:-efff2d23-97ae-4c5f-8b8b-9a6265001189}
+      - X_TOKEN=${PROD_X_TOKEN:-<SHYFT_X_TOKEN>}
       - HEALTH_PORT=8084
       - BIND_ADDRESS=0.0.0.0
       - DEX_FILTERING=ON
@@ -43507,7 +43507,7 @@ services:
       - "3000:3000"
     environment:
       # Basic Grafana admin password
-      - GF_SECURITY_ADMIN_PASSWORD=admin123
+      - GF_SECURITY_ADMIN_PASSWORD=<ADMIN_PASSWORD>
       # Disable user sign-up for security
       - GF_USERS_ALLOW_SIGN_UP=false
     volumes:
@@ -43565,7 +43565,7 @@ services:
       # PostgreSQL user for application data
       - POSTGRES_USER=${POSTGRES_USER:-mev}
       # PostgreSQL password for application data
-      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-mevpassword}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-<POSTGRES_PASSWORD>}
       # PostgreSQL database name for application data
       - POSTGRES_DB=${POSTGRES_DB:-mevdb}
       # Initialize database with UTF-8 encoding and C locale
@@ -44289,7 +44289,7 @@ services:
       - REDIS_HOSTS=local:redis:6379
       # Basic authentication for security
       - HTTP_USER=admin
-      - HTTP_PASSWORD=admin123
+      - HTTP_PASSWORD=<ADMIN_PASSWORD>
     ports:
       # Web interface accessible at http://localhost:8083
       # Note: Redis-Commander uses internal port 8081, mapped to host 8083
@@ -44348,14 +44348,14 @@ services:
       - KAFKA_BROKER=kafka:9092
       - TOPIC=dex-transactions
       - ENDPOINT=https://grpc.ny.shyft.to
-      - X_TOKEN=${X_TOKEN:-efff2d23-97ae-4c5f-8b8b-9a6265001189}
+      - X_TOKEN=${X_TOKEN:-<SHYFT_X_TOKEN>}
       - HEALTH_PORT=8084
       - BIND_ADDRESS=0.0.0.0
       - DEX_FILTERING=ON
       # Include all Jupiter entry programs: v4, v6, limit v1, limit v2
       - PROGRAM_IDS=JUP4Fb2cqiRUcaTHdrPC8h2gNsA2ETXiPDD33WcGuJB,JUP6LkbZbjS1jKKwapdHNy74zcZ3tLUZoi5QNyVTaV4,jupoNjAxXgZ4rjzxzPMP4oxduvQsQtZzyknqvzYNrNu,j1o2qRpjcyUwEvwtcfhEQefh773ZgjxcVRry7LDqg5X
       # PostgreSQL connection for raw transaction logging
-      - DATABASE_URL=postgresql://mev:mevpassword@postgres:5432/mevdb
+      - DATABASE_URL=postgresql://mev:<POSTGRES_PASSWORD>@postgres:5432/mevdb
     ports:
       - "8084:8084"
     networks:
@@ -44397,7 +44397,7 @@ services:
       - KAFKA_BROKER=kafka:9092
       - TOPIC=dex-transactions
       - ENDPOINT=https://grpc.ny.shyft.to
-      - X_TOKEN=${TEST_X_TOKEN:-efff2d23-97ae-4c5f-8b8b-9a6265001189}
+      - X_TOKEN=${TEST_X_TOKEN:-<SHYFT_X_TOKEN>}
       - HEALTH_PORT=8084
       - BIND_ADDRESS=0.0.0.0
       - DEX_FILTERING=OFF
@@ -44443,7 +44443,7 @@ services:
       - KAFKA_BROKER=kafka:9092
       - TOPIC=dex-transactions
       - ENDPOINT=https://grpc.ny.shyft.to
-      - X_TOKEN=${PROD_X_TOKEN:-efff2d23-97ae-4c5f-8b8b-9a6265001189}
+      - X_TOKEN=${PROD_X_TOKEN:-<SHYFT_X_TOKEN>}
       - HEALTH_PORT=8084
       - BIND_ADDRESS=0.0.0.0
       - DEX_FILTERING=ON
@@ -45425,7 +45425,7 @@ services:
       - "3000:3000"
     environment:
       # Basic Grafana admin password
-      - GF_SECURITY_ADMIN_PASSWORD=admin123
+      - GF_SECURITY_ADMIN_PASSWORD=<ADMIN_PASSWORD>
       # Disable user sign-up for security
       - GF_USERS_ALLOW_SIGN_UP=false
     volumes:
@@ -45483,7 +45483,7 @@ services:
       # PostgreSQL user for application data
       - POSTGRES_USER=${POSTGRES_USER:-mev}
       # PostgreSQL password for application data
-      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-mevpassword}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-<POSTGRES_PASSWORD>}
       # PostgreSQL database name for application data
       - POSTGRES_DB=${POSTGRES_DB:-mevdb}
       # Initialize database with UTF-8 encoding and C locale

@@ -116,7 +116,7 @@ Quick Links
 - **Monitoring API**: http://localhost:8091/health
 - **Kafka Management**: http://localhost:8080
 - **Database UI**: http://localhost:8082
-- **Grafana Dashboards**: http://localhost:3000 (admin/admin123)
+- **Grafana Dashboards**: http://localhost:3000 (admin/<ADMIN_PASSWORD>)
 
 ### **Critical Command References**
 ```bash

@@ -26,16 +26,16 @@
 
 ```bash
 # Build workspace
-DATABASE_URL="postgresql://mev:mevpassword@localhost:5433/mevdb" cargo build --workspace
+DATABASE_URL="postgresql://mev:<POSTGRES_PASSWORD>@localhost:5433/mevdb" cargo build --workspace
 
 # Start infrastructure
 cd infrastructure && docker-compose up -d
 
 # Run HotPath engine (paper trading)
 PAPER_TRADING=true \
-DATABASE_URL="postgresql://mev:mevpassword@localhost:5433/mevdb" \
+DATABASE_URL="postgresql://mev:<POSTGRES_PASSWORD>@localhost:5433/mevdb" \
 GEYSER_ENDPOINT="https://grpc.ny.shyft.to" \
-X_TOKEN="efff2d23-97ae-4c5f-8b8b-9a6265001189" \
+X_TOKEN="<SHYFT_X_TOKEN>" \
 METRICS_PORT=8088 \
 RUST_LOG=info \
 cargo run -p hotpath_arb_engine --bin hotpath_arb_engine
@@ -96,9 +96,9 @@ Geyser Stream → HotPath → FastEngine → SignalQueue → Executor → Jito
 **Run**:
 ```bash
 PAPER_TRADING=true \
-DATABASE_URL="postgresql://mev:mevpassword@localhost:5433/mevdb" \
+DATABASE_URL="postgresql://mev:<POSTGRES_PASSWORD>@localhost:5433/mevdb" \
 GEYSER_ENDPOINT="https://grpc.ny.shyft.to" \
-X_TOKEN="efff2d23-97ae-4c5f-8b8b-9a6265001189" \
+X_TOKEN="<SHYFT_X_TOKEN>" \
 METRICS_PORT=8088 \
 RUST_LOG=info \
 cargo run -p hotpath_arb_engine
@@ -147,7 +147,7 @@ docker-compose up -d
 
 ### Database
 
-**Connection String**: `postgresql://mev:mevpassword@localhost:5433/mevdb`
+**Connection String**: `postgresql://mev:<POSTGRES_PASSWORD>@localhost:5433/mevdb`
 
 **Migrations**: Auto-applied on service startup via SQLx
 
@@ -158,9 +158,9 @@ docker-compose up -d
 **Core Variables** (HotPath):
 ```bash
 PAPER_TRADING=true                         # Enable paper trading (safe testing)
-DATABASE_URL=postgresql://mev:mevpassword@localhost:5433/mevdb
+DATABASE_URL=postgresql://mev:<POSTGRES_PASSWORD>@localhost:5433/mevdb
 GEYSER_ENDPOINT=https://grpc.ny.shyft.to  # Shyft RPC endpoint
-X_TOKEN=efff2d23-97ae-4c5f-8b8b-9a6265001189  # Auth token
+X_TOKEN=<SHYFT_X_TOKEN>  # Auth token
 METRICS_PORT=8088                          # Prometheus scrape endpoint
 MULTI_ENDPOINT_MODE=true                   # Enable failover endpoints
 RUST_LOG=info                              # Log level
@@ -207,9 +207,9 @@ cd infrastructure && docker-compose up -d
 
 # Run HotPath with paper trading
 PAPER_TRADING=true \
-DATABASE_URL="postgresql://mev:mevpassword@localhost:5433/mevdb" \
+DATABASE_URL="postgresql://mev:<POSTGRES_PASSWORD>@localhost:5433/mevdb" \
 GEYSER_ENDPOINT="https://grpc.ny.shyft.to" \
-X_TOKEN="efff2d23-97ae-4c5f-8b8b-9a6265001189" \
+X_TOKEN="<SHYFT_X_TOKEN>" \
 METRICS_PORT=8088 \
 RUST_LOG=info \
 cargo run -p hotpath_arb_engine
@@ -230,7 +230,7 @@ docker ps
 docker logs postgres
 
 # Test database connection
-PGPASSWORD=mevpassword psql -h localhost -p 5433 -U mev -d mevdb -c "SELECT 1"
+PGPASSWORD=<POSTGRES_PASSWORD> psql -h localhost -p 5433 -U mev -d mevdb -c "SELECT 1"
 ```
 
 **No data flow**:
@@ -246,7 +246,7 @@ RUST_LOG=debug cargo run -p hotpath_arb_engine
 ```bash
 # Clean and rebuild
 cargo clean
-DATABASE_URL="postgresql://mev:mevpassword@localhost:5433/mevdb" cargo build --workspace
+DATABASE_URL="postgresql://mev:<POSTGRES_PASSWORD>@localhost:5433/mevdb" cargo build --workspace
 
 # Check dependencies
 cargo tree -p hotpath_arb_engine
@@ -279,7 +279,7 @@ cargo tree -p hotpath_arb_engine
 ### Debug Checklist
 
 1. ✅ Docker services running: `docker ps`
-2. ✅ Database accessible: `PGPASSWORD=mevpassword psql -h localhost -p 5433 -U mev -d mevdb -c "SELECT 1"`
+2. ✅ Database accessible: `PGPASSWORD=<POSTGRES_PASSWORD> psql -h localhost -p 5433 -U mev -d mevdb -c "SELECT 1"`
 3. ✅ No port conflicts: `lsof -i :8088`
 4. ✅ Environment variables set: `echo $DATABASE_URL`
 5. ✅ Code compiles: `cargo check --workspace`
@@ -452,7 +452,7 @@ MEVana/
 ```bash
 # Build
 cargo build --workspace
-DATABASE_URL="postgresql://mev:mevpassword@localhost:5433/mevdb" cargo build --release -p hotpath_arb_engine
+DATABASE_URL="postgresql://mev:<POSTGRES_PASSWORD>@localhost:5433/mevdb" cargo build --release -p hotpath_arb_engine
 
 # Test
 cargo test --workspace

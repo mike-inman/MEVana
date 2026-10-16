@@ -37,10 +37,10 @@ STREAM1_ENDPOINT="https://grpc.ny.shyft.to"
 STREAM1_REGION="NY"
 
 # Shyft Token
-SHYFT_TOKEN="efff2d23-97ae-4c5f-8b8b-9a6265001189"
+SHYFT_TOKEN="<SHYFT_X_TOKEN>"
 
 # Database URL
-DATABASE_URL="postgresql://mev:mevpassword@localhost:5433/mevdb"
+DATABASE_URL="postgresql://mev:<POSTGRES_PASSWORD>@localhost:5433/mevdb"
 
 echo -e "${BLUE}🚀 MEVana Single-Stream Optimized Deployment${NC}"
 echo -e "${BLUE}================================================================${NC}"

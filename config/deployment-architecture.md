@@ -49,9 +49,9 @@ MEVana HotPath Engine (8088) → Monitoring Service (8090) → API Service (8080
 
 ### Core Application
 ```bash
-DATABASE_URL=postgresql://mev:mevpassword@localhost:5433/mevdb
+DATABASE_URL=postgresql://mev:<POSTGRES_PASSWORD>@localhost:5433/mevdb
 GEYSER_ENDPOINT=https://grpc.ny.shyft.to
-X_TOKEN=efff2d23-97ae-4c5f-8b8b-9a6265001189
+X_TOKEN=<SHYFT_X_TOKEN>
 KAFKA_BROKER=localhost:29092
 METRICS_PORT=8088
 RUST_LOG=info
@@ -61,7 +61,7 @@ PAPER_TRADING=true
 ### Infrastructure
 ```bash
 POSTGRES_USER=mev
-POSTGRES_PASSWORD=mevpassword
+POSTGRES_PASSWORD=<POSTGRES_PASSWORD>
 POSTGRES_DB=mevdb
 REDIS_URL=redis://localhost:6379
 PROMETHEUS_CONFIG=prometheus.prod.yml

@@ -37,7 +37,7 @@ echo "🚀 Starting monitoring service on port 8090..."
 nohup bash -c '
 export MONITORING_PORT=8090
 export REDIS_URL="redis://localhost:6379"
-export DATABASE_URL="postgresql://mev:mevpassword@localhost:5433/mevdb"
+export DATABASE_URL="postgresql://mev:<POSTGRES_PASSWORD>@localhost:5433/mevdb"
 export RUST_LOG=info
 ./target/release/monitoring-service
 ' > logs/monitoring-service.log 2>&1 &

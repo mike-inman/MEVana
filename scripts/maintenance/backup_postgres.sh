@@ -7,7 +7,7 @@ set -euo pipefail
 # Adjust env vars if you changed credentials.
 
 DB_USER="${POSTGRES_USER:-mev}"
-DB_PASSWORD="${POSTGRES_PASSWORD:-mevpassword}"
+DB_PASSWORD="${POSTGRES_PASSWORD:-<POSTGRES_PASSWORD>}"
 DB_NAME="${POSTGRES_DB:-mevdb}"
 CONTAINER_NAME="postgres"
 TIMESTAMP="$(date +%Y%m%d-%H%M%S)"

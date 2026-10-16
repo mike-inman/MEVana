@@ -19,7 +19,7 @@ if [ ! -f .env ]; then
 KAFKA_BROKER=localhost:9092
 
 # Database Configuration  
-DATABASE_URL=postgresql://mev:mevpassword@localhost:5432/mevdb
+DATABASE_URL=postgresql://mev:<POSTGRES_PASSWORD>@localhost:5432/mevdb
 
 # Arbitrage Engine Configuration
 SWAP_TOPICS=raydium-swaps,orca-swaps

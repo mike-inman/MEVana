@@ -128,7 +128,7 @@ echo "⚙️  Setting up environment configuration..."
 cat > .env << 'EOF'
 # Shyft.to Configuration
 ENDPOINT=https://grpc.ny.shyft.to
-X_TOKEN=efff2d23-97ae-4c5f-8b8b-9a6265001189
+X_TOKEN=<SHYFT_X_TOKEN>
 
 # Kafka Configuration  
 KAFKA_BROKER=localhost:29092
@@ -217,7 +217,7 @@ services:
     ports:
       - "3000:3000"
     environment:
-      GF_SECURITY_ADMIN_PASSWORD: admin123
+      GF_SECURITY_ADMIN_PASSWORD: <ADMIN_PASSWORD>
     volumes:
       - ../grafana_data:/var/lib/grafana
     restart: unless-stopped
@@ -270,7 +270,7 @@ echo "   - Kafka: localhost:29092"
 echo "   - Redis: localhost:6379"  
 echo "   - PostgreSQL: localhost:5432"
 echo "   - Prometheus: http://$(curl -s ipinfo.io/ip):9090"
-echo "   - Grafana: http://$(curl -s ipinfo.io/ip):3000 (admin/admin123)"
+echo "   - Grafana: http://$(curl -s ipinfo.io/ip):3000 (admin/<ADMIN_PASSWORD>)"
 echo ""
 echo "📋 Next Steps:"
 echo "1. Run latency test: ./scripts/testing/latency_test.sh"

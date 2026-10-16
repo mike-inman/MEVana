@@ -179,7 +179,7 @@ if [ $FAILED -eq 0 ]; then
     echo "🎉 Deployment successful in ${total_time}s!"
     echo ""
     echo "📊 Access your dashboards:"
-    echo "   Grafana: http://localhost:3000 (admin/admin123)"
+    echo "   Grafana: http://localhost:3000 (admin/<ADMIN_PASSWORD>)"
     echo "   Prometheus: http://localhost:9090"
     echo "   Metrics: http://localhost:8088/metrics"
     echo ""

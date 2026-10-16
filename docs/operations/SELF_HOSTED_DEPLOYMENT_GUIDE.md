@@ -98,7 +98,7 @@ cd /opt/MEVana
 sudo docker compose -p mevana -f infrastructure/docker-compose.server.yml up -d \
   zookeeper kafka redis postgres adminer prometheus grafana kafka-ui
 ```
-- Grafana: `http://<server-ip>:3000` (admin/admin123)
+- Grafana: `http://<server-ip>:3000` (admin/<ADMIN_PASSWORD>)
 - Prometheus: `http://<server-ip>:9090`
 - Kafka broker exposed internally as `kafka:9092` (compose network `mevana_net`)
 - Database forwarded on `localhost:5433` via compose
@@ -147,7 +147,7 @@ CI/CD Workflow (`self-hosted-deploy.yml`)
   - Grafana/Prometheus/Kafka/Adminer health (HTTP)
   - Application metrics endpoints (`8088`, `8089`, `9901`, `9102`, `9904`, `8092`, `8095`)
   - Prometheus target coverage against `host.docker.internal:<port>`
-  - Grafana datasource connectivity (script logs in with admin/admin123) and warns if dashboards are missing
+  - Grafana datasource connectivity (script logs in with admin/<ADMIN_PASSWORD>) and warns if dashboards are missing
   - Systemd unit status for the bare-metal services, including the API gateway
 - Run manually on the host after changes:
   ```bash

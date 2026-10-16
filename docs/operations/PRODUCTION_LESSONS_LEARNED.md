@@ -94,7 +94,7 @@ docker start prometheus  # Picks up docker-compose port configuration
 ### **Working Configuration**
 ```bash
 # Verified Working Endpoints
-- Grafana: http://149.28.56.125:3000 ✅ (credentials: admin/admin123)
+- Grafana: http://149.28.56.125:3000 ✅ (credentials: admin/<ADMIN_PASSWORD>)
 - MEVana HotPath Engine: http://149.28.56.125:8088/metrics ✅
 - Prometheus: http://149.28.56.125:9090 ⚠️ (requires port mapping fix)
 ```

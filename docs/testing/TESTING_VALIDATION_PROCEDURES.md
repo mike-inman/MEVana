@@ -429,7 +429,7 @@ echo "🌐 Setting up testnet validation environment..."
 # 1. Configure for testnet
 export SOLANA_RPC_URL="https://api.testnet.solana.com"
 export GEYSER_ENDPOINT="wss://api.testnet.solana.com"
-export DATABASE_URL="postgresql://mev:mevpassword@localhost:5433/mevdb_testnet"
+export DATABASE_URL="postgresql://mev:<POSTGRES_PASSWORD>@localhost:5433/mevdb_testnet"
 
 # 2. Create testnet database
 createdb -h localhost -p 5433 -U mev mevdb_testnet

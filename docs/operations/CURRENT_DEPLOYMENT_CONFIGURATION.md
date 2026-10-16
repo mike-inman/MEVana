@@ -69,7 +69,7 @@ This document captures the exact configuration of the currently working MEVana d
 ### Environment Variables
 ```bash
 # Grafana
-GF_SECURITY_ADMIN_PASSWORD=admin123
+GF_SECURITY_ADMIN_PASSWORD=<ADMIN_PASSWORD>
 GF_USERS_ALLOW_SIGN_UP=false
 
 # Kafka
@@ -80,7 +80,7 @@ KAFKA_ADVERTISED_LISTENERS=PLAINTEXT://kafka:9092,PLAINTEXT_HOST://localhost:290
 # PostgreSQL
 POSTGRES_DB=mevdb
 POSTGRES_USER=mev
-POSTGRES_PASSWORD=mevpassword
+POSTGRES_PASSWORD=<POSTGRES_PASSWORD>
 ```
 
 ## Network Configuration
@@ -213,7 +213,7 @@ datasources:
 
 ### Grafana Environment
 ```bash
-GF_SECURITY_ADMIN_PASSWORD=admin123
+GF_SECURITY_ADMIN_PASSWORD=<ADMIN_PASSWORD>
 GF_USERS_ALLOW_SIGN_UP=false
 GF_PLUGINS_ALLOW_LOADING_UNSIGNED_PLUGINS=grafana-metricsdrilldown-app,grafana-lokiexplore-app,grafana-pyroscope-app,grafana-exploretraces-app
 GF_LOG_LEVEL=info

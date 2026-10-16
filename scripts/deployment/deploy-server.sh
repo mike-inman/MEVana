@@ -215,7 +215,7 @@ log "   • Starting Orca discovery stream..."
 nohup bash -c "
     source venue_config.env
     ENDPOINT=https://grpc.ny.shyft.to \
-    X_TOKEN=efff2d23-97ae-4c5f-8b8b-9a6265001189 \
+    X_TOKEN=<SHYFT_X_TOKEN> \
     KAFKA_BROKER=localhost:29092 \
     PROGRAM_IDS=whirLbMiicVdio4qvUfM5KAg6Ct8VwpYzGff3uctyCc \
     ./target/release/whirlpool-live-stream
@@ -281,8 +281,8 @@ log "📊 MEVANA DEPLOYMENT COMPLETE!"
 echo
 log "🏢 Infrastructure Services:"
 log "   • Kafka UI:      http://$(hostname -I | awk '{print $1}'):8080"
-log "   • Redis UI:      http://$(hostname -I | awk '{print $1}'):8083 (admin/admin123)"
-log "   • Grafana:       http://$(hostname -I | awk '{print $1}'):3000 (admin/admin123)"
+log "   • Redis UI:      http://$(hostname -I | awk '{print $1}'):8083 (admin/<ADMIN_PASSWORD>)"
+log "   • Grafana:       http://$(hostname -I | awk '{print $1}'):3000 (admin/<ADMIN_PASSWORD>)"
 log "   • Prometheus:    http://$(hostname -I | awk '{print $1}'):9090"
 
 log "⚡ Trading Services:"

@@ -53,7 +53,7 @@ curl -s http://localhost:8088/metrics | head
 curl -s http://localhost:${GRAFANA_HOST_PORT:-3001}/api/health
 ```
 
-Then log into Grafana (default credentials: `admin` / `admin123`) and verify dashboards:
+Then log into Grafana (default credentials: `admin` / `<ADMIN_PASSWORD>`) and verify dashboards:
 ```
 http://localhost:${GRAFANA_HOST_PORT:-3001}
 ```

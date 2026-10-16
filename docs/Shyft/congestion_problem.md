@@ -34,6 +34,6 @@ AI responses may include mistakes.
    https://grpc.va.shyft.to\
    https://grpc.va.shyft.to\
    \
-   x-token: efff2d23-97ae-4c5f-8b8b-9a6265001189\
+   x-token: <SHYFT_X_TOKEN>\
    \
     

@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-DB_URL=${DATABASE_URL:-"postgresql://mev:mevpassword@localhost:5433/mevdb"}
+DB_URL=${DATABASE_URL:-"postgresql://mev:<POSTGRES_PASSWORD>@localhost:5433/mevdb"}
 PROM_URL=${PROMETHEUS_URL:-"http://localhost:9090"}
 
 psql_cmd() {

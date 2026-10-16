@@ -23,4 +23,4 @@ echo "[INFO] Starting Prometheus and Grafana from $compose_file (Grafana host po
 docker compose -f "$compose_file" up -d prometheus grafana
 
 echo "[INFO] Prometheus UI: http://localhost:9091"
-echo "[INFO] Grafana UI:    http://localhost:${grafana_port} (admin / admin123)"
+echo "[INFO] Grafana UI:    http://localhost:${grafana_port} (admin / <ADMIN_PASSWORD>)"

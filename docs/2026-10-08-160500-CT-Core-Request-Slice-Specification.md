@@ -1,0 +1,19 @@
+# Request contract and test setup
+
+Date: 2026-10-08 16:05 CT. Purpose: complete task-specific Core context for a smaller coding handoff; preparation only, not implementation or product acceptance.
+
+Source: docs/2026-10-07-1547-CT-Experiment-Request-API-Specification.md; SHA256 5b20103663cd3a1550221787bbca0795f209d771c876ca94841bd720a28b72b1. The host verifies that unchanged source and this exact slice document. This document is the complete selected specification for its named task, with added public interface decisions. The full source is retained locally, rather than silently shortened in a model request. Existing larger profiles remain unchanged.
+
+Scope: local .NET 10 dependency-free Core and assigned tests only. No HTTP/JSON parsing, endpoints, database, idempotency storage, dataset download, research execution, trading, wallets, Rust, deployment, network calls, credentials or MCP changes. No real dataset ships. Test fixtures never establish real availability. Five fixed host checks (SDK, solution listing, restore, build, test), fresh nonzero passing TRX and independent review are required. Read all assigned inputs in a completed response before edits/checks. Preserve unrelated work. Outputs must stay within assigned source-token caps, favoring clear concise code and meaningful tests over verbose comments.
+
+Ownership: ExperimentRequest.cs, ExperimentRequestContractTests.cs and the existing test project file. Catalog, validation and canonicalization belong to later handoffs.
+
+Public API in MEVana.Research.Core: sealed immutable ExperimentRequest with a public constructor accepting, in order, string? datasetId, string? strategyVersion, DateTimeOffset? windowStartUtc, DateTimeOffset? windowEndUtc, IReadOnlyList<string?>? tokenPair, IReadOnlyList<string?>? poolIds, long? minTradeSizeQuoteAtoms, long? maxTradeSizeQuoteAtoms. Expose matching PascalCase read-only properties. Constructor parameter/property names are the stable interface consumed by later tasks.
+
+Preserve raw null, empty, malformed identifiers, duplicate/null list elements, negative/zero integers, reversed windows and unnormalized offsets for later structured validation. Do not throw for invalid request values, coerce invalid values to null, trim/case-fold, sort pools, reinterpret dataset IDs as token IDs, clamp values or validate catalog availability. All supplied collections must be defensively copied and exposed through a truly read-only snapshot; caller mutations and casts must not mutate the request. Preserve tokenPair base/quote order and original pool order. Exact nullable Int64 values are smallest quote-asset atoms; no floats or conversion.
+
+The original request rules are enforced by later validation: case-sensitive ASCII identifiers of 1–64 letters/digits/hyphen/underscore; exactly two distinct ordered token IDs; 2–16 distinct pool IDs; positive min <= max quote atoms; offset-aware UTC interval start < end with duration <=24h inside verified catalog coverage and supported strategy. This carrier must retain rejected values so those rules can report field errors. JSON malformed/missing/type/unknown-property and missing-timezone checks remain owned by future API parsing; DateTimeOffset values alone cannot distinguish a timezone-free original string.
+
+Test setup: net10.0, Nullable enable, ImplicitUsings enable, IsTestProject true, IsPackable false, Microsoft.NET.Test.Sdk 17.14.1, xunit 2.9.3, xunit.runner.visualstudio 3.1.4 PrivateAssets all, Using Xunit and relative ../../src/MEVana.Research.Core/MEVana.Research.Core.csproj only. No Core dependencies.
+
+Tests must establish retention of null/invalid/raw inputs, Int64 extremes and exact integers beyond double precision, list order, offset preservation, defensive copying and read-only behavior. Avoid tests that merely assert file existence or echo constructors. Report the exact signatures for successors. A passing request slice does not prove catalog/domain/HTTP validity.

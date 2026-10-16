@@ -340,7 +340,7 @@ async fn main() -> Result<()> {
     env_logger::init();
 
     let database_url = std::env::var("DATABASE_URL")
-        .unwrap_or_else(|_| "postgresql://mev:mevpassword@localhost:5433/mevdb".to_string());
+        .unwrap_or_else(|_| "postgresql://mev:<POSTGRES_PASSWORD>@localhost:5433/mevdb".to_string());
     let kafka_broker =
         std::env::var("KAFKA_BROKER").unwrap_or_else(|_| "localhost:29092".to_string());
 

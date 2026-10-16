@@ -99,7 +99,7 @@ log_info "Step 0: Verifying credentials and configuration..."
 # Check X_TOKEN for Geyser/Shyft access
 if [ -z "$X_TOKEN" ]; then
     log_warning "X_TOKEN not set. Setting from environment or using default..."
-    export X_TOKEN="efff2d23-97ae-4c5f-8b8b-9a6265001189"
+    export X_TOKEN="<SHYFT_X_TOKEN>"
     log_info "X_TOKEN set to: ${X_TOKEN:0:8}..."
 else
     log_success "X_TOKEN is configured: ${X_TOKEN:0:8}..."
@@ -159,7 +159,7 @@ if lsof -i :8091 > /dev/null 2>&1; then
     log_success "Monitoring service is already running on port 8091"
     send_status_to_webui "monitoring-service" "healthy" 8091 "Already running"
 else
-    MONITORING_PORT=8091 DATABASE_URL="postgresql://mev:mevpassword@localhost:5433/mevdb" \
+    MONITORING_PORT=8091 DATABASE_URL="postgresql://mev:<POSTGRES_PASSWORD>@localhost:5433/mevdb" \
         RUST_LOG=info cargo run -p monitoring-service --bin monitoring-service > logs/monitoring-service.log 2>&1 &
     sleep 5
     if check_health "monitoring-service" "http://localhost:8091/health" 8091; then
@@ -210,7 +210,7 @@ else
     log_warning "Wallet-vault is not running. Starting it..."
     send_status_to_webui "wallet-vault" "starting" 8090 "Starting wallet service..."
     # Start wallet-vault in background
-    WALLET_VAULT_AUTH_REQUIRED=false DATABASE_URL="postgresql://mev:mevpassword@localhost:5433/mevdb" \
+    WALLET_VAULT_AUTH_REQUIRED=false DATABASE_URL="postgresql://mev:<POSTGRES_PASSWORD>@localhost:5433/mevdb" \
         cargo run -p wallet-vault --bin wallet-vault > logs/wallet-vault.log 2>&1 &
     sleep 5
     if lsof -i :8090 | grep -q LISTEN; then
@@ -277,7 +277,7 @@ fi
 # Start executor-service
 log_info "Starting executor-service..."
 send_status_to_webui "executor-service" "starting" 9904 "Starting trade execution service..."
-RUST_LOG=info METRICS_PORT=9904 DATABASE_URL="postgresql://mev:mevpassword@localhost:5433/mevdb" \
+RUST_LOG=info METRICS_PORT=9904 DATABASE_URL="postgresql://mev:<POSTGRES_PASSWORD>@localhost:5433/mevdb" \
     ALLOW_EMPTY_SHYFT_API=1 TRADING_MODE="$TRADING_MODE" \
     cargo run -p executor-service --bin executor-service > logs/executor-service.log 2>&1 &
 sleep 5
@@ -310,7 +310,7 @@ log_info "Step 6: Starting HotPath Arbitrage Engine..."
 log_info "Starting hotpath_arb_engine with verified credentials..."
 send_status_to_webui "hotpath_arb_engine" "starting" 8088 "Starting zero-latency MEV engine..."
 RUST_LOG=info METRICS_PORT=8088 GEYSER_ENDPOINT="$GEYSER_ENDPOINT" X_TOKEN="$X_TOKEN" \
-    DATABASE_URL="postgresql://mev:mevpassword@localhost:5433/mevdb" \
+    DATABASE_URL="postgresql://mev:<POSTGRES_PASSWORD>@localhost:5433/mevdb" \
     TRADING_MODE="$TRADING_MODE" \
     cargo run -p hotpath_arb_engine --bin hotpath_arb_engine > logs/hotpath_arb_engine.log 2>&1 &
 sleep 10

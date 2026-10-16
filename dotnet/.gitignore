@@ -1,0 +1,36 @@
+# User-specific files
+.vs/
+*.user
+
+# Build results
+bin/
+obj/
+.local-data/
+
+# Visual Studio Code
+.vscode/
+
+# NuGet
+*.nupkg
+*.snupkg
+
+# Resharper
+*.DotSettings.user
+
+# Rider
+.idea/
+
+# OS generated files
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+
+# Dotnet local tools
+.tools
+
+# Dotnet build artifacts
+**/bin/
+**/obj/
+**/.local-data/

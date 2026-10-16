@@ -17,10 +17,10 @@ MEVana is a high-frequency arbitrage trading system targeting <10ms latency from
 - **Goal**: Maintain <10ms speed while improving data quality and reliability
 
 ### **Key Credentials & Endpoints**
-- **Shyft API Key**: `fWrVh_mDygK358FC` (CONFIDENTIAL)
+- **Shyft API Key**: `<SHYFT_API_KEY>` (CONFIDENTIAL)
 - **Network**: `mainnet-beta`
-- **RPC**: `https://rpc.shyft.to?api_key=fWrVh_mDygK358FC`
-- **GraphQL**: `https://programs.shyft.to/v0/graphql/?api_key=fWrVh_mDygK358FC&network=mainnet-beta`
+- **RPC**: `https://rpc.shyft.to?api_key=<SHYFT_API_KEY>`
+- **GraphQL**: `https://programs.shyft.to/v0/graphql/?api_key=<SHYFT_API_KEY>&network=mainnet-beta`
 
 ### **Immediate Next Steps**
 1. **Test Shyft APIs** using `scripts/test-shyft-apis.sh`

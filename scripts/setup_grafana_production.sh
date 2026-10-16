@@ -7,7 +7,7 @@ set -e
 
 GRAFANA_URL="http://149.28.56.125:3000"
 GRAFANA_USER="admin"
-GRAFANA_PASS="admin123"
+GRAFANA_PASS="${GRAFANA_PASS:?Set GRAFANA_PASS in the environment before running this script}"
 PROMETHEUS_URL="http://prometheus:9090"
 
 # Colors
@@ -167,7 +167,7 @@ show_access_info() {
     echo -e "${GREEN}📊 PRODUCTION DASHBOARD ACCESS:${NC}"
     echo -e "   URL: ${BLUE}http://149.28.56.125:3000${NC}"
     echo -e "   Username: ${YELLOW}admin${NC}"
-    echo -e "   Password: ${YELLOW}admin123${NC}"
+    echo -e "   Password: ${YELLOW}(provided through GRAFANA_PASS)${NC}"
     echo ""
     echo -e "${GREEN}🚀 LIVE TRADING METRICS:${NC}"
     echo -e "   • ${BLUE}🚨 Geyser Stream Status${NC} - CRITICAL: Must be green"

@@ -94,7 +94,7 @@ fi
 
 **Ensure PostgreSQL URL matches:**
 ```bash
-DATABASE_URL="postgresql://mev:mevpassword@localhost:5433/mevdb"
+DATABASE_URL="postgresql://mev:<POSTGRES_PASSWORD>@localhost:5433/mevdb"
 ```
 
 **Note:** Port 5433 (external) maps to 5432 (internal Docker port)

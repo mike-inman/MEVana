@@ -16,9 +16,9 @@ services:
       - METRICS_PORT=8088
       - KAFKA_BROKER=kafka:9092
       - REDIS_URL=redis://redis-service:6379/0
-      - DATABASE_URL=postgresql://mev:mevpassword@postgres-service:5432/mevdb
+      - DATABASE_URL=postgresql://mev:<POSTGRES_PASSWORD>@postgres-service:5432/mevdb
       - GEYSER_ENDPOINT=https://grpc.ny.shyft.to
-      - X_TOKEN=efff2d23-97ae-4c5f-8b8b-9a6265001189
+      - X_TOKEN=<SHYFT_X_TOKEN>
       - PAPER_TRADING=true
     volumes:
       - ./target/release/hotpath_arb_engine:/usr/local/bin/hotpath_arb_engine:ro
@@ -44,7 +44,7 @@ services:
       - RUST_LOG=info
       - METRICS_PORT=8085
       - KAFKA_BROKER=kafka:9092
-      - DATABASE_URL=postgresql://mev:mevpassword@postgres-service:5432/mevdb
+      - DATABASE_URL=postgresql://mev:<POSTGRES_PASSWORD>@postgres-service:5432/mevdb
     volumes:
       - ./target/release/normalizer-service:/usr/local/bin/normalizer-service:ro
     command: ["/usr/local/bin/normalizer-service"]

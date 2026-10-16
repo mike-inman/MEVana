@@ -45,10 +45,10 @@ STREAM3_ENDPOINT="https://grpc.eu1.shyft.to"
 STREAM3_REGION="EU1"
 
 # Shyft Token (from your .env)
-SHYFT_TOKEN="efff2d23-97ae-4c5f-8b8b-9a6265001189"
+SHYFT_TOKEN="<SHYFT_X_TOKEN>"
 
 # Database URL
-DATABASE_URL="postgresql://mev:mevpassword@localhost:5433/mevdb"
+DATABASE_URL="postgresql://mev:<POSTGRES_PASSWORD>@localhost:5433/mevdb"
 
 echo -e "${BLUE}🚀 MEVana Multi-Stream Ultra-Low Latency Deployment${NC}"
 echo -e "${BLUE}================================================================${NC}"

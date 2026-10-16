@@ -311,7 +311,7 @@ services:
       - REDIS_HOSTS=local:redis:6379
       # Basic authentication for security
       - HTTP_USER=admin
-      - HTTP_PASSWORD=admin123
+      - HTTP_PASSWORD=<ADMIN_PASSWORD>
     ports:
       # Web interface accessible at http://localhost:8083
       # Note: Redis-Commander uses internal port 8081, mapped to host 8083
@@ -425,7 +425,7 @@ services:
       - "3000:3000"
     environment:
       # Basic Grafana admin password
-      - GF_SECURITY_ADMIN_PASSWORD=admin123
+      - GF_SECURITY_ADMIN_PASSWORD=<ADMIN_PASSWORD>
       # Disable user sign-up for security
       - GF_USERS_ALLOW_SIGN_UP=false
       - GF_PLUGINS_ALLOW_LOADING_UNSIGNED_PLUGINS=grafana-metricsdrilldown-app,grafana-lokiexplore-app,grafana-pyroscope-app,grafana-exploretraces-app
@@ -485,7 +485,7 @@ services:
       # PostgreSQL user for application data
       - POSTGRES_USER=${POSTGRES_USER:-mev}
       # PostgreSQL password for application data
-      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-mevpassword}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-<POSTGRES_PASSWORD>}
       # PostgreSQL database name for application data
       - POSTGRES_DB=${POSTGRES_DB:-mevdb}
       # Initialize database with UTF-8 encoding and C locale
@@ -587,9 +587,9 @@ services:
     environment:
       # Geyser connection settings
       - GEYSER_ENDPOINT=https://grpc.ny.shyft.to
-      - X_TOKEN=efff2d23-97ae-4c5f-8b8b-9a6265001189
+      - X_TOKEN=<SHYFT_X_TOKEN>
       # Database configuration
-      - DATABASE_URL=postgresql://mev:mevpassword@postgres:5432/mevdb
+      - DATABASE_URL=postgresql://mev:<POSTGRES_PASSWORD>@postgres:5432/mevdb
       # Service configuration
       - METRICS_PORT=8088
       - RUST_LOG=info

@@ -184,7 +184,7 @@ ORDER BY avg_spread;
 
 Database connection for hotpath_arb_engine:
 ```bash
-export DATABASE_URL="postgresql://mev:mevpassword@localhost:5433/mevdb"
+export DATABASE_URL="postgresql://mev:<POSTGRES_PASSWORD>@localhost:5433/mevdb"
 export ORDERBOOK_HISTORY_ENABLED=true
 export ORDERBOOK_SNAPSHOT_INTERVAL_MS=1000
 ```

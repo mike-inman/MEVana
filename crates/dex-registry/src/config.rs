@@ -47,7 +47,7 @@ impl RegistryConfig {
         Ok(Self {
             // Database configuration
             database_url: env::var("DATABASE_URL").unwrap_or_else(|_| {
-                "postgresql://mev:mevpassword@localhost:5433/mevdb".to_string()
+                "postgresql://mev:<POSTGRES_PASSWORD>@localhost:5433/mevdb".to_string()
             }),
             redis_url: env::var("REDIS_URL")
                 .unwrap_or_else(|_| "redis://localhost:6379".to_string()),

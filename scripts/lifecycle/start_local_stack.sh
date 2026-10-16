@@ -70,7 +70,7 @@ if [[ -f "$REPO_ROOT/.env" ]]; then
   set +a
 fi
 
-DEFAULT_DATABASE_URL="postgresql://mev:mevpassword@localhost:5433/mevdb"
+DEFAULT_DATABASE_URL="postgresql://mev:<POSTGRES_PASSWORD>@localhost:5433/mevdb"
 DEFAULT_KAFKA="localhost:29092"
 DEFAULT_REDIS="redis://127.0.0.1:6380/0"
 DEFAULT_WALLET="$REPO_ROOT/infrastructure/keys/id.json"

@@ -121,7 +121,7 @@ async fn main() -> anyhow::Result<()> {
     #[cfg(feature = "database")]
     let db_pool = {
         let database_url = std::env::var("DATABASE_URL")
-            .unwrap_or_else(|_| "postgresql://mev:mevpassword@localhost:5433/mevdb".to_string());
+            .unwrap_or_else(|_| "postgresql://mev:<POSTGRES_PASSWORD>@localhost:5433/mevdb".to_string());
         match sqlx::PgPool::connect(&database_url).await {
             Ok(pool) => {
                 info!("✅ Connected to PostgreSQL for arbitrage data storage");

@@ -114,7 +114,7 @@ git status
 git log --oneline -5
 
 # 3. Test compilation
-DATABASE_URL="postgresql://mev:mevpassword@localhost:5433/mevdb" cargo build --release -p hotpath_arb_engine
+DATABASE_URL="postgresql://mev:<POSTGRES_PASSWORD>@localhost:5433/mevdb" cargo build --release -p hotpath_arb_engine
 ```
 
 ### **Step 2: Execute Deployment**

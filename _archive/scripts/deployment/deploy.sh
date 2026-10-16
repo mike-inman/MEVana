@@ -352,11 +352,11 @@ main() {
         log_info "📊 Service Endpoints:"
         if [ "$DEPLOYMENT_TARGET" = "production" ]; then
             log_info "   • Metrics: http://$SERVER_IP:$METRICS_PORT/metrics"
-            log_info "   • Grafana: http://$SERVER_IP:3000 (admin/admin123)"
+            log_info "   • Grafana: http://$SERVER_IP:3000 (admin/<ADMIN_PASSWORD>)"
             log_info "   • Prometheus: http://$SERVER_IP:9090"
         else
             log_info "   • Metrics: http://localhost:$METRICS_PORT/metrics"
-            log_info "   • Grafana: http://localhost:3000 (admin/admin123)"
+            log_info "   • Grafana: http://localhost:3000 (admin/<ADMIN_PASSWORD>)"
             log_info "   • Prometheus: http://localhost:9090"
         fi
     else

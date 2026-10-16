@@ -18,7 +18,7 @@ async fn main() -> anyhow::Result<()> {
     log::info!("Starting wallet-vault service on port {}", port);
     log::info!(
         "Connecting to database: {}",
-        database_url.replace(":mevpassword@", ":***@")
+        database_url.replace(":<POSTGRES_PASSWORD>@", ":***@")
     );
 
     // Create vault configuration

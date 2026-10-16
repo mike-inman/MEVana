@@ -139,7 +139,7 @@ deploy_to_server() {
 
     # Build release binary
     log_info "🔧 Building release binary..."
-    if ! DATABASE_URL="postgresql://mev:mevpassword@localhost:5433/mevdb" cargo build --release -p hotpath_arb_engine; then
+    if ! DATABASE_URL="postgresql://mev:<POSTGRES_PASSWORD>@localhost:5433/mevdb" cargo build --release -p hotpath_arb_engine; then
         log_error "${RED}❌ Failed to build release binary${NC}"
         exit 1
     fi
@@ -194,9 +194,9 @@ deploy_to_server() {
     start_result=$(ssh "$SERVER_USER@$SERVER_IP" "
         cd /opt/mevana
         export PAPER_TRADING=true
-        export DATABASE_URL='postgresql://mev:mevpassword@localhost:5433/mevdb'
+        export DATABASE_URL='postgresql://mev:<POSTGRES_PASSWORD>@localhost:5433/mevdb'
         export GEYSER_ENDPOINT='https://grpc.ny.shyft.to'
-        export X_TOKEN='efff2d23-97ae-4c5f-8b8b-9a6265001189'
+        export X_TOKEN='<SHYFT_X_TOKEN>'
         export METRICS_PORT=8088
         export RUST_LOG=info
         export STREAM_ID=server-production

@@ -52,7 +52,7 @@ MEVana App → metrics crate → PrometheusBuilder → HTTP Endpoint → Prometh
 
 ### **✅ WORKING ENDPOINTS**
 - **MEVana Metrics**: http://149.28.56.125:8088/metrics (✅ Live with industry-standard format)
-- **Grafana**: http://149.28.56.125:3000 (admin/admin123) (✅ Ready for dashboards)
+- **Grafana**: http://149.28.56.125:3000 (admin/<ADMIN_PASSWORD>) (✅ Ready for dashboards)
 - **Prometheus**: http://149.28.56.125:9090 (✅ Running, needs config refresh)
 
 ### **🔄 NEXT DEPLOYMENT WILL FIX**
@@ -132,7 +132,7 @@ let prometheus_handle = PrometheusBuilder::new()
 ## 🎛️ **GRAFANA DASHBOARD IMPORT**
 
 ### **Import Process**
-1. Access: http://149.28.56.125:3000 (admin/admin123)
+1. Access: http://149.28.56.125:3000 (admin/<ADMIN_PASSWORD>)
 2. Import JSON from `dashboards/mevana_complete_dashboard.json`
 3. Configure Prometheus data source: `http://prometheus:9090`
 4. Dashboard will show live metrics after next deployment

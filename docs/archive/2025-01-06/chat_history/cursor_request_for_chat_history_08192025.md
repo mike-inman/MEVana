@@ -2690,7 +2690,7 @@ echo "🧪 Testing MEVana Validation Pipeline"
 echo "====================================="
 
 # Set environment variables
-export SHYFT_API_KEY="fWrVh_mDygK358FC"
+export SHYFT_API_KEY="<SHYFT_API_KEY>"
 export RUST_LOG="info"
 
 echo "🔑 Using Shyft API Key: ${SHYFT_API_KEY:0:8}..."
@@ -2730,7 +2730,7 @@ use shyft_validator::ShyftValidator;
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let validator = ShyftValidator::new(
-        "fWrVh_mDygK358FC".to_string(),
+        "<SHYFT_API_KEY>".to_string(),
         "mainnet-beta".to_string()
     );
     
@@ -2877,7 +2877,7 @@ Let me update our key documents to reflect the new validation architecture and A
 
 ### **Shyft API Key (for REST/GraphQL APIs)**
 ```
-SHYFT_API_KEY=fWrVh_mDygK358FC
+SHYFT_API_KEY=<SHYFT_API_KEY>
 ```
 
 ### **Shyft X-Token (for Geyser gRPC Stream)**
@@ -2886,9 +2886,9 @@ X_TOKEN=[REDACTED - Check .env files]
 ```
 
 ### **Endpoints**
-- **RPC**: `https://rpc.shyft.to?api_key=fWrVh_mDygK358FC`
-- **WebSocket**: `wss://rpc.shyft.to?api_key=fWrVh_mDygK358FC`
-- **GraphQL**: `https://programs.shyft.to/v0/graphql/?api_key=fWrVh_mDygK358FC&network=mainnet-beta`
+- **RPC**: `https://rpc.shyft.to?api_key=<SHYFT_API_KEY>`
+- **WebSocket**: `wss://rpc.shyft.to?api_key=<SHYFT_API_KEY>`
+- **GraphQL**: `https://programs.shyft.to/v0/graphql/?api_key=<SHYFT_API_KEY>&network=mainnet-beta`
 - **Swagger UI**: `https://api.shyft.to/sol/api/explore/`
 
 ## 🏗️ **Architecture Components**
@@ -3658,7 +3658,7 @@ redis = { version = "0.32", features = ["tokio-comp"] }
 export TEST_MODE=true
 export TEST_REDIS_URL=redis://localhost:6379/1
 export TEST_KAFKA_BROKERS=localhost:9092
-export TEST_SHYFT_API_KEY=fWrVh_mDygK358FC
+export TEST_SHYFT_API_KEY=<SHYFT_API_KEY>
 ```
 
 ### **Test Data Sources**
@@ -3729,7 +3729,7 @@ NC='\033[0m' # No Color
 TEST_MODE=true
 TEST_REDIS_URL=${TEST_REDIS_URL:-"redis://localhost:6379/1"}
 TEST_KAFKA_BROKERS=${TEST_KAFKA_BROKERS:-"localhost:9092"}
-TEST_SHYFT_API_KEY=${TEST_SHYFT_API_KEY:-"fWrVh_mDygK358FC"}
+TEST_SHYFT_API_KEY=${TEST_SHYFT_API_KEY:-"<SHYFT_API_KEY>"}
 
 # Test results tracking
 TESTS_PASSED=0
@@ -3976,7 +3976,7 @@ test_retry_attempts = 3
 # Infrastructure endpoints
 redis_url = "redis://localhost:6379/1"
 kafka_brokers = "localhost:9092"
-shyft_api_key = "fWrVh_mDygK358FC"
+shyft_api_key = "<SHYFT_API_KEY>"
 shyft_network = "mainnet-beta"
 
 [performance_thresholds]
@@ -4101,7 +4101,7 @@ NC='\033[0m' # No Color
 TEST_MODE=true
 TEST_REDIS_URL=${TEST_REDIS_URL:-"redis://localhost:6379/1"}
 TEST_KAFKA_BROKERS=${TEST_KAFKA_BROKERS:-"localhost:9092"}
-TEST_SHYFT_API_KEY=${TEST_SHYFT_API_KEY:-"fWrVh_mDygK358FC"}
+TEST_SHYFT_API_KEY=${TEST_SHYFT_API_KEY:-"<SHYFT_API_KEY>"}
 
 # Test results tracking
 TESTS_PASSED=0
@@ -4596,7 +4596,7 @@ grafana_api = "0.1"
 export TEST_MODE=true
 export TEST_REDIS_URL=redis://localhost:6379/1
 export TEST_KAFKA_BROKERS=localhost:9092
-export TEST_SHYFT_API_KEY=fWrVh_mDygK358FC
+export TEST_SHYFT_API_KEY=<SHYFT_API_KEY>
 
 # Observability configuration
 export PROMETHEUS_URL=http://localhost:9090
@@ -5266,7 +5266,7 @@ Perfect! Now I understand the current state. We have:
 
 ## ✅ **What's Already Configured:**
 1. **Prometheus** - Running on port 9090 with basic infrastructure monitoring
-2. **Grafana** - Running on port 3000 with admin password `admin123`
+2. **Grafana** - Running on port 3000 with admin password `<ADMIN_PASSWORD>`
 3. **Basic Monitoring** - Kafka, Redis, Postgres, and Prometheus itself
 
 ## 🔧 **What We Need to Add for Testing:**
@@ -5439,7 +5439,7 @@ Now let me update our testing framework to use the existing Prometheus and Grafa
 
 ### **Observability Infrastructure** ✅ **ALREADY CONFIGURED**
 - **Prometheus**: Running on port 9090 with MEVana services configured
-- **Grafana**: Running on port 3000 with admin/admin123 credentials
+- **Grafana**: Running on port 3000 with admin/<ADMIN_PASSWORD> credentials
 - **Custom Metrics**: Service-specific performance and business metrics
 - **Alert Rules**: Performance degradation and error condition alerts
 - **AI Learning Integration**: Metrics feeding into AI agent learning systems
@@ -5565,12 +5565,12 @@ grafana_api = "0.1"  # ✅ **READY TO USE**
 export TEST_MODE=true
 export TEST_REDIS_URL=redis://localhost:6379/1
 export TEST_KAFKA_BROKERS=localhost:9092
-export TEST_SHYFT_API_KEY=fWrVh_mDygK358FC
+export TEST_SHYFT_API_KEY=<SHYFT_API_KEY>
 
 # Observability configuration ✅ **ALREADY CONFIGURED**
 export PROMETHEUS_URL=http://localhost:9090  # ✅ **READY**
 export GRAFANA_URL=http://localhost:3000     # ✅ **READY**
-export GRAFANA_API_KEY=admin123              # ✅ **READY**
+export GRAFANA_API_KEY=<ADMIN_PASSWORD>              # ✅ **READY**
 ```
 
 ### **Prometheus Metrics for Testing** ✅ **READY TO USE**
@@ -6577,7 +6577,7 @@ fi
 # Test 5: Check Grafana dashboard
 echo -e "\n${BLUE}[TEST 5] Grafana Dashboard Check${NC}"
 echo "  Grafana is running and accessible at: $GRAFANA_URL"
-echo "  Login credentials: admin / admin123"
+echo "  Login credentials: admin / <ADMIN_PASSWORD>"
 echo "  Our test dashboard should be available in the dashboards list"
 echo "  Dashboard name: 'MEVana Test Dashboard'"
 
@@ -6606,7 +6606,7 @@ echo "  ✅ Dashboard is configured and ready"
 echo ""
 echo -e "${BLUE}Next steps:${NC}"
 echo "  1. Open Grafana at: $GRAFANA_URL"
-echo "  2. Login with: admin / admin123"
+echo "  2. Login with: admin / <ADMIN_PASSWORD>"
 echo "  3. View the 'MEVana Test Dashboard'"
 echo "  4. Add more metrics to our services"
 echo "  5. Create custom dashboards for specific use cases"
@@ -6651,7 +6651,7 @@ Perfect! I can see that `host.docker.internal:9091` is showing as **"health":"up
 ### **How to Use:**
 
 1. **View Prometheus**: http://localhost:9090
-2. **View Grafana**: http://localhost:3000 (admin/admin123)
+2. **View Grafana**: http://localhost:3000 (admin/<ADMIN_PASSWORD>)
 3. **Test Metrics**: http://localhost:9091/metrics
 4. **Run Test Script**: `./scripts/test-observability-pipeline.sh`
 
@@ -6893,7 +6893,7 @@ Our MEVana platform now has a **complete observability pipeline** with Prometheu
 
 ### **Grafana** ✅ **OPERATIONAL**
 - **Status**: Running and healthy on port 3000
-- **Credentials**: admin / admin123
+- **Credentials**: admin / <ADMIN_PASSWORD>
 - **Datasource**: Prometheus configured and connected
 - **Dashboard**: MEVana test dashboard ready
 
@@ -6944,7 +6944,7 @@ Our MEVana platform now has a **complete observability pipeline** with Prometheu
 ### **Grafana Configuration**
 - **Datasource**: Prometheus at http://prometheus:9090
 - **Dashboard Provisioning**: Automatic dashboard loading
-- **Authentication**: Basic auth with admin/admin123
+- **Authentication**: Basic auth with admin/<ADMIN_PASSWORD>
 
 ## 🧪 **Testing & Validation**
 
@@ -7027,7 +7027,7 @@ curl http://localhost:9090/api/v1/targets
 curl http://localhost:9091/metrics
 
 # Access Grafana
-open http://localhost:3000  # admin/admin123
+open http://localhost:3000  # admin/<ADMIN_PASSWORD>
 ```
 
 ## 🎉 **Achievement Summary**
@@ -8045,7 +8045,7 @@ NC='\033[0m' # No Color
 TEST_MODE=true
 TEST_REDIS_URL=${TEST_REDIS_URL:-"redis://localhost:6379/0"}
 TEST_KAFKA_BROKERS=${TEST_KAFKA_BROKERS:-"localhost:9092"}
-TEST_SHYFT_API_KEY=${TEST_SHYFT_API_KEY:-"fWrVh_mDygK358FC"}
+TEST_SHYFT_API_KEY=${TEST_SHYFT_API_KEY:-"<SHYFT_API_KEY>"}
 TEST_TIMEOUT=${TEST_TIMEOUT:-30}
 
 # Test results tracking
@@ -8728,7 +8728,7 @@ echo -e "${BLUE}📋 Next Steps:${NC}"
 echo "1. Start the missing services above"
 echo "2. Check logs: docker compose logs -f [service-name]"
 echo "3. Monitor data flow: ./scripts/test-data-flow-pipeline.sh"
-echo "4. Check Grafana: http://localhost:3000 (admin/admin123)"
+echo "4. Check Grafana: http://localhost:3000 (admin/<ADMIN_PASSWORD>)"
 echo "5. Check Prometheus: http://localhost:9090"
 
 echo ""
@@ -11481,13 +11481,13 @@ You need to run the actual `token-registry` service (not just the populate scrip
 pkill -f token-registry
 
 # Run with real API key
-cargo run -p token-registry -- --shyft-api-key fWrVh_mDygK358FC
+cargo run -p token-registry -- --shyft-api-key <SHYFT_API_KEY>
 ```
 
 ### **Option 2: Run in Background**
 ```bash
 # Run in background to get real prices
-cargo run -p token-registry -- --shyft-api-key fWrVh_mDygK358FC --update-interval 60 &
+cargo run -p token-registry -- --shyft-api-key <SHYFT_API_KEY> --update-interval 60 &
 ```
 
 ## 🔧 **What Happens When You Run the Real Service**
@@ -11550,12 +11550,12 @@ async fn fetch_token_info_from_shyft(&self, mint_address: &str, api_key: &str) -
 pkill -f token-registry
 
 # Run with real API key
-cargo run -p token-registry -- --shyft-api-key fWrVh_mDygK358FC
+cargo run -p token-registry -- --shyft-api-key <SHYFT_API_KEY>
 ```
 
 ```shellscript
 # Run in background to get real prices
-cargo run -p token-registry -- --shyft-api-key fWrVh_mDygK358FC --update-interval 60 &
+cargo run -p token-registry -- --shyft-api-key <SHYFT_API_KEY> --update-interval 60 &
 ```
 
 ---
@@ -18367,7 +18367,7 @@ Great! I've added comprehensive startup configuration logging. Now when you run 
 Now you can run the service and see exactly what's happening:
 
 ```bash
-cargo run -- --topic test.live.data --broker localhost:29092 --endpoint "https://grpc.ny.shyft.to" --x-token "efff2d23-97ae-4c5f-8b8b-9a6265001189e" --no-filter
+cargo run -- --topic test.live.data --broker localhost:29092 --endpoint "https://grpc.ny.shyft.to" --x-token "<SHYFT_X_TOKEN>e" --no-filter
 ```
 
 This will show you:
@@ -18381,7 +18381,7 @@ This should eliminate the guesswork and show us exactly why it's still trying to
 Would you like to test this now, or would you prefer to make any other changes first?
 
 ```shellscript
-cargo run -- --topic test.live.data --broker localhost:29092 --endpoint "https://grpc.ny.shyft.to" --x-token "efff2d23-97ae-4c5f-8b8b-9a6265001189e" --no-filter
+cargo run -- --topic test.live.data --broker localhost:29092 --endpoint "https://grpc.ny.shyft.to" --x-token "<SHYFT_X_TOKEN>e" --no-filter
 ```
 
 ---
@@ -23402,7 +23402,7 @@ Now you have a **clean, simple service** without any test complexity that forces
 Instead of fighting with tests, let's just **run the service** and see if it works:
 
 ```bash
-cargo run -- --topic test.live.data --broker localhost:29092 --endpoint "https://grpc.ny.shyft.to" --x-token "efff2d23-97ae-4c5f-8b8b-9a6265001189e" --no-filter
+cargo run -- --topic test.live.data --broker localhost:29092 --endpoint "https://grpc.ny.shyft.to" --x-token "<SHYFT_X_TOKEN>e" --no-filter
 ```
 
 This will:
@@ -23413,7 +23413,7 @@ This will:
 **No more test complexity** - just a working service that you can see in action. Want to try running it directly?
 
 ```shellscript
-cargo run -- --topic test.live.data --broker localhost:29092 --endpoint "https://grpc.ny.shyft.to" --x-token "efff2d23-97ae-4c5f-8b8b-9a6265001189e" --no-filter
+cargo run -- --topic test.live.data --broker localhost:29092 --endpoint "https://grpc.ny.shyft.to" --x-token "<SHYFT_X_TOKEN>e" --no-filter
 ```
 
 ---
@@ -23450,7 +23450,7 @@ Instead of fighting with test compilation, we should be:
 **Next step:** Run the service and verify it's actually working with live data:
 
 ```bash
-cargo run -- --topic test.live.data --broker localhost:29092 --endpoint "https://grpc.ny.shyft.to" --x-token "efff2d23-97ae-4c5f-8b8b-9a6265001189e" --no-filter
+cargo run -- --topic test.live.data --broker localhost:29092 --endpoint "https://grpc.ny.shyft.to" --x-token "<SHYFT_X_TOKEN>e" --no-filter
 ```
 
 This will show us:
@@ -23461,7 +23461,7 @@ This will show us:
 **Should we get back to the actual plan and test the live data flow?** That's what we actually need to accomplish, not fighting with test infrastructure.
 
 ```shellscript
-cargo run -- --topic test.live.data --broker localhost:29092 --endpoint "https://grpc.ny.shyft.to" --x-token "efff2d23-97ae-4c5f-8b8b-9a6265001189e" --no-filter
+cargo run -- --topic test.live.data --broker localhost:29092 --endpoint "https://grpc.ny.shyft.to" --x-token "<SHYFT_X_TOKEN>e" --no-filter
 ```
 
 ---
@@ -39406,7 +39406,7 @@ Let me fix these issues:
       - KAFKA_BROKER=kafka:9092
       - TOPIC=dex-transactions
       - ENDPOINT=https://grpc.ny.shyft.to
-      - X_TOKEN=${X_TOKEN:-efff2d23-97ae-4c5f-8b8b-9a6265001189}
+      - X_TOKEN=${X_TOKEN:-<SHYFT_X_TOKEN>}
       - HEALTH_PORT=8084
       - BIND_ADDRESS=0.0.0.0
       - DEX_FILTERING=OFF
@@ -39463,7 +39463,7 @@ Perfect! You're right, I know the values. Let me complete the configuration fixe
       - KAFKA_BROKER=kafka:9092
       - TOPIC=dex-transactions
       - ENDPOINT=https://grpc.ny.shyft.to
-      - X_TOKEN=${TEST_X_TOKEN:-efff2d23-97ae-4c5f-8b8b-9a6265001189}
+      - X_TOKEN=${TEST_X_TOKEN:-<SHYFT_X_TOKEN>}
       - HEALTH_PORT=8084
       - BIND_ADDRESS=0.0.0.0
       - DEX_FILTERING=OFF
@@ -39504,7 +39504,7 @@ Perfect! You're right, I know the values. Let me complete the configuration fixe
       - KAFKA_BROKER=kafka:9092
       - TOPIC=dex-transactions
       - ENDPOINT=https://grpc.ny.shyft.to
-      - X_TOKEN=${PROD_X_TOKEN:-efff2d23-97ae-4c5f-8b8b-9a6265001189}
+      - X_TOKEN=${PROD_X_TOKEN:-<SHYFT_X_TOKEN>}
       - HEALTH_PORT=8084
       - BIND_ADDRESS=0.0.0.0
       - DEX_FILTERING=ON
@@ -45385,7 +45385,7 @@ services:
       - REDIS_HOSTS=local:redis:6379
       # Basic authentication for security
       - HTTP_USER=admin
-      - HTTP_PASSWORD=admin123
+      - HTTP_PASSWORD=<ADMIN_PASSWORD>
     ports:
       # Web interface accessible at http://localhost:8083
       # Note: Redis-Commander uses internal port 8081, mapped to host 8083
@@ -46910,7 +46910,7 @@ Let me update each environment section one at a time. First, the dev environment
       - KAFKA_BROKER=kafka:9092
       - TOPIC=dex-transactions
       - ENDPOINT=https://grpc.ny.shyft.to
-      - X_TOKEN=${X_TOKEN:-efff2d23-97ae-4c5f-8b8b-9a6265001189}
+      - X_TOKEN=${X_TOKEN:-<SHYFT_X_TOKEN>}
       - HEALTH_PORT=8084
       - BIND_ADDRESS=0.0.0.0
       - DEX_FILTERING=OFF
@@ -46922,7 +46922,7 @@ Let me update each environment section one at a time. First, the dev environment
       - KAFKA_BROKER=kafka:9092
       - TOPIC=dex-transactions
       - ENDPOINT=https://grpc.ny.shyft.to
-      - X_TOKEN=${X_TOKEN:-efff2d23-97ae-4c5f-8b8b-9a6265001189}
+      - X_TOKEN=${X_TOKEN:-<SHYFT_X_TOKEN>}
       - HEALTH_PORT=8084
       - BIND_ADDRESS=0.0.0.0
       - DEX_FILTERING=OFF
@@ -46938,7 +46938,7 @@ Now let me update the test environment:
       - KAFKA_BROKER=kafka:9092
       - TOPIC=dex-transactions
       - ENDPOINT=https://grpc.ny.shyft.to
-      - X_TOKEN=${TEST_X_TOKEN:-efff2d23-97ae-4c5f-8b8b-9a6265001189}
+      - X_TOKEN=${TEST_X_TOKEN:-<SHYFT_X_TOKEN>}
       - HEALTH_PORT=8084
       - BIND_ADDRESS=0.0.0.0
       - DEX_FILTERING=OFF
@@ -46950,7 +46950,7 @@ Now let me update the test environment:
       - KAFKA_BROKER=kafka:9092
       - TOPIC=dex-transactions
       - ENDPOINT=https://grpc.ny.shyft.to
-      - X_TOKEN=${TEST_X_TOKEN:-efff2d23-97ae-4c5f-8b8b-9a6265001189}
+      - X_TOKEN=${TEST_X_TOKEN:-<SHYFT_X_TOKEN>}
       - HEALTH_PORT=8084
       - BIND_ADDRESS=0.0.0.0
       - DEX_FILTERING=OFF
@@ -47774,7 +47774,7 @@ Now let me replace the old configuration in the master docker-compose.yml with t
       - KAFKA_BROKER=kafka:9092
       - TOPIC=dex-transactions
       - ENDPOINT=https://grpc.ny.shyft.to
-      - X_TOKEN=${X_TOKEN:-efff2d23-97ae-4c5f-8b8b-9a6265001189}
+      - X_TOKEN=${X_TOKEN:-<SHYFT_X_TOKEN>}
       - HEALTH_PORT=8084
       - BIND_ADDRESS=0.0.0.0
       - DEX_FILTERING=OFF
@@ -47820,7 +47820,7 @@ Now let me replace the old configuration in the master docker-compose.yml with t
       - KAFKA_BROKER=kafka:9092
       - TOPIC=dex-transactions
       - ENDPOINT=https://grpc.ny.shyft.to
-      - X_TOKEN=${TEST_X_TOKEN:-efff2d23-97ae-4c5f-8b8b-9a6265001189}
+      - X_TOKEN=${TEST_X_TOKEN:-<SHYFT_X_TOKEN>}
       - HEALTH_PORT=8084
       - BIND_ADDRESS=0.0.0.0
       - DEX_FILTERING=OFF
@@ -47866,7 +47866,7 @@ Now let me replace the old configuration in the master docker-compose.yml with t
       - KAFKA_BROKER=kafka:9092
       - TOPIC=dex-transactions
       - ENDPOINT=https://grpc.ny.shyft.to
-      - X_TOKEN=${PROD_X_TOKEN:-efff2d23-97ae-4c5f-8b8b-9a6265001189}
+      - X_TOKEN=${PROD_X_TOKEN:-<SHYFT_X_TOKEN>}
       - HEALTH_PORT=8084
       - BIND_ADDRESS=0.0.0.0
       - DEX_FILTERING=ON
@@ -47938,7 +47938,7 @@ You're absolutely right! Let me simplify this to just one improved service confi
       - KAFKA_BROKER=kafka:9092
       - TOPIC=dex-transactions
       - ENDPOINT=https://grpc.ny.shyft.to
-      - X_TOKEN=${X_TOKEN:-efff2d23-97ae-4c5f-8b8b-9a6265001189}
+      - X_TOKEN=${X_TOKEN:-<SHYFT_X_TOKEN>}
       - HEALTH_PORT=8084
       - BIND_ADDRESS=0.0.0.0
       - DEX_FILTERING=OFF
@@ -47984,7 +47984,7 @@ You're absolutely right! Let me simplify this to just one improved service confi
       - KAFKA_BROKER=kafka:9092
       - TOPIC=dex-transactions
       - ENDPOINT=https://grpc.ny.shyft.to
-      - X_TOKEN=${TEST_X_TOKEN:-efff2d23-97ae-4c5f-8b8b-9a6265001189}
+      - X_TOKEN=${TEST_X_TOKEN:-<SHYFT_X_TOKEN>}
       - HEALTH_PORT=8084
       - BIND_ADDRESS=0.0.0.0
       - DEX_FILTERING=OFF
@@ -48030,7 +48030,7 @@ You're absolutely right! Let me simplify this to just one improved service confi
       - KAFKA_BROKER=kafka:9092
       - TOPIC=dex-transactions
       - ENDPOINT=https://grpc.ny.shyft.to
-      - X_TOKEN=${PROD_X_TOKEN:-efff2d23-97ae-4c5f-8b8b-9a6265001189}
+      - X_TOKEN=${PROD_X_TOKEN:-<SHYFT_X_TOKEN>}
       - HEALTH_PORT=8084
       - BIND_ADDRESS=0.0.0.0
       - DEX_FILTERING=OFF
@@ -48090,7 +48090,7 @@ You're absolutely right! Let me simplify this to just one improved service confi
       - KAFKA_BROKER=kafka:9092
       - TOPIC=dex-transactions
       - ENDPOINT=https://grpc.ny.shyft.to
-      - X_TOKEN=${X_TOKEN:-efff2d23-97ae-4c5f-8b8b-9a6265001189}
+      - X_TOKEN=${X_TOKEN:-<SHYFT_X_TOKEN>}
       - HEALTH_PORT=8084
       - BIND_ADDRESS=0.0.0.0
       - DEX_FILTERING=OFF
@@ -48155,7 +48155,7 @@ Now I'll replace the entire section with just one simplified service:
       - KAFKA_BROKER=kafka:9092
       - TOPIC=dex-transactions
       - ENDPOINT=https://grpc.ny.shyft.to
-      - X_TOKEN=${X_TOKEN:-efff2d23-97ae-4c5f-8b8b-9a6265001189}
+      - X_TOKEN=${X_TOKEN:-<SHYFT_X_TOKEN>}
       - HEALTH_PORT=8084
       - BIND_ADDRESS=0.0.0.0
       - DEX_FILTERING=OFF
@@ -48201,7 +48201,7 @@ Now I'll replace the entire section with just one simplified service:
       - KAFKA_BROKER=kafka:9092
       - TOPIC=dex-transactions
       - ENDPOINT=https://grpc.ny.shyft.to
-      - X_TOKEN=${TEST_X_TOKEN:-efff2d23-97ae-4c5f-8b8b-9a6265001189}
+      - X_TOKEN=${TEST_X_TOKEN:-<SHYFT_X_TOKEN>}
       - HEALTH_PORT=8084
       - BIND_ADDRESS=0.0.0.0
       - DEX_FILTERING=OFF
@@ -48247,7 +48247,7 @@ Now I'll replace the entire section with just one simplified service:
       - KAFKA_BROKER=kafka:9092
       - TOPIC=dex-transactions
       - ENDPOINT=https://grpc.ny.shyft.to
-      - X_TOKEN=${PROD_X_TOKEN:-efff2d23-97ae-4c5f-8b8b-9a6265001189}
+      - X_TOKEN=${PROD_X_TOKEN:-<SHYFT_X_TOKEN>}
       - HEALTH_PORT=8084
       - BIND_ADDRESS=0.0.0.0
       - DEX_FILTERING=OFF
@@ -48307,7 +48307,7 @@ Now I'll replace the entire section with just one simplified service:
       - KAFKA_BROKER=kafka:9092
       - TOPIC=dex-transactions
       - ENDPOINT=https://grpc.ny.shyft.to
-      - X_TOKEN=${X_TOKEN:-efff2d23-97ae-4c5f-8b8b-9a6265001189}
+      - X_TOKEN=${X_TOKEN:-<SHYFT_X_TOKEN>}
       - HEALTH_PORT=8084
       - BIND_ADDRESS=0.0.0.0
       - DEX_FILTERING=OFF
@@ -48441,7 +48441,7 @@ Now let me update the master docker-compose.yml to have the clean, improved serv
       - KAFKA_BROKER=kafka:9092
       - TOPIC=dex-transactions
       - ENDPOINT=https://grpc.ny.shyft.to
-      - X_TOKEN=${X_TOKEN:-efff2d23-97ae-4c5f-8b8b-9a6265001189}
+      - X_TOKEN=${X_TOKEN:-<SHYFT_X_TOKEN>}
       - HEALTH_PORT=8084
       - BIND_ADDRESS=0.0.0.0
       - DEX_FILTERING=OFF
@@ -48501,7 +48501,7 @@ Now let me update the master docker-compose.yml to have the clean, improved serv
       - KAFKA_BROKER=kafka:9092
       - TOPIC=dex-transactions
       - ENDPOINT=https://grpc.ny.shyft.to
-      - X_TOKEN=${X_TOKEN:-efff2d23-97ae-4c5f-8b8b-9a6265001189}
+      - X_TOKEN=${X_TOKEN:-<SHYFT_X_TOKEN>}
       - HEALTH_PORT=8084
       - BIND_ADDRESS=0.0.0.0
       - DEX_FILTERING=OFF
@@ -48735,7 +48735,7 @@ I see the issue! There are still multiple service definitions (dev, test, prod) 
       - KAFKA_BROKER=kafka:9092
       - TOPIC=dex-transactions
       - ENDPOINT=https://grpc.ny.shyft.to
-      - X_TOKEN=${TEST_X_TOKEN:-efff2d23-97ae-4c5f-8b8b-9a6265001189}
+      - X_TOKEN=${TEST_X_TOKEN:-<SHYFT_X_TOKEN>}
       - HEALTH_PORT=8084
       - BIND_ADDRESS=0.0.0.0
       - DEX_FILTERING=OFF
@@ -48781,7 +48781,7 @@ I see the issue! There are still multiple service definitions (dev, test, prod) 
       - KAFKA_BROKER=kafka:9092
       - TOPIC=dex-transactions
       - ENDPOINT=https://grpc.ny.shyft.to
-      - X_TOKEN=${PROD_X_TOKEN:-efff2d23-97ae-4c5f-8b8b-9a6265001189}
+      - X_TOKEN=${PROD_X_TOKEN:-<SHYFT_X_TOKEN>}
       - HEALTH_PORT=8084
       - BIND_ADDRESS=0.0.0.0
       - DEX_FILTERING=OFF
@@ -48836,7 +48836,7 @@ Now let me remove these duplicate services:
       - KAFKA_BROKER=kafka:9092
       - TOPIC=dex-transactions
       - ENDPOINT=https://grpc.ny.shyft.to
-      - X_TOKEN=${TEST_X_TOKEN:-efff2d23-97ae-4c5f-8b8b-9a6265001189}
+      - X_TOKEN=${TEST_X_TOKEN:-<SHYFT_X_TOKEN>}
       - HEALTH_PORT=8084
       - BIND_ADDRESS=0.0.0.0
       - DEX_FILTERING=OFF
@@ -48882,7 +48882,7 @@ Now let me remove these duplicate services:
       - KAFKA_BROKER=kafka:9092
       - TOPIC=dex-transactions
       - ENDPOINT=https://grpc.ny.shyft.to
-      - X_TOKEN=${PROD_X_TOKEN:-efff2d23-97ae-4c5f-8b8b-9a6265001189}
+      - X_TOKEN=${PROD_X_TOKEN:-<SHYFT_X_TOKEN>}
       - HEALTH_PORT=8084
       - BIND_ADDRESS=0.0.0.0
       - DEX_FILTERING=OFF
@@ -49222,11 +49222,11 @@ Perfect! I found the issue. The Grafana configuration shows:
 
 **Default Credentials:**
 - **Username**: `admin` (Grafana default)
-- **Password**: `admin123` (set in environment variable)
+- **Password**: `<ADMIN_PASSWORD>` (set in environment variable)
 
 **Try logging in with:**
 - **Username**: `admin`
-- **Password**: `admin123`
+- **Password**: `<ADMIN_PASSWORD>`
 
 If that doesn't work, let me check if there might be an issue with the Grafana configuration. Let me also check if there are any environment files that might be overriding this:
 
@@ -49256,7 +49256,7 @@ Perfect! Grafana is now healthy.
 **Try logging in with:**
 - **URL**: http://localhost:3000
 - **Username**: `admin`
-- **Password**: `admin123`
+- **Password**: `<ADMIN_PASSWORD>`
 
 ## 🔍 **What I Found & Fixed**
 
@@ -49266,7 +49266,7 @@ Perfect! Grafana is now healthy.
 - There might have been a configuration issue from the previous setup
 
 **What I Did:**
-- ✅ **Verified** the correct credentials are set (`admin` / `admin123`)
+- ✅ **Verified** the correct credentials are set (`admin` / `<ADMIN_PASSWORD>`)
 - ✅ **Confirmed** Grafana is healthy and responding
 - ✅ **Restarted** Grafana to clear any configuration issues
 - ✅ **Verified** the service is now healthy
@@ -49276,7 +49276,7 @@ Perfect! Grafana is now healthy.
 - Default credentials should now work
 - The service has been restarted with a clean configuration
 
-**Try logging in now** with `admin` / `admin123`. If you still have issues, let me know and I can investigate further by checking the Grafana configuration files or trying a different approach.
+**Try logging in now** with `admin` / `<ADMIN_PASSWORD>`. If you still have issues, let me know and I can investigate further by checking the Grafana configuration files or trying a different approach.
 
 ---
 
@@ -49308,7 +49308,7 @@ Excellent! 🎉 The Grafana restart fixed the authentication issue.
 ## �� **Current Status - All Systems Operational**
 
 Now you have access to:
-- **Grafana Dashboard**: http://localhost:3000 (admin/admin123)
+- **Grafana Dashboard**: http://localhost:3000 (admin/<ADMIN_PASSWORD>)
 - **Prometheus**: http://localhost:9090
 - **Kafka-UI**: http://localhost:8080
 - **Redis-UI**: http://localhost:8083
@@ -49515,7 +49515,7 @@ Perfect! That's exactly the right approach. 🎯
 - ✅ **Clean naming** (no `_dev` suffixes)
 - ✅ **DEX stream service** processing 36,000+ transactions
 - ✅ **Kafka receiving** 323,000+ messages
-- ✅ **Grafana accessible** (admin/admin123)
+- ✅ **Grafana accessible** (admin/<ADMIN_PASSWORD>)
 - ✅ **Kafka-UI functional** (despite cosmetic message)
 - ✅ **Full monitoring stack** operational
 
@@ -53945,7 +53945,7 @@ Based on my research, I found several **Shyft API methods** that can return comp
    - `https://api.shyft.to/sol/v1/transaction/history?network=mainnet-beta&account={WALLET}&tx_num=5`
 
 ### **🔑 Implementation Details:**
-- **API Key Required**: `SHYFT_API_KEY=fWrVh_mDygK358FC`
+- **API Key Required**: `SHYFT_API_KEY=<SHYFT_API_KEY>`
 - **Network Support**: `mainnet-beta`, `devnet`, `testnet`
 - **Rate Limiting**: Built into existing `shyft-validator` service
 - **Existing Infrastructure**: `crates/shyft-validator/` already has validation framework
@@ -53975,19 +53975,19 @@ okay, I gave my shyft API key already. You should have it. If you have lost it I
 
 You're absolutely right! I do have your Shyft API key from the documentation:
 
-**`SHYFT_API_KEY=fWrVh_mDygK358FC`**
+**`SHYFT_API_KEY=<SHYFT_API_KEY>`**
 
 I can see it clearly in the `docs/README_AI_AGENTS_SHYFT_APIS_STRATEGIC_FOUNDATION.md` file and other configuration files. I haven't lost it.
 
 ## 🔑 **Your Shyft API Key is:**
 ```
-SHYFT_API_KEY=fWrVh_mDygK358FC
+SHYFT_API_KEY=<SHYFT_API_KEY>
 ```
 
 ## 📍 **Available Endpoints:**
-- **REST API**: `https://api.shyft.to/sol/v1/transaction/parsed?api_key=fWrVh_mDygK358FC&network=mainnet-beta&tx_signature={SIGNATURE}`
-- **GraphQL**: `https://programs.shyft.to/v0/graphql/?api_key=fWrVh_mDygK358FC&network=mainnet-beta`
-- **RPC**: `https://rpc.shyft.to?api_key=fWrVh_mDygK358FC`
+- **REST API**: `https://api.shyft.to/sol/v1/transaction/parsed?api_key=<SHYFT_API_KEY>&network=mainnet-beta&tx_signature={SIGNATURE}`
+- **GraphQL**: `https://programs.shyft.to/v0/graphql/?api_key=<SHYFT_API_KEY>&network=mainnet-beta`
+- **RPC**: `https://rpc.shyft.to?api_key=<SHYFT_API_KEY>`
 
 ## �� **Next Step:**
 Now that I have the API key, I can implement the transaction validation to cross-check our debug output with Shyft's complete transaction data. 
@@ -53995,7 +53995,7 @@ Now that I have the API key, I can implement the transaction validation to cross
 Would you like me to proceed with extending the `shyft-validator` service to include transaction validation methods using your API key?
 
 ```plaintext
-SHYFT_API_KEY=fWrVh_mDygK358FC
+SHYFT_API_KEY=<SHYFT_API_KEY>
 ```
 
 ---
@@ -55295,7 +55295,7 @@ for tx in transactions {
 
 **User**
 
-this is my Shyft API key: fWrVh_mDygK358FC
+this is my Shyft API key: <SHYFT_API_KEY>
 
 We are going to make a slight pivot in our development strategy. 
 
@@ -58239,7 +58239,7 @@ on a random transaction and I did not have a problem witht the API key
 curl -X 'GET' \
   'https://api.shyft.to/sol/v1/transaction/parsed?network=mainnet-beta&txn_signature=JhVavpeVhEaAErArbCLJ6SKiXMj4XGxJmLKuszgfgpxSf4vhiGgbuiCCoQgSdJMAvSsuCsH9MpNAiAJNZ3gVrVw&commitment=finalized' \
   -H 'accept: application/json' \
-  -H 'x-api-key: fWrVh_mDygK358FC'
+  -H 'x-api-key: <SHYFT_API_KEY>'
 
 ---
 
@@ -62974,7 +62974,7 @@ services:
       - REDIS_HOSTS=local:redis:6379
       # Basic authentication for security
       - HTTP_USER=admin
-      - HTTP_PASSWORD=admin123
+      - HTTP_PASSWORD=<ADMIN_PASSWORD>
     ports:
       # Web interface accessible at http://localhost:8083
       # Note: Redis-Commander uses internal port 8081, mapped to host 8083
@@ -63031,7 +63031,7 @@ services:
       - KAFKA_BROKER=kafka:9092
       - TOPIC=dex-transactions
       - ENDPOINT=https://grpc.ny.shyft.to
-      - X_TOKEN=${X_TOKEN:-efff2d23-97ae-4c5f-8b8b-9a6265001189}
+      - X_TOKEN=${X_TOKEN:-<SHYFT_X_TOKEN>}
       - HEALTH_PORT=8084
       - BIND_ADDRESS=0.0.0.0
       - DEX_FILTERING=OFF
@@ -63077,7 +63077,7 @@ services:
       - KAFKA_BROKER=kafka:9092
       - TOPIC=dex-transactions
       - ENDPOINT=https://grpc.ny.shyft.to
-      - X_TOKEN=${TEST_X_TOKEN:-efff2d23-97ae-4c5f-8b8b-9a6265001189}
+      - X_TOKEN=${TEST_X_TOKEN:-<SHYFT_X_TOKEN>}
       - HEALTH_PORT=8084
       - BIND_ADDRESS=0.0.0.0
       - DEX_FILTERING=OFF
@@ -63123,7 +63123,7 @@ services:
       - KAFKA_BROKER=kafka:9092
       - TOPIC=dex-transactions
       - ENDPOINT=https://grpc.ny.shyft.to
-      - X_TOKEN=${PROD_X_TOKEN:-efff2d23-97ae-4c5f-8b8b-9a6265001189}
+      - X_TOKEN=${PROD_X_TOKEN:-<SHYFT_X_TOKEN>}
       - HEALTH_PORT=8084
       - BIND_ADDRESS=0.0.0.0
       - DEX_FILTERING=ON
@@ -63873,7 +63873,7 @@ services:
       - "3000:3000"
     environment:
       # Basic Grafana admin password
-      - GF_SECURITY_ADMIN_PASSWORD=admin123
+      - GF_SECURITY_ADMIN_PASSWORD=<ADMIN_PASSWORD>
       # Disable user sign-up for security
       - GF_USERS_ALLOW_SIGN_UP=false
     volumes:
@@ -63931,7 +63931,7 @@ services:
       # PostgreSQL user for application data
       - POSTGRES_USER=${POSTGRES_USER:-mev}
       # PostgreSQL password for application data
-      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-mevpassword}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-<POSTGRES_PASSWORD>}
       # PostgreSQL database name for application data
       - POSTGRES_DB=${POSTGRES_DB:-mevdb}
       # Initialize database with UTF-8 encoding and C locale
@@ -65182,7 +65182,7 @@ services:
       - REDIS_HOSTS=local:redis:6379
       # Basic authentication for security
       - HTTP_USER=admin
-      - HTTP_PASSWORD=admin123
+      - HTTP_PASSWORD=<ADMIN_PASSWORD>
     ports:
       # Web interface accessible at http://localhost:8083
       # Note: Redis-Commander uses internal port 8081, mapped to host 8083
@@ -65239,7 +65239,7 @@ services:
       - KAFKA_BROKER=kafka:9092
       - TOPIC=dex-transactions
       - ENDPOINT=https://grpc.ny.shyft.to
-      - X_TOKEN=${X_TOKEN:-efff2d23-97ae-4c5f-8b8b-9a6265001189}
+      - X_TOKEN=${X_TOKEN:-<SHYFT_X_TOKEN>}
       - HEALTH_PORT=8084
       - BIND_ADDRESS=0.0.0.0
       - DEX_FILTERING=OFF
@@ -65285,7 +65285,7 @@ services:
       - KAFKA_BROKER=kafka:9092
       - TOPIC=dex-transactions
       - ENDPOINT=https://grpc.ny.shyft.to
-      - X_TOKEN=${TEST_X_TOKEN:-efff2d23-97ae-4c5f-8b8b-9a6265001189}
+      - X_TOKEN=${TEST_X_TOKEN:-<SHYFT_X_TOKEN>}
       - HEALTH_PORT=8084
       - BIND_ADDRESS=0.0.0.0
       - DEX_FILTERING=OFF
@@ -65331,7 +65331,7 @@ services:
       - KAFKA_BROKER=kafka:9092
       - TOPIC=dex-transactions
       - ENDPOINT=https://grpc.ny.shyft.to
-      - X_TOKEN=${PROD_X_TOKEN:-efff2d23-97ae-4c5f-8b8b-9a6265001189}
+      - X_TOKEN=${PROD_X_TOKEN:-<SHYFT_X_TOKEN>}
       - HEALTH_PORT=8084
       - BIND_ADDRESS=0.0.0.0
       - DEX_FILTERING=ON
@@ -66081,7 +66081,7 @@ services:
       - "3000:3000"
     environment:
       # Basic Grafana admin password
-      - GF_SECURITY_ADMIN_PASSWORD=admin123
+      - GF_SECURITY_ADMIN_PASSWORD=<ADMIN_PASSWORD>
       # Disable user sign-up for security
       - GF_USERS_ALLOW_SIGN_UP=false
     volumes:
@@ -66139,7 +66139,7 @@ services:
       # PostgreSQL user for application data
       - POSTGRES_USER=${POSTGRES_USER:-mev}
       # PostgreSQL password for application data
-      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-mevpassword}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-<POSTGRES_PASSWORD>}
       # PostgreSQL database name for application data
       - POSTGRES_DB=${POSTGRES_DB:-mevdb}
       # Initialize database with UTF-8 encoding and C locale
@@ -69223,7 +69223,7 @@ How it works
 Run and verify
 - Start (uses your Shyft RPC and local Redis):
 ```bash
-RPC_URL='https://rpc.shyft.to?api_key=fWrVh_mDygK358FC' \
+RPC_URL='https://rpc.shyft.to?api_key=<SHYFT_API_KEY>' \
 BIND_ADDRESS='127.0.0.1:8084' \
 REDIS_URL='redis://127.0.0.1:6379/0' \
 CACHE_TTL_SECS='600' \
@@ -69244,7 +69244,7 @@ Next step (when you’re ready)
 - Wire `shyft-raw-price-feed` to call this endpoint with a small in-process LRU cache to enrich symbols/decimals in real time.
 
 ```shellscript
-RPC_URL='https://rpc.shyft.to?api_key=fWrVh_mDygK358FC' \
+RPC_URL='https://rpc.shyft.to?api_key=<SHYFT_API_KEY>' \
 BIND_ADDRESS='127.0.0.1:8084' \
 REDIS_URL='redis://127.0.0.1:6379/0' \
 CACHE_TTL_SECS='600' \

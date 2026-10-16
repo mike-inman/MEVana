@@ -53,7 +53,7 @@ executor-service:
 
 ### Environment Configuration (.env)
 ```bash
-X_TOKEN=efff2d23-97ae-4c5f-8b8b-9a6265001189
+X_TOKEN=<SHYFT_X_TOKEN>
 ENDPOINT=https://grpc.ny.shyft.to
 JUPITER_API_KEY=7ad95b98-4855-4a0e-bb2d-362e17aefdd6
 GRAFANA_HOST_PORT=3300  # Grafana external port override

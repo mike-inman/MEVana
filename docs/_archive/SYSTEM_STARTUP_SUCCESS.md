@@ -110,7 +110,7 @@ RUST_LOG=info cargo run -p system-orchestrator
 RUST_LOG=debug PORT=8090 cargo run -p api-service --bin api-server
 
 # HotPath Engine (with authentication)
-GEYSER_ENDPOINT=https://grpc.ny.shyft.to X_TOKEN=efff2d23-97ae-4c5f-8b8b-9a6265001189 \
+GEYSER_ENDPOINT=https://grpc.ny.shyft.to X_TOKEN=<SHYFT_X_TOKEN> \
 METRICS_PORT=8088 API_AUTH_TOKEN=test-auth-token RUST_LOG=info PAPER_TRADING=true \
 cargo run -p hotpath_arb_engine --bin hotpath_arb_engine
 ```

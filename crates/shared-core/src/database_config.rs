@@ -175,11 +175,11 @@ mod tests {
 
     #[test]
     fn test_url_parsing() {
-        let config = DatabaseConfig::from_url("postgresql://mev:mevpassword@localhost:5433/mevdb")
+        let config = DatabaseConfig::from_url("postgresql://mev:<POSTGRES_PASSWORD>@localhost:5433/mevdb")
             .expect("Should parse valid URL");
 
         assert_eq!(config.username, "mev");
-        assert_eq!(config.password, "mevpassword");
+        assert_eq!(config.password, "<POSTGRES_PASSWORD>");
         assert_eq!(config.host, "localhost");
         assert_eq!(config.port, 5433);
         assert_eq!(config.database, "mevdb");
@@ -187,7 +187,7 @@ mod tests {
 
     #[test]
     fn test_validation() {
-        let config = DatabaseConfig::from_url("postgresql://mev:mevpassword@localhost:5433/mevdb")
+        let config = DatabaseConfig::from_url("postgresql://mev:<POSTGRES_PASSWORD>@localhost:5433/mevdb")
             .expect("Should parse valid URL");
 
         // Should pass validation
@@ -199,7 +199,7 @@ mod tests {
     #[test]
     fn test_invalid_database_rejected() {
         let config =
-            DatabaseConfig::from_url("postgresql://mev:mevpassword@localhost:5433/wrongdb")
+            DatabaseConfig::from_url("postgresql://mev:<POSTGRES_PASSWORD>@localhost:5433/wrongdb")
                 .expect("Should parse URL");
 
         // Should fail validation
@@ -208,11 +208,11 @@ mod tests {
 
     #[test]
     fn test_safe_url() {
-        let config = DatabaseConfig::from_url("postgresql://mev:mevpassword@localhost:5433/mevdb")
+        let config = DatabaseConfig::from_url("postgresql://mev:<POSTGRES_PASSWORD>@localhost:5433/mevdb")
             .expect("Should parse valid URL");
 
         let safe_url = config.to_safe_url();
         assert!(safe_url.contains("***"));
-        assert!(!safe_url.contains("mevpassword"));
+        assert!(!safe_url.contains("<POSTGRES_PASSWORD>"));
     }
 }

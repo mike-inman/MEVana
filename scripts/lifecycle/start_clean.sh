@@ -75,9 +75,9 @@ echo ""
 
 # Start single clean instance with multi-endpoint configuration
 PAPER_TRADING=true \
-DATABASE_URL="postgresql://mev:mevpassword@localhost:5433/mevdb" \
+DATABASE_URL="postgresql://mev:<POSTGRES_PASSWORD>@localhost:5433/mevdb" \
 GEYSER_ENDPOINT="https://grpc.ny.shyft.to" \
-X_TOKEN="efff2d23-97ae-4c5f-8b8b-9a6265001189" \
+X_TOKEN="<SHYFT_X_TOKEN>" \
 METRICS_PORT=8081 \
 RUST_LOG=warn \
 cargo run -p hotpath_arb_engine --bin hotpath_arb_engine

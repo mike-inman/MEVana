@@ -418,7 +418,7 @@ struct Args {
     geyser_endpoint: String,
 
     /// Geyser auth token
-    #[arg(long, default_value = "efff2d23-97ae-4c5f-8b8b-9a6265001189")]
+    #[arg(long, default_value = "<SHYFT_X_TOKEN>")]
     x_token: String,
 
     /// HTTP metrics port
@@ -3913,7 +3913,7 @@ impl Default for StreamConfig {
             name: "default".to_string(),
             program_ids: vec![],
             endpoint: "https://grpc.ny.shyft.to".to_string(),
-            token: "efff2d23-97ae-4c5f-8b8b-9a6265001189".to_string(),
+            token: "<SHYFT_X_TOKEN>".to_string(),
         }
     }
 }
@@ -5586,7 +5586,7 @@ async fn main() -> Result<()> {
     let history_buffer = if std::env::var("ORDERBOOK_HISTORY_ENABLED").unwrap_or_default() == "true"
     {
         let database_url = std::env::var("DATABASE_URL")
-            .unwrap_or_else(|_| "postgresql://mev:mevpassword@localhost:5433/mevdb".to_string());
+            .unwrap_or_else(|_| "postgresql://mev:<POSTGRES_PASSWORD>@localhost:5433/mevdb".to_string());
 
         match PgPool::connect(&database_url).await {
             Ok(pool) => {

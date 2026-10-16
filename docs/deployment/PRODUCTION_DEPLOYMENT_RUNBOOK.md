@@ -175,7 +175,7 @@ Document actions and results.
    - `curl -s http://localhost:8088/metrics | grep hotpath_opportunities`
    - `curl -s http://localhost:9905/metrics | head`
    - `curl -s http://localhost:9102/metrics | head`
-3. Grafana login (`admin`/`admin123` or secret). Confirm dashboards load wallet/gateway data.
+3. Grafana login (`admin`/`<ADMIN_PASSWORD>` or secret). Confirm dashboards load wallet/gateway data.
 4. Run `scripts/ci/post-deployment-diagnostics.sh` and archive output.
 5. Execute arbitrage preflight tool (when available) and capture summary.
 

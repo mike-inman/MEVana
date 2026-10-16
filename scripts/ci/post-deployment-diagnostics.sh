@@ -32,7 +32,7 @@ DISCOVERY_INTERNAL_PORT="${MEVANA_DISCOVERY_INTERNAL_PORT:-9102}"
 EXECUTOR_INTERNAL_PORT="${MEVANA_EXECUTOR_INTERNAL_PORT:-9904}"
 
 GRAFANA_USER="${MEVANA_GRAFANA_USER:-admin}"
-GRAFANA_PASS="${MEVANA_GRAFANA_PASS:-admin123}"
+GRAFANA_PASS="${MEVANA_GRAFANA_PASS:-<ADMIN_PASSWORD>}"
 
 TMP_FILES=()
 cleanup() {
@@ -451,7 +451,7 @@ if [ $failed_tests -eq 0 ]; then
     print_status "pass" "All diagnostics passed! Phase 1 deployment is successful."
     echo ""
     echo "🎯 Next steps:"
-    echo "  • Visit Grafana: ${SERVER_BASE}:3000 (admin/admin123)"
+    echo "  • Visit Grafana: ${SERVER_BASE}:3000 (admin/<ADMIN_PASSWORD>)"
     echo "  • Check Prometheus: ${SERVER_BASE}:9090"
     echo "  • Verify dashboards are loading data"
     exit 0

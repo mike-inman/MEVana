@@ -332,7 +332,7 @@ if wallet_balance_sol > MAX_HOT_WALLET_BALANCE_SOL {
 4. Modify `main.rs` - Simplify `is_trading_enabled_and_safe()`
 5. Verify `event_bus.rs` - Confirm Kafka publishing works
 6. Modify `execution_engine.rs` - Add wallet balance safety check
-7. Run local build test: `DATABASE_URL="postgresql://mev:mevpassword@localhost:5433/mevdb" cargo build --workspace`
+7. Run local build test: `DATABASE_URL="postgresql://mev:<POSTGRES_PASSWORD>@localhost:5433/mevdb" cargo build --workspace`
 
 ### Phase 2: Testing (Local)
 1. Start local infrastructure: `cd infrastructure && docker-compose up -d`

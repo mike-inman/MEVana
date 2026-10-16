@@ -9,5 +9,5 @@ MEVana Grafana Dashboards — Contribution Guide
 
 Quick test locally
 - Run: `docker compose -f infrastructure/docker-compose.server.yml -f infrastructure/docker-compose.full.yml up -d grafana prometheus`
-- Open: http://localhost:3000 (admin/admin123)
+- Open: http://localhost:3000 (admin/<ADMIN_PASSWORD>)
 - Dashboards should appear automatically under the configured folder.

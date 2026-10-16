@@ -23,7 +23,7 @@ async fn main() -> anyhow::Result<()> {
 
     tracing::info!("📊 Configuration loaded:");
     tracing::info!("  - Server: {}", config.server.bind_address);
-    tracing::info!("  - Database: {}", config.database.url.replace(":mevpassword@", ":***@"));
+    tracing::info!("  - Database: {}", config.database.url.replace(":<POSTGRES_PASSWORD>@", ":***@"));
     tracing::info!("  - JWT Secret: [REDACTED]");
     tracing::info!("  - Wallet Vault: http://localhost:{}", config.wallet_vault.port);
 
@@ -50,7 +50,7 @@ impl ApiConfig {
             },
             database: DatabaseConfig {
                 url: env::var("DATABASE_URL")
-                    .unwrap_or_else(|_| "postgresql://mev:mevpassword@localhost:5433/mevdb".to_string()),
+                    .unwrap_or_else(|_| "postgresql://mev:<POSTGRES_PASSWORD>@localhost:5433/mevdb".to_string()),
                 max_connections: env::var("DB_MAX_CONNECTIONS")
                     .ok()
                     .and_then(|v| v.parse().ok())

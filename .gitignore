@@ -15,9 +15,17 @@ crates/**/target/
 **/*.dSYM/
 **/*.dwarf
 
-# Logs
+# Logs and runtime state
 logs/
 *.log
+*.pid
+pids/
+backups/
+*.dump
+*.sql.gz
+*.sqlite
+*.sqlite3
+*.db
 
 # Temporary files
 tmp/
@@ -36,11 +44,19 @@ infra.tgz
 # Environment files
 .env
 .env*
+.env.*
+*.env
+*.env.*
+!.env.example
+!*.env.example
+!*.env.sample
 infra/docker/.env.docker
 
 # IDE files
 .vscode/
 .idea/
+.claude/
+.cursor/
 *.swp
 *.swo
 *.sublime-*
@@ -48,6 +64,7 @@ infra/docker/.env.docker
 
 # OS files
 .DS_Store
+**/.DS_Store
 Thumbs.db
 desktop.ini
 
@@ -63,10 +80,19 @@ npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 
-# Database files
-*.sqlite
-*.sqlite3
-*.db
+# Secret and session material
+*.pem
+*.key
+*.p12
+*.pfx
+*keypair*.json
+id.json
+cookies.txt
+*cookie*
+*session*
+wallet*.json
+config/keys/
+infrastructure/keys/
 
 # Cargo lock files (optional - remove if you want to commit them)
 # Cargo.lock
@@ -112,5 +138,3 @@ yarn-error.log*
 *.yaml.bak
 *.yml.bak
 *.json.bak
-config/keys/
-infrastructure/keys/

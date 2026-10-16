@@ -1,0 +1,6 @@
+<Solution>
+  <Project Path="src/MEVana.Research.Api/MEVana.Research.Api.csproj" />
+  <Project Path="src/MEVana.Research.Core/MEVana.Research.Core.csproj" />
+  <Project Path="src/MEVana.Research.Persistence/MEVana.Research.Persistence.csproj" />
+  <Project Path="tests/MEVana.Research.Tests/MEVana.Research.Tests.csproj" />
+</Solution>

@@ -100,7 +100,7 @@ docker run -d --name laserstream-metrics --network mevana_net -e RUST_LOG=info l
 ### Step 4: Fix Grafana Data Source
 ```bash
 # Update data source URL via Grafana API
-curl -X PUT -H "Content-Type: application/json" -u admin:admin123 \
+curl -X PUT -H "Content-Type: application/json" -u admin:<ADMIN_PASSWORD> \
 "http://localhost:3000/api/datasources/2" -d '{
   "id": 2,
   "uid": "prometheus",
@@ -147,7 +147,7 @@ curl -s "http://localhost:9090/api/v1/query?query=up" | jq '.data.result[] | sel
 
 ### Test Grafana Data Source Connection
 ```bash
-curl -X POST -H "Content-Type: application/json" -u admin:admin123 \
+curl -X POST -H "Content-Type: application/json" -u admin:<ADMIN_PASSWORD> \
 "http://localhost:3000/api/datasources/proxy/2/api/v1/query?query=mevana_e2e_latency_ms_count"
 ```
 
@@ -162,7 +162,7 @@ curl -s "http://localhost:9090/api/v1/query?query=mevana_e2e_latency_ms_count" |
 - ✅ **Prometheus Scraping**: Target status UP (value = 1)
 - ✅ **Live Data**: 734+ Jupiter transactions, 148+ unknown program transactions
 - ✅ **Grafana Dashboard**: Visible data with real-time updates
-- ✅ **Production Access**: `http://149.28.56.125:3000` (admin/admin123)
+- ✅ **Production Access**: `http://149.28.56.125:3000` (admin/<ADMIN_PASSWORD>)
 
 ## Lessons Learned
 

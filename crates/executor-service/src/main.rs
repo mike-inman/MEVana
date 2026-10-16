@@ -442,7 +442,7 @@ async fn main() -> Result<()> {
     let _metrics_handle = tokio::spawn(async move { metrics_clone.start().await });
 
     let database_url = std::env::var("DATABASE_URL")
-        .unwrap_or_else(|_| "postgresql://mev:mevpassword@localhost:5433/mevdb".into());
+        .unwrap_or_else(|_| "postgresql://mev:<POSTGRES_PASSWORD>@localhost:5433/mevdb".into());
     let disable_db = std::env::var("DISABLE_DB")
         .ok()
         .map(|v| v == "1" || v.eq_ignore_ascii_case("true"))

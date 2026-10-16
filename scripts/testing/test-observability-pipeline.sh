@@ -97,7 +97,7 @@ fi
 # Test 5: Check Grafana dashboard
 echo -e "\n${BLUE}[TEST 5] Grafana Dashboard Check${NC}"
 echo "  Grafana is running and accessible at: $GRAFANA_URL"
-echo "  Login credentials: admin / admin123"
+echo "  Login credentials: admin / <ADMIN_PASSWORD>"
 echo "  Our test dashboard should be available in the dashboards list"
 echo "  Dashboard name: 'MEVana Test Dashboard'"
 
@@ -126,7 +126,7 @@ echo "  ✅ Dashboard is configured and ready"
 echo ""
 echo -e "${BLUE}Next steps:${NC}"
 echo "  1. Open Grafana at: $GRAFANA_URL"
-echo "  2. Login with: admin / admin123"
+echo "  2. Login with: admin / <ADMIN_PASSWORD>"
 echo "  3. View the 'MEVana Test Dashboard'"
 echo "  4. Add more metrics to our services"
 echo "  5. Create custom dashboards for specific use cases"

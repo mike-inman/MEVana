@@ -19,7 +19,7 @@ Last updated: 2025-09-15
 
 ### **Shyft API Key (for REST/GraphQL APIs)**
 ```
-SHYFT_API_KEY=fWrVh_mDygK358FC
+SHYFT_API_KEY=<SHYFT_API_KEY>
 ```
 
 ### **Shyft X-Token (for Geyser gRPC Stream)**
@@ -28,9 +28,9 @@ X_TOKEN=[REDACTED - Check .env files]
 ```
 
 ### **Endpoints**
-- **RPC**: `https://rpc.shyft.to?api_key=fWrVh_mDygK358FC`
-- **WebSocket**: `wss://rpc.shyft.to?api_key=fWrVh_mDygK358FC`
-- **GraphQL**: `https://programs.shyft.to/v0/graphql/?api_key=fWrVh_mDygK358FC&network=mainnet-beta`
+- **RPC**: `https://rpc.shyft.to?api_key=<SHYFT_API_KEY>`
+- **WebSocket**: `wss://rpc.shyft.to?api_key=<SHYFT_API_KEY>`
+- **GraphQL**: `https://programs.shyft.to/v0/graphql/?api_key=<SHYFT_API_KEY>&network=mainnet-beta`
 - **Swagger UI**: `https://api.shyft.to/sol/api/explore/`
 
 ## 🏗️ **Architecture Components**

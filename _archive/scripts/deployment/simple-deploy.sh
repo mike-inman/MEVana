@@ -107,9 +107,9 @@ main() {
         echo "🚀 Starting hotpath_arb_engine..."
         nohup bash -c "
             export PAPER_TRADING=true
-            export DATABASE_URL='postgresql://mev:mevpassword@localhost:5433/mevdb'
+            export DATABASE_URL='postgresql://mev:<POSTGRES_PASSWORD>@localhost:5433/mevdb'
             export GEYSER_ENDPOINT='https://grpc.ny.shyft.to'
-            export X_TOKEN='efff2d23-97ae-4c5f-8b8b-9a6265001189'
+            export X_TOKEN='<SHYFT_X_TOKEN>'
             export METRICS_PORT=8088
             export RUST_LOG=info
             ./target/release/hotpath_arb_engine
@@ -148,7 +148,7 @@ main() {
         echo "   • Metrics: http://149.28.56.125:8088/metrics"
         echo "   • Performance: http://149.28.56.125:8088/performance"
         echo "   • AI Config: http://149.28.56.125:8088/ai/config"
-        echo "   • Grafana: http://149.28.56.125:3000 (admin/admin123)"
+        echo "   • Grafana: http://149.28.56.125:3000 (admin/<ADMIN_PASSWORD>)"
         echo "   • Prometheus: http://149.28.56.125:9090"
         echo ""
         echo "📋 Management:"

@@ -99,7 +99,7 @@ grafana        grafana/grafana:latest                Up (healthy)
 #### **1.3 Database Schema Setup**
 ```bash
 # Apply database migrations
-DATABASE_URL="postgresql://mev:mevpassword@localhost:5433/mevdb" \
+DATABASE_URL="postgresql://mev:<POSTGRES_PASSWORD>@localhost:5433/mevdb" \
 cargo run -p executor-service --bin migrate
 
 # Verify schema
@@ -133,7 +133,7 @@ ls -la target/release/monitoring-service
 #### **2.3 Service Startup Sequence**
 ```bash
 # Start monitoring service first
-DATABASE_URL="postgresql://mev:mevpassword@localhost:5433/mevdb" \
+DATABASE_URL="postgresql://mev:<POSTGRES_PASSWORD>@localhost:5433/mevdb" \
 MONITORING_PORT=8091 \
 RUST_LOG=info \
 ./target/release/monitoring-service &
@@ -142,7 +142,7 @@ RUST_LOG=info \
 sleep 10
 
 # Start HotPath engine (PAPER TRADING MODE for initial testing)
-DATABASE_URL="postgresql://mev:mevpassword@localhost:5433/mevdb" \
+DATABASE_URL="postgresql://mev:<POSTGRES_PASSWORD>@localhost:5433/mevdb" \
 RUST_LOG=info \
 GEYSER_ENDPOINT="https://grpc.ny.shyft.to" \
 X_TOKEN="your_shyft_token" \
@@ -193,7 +193,7 @@ Expected metrics after 10 minutes of operation:
 #### **Database Configuration**
 ```bash
 # REQUIRED - Single source of truth for database
-DATABASE_URL="postgresql://mev:mevpassword@localhost:5433/mevdb"
+DATABASE_URL="postgresql://mev:<POSTGRES_PASSWORD>@localhost:5433/mevdb"
 ```
 
 #### **Geyser API Configuration**  
@@ -257,7 +257,7 @@ INSERT INTO smart_filter_config_history
 - **Volume Processed**: Transaction throughput
 
 ### **Grafana Dashboards**
-Access: http://your-domain:3000 (admin/admin123)
+Access: http://your-domain:3000 (admin/<ADMIN_PASSWORD>)
 
 **Pre-configured dashboards**:
 1. **System Overview** - Infrastructure health, uptime
@@ -318,7 +318,7 @@ chown -R mevana:mevana /opt/mevana
 ### **Data Security**
 ```bash
 # Database backup encryption
-pg_dump postgresql://mev:mevpassword@localhost:5433/mevdb | \
+pg_dump postgresql://mev:<POSTGRES_PASSWORD>@localhost:5433/mevdb | \
 gpg --cipher-algo AES256 --compress-algo 1 --symmetric \
 --output backup_$(date +%Y%m%d).sql.gpg
 ```

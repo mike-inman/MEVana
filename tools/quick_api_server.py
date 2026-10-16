@@ -13,7 +13,7 @@ DB_CONFIG = {
     'port': 5433,
     'database': 'mevdb',
     'user': 'mev',
-    'password': 'mevpassword'
+    'password': '<POSTGRES_PASSWORD>'
 }
 
 class ArbitrageAPIHandler(BaseHTTPRequestHandler):

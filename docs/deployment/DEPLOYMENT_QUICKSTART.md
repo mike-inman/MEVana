@@ -71,7 +71,7 @@ cd ..
 
 ## Monitoring URLs
 - Arbitrage Config: http://YOUR_SERVER_IP:8081/ai/config
-- Grafana Dashboard: http://YOUR_SERVER_IP:3000 (admin/admin123)
+- Grafana Dashboard: http://YOUR_SERVER_IP:3000 (admin/<ADMIN_PASSWORD>)
 - Prometheus: http://YOUR_SERVER_IP:9090
 
 ## Next Steps After Deployment

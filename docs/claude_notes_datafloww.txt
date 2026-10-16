@@ -32,7 +32,7 @@ Key Findings
   max_profit_bps: 1000,         // Raise to allow more opportunities
   2. Verify database connectivity:
     - Ensure DATABASE_URL environment variable is set
-    - Test connection: postgresql://mev:mevpassword@localhost:5433/mevdb
+    - Test connection: postgresql://mev:<POSTGRES_PASSWORD>@localhost:5433/mevdb
   3. Enable debug logging:
     - Set RUST_LOG=debug to see filtering decisions
     - Monitor logs for "should_execute=false" messages
@@ -94,7 +94,7 @@ Key Findings
   Step 2: Verify Environment Variables
 
   Ensure these are set:
-  export DATABASE_URL="postgresql://mev:mevpassword@localhost:5433/mevdb"
+  export DATABASE_URL="postgresql://mev:<POSTGRES_PASSWORD>@localhost:5433/mevdb"
   export RUST_LOG=info
   export GEYSER_ENDPOINT="https://grpc.ny.shyft.to"  # or your endpoint
   export X_TOKEN="your_shyft_token"  # if using Shyft

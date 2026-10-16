@@ -69,7 +69,7 @@ Expected behavior: ✅ Working correctly
 **Identified Hardcoded Values:**
 ```rust
 // Database connections
-"postgresql://mev:mevpassword@localhost:5433/mevdb"  // main.rs:4099
+"postgresql://mev:<POSTGRES_PASSWORD>@localhost:5433/mevdb"  // main.rs:4099
 "redis://localhost:6379"                             // redis_publisher.rs:51, main.rs:3186
 
 // Message broker

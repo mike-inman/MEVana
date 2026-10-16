@@ -21,7 +21,7 @@ ensure_multi_venue_config() {
   # dependent services have their environment before we trigger restarts.
   cat > /etc/mevana/normalizer.env <<'EOF'
 KAFKA_BROKER=localhost:29092
-DATABASE_URL=postgresql://mev:mevpassword@localhost:5433/mevdb
+DATABASE_URL=postgresql://mev:<POSTGRES_PASSWORD>@localhost:5433/mevdb
 IN_TOPIC=dex-transactions
 OUT_TOPIC=normalized-swaps.v1
 METRICS_PORT=9901
@@ -32,7 +32,7 @@ EOF
   # binding conflicts with monitoring-service (8091) by pinning the API to 8092.
   cat > /etc/mevana/api-service.env <<'EOF'
 PORT=8092
-DATABASE_URL=postgresql://mev:mevpassword@localhost:5433/mevdb
+DATABASE_URL=postgresql://mev:<POSTGRES_PASSWORD>@localhost:5433/mevdb
 REDIS_URL=redis://localhost:6380/0
 KAFKA_BROKER=localhost:29092
 MEVANA_GATEWAY_ENABLE=true

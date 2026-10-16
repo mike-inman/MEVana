@@ -17,7 +17,7 @@ Last updated: 2025-09-15
 
 ### **Key URLs**
 - **Main Dashboard**: http://localhost:8088/performance
-- **Grafana Monitoring**: http://localhost:3000 (admin/admin123)
+- **Grafana Monitoring**: http://localhost:3000 (admin/<ADMIN_PASSWORD>)
 - **Kafka UI**: http://localhost:8080
 - **Database Admin**: http://localhost:8082
 
@@ -38,7 +38,7 @@ Last updated: 2025-09-15
 
 3. **Start Monitoring Service**
    ```bash
-   DATABASE_URL="postgresql://mev:mevpassword@localhost:5433/mevdb" \
+   DATABASE_URL="postgresql://mev:<POSTGRES_PASSWORD>@localhost:5433/mevdb" \
    MONITORING_PORT=8091 \
    RUST_LOG=info \
    ./target/release/monitoring-service &
@@ -46,7 +46,7 @@ Last updated: 2025-09-15
 
 4. **Start HotPath Engine**
    ```bash
-   DATABASE_URL="postgresql://mev:mevpassword@localhost:5433/mevdb" \
+   DATABASE_URL="postgresql://mev:<POSTGRES_PASSWORD>@localhost:5433/mevdb" \
    RUST_LOG=info \
    GEYSER_ENDPOINT="https://grpc.ny.shyft.to" \
    X_TOKEN="your_shyft_token" \
@@ -129,7 +129,7 @@ Access: http://localhost:8088/performance
 - **Memory Usage**: Should be stable, no continuous growth
 
 #### **Grafana Dashboards**
-Access: http://localhost:3000 (admin/admin123)
+Access: http://localhost:3000 (admin/<ADMIN_PASSWORD>)
 
 **Main Dashboards:**
 1. **System Overview** - Infrastructure health, service uptime
@@ -372,14 +372,14 @@ sleep 60
 docker-compose ps
 
 # 4. Start services with conservative settings
-DATABASE_URL="postgresql://mev:mevpassword@localhost:5433/mevdb" \
+DATABASE_URL="postgresql://mev:<POSTGRES_PASSWORD>@localhost:5433/mevdb" \
 MONITORING_PORT=8091 \
 RUST_LOG=info \
 ./target/release/monitoring-service &
 
 sleep 10
 
-DATABASE_URL="postgresql://mev:mevpassword@localhost:5433/mevdb" \
+DATABASE_URL="postgresql://mev:<POSTGRES_PASSWORD>@localhost:5433/mevdb" \
 RUST_LOG=info \
 GEYSER_ENDPOINT="https://grpc.ny.shyft.to" \
 X_TOKEN="your_shyft_token" \

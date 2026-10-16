@@ -10,7 +10,7 @@ echo "🧪 Testing MEVana Validation Pipeline"
 echo "====================================="
 
 # Set environment variables
-export SHYFT_API_KEY="fWrVh_mDygK358FC"
+export SHYFT_API_KEY="<SHYFT_API_KEY>"
 export RUST_LOG="info"
 
 echo "🔑 Using Shyft API Key: ${SHYFT_API_KEY:0:8}..."
@@ -50,7 +50,7 @@ use shyft_validator::ShyftValidator;
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let validator = ShyftValidator::new(
-        "fWrVh_mDygK358FC".to_string(),
+        "<SHYFT_API_KEY>".to_string(),
         "mainnet-beta".to_string()
     );
     
