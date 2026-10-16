@@ -17,6 +17,7 @@ crates/**/target/
 
 # Logs and runtime state
 logs/
+benchmark_results/
 *.log
 *.pid
 pids/

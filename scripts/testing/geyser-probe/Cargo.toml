@@ -1,0 +1,20 @@
+[package]
+name = "mevana-geyser-probe-benchmark"
+version = "0.1.0"
+edition = "2021"
+
+[[bin]]
+name = "geyser_probe"
+path = "../../../crates/executor-service/src/bin/geyser_probe.rs"
+
+[workspace]
+
+[dependencies]
+anyhow = "1"
+chrono = "0.4"
+futures-util = "0.3"
+tokio = { version = "1", features = ["full"] }
+tonic = { version = "0.12", features = ["transport"] }
+url = "2.5"
+yellowstone-grpc-client = "=4.2.1"
+yellowstone-grpc-proto = "=4.2.1"

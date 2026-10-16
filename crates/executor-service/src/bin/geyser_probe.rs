@@ -1,143 +1,246 @@
+//! Read-only Yellowstone subscription benchmark. No wallet or submission path.
 use futures_util::StreamExt;
-use std::time::Duration;
+use std::{
+    collections::HashMap,
+    fs::OpenOptions,
+    io::Write,
+    time::{Duration, Instant},
+};
 use yellowstone_grpc_client::GeyserGrpcClient;
 use yellowstone_grpc_proto::prelude::{
     subscribe_update::UpdateOneof, CommitmentLevel, SubscribeRequest,
     SubscribeRequestFilterTransactions,
 };
 
-// Minimal standalone probe to validate GEYSER endpoint + token.
-// Does not touch DB, Kafka, wallet, metrics. Prints raw account update summaries for ~N seconds.
-// Run with:
-//   GEYSER_ENDPOINT=... GEYSER_X_TOKEN=... cargo run -p executor-service --bin geyser_probe
-// Optional env:
-//   GEYSER_OWNER_FILTERS=prog1,prog2   (comma separated owners)
-//   GEYSER_PROBE_SECS=10              (duration, default 10)
-//   RUST_LOG=info                     (for logs)
+fn row(
+    file: &mut std::fs::File,
+    label: &str,
+    endpoint: &str,
+    trial: &str,
+    metric: &str,
+    value: f64,
+    unit: &str,
+    status: &str,
+) -> anyhow::Result<()> {
+    writeln!(
+        file,
+        "{},{},{},{},{},{:.3},{},{}",
+        label,
+        chrono::Utc::now().to_rfc3339(),
+        endpoint,
+        trial,
+        metric,
+        value,
+        unit,
+        status
+    )?;
+    Ok(())
+}
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
-    env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("info")).init();
-    let endpoint = std::env::var("GEYSER_ENDPOINT").or_else(|_| std::env::var("ENDPOINT"))?;
-    let x_token = std::env::var("GEYSER_X_TOKEN").or_else(|_| std::env::var("X_TOKEN"))?;
+    let endpoint = std::env::var("GEYSER_ENDPOINT")?;
+    let token = std::env::var("GEYSER_X_TOKEN")?;
+    let label = std::env::var("BENCH_SERVER_LABEL")?;
+    let trial = std::env::var("BENCH_TRIAL")?;
+    let output = std::env::var("BENCH_OUTPUT")?;
+    anyhow::ensure!(
+        matches!(label.as_str(), "vultr" | "hetzner"),
+        "invalid server label"
+    );
+    anyhow::ensure!(
+        trial
+            .bytes()
+            .all(|b| b.is_ascii_alphanumeric() || b == b'-' || b == b'_'),
+        "invalid trial label"
+    );
+    let host = url::Url::parse(&endpoint)
+        .map_err(|_| anyhow::anyhow!("invalid Geyser endpoint"))?
+        .host_str()
+        .ok_or_else(|| anyhow::anyhow!("endpoint host missing"))?
+        .to_string();
     let secs: u64 = std::env::var("GEYSER_PROBE_SECS")
-        .ok()
-        .and_then(|s| s.parse().ok())
-        .unwrap_or(10);
-    log::info!(
-        "geyser_probe_start endpoint={} duration_secs={}",
-        endpoint,
-        secs
+        .unwrap_or_else(|_| "120".into())
+        .parse()?;
+    let stall_secs: u64 = std::env::var("GEYSER_STALL_SECS")
+        .unwrap_or_else(|_| "10".into())
+        .parse()?;
+    anyhow::ensure!(secs > 0 && stall_secs > 0, "durations must be positive");
+    let program_ids: Vec<String> = std::env::var("GEYSER_PROGRAM_IDS")?
+        .split(',')
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .map(str::to_owned)
+        .collect();
+    anyhow::ensure!(
+        !program_ids.is_empty(),
+        "GEYSER_PROGRAM_IDS must contain at least one program"
     );
 
-    let mut client = GeyserGrpcClient::build_from_shared(endpoint.clone())?
-        .x_token(Some(x_token.clone()))?
-        .connect_timeout(Duration::from_secs(10))
-        .timeout(Duration::from_secs(10))
-        .tls_config(tonic::transport::channel::ClientTlsConfig::new().with_native_roots())?
-        .max_decoding_message_size(1024 * 1024 * 1024)
-        .connect()
-        .await?;
-    log::info!("geyser_probe_connected");
-
-    // Filtering configuration (mirrors dex-stream-universal simplified)
-    let dex_filtering = std::env::var("DEX_FILTERING").unwrap_or_else(|_| "ON".to_string());
-    // Support both PROGRAM_IDS and GEYSER_PROGRAM_IDS env vars
-    let program_ids_csv = std::env::var("GEYSER_PROGRAM_IDS")
-        .or_else(|_| std::env::var("PROGRAM_IDS"))
-        .unwrap_or_default();
-    let program_ids: Vec<String> = program_ids_csv
-        .split(',')
-        .map(|s| s.trim().to_string())
-        .filter(|s| !s.is_empty())
-        .collect();
-
-    if dex_filtering == "OFF" {
-        log::info!("probe_filter_mode=wide_open (vote+failed+all accounts)");
-    } else {
-        log::info!(
-            "probe_filter_mode=filtered program_ids_count={} program_ids={:?}",
-            program_ids.len(),
-            program_ids
-        );
+    let mut file = OpenOptions::new().append(true).create(true).open(output)?;
+    if file.metadata()?.len() == 0 {
+        writeln!(
+            file,
+            "server_label,utc_time,endpoint,trial,metric,value,unit,status"
+        )?;
     }
+    let started = Instant::now();
+    let mut client = GeyserGrpcClient::build_from_shared(endpoint)
+        .map_err(|_| anyhow::anyhow!("invalid Geyser endpoint"))?
+        .x_token(Some(token))
+        .map_err(|_| anyhow::anyhow!("invalid Geyser token"))?
+        .connect_timeout(Duration::from_secs(10))
+        .tls_config(tonic::transport::channel::ClientTlsConfig::new().with_native_roots())?
+        .max_decoding_message_size(16 * 1024 * 1024)
+        .connect()
+        .await
+        .map_err(|_| anyhow::anyhow!("Geyser connection failed"))?;
+    row(
+        &mut file,
+        &label,
+        &host,
+        &trial,
+        "connect_ms",
+        started.elapsed().as_secs_f64() * 1000.0,
+        "ms",
+        "ok",
+    )?;
 
-    let mut transactions_filters = std::collections::HashMap::new();
-    let (vote, failed, account_include) = if dex_filtering == "OFF" {
-        (None, None, Vec::new())
-    } else {
-        (Some(false), Some(false), program_ids)
-    };
-    transactions_filters.insert(
-        "probe".to_string(),
+    let mut transactions = HashMap::new();
+    transactions.insert(
+        "benchmark".into(),
         SubscribeRequestFilterTransactions {
-            vote,
-            failed,
-            account_include,
+            vote: Some(false),
+            failed: Some(false),
+            account_include: program_ids,
             account_exclude: vec![],
             account_required: vec![],
             signature: None,
         },
     );
-
-    let req = SubscribeRequest {
+    let request = SubscribeRequest {
         commitment: Some(CommitmentLevel::Processed as i32),
-        transactions: transactions_filters,
+        transactions,
         ..Default::default()
     };
-    let (_tx, mut stream) = client.subscribe_with_request(Some(req)).await?;
-    log::info!("geyser_probe_stream_opened");
-
-    use std::time::Instant;
-    let end = Instant::now() + Duration::from_secs(secs);
-    while Instant::now() < end {
-        match stream.next().await {
-            Some(Ok(m)) => match m.update_oneof {
-                Some(UpdateOneof::Account(a)) => {
-                    if let Some(ai) = a.account {
-                        log::info!("acct slot={} len={}", a.slot, ai.data.len());
-                    }
+    let (_sender, mut stream) = client
+        .subscribe_with_request(Some(request))
+        .await
+        .map_err(|_| anyhow::anyhow!("Geyser subscription failed"))?;
+    let opened = Instant::now();
+    let deadline = opened + Duration::from_secs(secs);
+    let (mut updates, mut stalls, mut disconnects) = (0u64, 0u64, 0u64);
+    let mut first_ms = None;
+    let mut last_update = opened;
+    let mut status = "ok";
+    loop {
+        let now = Instant::now();
+        if now >= deadline {
+            break;
+        }
+        if now.duration_since(last_update) >= Duration::from_secs(stall_secs) {
+            stalls += 1;
+            last_update = now;
+        }
+        let wait = std::cmp::min(Duration::from_secs(stall_secs), deadline - now);
+        match tokio::time::timeout(wait, stream.next()).await {
+            Ok(Some(Ok(message))) => {
+                if matches!(message.update_oneof, Some(UpdateOneof::Transaction(_))) {
+                    updates += 1;
+                    first_ms.get_or_insert_with(|| opened.elapsed().as_secs_f64() * 1000.0);
+                    last_update = Instant::now();
                 }
-                Some(UpdateOneof::Transaction(t)) => {
-                    if let Some(txinfo) = t.transaction.as_ref() {
-                        let signature = bs58::encode(&txinfo.signature).into_string();
-                        // Extract program IDs
-                        let mut programs = Vec::new();
-                        if let Some(inner) = txinfo.transaction.as_ref() {
-                            if let Some(msg) = inner.message.as_ref() {
-                                for ix in &msg.instructions {
-                                    if let Some(key) =
-                                        msg.account_keys.get(ix.program_id_index as usize)
-                                    {
-                                        programs.push(bs58::encode(key).into_string());
-                                    }
-                                }
-                            }
-                        }
-                        log::info!(
-                            "txn slot={} sig={} programs=[{}]",
-                            t.slot,
-                            signature,
-                            programs.join(",")
-                        );
-                    } else {
-                        log::info!("txn slot={} (no txinfo)", t.slot);
-                    }
-                }
-                Some(UpdateOneof::Ping(_)) => {}
-                Some(UpdateOneof::Pong(_)) => {}
-                _ => {}
-            },
-            Some(Err(e)) => {
-                log::error!("stream_error {:?}", e);
+            }
+            Ok(Some(Err(_))) | Ok(None) => {
+                disconnects += 1;
+                status = "disconnected";
                 break;
             }
-            None => {
-                log::warn!("stream_closed");
-                break;
+            Err(_) => {
+                if Instant::now() >= deadline {
+                    break;
+                }
             }
         }
     }
-    log::info!("done");
+    let elapsed = opened.elapsed().as_secs_f64();
+    if first_ms.is_none() && status == "ok" {
+        status = "no_updates";
+    }
+    row(
+        &mut file,
+        &label,
+        &host,
+        &trial,
+        "first_update_ms",
+        first_ms.unwrap_or(0.0),
+        "ms",
+        if first_ms.is_some() { "ok" } else { status },
+    )?;
+    row(
+        &mut file,
+        &label,
+        &host,
+        &trial,
+        "updates_per_sec",
+        updates as f64 / elapsed,
+        "per_sec",
+        status,
+    )?;
+    row(
+        &mut file,
+        &label,
+        &host,
+        &trial,
+        "updates",
+        updates as f64,
+        "count",
+        status,
+    )?;
+    row(
+        &mut file,
+        &label,
+        &host,
+        &trial,
+        "stalls",
+        stalls as f64,
+        "count",
+        status,
+    )?;
+    row(
+        &mut file,
+        &label,
+        &host,
+        &trial,
+        "disconnects",
+        disconnects as f64,
+        "count",
+        status,
+    )?;
+    row(
+        &mut file,
+        &label,
+        &host,
+        &trial,
+        "reconnects",
+        0.0,
+        "count",
+        status,
+    )?;
+    row(
+        &mut file,
+        &label,
+        &host,
+        &trial,
+        "runtime_sec",
+        elapsed,
+        "sec",
+        status,
+    )?;
+    println!(
+        "trial={} endpoint={} updates={} stalls={} disconnects={} status={}",
+        trial, host, updates, stalls, disconnects, status
+    );
+    anyhow::ensure!(status == "ok", "stream trial ended with {status}");
     Ok(())
 }
