@@ -4,6 +4,10 @@ use arb_engine::stats::{
     CIRCUIT_OPEN, EDGE_DECODE_ERRORS, EDGE_PROCESS_ERRORS, EDGE_TOTAL,
 };
 use std::sync::atomic::Ordering as Ao;
+use std::sync::Mutex;
+
+// These tests exercise process-wide circuit state and must not reset it concurrently.
+static TEST_LOCK: Mutex<()> = Mutex::new(());
 
 fn reset_state() {
     EDGE_TOTAL.store(0, Ao::Relaxed);
@@ -18,6 +22,7 @@ fn reset_state() {
 
 #[test]
 fn opens_after_threshold() {
+    let _guard = TEST_LOCK.lock().unwrap();
     reset_state();
     let cfg = CircuitConfig {
         threshold: 0.5,
@@ -41,6 +46,7 @@ fn opens_after_threshold() {
 
 #[test]
 fn half_open_and_close_success() {
+    let _guard = TEST_LOCK.lock().unwrap();
     reset_state();
     let cfg = CircuitConfig {
         threshold: 0.25,
@@ -66,6 +72,7 @@ fn half_open_and_close_success() {
 
 #[test]
 fn half_open_reopens_on_errors() {
+    let _guard = TEST_LOCK.lock().unwrap();
     reset_state();
     let cfg = CircuitConfig {
         threshold: 0.25,

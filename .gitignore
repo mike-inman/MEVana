@@ -139,3 +139,6 @@ infrastructure/keys/
 *.yaml.bak
 *.yml.bak
 *.json.bak
+
+# Runtime AI logs produced by local tests and development
+crates/arb-engine/ai_logs/

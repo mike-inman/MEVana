@@ -22,6 +22,8 @@ static ADVICE_LOG: OnceLock<Mutex<VecDeque<AdviceEntry>>> = OnceLock::new();
 static ADVICE_ID: OnceLock<std::sync::atomic::AtomicU64> = OnceLock::new();
 static SIGNAL_LOG_FILE: OnceLock<Mutex<Option<File>>> = OnceLock::new();
 static ADVICE_LOG_FILE: OnceLock<Mutex<Option<File>>> = OnceLock::new();
+// Keep each write and its subsequent rotation together after releasing the file lock.
+static LOG_WRITE_LOCK: Mutex<()> = Mutex::new(());
 // Track current log date + size for cheap rotation checks
 static LOG_STATE: OnceLock<Mutex<LogState>> = OnceLock::new();
 
@@ -158,16 +160,21 @@ pub fn record_recent_signal(sig: ArbSignal) {
     }
     q.push_back(sig.clone());
     // Persist
+    let _write_guard = LOG_WRITE_LOCK.lock().unwrap();
+    let mut written_bytes = None;
     if let Some(lock) = SIGNAL_LOG_FILE.get() {
         if let Ok(mut fopt) = lock.lock() {
             if let Some(f) = fopt.as_mut() {
                 if let Ok(line) = serde_json::to_string(&sig) {
-                    let _ = writeln!(f, "{}", line);
-                    let _ = f.flush();
-                    rotate_if_needed("signals", line.len() + 1);
+                    if writeln!(f, "{}", line).is_ok() && f.flush().is_ok() {
+                        written_bytes = Some(line.len() + 1);
+                    }
                 }
             }
         }
+    }
+    if let Some(bytes) = written_bytes {
+        rotate_if_needed("signals", bytes);
     }
 }
 
@@ -197,16 +204,21 @@ pub fn add_advice(tag: String, message: String) -> AdviceEntry {
         q.pop_front();
     }
     q.push_back(entry.clone());
+    let _write_guard = LOG_WRITE_LOCK.lock().unwrap();
+    let mut written_bytes = None;
     if let Some(lock) = ADVICE_LOG_FILE.get() {
         if let Ok(mut fopt) = lock.lock() {
             if let Some(f) = fopt.as_mut() {
                 if let Ok(line) = serde_json::to_string(&entry) {
-                    let _ = writeln!(f, "{}", line);
-                    let _ = f.flush();
-                    rotate_if_needed("advice", line.len() + 1);
+                    if writeln!(f, "{}", line).is_ok() && f.flush().is_ok() {
+                        written_bytes = Some(line.len() + 1);
+                    }
                 }
             }
         }
+    }
+    if let Some(bytes) = written_bytes {
+        rotate_if_needed("advice", bytes);
     }
     entry
 }

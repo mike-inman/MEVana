@@ -1,7 +1,8 @@
 use arb_engine::edge_integration::EdgeArbitrageDetector;
 use arb_engine::hotpath::SignalQueue;
-use edge_assembler::edge::EdgeDelta;
+use edge_assembler::edge::{edge_delta, ClmmState, CpmmState, DlmmState, EdgeDelta};
 use std::sync::Arc;
+use std::time::{SystemTime, UNIX_EPOCH};
 
 fn q64(price: f64) -> Vec<u8> {
     ((price * 18446744073709551616.0) as u128)
@@ -14,7 +15,7 @@ fn size(v: u128) -> Vec<u8> {
 
 // Construct a 3-leg cycle A->B->C->A with net profit
 // Legs:
-// A->B price 1.01, B->C 1.01, C->A 1.00 (overall gross ~1.0201) minus fees (~0.999 * 0.999 * 0.999 ~ 0.997) still >1
+// A->B price 1.02, B->C 1.02, C->A 1.01; fees are 0.1% per leg.
 // Fees each 0.1% (10 bps)
 #[tokio::test]
 async fn three_leg_cycle_generates_signal() {
@@ -29,6 +30,10 @@ async fn three_leg_cycle_generates_signal() {
     let a = vec![1u8; 32];
     let b = vec![2u8; 32];
     let c = vec![3u8; 32];
+    let now_ns = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap()
+        .as_nanos() as u64;
 
     // e1: A->B direction 0
     let e1 = EdgeDelta {
@@ -43,11 +48,17 @@ async fn three_leg_cycle_generates_signal() {
         fee_bps_total: 10,
         slot: 1,
         write_version: 1,
-        updated_at_ns: 1,
+        updated_at_ns: now_ns,
         marginal_price_q64: q64(1.02),
         size_to_next_boundary_in: size(10_000),
         cu_estimate: 50_000,
-        state: None,
+        state: Some(edge_delta::State::Clmm(ClmmState {
+            sqrt_price_x64: q64(1.0),
+            liquidity: size(1_000_000),
+            tick_current: 0,
+            tick_spacing: 64,
+            size_to_next_in: size(10_000),
+        })),
     };
     // e2: B->C direction 0
     let e2 = EdgeDelta {
@@ -62,11 +73,14 @@ async fn three_leg_cycle_generates_signal() {
         fee_bps_total: 10,
         slot: 1,
         write_version: 1,
-        updated_at_ns: 2,
+        updated_at_ns: now_ns,
         marginal_price_q64: q64(1.02),
         size_to_next_boundary_in: size(10_000),
         cu_estimate: 50_000,
-        state: None,
+        state: Some(edge_delta::State::Cpmm(CpmmState {
+            reserve_in: size(1_000_000),
+            reserve_out: size(1_020_000),
+        })),
     };
     // e3: C->A direction 0 price 1.01
     let e3 = EdgeDelta {
@@ -81,11 +95,15 @@ async fn three_leg_cycle_generates_signal() {
         fee_bps_total: 10,
         slot: 1,
         write_version: 1,
-        updated_at_ns: 3,
+        updated_at_ns: now_ns,
         marginal_price_q64: q64(1.01),
         size_to_next_boundary_in: size(10_000),
         cu_estimate: 50_000,
-        state: None,
+        state: Some(edge_delta::State::Dlmm(DlmmState {
+            active_bin: 0,
+            bin_price_q64: q64(1.01),
+            depth_hint_in: size(10_000),
+        })),
     };
 
     det.process_edge_update(e1).unwrap();
