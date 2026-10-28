@@ -1,6 +1,18 @@
 # Initialized 2026-10-27 CDT
 schema: spec-driven
 
+# Standing research constraints recorded 2026-10-28 CDT.
+context: |
+  Research contracts cover Solana DEX routes only; ranking is advisory WATCH output.
+  Use integer quote-atom amounts and integer basis points (0 through 10000), never floating point.
+  All new contract timestamps require zero-offset UTC.
+  Synthetic fixtures must say Synthetic and must never be presented as market evidence.
+  Research contracts carry no signing material, wallet identifiers, serialized transactions,
+  instructions or other trading authority. Do not define TRIGGER messages.
+  Date every authored document. Keep general plans and closeouts in the local project docs directory.
+  Preserve existing contract behavior, credentials and wallet material. Keep trading disabled.
+  No live-data/provider calls, Rust, UI, API host, persistence or deployment changes in this slice.
+
 # Project context (optional)
 # Add only constraints that should guide OpenSpec artifacts and workflows.
 # Include constraints an agent cannot infer by reading the code.
