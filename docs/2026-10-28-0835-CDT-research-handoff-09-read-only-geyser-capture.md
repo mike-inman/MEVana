@@ -28,9 +28,20 @@ This slice builds a **record-only** capture tool for Orca Whirlpool state, check
   - Only the three files above subscribe to Geyser.
   - The `async_history_buffer` writes opportunities to the database.
   - The normalizer binaries (`tap_orca_*`, `arb_watch`, `swap_feed`) and `live_edge_audit` read Kafka.
-  - `multi-geyser-streams` is an empty stub.
+  - `crates/multi-geyser-streams` contains only an empty `src/main.rs` today. Its last full version is at `git show 14874a0d^:crates/multi-geyser-streams/src/main.rs` (729 lines, deleted 2025-09-06).
+    - That version was a transactions-only monitor: three parallel Processed subscriptions (Jupiter, Whirlpool, Raydium AMM), Prometheus `multi_geyser_stream_*` metrics, and a fixed 5-second retry.
+    - It had no file output, no account subscription, no ping handling and no stall detection.
+    - Its client and retry code continued as `hotpath_arb_engine/src/main.rs:4034` and `:4325`.
 
   Do not reuse any of these as a capture path.
+- **Reuse two ideas from `multi-geyser-streams`:**
+  1. Give the account stream and the transaction stream **separate connections**, so that transaction volume cannot starve account capture. Record gaps per connection.
+  2. Expose a **Prometheus metrics endpoint**: updates per second by type, bytes written, current file, last slot, seconds since the last message, and gap and stall counts.
+     - Use a new `geyser_capture_*` metric prefix. **Do not reuse `multi_geyser_stream_*`**, because `scripts/geyser_recovery.sh` acts automatically on those metrics.
+     - Choose a port that does not conflict with any port listed in `CLAUDE.md`, and make it configurable.
+     - Bind to `127.0.0.1` by default.
+
+  Do not restore or modify the old crate, and do not touch the Grafana dashboards in this slice.
 - **Guard against the fake Geyser.** `scripts/development/start_fake_geyser.sh` runs a synthetic Geyser on `localhost:50051`, created as an ISP-throttling workaround.
   - The capture tool must **refuse** loopback, private or `localhost` endpoints unless `--synthetic-source` is passed.
   - When that flag is set, every manifest must record the source as synthetic, so the data is never cataloged as market data. Test this.
