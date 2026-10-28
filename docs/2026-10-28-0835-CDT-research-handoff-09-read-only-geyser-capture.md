@@ -24,6 +24,18 @@ This slice builds a **record-only** capture tool for Orca Whirlpool state, check
   - The token comes from `GEYSER_X_TOKEN`, falling back to `X_TOKEN` (and `SHYFT_GEYSER_X_TOKEN`, as in `executor-service/src/config.rs:94`).
   - The operator supplies these through the environment. Do not open, print, copy, edit or create `.env` files or other secret files.
 - **The OpenSpec project context blocks this slice and must be narrowed.** Line 14 of `openspec/config.yaml` forbids live-data and provider calls and Rust changes. That restriction was written for the contract slices, but as project-wide context it would apply here.
+- **A sweep of every crate (including `crates/_archive`) and `scripts/` on 2026-10-28 found no existing raw-stream recorder.**
+  - Only the three files above subscribe to Geyser.
+  - The `async_history_buffer` writes opportunities to the database.
+  - The normalizer binaries (`tap_orca_*`, `arb_watch`, `swap_feed`) and `live_edge_audit` read Kafka.
+  - `multi-geyser-streams` is an empty stub.
+
+  Do not reuse any of these as a capture path.
+- **Guard against the fake Geyser.** `scripts/development/start_fake_geyser.sh` runs a synthetic Geyser on `localhost:50051`, created as an ISP-throttling workaround.
+  - The capture tool must **refuse** loopback, private or `localhost` endpoints unless `--synthetic-source` is passed.
+  - When that flag is set, every manifest must record the source as synthetic, so the data is never cataloged as market data. Test this.
+  - The ISP-throttling history also means this Mac's network may introduce gaps. Report gap rates honestly, and recommend a server host if they are material.
+- `whirlpool-core/examples/seed_and_log.rs` fetches pool and TickArray accounts over RPC (`RPC_URL`). It can serve as a cross-check for decoder fixtures, but the fixtures themselves should come from captured bytes.
 - Raydium is out of scope. Its CLMM decoder is private and untested, AMM v4 decoding is a stub, and there is no CPMM account decoder.
 
 ## Work
