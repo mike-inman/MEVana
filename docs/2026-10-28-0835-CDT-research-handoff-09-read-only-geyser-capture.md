@@ -165,12 +165,15 @@ This slice builds a **record-only** capture tool for Orca Whirlpool state, check
 
 ## Later slices (not in scope)
 
-- **Handoff 10 — Replay correctness:**
+The sequence below was revised on 2026-10-28 after `docs/2026-10-28-0832-CDT-rust-crates-inventory-and-capability-map.md` found that no crate contains exact quote math.
+
+- **Handoff 10 — Exact Whirlpool quoting:** an integer port of Orca's swap math, including tick crossing and `liquidity_net`. Golden-test it against captured on-chain swaps and the pool state before and after each one.
+- **Handoff 11 — Replay correctness:**
   - fix the `arb_replay` problems in finding F8: the 1,024-signal queue loss, historical clock semantics and seed control;
   - add a step that converts raw captures into the replay input, the `EdgeDelta` frames from `crates/edge-assembler/proto/edge.proto`. `arb_replay` currently replays derived edges, not raw Geyser updates;
   - write the first `Simulated` `ExperimentResult` from a real capture.
-- **Handoff 11:** a read-only Research API that serves the catalog, including capture-backed datasets, and the contract artifacts.
-- **Handoff 12:** the MEVana-UI research page.
+- **Handoff 12:** a read-only Research API that serves the catalog, including capture-backed datasets, and the contract artifacts.
+- **Handoff 13:** the MEVana-UI research page.
 - **Follow-up:** corrections to the request contract, and Raydium decoders with tests once Whirlpool capture is stable.
 
 ## Exit criteria
