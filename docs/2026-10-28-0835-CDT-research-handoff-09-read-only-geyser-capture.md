@@ -42,6 +42,20 @@ This slice builds a **record-only** capture tool for Orca Whirlpool state, check
      - Bind to `127.0.0.1` by default.
 
   Do not restore or modify the old crate, and do not touch the Grafana dashboards in this slice.
+- **`crates/shared-core` rules for this slice.** Do not modify `shared-core`.
+  - **Use** `shared_core::programs::ORCA_WHIRLPOOL` for the program ID.
+  - **Do not use `shared_core::Config`.** It holds `x_token` in a type that derives `Serialize` and `Debug`, so logging it or writing it to a manifest would leak the token. Keep the token in a dedicated type with redacted `Debug` and no `Serialize` implementation, and test the redaction.
+  - **Do not use `shared_core::port_manager::get_port_with_fallback`** for the metrics port.
+    - It silently moves to another port when the requested one is busy, and writes `/tmp/mevana_port_allocations.json`.
+    - The same module contains `kill_port_process`. Never call it.
+    - Instead, bind a fixed, configurable port and **fail at startup if it is busy**.
+  - **Metrics port:** the default is `8121`, inside the metrics range (`8120-8139`) defined in `port_manager.rs`.
+    - Before choosing it, verify that it is free and not listed in `config/ports.toml` or in the ports section of `CLAUDE.md`.
+    - Record it as `geyser_capture_metrics` under `[development]` in `config/ports.toml`, with a dated comment. `PortConfig` does not declare `deny_unknown_fields`, but add a test proving that `PortConfig` still loads with the new key. If it does not, leave `ports.toml` alone and document the port in the crate README instead.
+- **Pre-existing problems to record in the closeout as follow-ups, without fixing them:**
+  - **Wrong Jupiter ID.** `shared_core::programs::JUPITER_V6` holds `JUP4Fb2cqiRUcaTHdrPC8h2gNsA2ETXiPDD33WcGuJB`, which the old `multi-geyser-streams` code labeled Jupiter v4. The old v6 ID was `JUP6LkbZbjS1jKKwapdHNy74zcZ3tLUZoi5QNyVTaV4`.
+  - **Port 9898 collision.** `config/ports.toml` gives 9898 to `token_registry_service`, while MEVana-UI's `src/lib/config.ts` uses `127.0.0.1:9898` for executor admin.
+  - **Redis port mismatch.** `config/ports.toml` lists Redis as 6379, but `CLAUDE.md` lists 6380.
 - **Guard against the fake Geyser.** `scripts/development/start_fake_geyser.sh` runs a synthetic Geyser on `localhost:50051`, created as an ISP-throttling workaround.
   - The capture tool must **refuse** loopback, private or `localhost` endpoints unless `--synthetic-source` is passed.
   - When that flag is set, every manifest must record the source as synthetic, so the data is never cataloged as market data. Test this.
