@@ -19,6 +19,11 @@ This slice builds a **record-only** capture tool for Orca Whirlpool state, check
   - **Minimal probe:** `crates/executor-service/src/bin/geyser_probe.rs:42-122`.
   - **Whirlpool program ID:** `ORCA_WHIRLPOOL` in `crates/shared-core/src/lib.rs:88`.
   - **Whirlpool decoders:** `crates/whirlpool-core/src/decode.rs:25,33` (`decode_whirlpool` and `decode_tick_array`, which check the Anchor discriminator and then Borsh-decode). Types are in `src/types.rs`. **These decoders currently have no tests.**
+  - **The `whirlpool-core` TickArray layout is wrong. This was verified on 2026-10-28 against the repository's own IDL at `idls/whirlpool_idl.json`.**
+    - The IDL defines `Tick` as `initialized: bool` followed by five `u128`/`i128` fields and `[u128; 3]`, which is 113 bytes. `TickArray` is `startTickIndex: i32`, then `ticks: [Tick; 88]`, then `whirlpool: Pubkey`, which is 9,988 bytes including the 8-byte discriminator.
+    - `whirlpool-core/src/types.rs:7-22` omits `initialized` and places `whirlpool` before `ticks`. Its own comment computes 9,900 bytes. Borsh does not require all input to be consumed, so `decode_tick_array` returns garbage without reporting an error.
+    - `WhirlpoolMinimal` appears correct, but verify it too.
+    - **Derive every data size and memcmp offset from the IDL, not from `whirlpool-core` types.** The expected values are a TickArray size of 9,988 bytes with the `whirlpool` field at offset 9,956 (8 + 4 + 88 × 113). Confirm the pool account size from the IDL as well. Then confirm all of these against the lengths of real captured accounts, and report any account types or lengths you see that you did not expect (for example a newer tick-array variant) instead of assuming.
 - Credentials:
   - The endpoint comes from `GEYSER_ENDPOINT`, falling back to `ENDPOINT`.
   - The token comes from `GEYSER_X_TOKEN`, falling back to `X_TOKEN` (and `SHYFT_GEYSER_X_TOKEN`, as in `executor-service/src/config.rs:94`).
@@ -118,7 +123,11 @@ This slice builds a **record-only** capture tool for Orca Whirlpool state, check
    - decode captured pool and TickArray accounts with `whirlpool-core`, reporting decode success and failure counts by account type;
    - produce a **pool inventory**: pool address, mint A and B, tick spacing and fee rate (as decoded), and update count.
 5. **Tests** (no network): frame round trip, rotation and atomic rename, `.part` handling, manifest hash correctness, gap recording, backoff bounds, filter offsets and sizes, and secret redaction. For gap recording and backoff, use a mock update source, and introduce a source trait if needed.
-6. **Decoder fixtures.** Commit at most a few KB of real captured account bytes: one or two Whirlpool pool accounts and one TickArray. Store them with their slot and pubkey under `crates/whirlpool-core/tests/fixtures/`, and add **tests only** to `whirlpool-core` that decode them. Make no changes to `whirlpool-core` source. Label the fixtures as real captured public account data for decoder tests, not as evidence of opportunities.
+6. **Decoder fixtures.** Commit at most a few KB of real captured account bytes: one or two Whirlpool pool accounts and one TickArray. Store them with their slot and pubkey under `crates/whirlpool-core/tests/fixtures/`, and add tests to `whirlpool-core` that decode them.
+   - **Correct the `Tick` and `TickArray` structs in `whirlpool-core/src/types.rs` to match the IDL.** Make no other `whirlpool-core` source changes. Leave `math.rs`, `quoter.rs` and `tick_window.rs` alone; they are a known rewrite for a later slice.
+   - Make `decode_tick_array` reject input whose length differs from the expected account size, so it cannot silently mis-decode.
+   - Test both: a real TickArray fixture must decode with plausible values (`start_tick_index` divisible by `tick_spacing × 88`, and a `whirlpool` field equal to its pool), and wrong-length input must fail.
+   - List every crate that calls `decode_tick_array` and say whether the fix affects it. Do not change the callers. Label the fixtures as real captured public account data for decoder tests, not as evidence of opportunities.
 7. **Runs.**
    - **(a) A 10-minute discovery run** with an empty TickArray allowlist, capturing pool accounts only. Use `capture_inspect` to build the inventory.
    - **(b) Choose the allowlist** from that inventory: every observed pool whose mint pair is SOL/USDC, SOL/USDT or USDC/USDT. The mints are wrapped SOL `So11111111111111111111111111111111111111112`, USDC `EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v` and USDT `Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCE8BenwNYb`; verify all three against the decoded data. These pairs give both same-pair, multi-pool routes and SOL–USDC–USDT triangles. Commit the allowlist file.
@@ -150,7 +159,7 @@ This slice builds a **record-only** capture tool for Orca Whirlpool state, check
 
 - **Read-only.** No transactions, signing, wallet access, executor or hotpath changes, Kafka, PostgreSQL or Docker changes, and no changes to MEVana-UI or the .NET projects.
 - Do not modify, delete, rotate or create credentials, `.env` files or wallet material. Never log or commit tokens.
-- Rust changes are limited to the new `geyser-capture` crate, test-only additions to `whirlpool-core`, the workspace `members` entry and the resulting `Cargo.lock` additions.
+- Rust changes are limited to the new `geyser-capture` crate; the `whirlpool-core` `Tick`/`TickArray` layout fix, the length check and the tests; the workspace `members` entry; and the resulting `Cargo.lock` additions.
 - Do not commit capture data other than the decoder fixtures in step 6.
 - Keep trading disabled. Date every document, and make sure no work is lost.
 
