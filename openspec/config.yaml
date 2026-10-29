@@ -11,7 +11,11 @@ context: |
   instructions or other trading authority. Do not define TRIGGER messages.
   Date every authored document. Keep general plans and closeouts in the local project docs directory.
   Preserve existing contract behavior, credentials and wallet material. Keep trading disabled.
-  No live-data/provider calls, Rust, UI, API host, persistence or deployment changes in this slice.
+  Research contract changes exclude live-data/provider calls, Rust, UI, API host, persistence and deployment.
+  Market-data capture is read-only recording; no signing, wallets, transaction construction or submission.
+  Capture tokens and endpoint query strings never appear in logs, files, manifests, errors or commits.
+  Capture data stays outside the repository except small public-account decoder fixtures.
+  Capture may read only approved Geyser keys from the root .env, with process environment taking precedence.
 
 # Project context (optional)
 # Add only constraints that should guide OpenSpec artifacts and workflows.
