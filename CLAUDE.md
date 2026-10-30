@@ -152,10 +152,9 @@ Work proceeds through dated handoffs in `docs/`. The latest one is the authority
 4. **Handoff 11 (done, 2026-10-30):** deterministic offline replay (`crates/research-replay`), producing three per-pair `Simulated` results (SOL/USDC, SOL/USDT, USDC/USDT).
    - No positive opportunity was found in the 10-minute capture, and missing state was heavy.
    - See `docs/2026-10-30-0828-CDT-research-handoff-11-closeout.md`.
-5. **Handoff 12 (active):** slot-correct replay and bounded Tatum RPC tick-array snapshots.
-   - Offline Part A runs first.
-   - Then one ≤10-minute capture.
-   - See `docs/2026-10-30-0859-CDT-research-handoff-12-capture-snapshot-and-slot-semantics.md`.
+5. **Handoff 12 (done, 2026-10-30):** slot-correct replay (Confirmed state, fork writes dropped, skipped slots are not gaps) and bounded Tatum RPC tick-array snapshots.
+   - SOL/USDC and USDC/USDT are now about 99.7% evaluable; SOL/USDT is about 45%.
+   - See `docs/2026-10-30-1139-CDT-research-handoff-12-closeout.md`.
 6. **Handoff 13 (active, in parallel with 12):** experiment request contract v2, for multi-pair route universes and triangles. It is .NET plus OpenSpec only, and v1 stays frozen. See `docs/2026-10-30-1118-CDT-research-handoff-13-experiment-request-contract-v2.md`.
 7. **Next:**
    - handoff 14: triangle and multi-pair replay (needs 12 and 13);
