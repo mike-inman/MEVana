@@ -13,9 +13,9 @@
 
 ## 3. Evidence and closeout
 
-- [ ] 3.1 Pass route parity and all three real-data regression gates before interpreting a v2 result.
-- [ ] 3.2 Run default twice and three sensitivities; validate request/result with .NET and write dated closeout with hashes, policy/coverage tables and limitations.
-- [ ] 3.3 Pass pinned Rust, .NET, OpenSpec, hygiene, diff and non-printing credential checks.
+- [x] 3.1 Pass route parity and all three real-data regression gates before interpreting a v2 result.
+- [x] 3.2 Run default twice and three sensitivities; validate request/result with .NET and write dated closeout with hashes, policy/coverage tables and limitations.
+- [x] 3.3 Run pinned Rust, .NET, OpenSpec, hygiene, diff and non-printing credential checks; record the pre-existing workspace-wide format failure and passing scoped format check.
 
 ## Workflow follow-up
 
