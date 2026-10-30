@@ -1,4 +1,4 @@
-//! Source-derived layouts; see docs/2026-10-29-2200-CDT-geyser-account-layouts.md.
+//! Source-derived layouts; see docs/2026-10-29-2148-CDT-geyser-account-layouts.md.
 use std::collections::HashMap;
 use whirlpool_core::decode::anchor_discriminator;
 use yellowstone_grpc_proto::prelude::*;

@@ -263,7 +263,7 @@ fn prior_bytes(out: &std::path::Path) -> Result<u64> {
         for file in std::fs::read_dir(&dir)? {
             let file = file?;
             ensure!(
-                !file.path().extension().is_some_and(|e| e == "part"),
+                file.path().extension().is_none_or(|e| e != "part"),
                 "incomplete previous capture blocks new streams"
             );
         }

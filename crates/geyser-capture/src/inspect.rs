@@ -13,7 +13,7 @@ use yellowstone_grpc_proto::prelude::{subscribe_update::UpdateOneof, SubscribeUp
 pub const MINTS: [&str; 3] = [
     "So11111111111111111111111111111111111111112",
     "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v",
-    "Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCE8BenwNYb",
+    "Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB",
 ];
 #[derive(Debug, Default, Serialize, Deserialize)]
 pub struct Pool {
@@ -130,9 +130,9 @@ pub fn inspect(directory: &Path) -> Result<Report> {
                             .entry("dynamic_unsupported".into())
                             .or_default() += 1;
                         let len = info.data.len();
-                        if len < crate::layout::DYNAMIC_MIN
-                            || len > crate::layout::DYNAMIC_MIN + 88 * 112
-                            || (len - crate::layout::DYNAMIC_MIN) % 112 != 0
+                        if !(crate::layout::DYNAMIC_MIN..=crate::layout::DYNAMIC_MIN + 88 * 112)
+                            .contains(&len)
+                            || !(len - crate::layout::DYNAMIC_MIN).is_multiple_of(112)
                         {
                             *report
                                 .unexpected

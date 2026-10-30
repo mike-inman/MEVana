@@ -1,4 +1,4 @@
-# 2026-10-29 22:00 CDT — Handoff 09 account layout derivation
+# 2026-10-29 21:48 CDT — Handoff 09 account layout derivation
 
 No provider calls were used. Local `idls/whirlpool_idl.json` supplies Whirlpool, Tick, TickArray and Position fields. Current Orca source at commit `cc683ec92acb5e7606caa3d8e514d9383e9c7c11` supplies DynamicTickArray and Oracle:
 https://github.com/orca-so/whirlpools/tree/cc683ec92acb5e7606caa3d8e514d9383e9c7c11/programs/whirlpool/src/state
