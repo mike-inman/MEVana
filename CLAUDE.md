@@ -155,9 +155,10 @@ Work proceeds through dated handoffs in `docs/`. The latest one is the authority
 5. **Handoff 12 (done, 2026-10-30):** slot-correct replay (Confirmed state, fork writes dropped, skipped slots are not gaps) and bounded Tatum RPC tick-array snapshots.
    - SOL/USDC and USDC/USDT are now about 99.7% evaluable; SOL/USDT is about 45%.
    - See `docs/2026-10-30-1139-CDT-research-handoff-12-closeout.md`.
-6. **Handoff 13 (active, in parallel with 12):** experiment request contract v2, for multi-pair route universes and triangles. It is .NET plus OpenSpec only, and v1 stays frozen. See `docs/2026-10-30-1118-CDT-research-handoff-13-experiment-request-contract-v2.md`.
+6. **Handoff 13 (done, 2026-10-30):** experiment request contract v2, for multi-pair route universes and triangles. It is .NET plus OpenSpec only, and v1 stays frozen.
+   - See `docs/2026-10-30-1325-CDT-research-handoff-13-request-v2-closeout.md`.
 7. **Next:**
-   - handoff 14: triangle and multi-pair replay (needs 12 and 13);
+   - handoff 14: triangle and multi-pair replay (12 and 13 are done). A version-2 `ExperimentResult` cannot be canonicalized or catalog-validated yet, because `ExperimentResultSyntaxValidator` accepts version 1 only, so this handoff must add a v2 result path without changing v1;
    - handoff 15: read-only Research API;
    - handoff 16: MEVana-UI research page.
    - Later: a server-host capture.
