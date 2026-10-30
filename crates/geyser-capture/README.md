@@ -45,4 +45,4 @@ Offline tests cover framing/unknown fields, rotation, hashes/corruption, truncat
 
 Existing decoder callers: `whirlpool-core/examples/seed_and_log.rs` receives correct fixed-array ticks/pool identity and now rejects wrong lengths. The new inspector also uses it. No other Rust crate directly calls `decode_tick_array`; callers are unchanged. Dynamic decode and quote/math/tick-window correctness remain later work.
 
-The 2026-10-29 filter check captured the actual USDT mint as `Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB`; the handoff text has a case-sensitive typo. Use the captured value when selecting pools.
+The 2026-10-29 filter check captured USDT mint `Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB`; Revision 3 of the handoff now uses this corrected value. The dated final closeout in `docs/` records both bounded runs and the observed 18-pool allowlist.

@@ -19,12 +19,12 @@ Historical Shyft failure remains in the earlier closeout. Superseded gate: Sodae
 
 - [x] 3.1 Capture five-minute pool discovery with hard stop; inspect inventory, confirm mints/cluster, measure rates, volume and peak memory, choose and commit observed-pair allowlist.
 - [x] 3.2 Correct permitted Tick/TickArray layout and exact-length rejection offline before live runs; then add compact real public-account fixtures with slot/pubkey, run decoder tests and document caller impact without caller edits.
-- [ ] 3.3 Run allowlist capture with transactions, at most ten minutes, 2–3 minute rotation and signal shutdown before deadline; inspect all files, prove no remaining process and report rates, gaps, decoder success and memory.
+- [x] 3.3 Run allowlist capture with transactions, at most ten minutes, 2–3 minute rotation and signal shutdown before deadline; inspect all files, prove no remaining process and report rates, gaps, decoder success and memory.
 
 ## 4. Integration and closeout
 
-- [ ] 4.1 Run required fmt, focused clippy/tests, workspace locked build/tests, hygiene, unchanged .NET tests, strict OpenSpec validation, diff and non-printing secret scans; record exact outcomes.
-- [ ] 4.2 Deliver dated closeout with tier/cluster/limits, both run volumes and qualified projections, retention/disk needs, decoder findings and open risks; verify only permitted fixtures and allowlist are committed.
+- [x] 4.1 Run required fmt, focused clippy/tests, workspace locked build/tests, hygiene, unchanged .NET tests, strict OpenSpec validation, diff and non-printing secret scans; record exact outcomes.
+- [x] 4.2 Deliver dated closeout with tier/cluster/limits, both run volumes and qualified projections, retention/disk needs, decoder findings and open risks; verify only permitted fixtures and allowlist are committed.
 
 ## Workflow follow-up
 
@@ -35,4 +35,4 @@ Historical Shyft failure remains in the earlier closeout. Superseded gate: Sodae
 
 - [x] 5.1 Identify 653, 9988, 148+112*n, 216 and 254-byte accounts from discriminators and IDL/current Orca source without provider calls; derive all offsets.
 - [x] 5.2 Test bound provider profiles, TLS-only Sodae override, dynamic capture and unsupported decode reporting, reconnect limit (default 5), aggregate 0.5 GB limit and no owner-wide requests.
-- [ ] 5.3 After offline tests pass run filter-support check before discovery; after every run record manifest bytes, resolved provider IPs, pgrep and lsof checks and per-provider totals.
+- [x] 5.3 After offline tests pass run filter-support check before discovery; after every run record manifest bytes, resolved provider IPs, pgrep and lsof checks and per-provider totals.
