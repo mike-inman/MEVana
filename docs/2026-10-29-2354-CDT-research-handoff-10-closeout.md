@@ -64,3 +64,25 @@ The committed compressed subset is 13 KB with 20 real cases across 8 standard-fe
 ## Open risks and next decision
 
 Adaptive-fee pools return `AdaptiveFeeUnsupported`; a later consent or clean-room slice with Oracle capture is needed. Three golden cases remain unexplained, within the handoff's one-percent threshold. The temporary compiler workaround was used only for validation and is not in the branch or final lockfile. The operator must decide a separate remedy for the already-locked `ethnum` compiler incompatibility and the legacy Clippy warnings before exact unmodified validation and OpenSpec archiving. Merging to `main` remains the operator's decision.
+
+## Addendum — 2026-10-30 00:58 CDT: validation gate resolved on the pinned toolchain
+
+The operator verified the cause of the two reported validation failures. This Mac has two Rust installations:
+- Homebrew Rust 1.98.1 at `/usr/local/bin/cargo`;
+- rustup at `~/.cargo/bin/cargo`.
+
+When `/usr/local/bin` comes first on `PATH`, Homebrew's cargo runs and ignores `rust-toolchain.toml`. The `ethnum 1.5.2` E0512 error and the `manual_checked_ops` lints in the legacy `quoter.rs` occur only on that newer compiler. Neither is a defect of this branch.
+
+The operator re-ran the step 8 Rust commands **unmodified**, with `--locked` and no workaround, on the pinned `nightly-2025-09-15` toolchain (rustc 1.92.0-nightly 2025-09-14) at `1b8e8288`:
+
+| Command | Result |
+| --- | --- |
+| `cargo test --locked -p whirlpool-core -p geyser-capture` | Pass, 23/23 |
+| `cargo clippy --locked -p whirlpool-core -p geyser-capture --all-targets -- -D warnings` | Pass |
+| `cargo fmt -p whirlpool-core -p geyser-capture -- --check` | Pass |
+| `cargo build --locked -p edge-assembler -p arb-engine -p executor-service` | Pass |
+
+The validation gate is therefore met, with no exceptions and no dependency or legacy-file changes.
+- **OpenSpec:** `add-exact-whirlpool-quoting` was archived as `2026-10-30-add-exact-whirlpool-quoting`, and `openspec/specs/whirlpool-quoting/spec.md` was created.
+- **Branch:** approved for a fast-forward merge to `main`.
+- **Prevention:** `AGENTS.md` and `CLAUDE.md` on `main` now require the rustup toolchain.
