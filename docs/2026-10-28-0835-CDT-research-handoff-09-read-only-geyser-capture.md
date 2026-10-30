@@ -16,6 +16,42 @@ The operator changed three things on 2026-10-29. Where any older text in this do
 
 It also adds an *Execution model* section, which rules out the old AgentEngineering factory process.
 
+## Revision 2 — 2026-10-29 21:05 CDT: provider is Sodae; Shyft is blocked
+
+These changes override the *Credentials* section and the preflight gate below where they conflict.
+
+- **Shyft is blocked and Sodae is now the primary provider.**
+  - Shyft (`grpc.va.shyft.to`) returned UNAUTHENTICATED for **both** `X_TOKEN` and `SHYFT_GEYSER_X_TOKEN`. See `docs/2026-10-29-1745-CDT-research-handoff-09-closeout.md` on branch `feat/geyser-capture-20261029`. Treat Shyft as blocked until the operator renews its access.
+  - The primary provider is now the **Sodae Yellowstone trial**: 5 GB for 7 days, as described in `docs/2026-10-29-2032-CDT-tatum-sodae-geyser-development-setup.md`.
+  - Tatum (header `x-api-key`) is the secondary provider. Its key is not in `.env` yet.
+- **Credential mapping.** The capture tool reads these keys from the process environment first, then from `.env`. The `.env` names contain dots, so they must be parsed explicitly; they cannot be exported as shell variables.
+  - **Token:** `SODAE.IO_API_KEY`, sent in the `x-token` header.
+  - **Endpoint:** `SODAE.IO_YELLOWSTONE_GRPC_URL` is plaintext `http://ams.rpc.sodae.io:10201`. Use the documented TLS endpoint **`https://ams.tls.sodae.io:443`** instead, and refuse plaintext endpoints.
+  - **Pairing.** Endpoints and tokens are chosen together, as a named provider profile with `--provider sodae|tatum|shyft|custom`. They are never chosen by independent alias fallback.
+  - **Auth header.** The header name is set per provider: `x-token` for Sodae and Shyft, `x-api-key` for Tatum.
+  - Do not edit `.env`.
+- **The preflight already passed on Sodae, on 2026-10-29.** A 20-second subscription filtered by `ORCA_WHIRLPOOL` owner, at Processed commitment, using bindings generated from the locally cached yellowstone-grpc-proto **4.2.1** protos:
+  - connected in 683 ms; the first account arrived 208 ms later;
+  - received 1,403 account updates (about 70/s); the last slot was 463,112,617;
+  - returned no errors.
+
+  The pinned 4.2.1 client protocol is therefore compatible with Sodae, and **no Yellowstone dependency upgrade is needed**. Do not adopt the version 14 crates used by Sodae's example. Re-run the preflight only if the provider or credentials change.
+- **Observed account lengths** in those 20 seconds:
+
+  | Size (bytes) | Updates | Interpretation |
+  | --- | ---: | --- |
+  | 653 | 317 | Whirlpool pool |
+  | 9,988 | 364 | Fixed TickArray; matches the IDL calculation |
+  | 148 + 112·n (260, 372 … 10,004) | many | Probably the newer **dynamic tick array** variant |
+  | 216 | 60 | Probably Position accounts |
+  | 254 | 87 | Unidentified |
+
+  Before choosing filters, identify each of these by its discriminator against the IDL, or against Orca's current program source if the repo IDL predates dynamic tick arrays. The TickArray filter must cover **both** fixed and dynamic tick arrays for allowlisted pools. Dynamic arrays have a different `whirlpool` field offset, so derive it rather than assuming it. Decoding dynamic tick arrays may be reported as unsupported in this slice, but they must be captured and counted.
+- **Quota budget.**
+  - Subscribing to everything the owner holds, unfiltered, used about 5.1 MB per 20 s, roughly **0.9 GB/hour**, which would exhaust the 5 GB trial in about 5.5 hours. Pool accounts alone use about 0.04 GB/hour.
+  - Never run an unfiltered owner subscription beyond preflight. The 5-minute discovery run (pools only) and the 10-minute allowlist run should together use well under 0.5 GB.
+  - Report the bytes used by each run in the closeout.
+
 ## Execution model (not the old factory process)
 
 This slice is implemented **directly in this repository** by an interactive coding-assistant session (Claude Code or Codex), working with the operator. It follows this repo's own OpenSpec workflow, as handoffs 07 and 08 did.
