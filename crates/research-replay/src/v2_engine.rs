@@ -65,7 +65,7 @@ pub struct PoolDirectionCoverage {
 pub struct SummaryV2 {
     pub route_shapes: usize,
     pub slot_boundaries: u64,
-    pub probe_input_atoms: u64,
+    pub probe_input_atoms: [u64; 3],
     pub policies: [PolicySummary; 3],
     pub shapes: BTreeMap<String, ShapeSummary>,
     pub pool_directions: Vec<PoolDirectionCoverage>,
@@ -291,7 +291,7 @@ pub fn replay(capture: &Capture, config: &ConfigV2) -> Result<OutputV2> {
     let mut summary = SummaryV2 {
         route_shapes: routes.len(),
         slot_boundaries: 0,
-        probe_input_atoms: config.base.sizes_quote_atoms[0],
+        probe_input_atoms: config.base.sizes_quote_atoms,
         policies: policies(),
         shapes: BTreeMap::from([
             (
@@ -313,7 +313,7 @@ pub fn replay(capture: &Capture, config: &ConfigV2) -> Result<OutputV2> {
     };
     let direction_keys = directions(&routes);
     let mut coverage: BTreeMap<(String, String, String), PoolDirectionCoverage> = BTreeMap::new();
-    let mut probe_cache: BTreeMap<(Pubkey, Pubkey, Pubkey), (u64, String)> = BTreeMap::new();
+    let mut probe_cache: BTreeMap<(Pubkey, Pubkey, Pubkey, u64), (u64, String)> = BTreeMap::new();
     let mut state = MarketState::default();
     let mut rows = Vec::new();
     let mut route_cache: Vec<Option<(Vec<u64>, Vec<SizeQuote>)>> = vec![None; routes.len()];
@@ -409,28 +409,6 @@ pub fn replay(capture: &Capture, config: &ConfigV2) -> Result<OutputV2> {
         }
         for &(pool, input_token, output_token) in &direction_keys {
             let generation = state.generation(&pool);
-            let cached = probe_cache.get(&(pool, input_token, output_token));
-            let outcome = match cached {
-                Some((g, reason)) if *g == generation => reason.clone(),
-                _ => {
-                    let reason: String = match quote_leg(
-                        &state,
-                        &program,
-                        &pool,
-                        input_token,
-                        output_token,
-                        config.base.sizes_quote_atoms[0],
-                    ) {
-                        Ok(_) => "success".into(),
-                        Err(error) => error.code().into(),
-                    };
-                    probe_cache.insert(
-                        (pool, input_token, output_token),
-                        (generation, reason.clone()),
-                    );
-                    reason
-                }
-            };
             let key = (
                 pool.to_string(),
                 input_token.to_string(),
@@ -445,8 +423,32 @@ pub fn replay(capture: &Capture, config: &ConfigV2) -> Result<OutputV2> {
                     attempts: 0,
                     outcomes: BTreeMap::new(),
                 });
-            entry.attempts += 1;
-            *entry.outcomes.entry(outcome).or_default() += 1;
+            for &amount in &config.base.sizes_quote_atoms {
+                let cached = probe_cache.get(&(pool, input_token, output_token, amount));
+                let outcome = match cached {
+                    Some((g, reason)) if *g == generation => reason.clone(),
+                    _ => {
+                        let reason: String = match quote_leg(
+                            &state,
+                            &program,
+                            &pool,
+                            input_token,
+                            output_token,
+                            amount,
+                        ) {
+                            Ok(_) => "success".into(),
+                            Err(error) => error.code().into(),
+                        };
+                        probe_cache.insert(
+                            (pool, input_token, output_token, amount),
+                            (generation, reason.clone()),
+                        );
+                        reason
+                    }
+                };
+                entry.attempts += 1;
+                *entry.outcomes.entry(outcome).or_default() += 1;
+            }
         }
         summary.slot_boundaries += 1;
         let reference_generation = state.generation(&reference);
@@ -595,7 +597,7 @@ mod tests {
         let mut summary = SummaryV2 {
             route_shapes: 152,
             slot_boundaries: 1,
-            probe_input_atoms: 10,
+            probe_input_atoms: [10, 100, 1_000],
             policies: policies(),
             shapes: BTreeMap::from([
                 (
@@ -618,5 +620,49 @@ mod tests {
         assert!(check_accounting(&summary).is_ok());
         summary.policies[0].candidates_evaluated = 1;
         assert!(check_accounting(&summary).is_err());
+    }
+
+    #[test]
+    fn v2_refuses_format_one_capture_before_replay() {
+        let capture = Capture {
+            format_version: 1,
+            session_id: "synthetic-v1".into(),
+            writes: vec![],
+            gaps: vec![],
+            slot_nodes: BTreeMap::new(),
+            snapshots: vec![],
+            slots: Default::default(),
+            allowlist: Default::default(),
+            hashes: BTreeMap::new(),
+            first_receive_ns: 0,
+            last_receive_ns: 1,
+            first_slot: 0,
+            last_slot: 1,
+        };
+        let base = Config {
+            commitment_mode: CommitmentMode::Confirmed,
+            sizes_quote_atoms: [10_000_000, 100_000_000, 1_000_000_000],
+            base_fee_lamports: 5_000,
+            priority_micro_lamports_per_cu: 1_000,
+            compute_units_two_leg: 400_000,
+            tip_lamports: 10_000,
+            latency_slots: 1,
+            simple_min_net_quote_atoms: 1_000,
+            ranking_top_k: 1,
+            seed: 0,
+            reference_a: String::new(),
+            reference_b: String::new(),
+            reference_c: String::new(),
+        };
+        let config = ConfigV2 {
+            base,
+            compute_units_triangle: 600_000,
+            reference_pool: String::new(),
+        };
+        assert!(replay(&capture, &config)
+            .err()
+            .unwrap()
+            .to_string()
+            .contains("format version 2"));
     }
 }

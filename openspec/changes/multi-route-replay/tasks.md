@@ -9,7 +9,7 @@
 
 - [x] 2.1 Add exact-in multi-leg quotes, first-failure attribution, shape-specific cost and cache tests.
 - [x] 2.2 Add whole-universe policy decisions, third-pool conflicts, deterministic tie-breaks and accounting tests.
-- [ ] 2.3 Add v2 replay profiles, per-shape and per-pool-direction coverage, canonical artifacts and manifest; verify refusal of v1 capture and overwrite.
+- [x] 2.3 Add v2 replay profiles, per-shape and per-pool-direction coverage, canonical artifacts and manifest; verify refusal of v1 capture and overwrite.
 
 ## 3. Evidence and closeout
 

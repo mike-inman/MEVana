@@ -15,7 +15,7 @@ V1 replay and its manifest are the regression baseline. Its config and candidate
 - Keep v1 replay/config/output entry points intact. Put v2 route, policy, replay and serialization behind v2 profiles so the v1 manifest remains unchanged except its supplied commit.
 - Commit one full route fixture generated from the established .NET enumerator. Rust reads it for parity; Rust never writes it.
 - Reuse the existing slot graph and snapshot application semantics. V2 route cache tracks all route pool generations plus the reference generation; v2 cost cache keys both shape and reference generation.
-- Independently probe each leg's availability at the boundary for coverage diagnostics, while route outcome still uses first failing leg. A later-leg probe uses a declared test amount so missing arrays are visible without inventing an executable preceding output.
+- Independently probe each pool direction at all three declared raw input-atom ladder sizes for coverage diagnostics, while route outcome still uses first failing leg. These probes reveal missing arrays on later legs without inventing an executable preceding output; their input atoms are diagnostic, not a chained route amount.
 - Extract the existing result JSON writer into an internal helper with a parameterized validation result; prove original bytes unchanged with existing golden tests. V2 syntax validates a version-normalized copy plus an explicit version-two check.
 
 ## Risks / Trade-offs
