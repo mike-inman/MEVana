@@ -71,6 +71,7 @@ pub struct PoolState {
     pub pool: Option<WhirlpoolMinimal>,
     pub arrays: BTreeMap<Pubkey, exact::DecodedTickArray>,
     pub stale: bool,
+    pub generation: u64,
 }
 #[derive(Clone, Default)]
 pub struct MarketState {
@@ -80,7 +81,11 @@ impl MarketState {
     pub fn gap(&mut self) {
         for state in self.pools.values_mut() {
             state.stale = true;
+            state.generation += 1;
         }
+    }
+    pub fn generation(&self, id: &Pubkey) -> u64 {
+        self.pools.get(id).map_or(0, |state| state.generation)
     }
     pub fn apply(&mut self, write: &AccountWrite, allowlist: &BTreeSet<Pubkey>) -> Result<()> {
         match layout::kind(&write.data) {
@@ -89,15 +94,15 @@ impl MarketState {
                 let state = self.pools.entry(write.key).or_default();
                 state.pool = Some(pool);
                 state.stale = false;
+                state.generation += 1;
             }
             "fixed" | "dynamic" => {
                 let array = exact::decode_array(&write.data)?;
-                if allowlist.contains(&array.whirlpool) {
-                    self.pools
-                        .entry(array.whirlpool)
-                        .or_default()
-                        .arrays
-                        .insert(write.key, array);
+                let owner = array.whirlpool;
+                if allowlist.contains(&owner) {
+                    let state = self.pools.entry(owner).or_default();
+                    state.arrays.insert(write.key, array);
+                    state.generation += 1;
                 }
             }
             _ => {}
@@ -407,14 +412,8 @@ mod tests {
         let quote =
             exact::quote_exact_in(&program, &pool_id, &pool, &arrays, 1_000_000, true).unwrap();
         assert_eq!(quote.fee_amount, 400); // 400 parts per million = 0.04% of input.
-        assert_eq!(
-            direction(&pool, pool.token_mint_a, pool.token_mint_b).unwrap(),
-            true
-        );
-        assert_eq!(
-            direction(&pool, pool.token_mint_b, pool.token_mint_a).unwrap(),
-            false
-        );
+        assert!(direction(&pool, pool.token_mint_a, pool.token_mint_b).unwrap());
+        assert!(!direction(&pool, pool.token_mint_b, pool.token_mint_a).unwrap());
         assert!(direction(&pool, pool.token_mint_a, Pubkey::new_unique()).is_err());
         assert_eq!(
             cost_lamports(5_000, 1_000, 400_000, 10_000).unwrap(),

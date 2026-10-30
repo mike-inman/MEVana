@@ -90,6 +90,7 @@ pub struct ReplayOutput {
     pub rows: Vec<CandidateRow>,
     pub summaries: Vec<PairSummary>,
 }
+type CachedRouteQuotes = Option<([u64; 3], Vec<SizeQuote>)>;
 
 fn standard_pair(pool: &WhirlpoolMinimal) -> Option<Pair> {
     if u16::from_le_bytes(pool.tick_spacing_seed) != pool.tick_spacing {
@@ -226,6 +227,14 @@ pub fn replay(capture: &Capture, config: &Config, pairs: &[Pair]) -> Result<Repl
     }
     let mut state = MarketState::default();
     let mut rows = Vec::<CandidateRow>::new();
+    // Reuse exact quotes only while both route pools and the cost reference have
+    // unchanged captured generations. This never infers an absent array.
+    let mut route_cache: Vec<Vec<CachedRouteQuotes>> = summaries
+        .iter()
+        .map(|s| vec![None; s.route_shapes])
+        .collect();
+    let mut cost_cache: Vec<Option<(u64, std::result::Result<u64, QuoteFailure>)>> =
+        vec![None; summaries.len()];
     let mut pending = BTreeMap::<u64, Vec<(usize, usize, usize)>>::new();
     let mut write_index = 0;
     let mut gap_index = 0;
@@ -281,18 +290,47 @@ pub fn replay(capture: &Capture, config: &Config, pairs: &[Pair]) -> Result<Repl
         for (summary_idx, summary) in summaries.iter_mut().enumerate() {
             summary.slot_boundaries += 1;
             let routes = &route_sets[summary.pair.label()];
-            let slot_cost = cost(&state, &program, summary.pair, config);
+            let reference_generation = state.generation(&config.reference(summary.pair)?);
+            let slot_cost = match cost_cache[summary_idx] {
+                Some((generation, cached)) if generation == reference_generation => cached,
+                _ => {
+                    let fresh = cost(&state, &program, summary.pair, config);
+                    cost_cache[summary_idx] = Some((reference_generation, fresh));
+                    fresh
+                }
+            };
             let inputs: Vec<CandidateInput> = routes
                 .iter()
-                .map(|route| CandidateInput {
-                    route: route.clone(),
-                    sizes: evaluate(
-                        &state,
-                        &program,
-                        route,
-                        &config.sizes_quote_atoms,
-                        slot_cost,
-                    ),
+                .enumerate()
+                .map(|(route_idx, route)| {
+                    let generations = [
+                        state.generation(&route.first),
+                        state.generation(&route.second),
+                        reference_generation,
+                    ];
+                    let sizes = match &route_cache[summary_idx][route_idx] {
+                        Some((cached_generations, cached))
+                            if *cached_generations == generations =>
+                        {
+                            cached.clone()
+                        }
+                        _ => {
+                            let fresh = evaluate(
+                                &state,
+                                &program,
+                                route,
+                                &config.sizes_quote_atoms,
+                                slot_cost,
+                            );
+                            route_cache[summary_idx][route_idx] =
+                                Some((generations, fresh.clone()));
+                            fresh
+                        }
+                    };
+                    CandidateInput {
+                        route: route.clone(),
+                        sizes,
+                    }
                 })
                 .collect();
             let decisions = decide(
