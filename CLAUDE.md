@@ -5,6 +5,10 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## Essential Commands
 
 ### Build & Development
+**Toolchain (2026-10-30):** always use rustup's cargo (`~/.cargo/bin/cargo`), which honors `rust-toolchain.toml` (`nightly-2025-09-15`).
+- Homebrew Rust 1.98.1 is also installed at `/usr/local/bin/cargo` and ignores the pin. If `cargo -V` does not show `1.92.0-nightly`, put `~/.cargo/bin` first on `PATH`, or run `~/.cargo/bin/cargo`.
+- Validation results from the Homebrew compiler are invalid. Example: an `ethnum` E0512 error.
+
 ```bash
 # Build entire workspace
 cargo build --workspace
