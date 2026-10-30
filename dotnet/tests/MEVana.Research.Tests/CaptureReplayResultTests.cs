@@ -10,6 +10,8 @@ public class CaptureReplayResultTests
 {
     static string Fixture(char pair, string kind) => File.ReadAllText(Path.Combine(AppContext.BaseDirectory,
         "Fixtures", $"2026-10-30-replay-{pair}-{kind}.json"));
+    static string SnapshotFixture(char pair, string kind) => File.ReadAllText(Path.Combine(AppContext.BaseDirectory,
+        "Fixtures", $"2026-10-30-snapshot-replay-{pair}-{kind}.json"));
     static ExperimentRequest ReadRequest(JsonElement root) => new(
         root.GetProperty("datasetId").GetString(), root.GetProperty("strategyVersion").GetString(),
         root.GetProperty("windowStartUtc").GetDateTimeOffset(), root.GetProperty("windowEndUtc").GetDateTimeOffset(),
@@ -72,5 +74,29 @@ public class CaptureReplayResultTests
         var result = ReadResult(resultJson.RootElement);
         Assert.Empty(ExperimentResultSyntaxValidator.Validate(result));
         Assert.Empty(ExperimentResultValidator.Validate(result, CaptureReplayCatalog.Create(), request));
+    }
+
+    [Theory]
+    [InlineData('a', CaptureReplayCatalog.Sol, CaptureReplayCatalog.Usdc, 6)]
+    [InlineData('b', CaptureReplayCatalog.Sol, CaptureReplayCatalog.Usdt, 5)]
+    [InlineData('c', CaptureReplayCatalog.Usdc, CaptureReplayCatalog.Usdt, 2)]
+    public void SnapshotCapturePairValidatesUnchangedV1(char pair, string baseToken, string quoteToken, int poolCount)
+    {
+        using var requestJson = JsonDocument.Parse(SnapshotFixture(pair, "request"));
+        using var resultJson = JsonDocument.Parse(SnapshotFixture(pair, "result"));
+        var request = ReadRequest(requestJson.RootElement);
+        var result = ReadResult(resultJson.RootElement);
+        var catalog = CaptureReplayCatalog.CreateSnapshot();
+        Assert.Equal(new[] { baseToken, quoteToken }, request.TokenPair);
+        Assert.Equal(CaptureReplayCatalog.Pools(pair).Order(StringComparer.Ordinal), request.PoolIds);
+        Assert.Equal(poolCount, request.PoolIds!.Count);
+        Assert.Empty(ExperimentRequestSyntaxValidator.Validate(request));
+        Assert.Empty(ExperimentRequestValidator.Validate(request, catalog));
+        Assert.Equal(SnapshotFixture(pair, "request"), ExperimentRequestCanonicalizer.Canonicalize(request).Content);
+        Assert.Empty(ExperimentResultSyntaxValidator.Validate(result));
+        Assert.Empty(ExperimentResultValidator.Validate(result, catalog, request));
+        Assert.Equal(SnapshotFixture(pair, "result"), ExperimentResultCanonicalizer.Canonicalize(result).Content);
+        Assert.Equal(EvidenceKind.Simulated, result.EvidenceKind);
+        Assert.Equal("research-replay-0_2_0", result.EngineVersion);
     }
 }
