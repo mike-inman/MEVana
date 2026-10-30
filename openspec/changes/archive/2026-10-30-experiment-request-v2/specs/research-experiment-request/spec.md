@@ -11,4 +11,4 @@ ExperimentRequest v1 validation, canonicalization, fingerprinting and result lin
 
 #### Scenario: Version separation
 - **WHEN** a version-2 result is passed to a v1 request linkage check
-- **THEN** it receives request_mismatch or the existing v1 syntax version issue without v1 behavior changing
+- **THEN** it receives `requestCanonicalizationVersion/unsupported_canonicalization_version` from the unchanged v1 path

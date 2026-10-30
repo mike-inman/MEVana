@@ -73,8 +73,8 @@ Canonicalization SHALL require valid v2 syntax and emit compact JSON with canoni
 The v2 result validator SHALL apply existing result and catalog checks, require requestCanonicalizationVersion 2, and compare the v2 fingerprint, dataset, strategy and window with the original request. It SHALL not alter the v1 result path.
 
 #### Scenario: Cross-version mismatch
-- **WHEN** a result fingerprinted from v1 is checked against an equivalent v2 request, or the reverse
-- **THEN** request_mismatch is returned
+- **WHEN** a version-1 result is checked against an equivalent v2 request
+- **THEN** `request/request_mismatch` is returned by the v2 overload
 
 #### Scenario: Valid v2 linkage
 - **WHEN** a result has version 2 and the exact canonical v2 fingerprint and common scope

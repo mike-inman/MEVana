@@ -16,6 +16,7 @@ The v1 request and result syntax paths are independent classes. `ResearchContrac
 - Enumerate routes from catalog pool token pairs. Sort shape, pool sequence and token path ordinally for a stable public definition. A two-leg route traverses two distinct pools on one quote-containing pair; a triangle traverses three distinct token edges and pools, with both directions.
 - Validate scope against the enumerated universe. Check shape feasibility before reporting unused leg pools; price-input pools need catalog existence but never count as route legs.
 - Add a v2 overload to the existing result validator. To reuse all established result syntax and catalog checks without widening the v1-only syntax validator, validate an otherwise identical copy whose canonicalization version is normalized to 1, then check the original version-2 fingerprint and scope. This is internal to the v2 overload; the v1 overload remains byte-for-byte intact.
+- The 2026-10-30 13:19 CDT amendment freezes the two asymmetric rejection codes: a version-1 result against a v2 request receives `request/request_mismatch`; a version-2 result against a v1 request receives the existing `requestCanonicalizationVersion/unsupported_canonicalization_version`. Keep an optional v2 overload parameter so literal-null calls remain bound to the original v1 methods.
 - Use `Utf8JsonWriter` and the v1 UTC formatting convention for canonical v2 JSON. No new dependency.
 
 ## Risks / Trade-offs

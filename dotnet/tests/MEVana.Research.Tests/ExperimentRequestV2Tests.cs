@@ -74,6 +74,26 @@ public class ExperimentRequestV2Tests
             tokens: ["A", "a"], quote: "A", pools: ["P", "p"], shapes: ["two_leg"], price: [])));
     }
 
+    [Fact] public void IndependentSyntaxIssuesAndNullFieldOrdering()
+    {
+        var request = Request(dataset: "", strategy: "", quote: "missing",
+            tokens: ["A", "A"], pools: ["P"], shapes: ["unknown"], price: ["X", "X"],
+            min: 0, start: End, end: Start);
+        var issues = ExperimentRequestV2SyntaxValidator.Validate(request);
+        Assert.Equal(issues, ExperimentRequestV2SyntaxValidator.Validate(request));
+        Assert.Contains(new ValidationIssue("datasetId", "invalid_identifier"), issues);
+        Assert.Contains(new ValidationIssue("strategyVersion", "invalid_identifier"), issues);
+        Assert.Contains(new ValidationIssue("window", "invalid_window"), issues);
+        Assert.Contains(new ValidationIssue("tokenIds", "invalid_token_ids"), issues);
+        Assert.Contains(new ValidationIssue("poolIds", "invalid_pool_ids"), issues);
+        Assert.Contains(new ValidationIssue("routeShapes", "invalid_route_shapes"), issues);
+        Assert.Contains(new ValidationIssue("priceInputPoolIds", "invalid_price_input_pools"), issues);
+        Assert.Contains(new ValidationIssue("tradeSizeQuoteAtoms", "invalid_trade_size"), issues);
+        var nulls = new ExperimentRequestV2(null, null, null, null, null, null, null, null, null, null, null);
+        Assert.All(ExperimentRequestV2SyntaxValidator.Validate(nulls), issue => Assert.Equal("required", issue.Code));
+        Assert.Equal(ExperimentRequestV2SyntaxValidator.Validate(nulls), ExperimentRequestV2Validator.Validate(nulls, ResearchCatalog.Empty));
+    }
+
     [Fact] public void CatalogRulesAndRouteExamples()
     {
         var catalog = CaptureReplayCatalog.Create();
@@ -85,12 +105,13 @@ public class ExperimentRequestV2Tests
         Assert.Equal(120, routes.Count(r => r.Shape == "triangle"));
         Assert.Equal(32, routes.Count(r => r.Shape == "two_leg"));
         Assert.All(routes, r => { Assert.Equal(CaptureReplayCatalog.Usdc, r.TokenIds[0]); Assert.Equal(CaptureReplayCatalog.Usdc, r.TokenIds[^1]); Assert.Equal(r.PoolIds.Count + 1, r.TokenIds.Count); Assert.Equal(r.PoolIds.Count, r.PoolIds.Distinct().Count()); });
-        Assert.Equal(routes, ExperimentRequestV2RouteEnumerator.Enumerate(R2(), catalog));
+        string Key(ExperimentRouteV2 route) => route.Shape + ":" + string.Join(",", route.PoolIds) + ":" + string.Join(",", route.TokenIds);
+        Assert.Equal(routes.Select(Key), ExperimentRequestV2RouteEnumerator.Enumerate(R2(), catalog).Select(Key));
         Catalog(R3(), catalog, "poolIds", "unused_pool");
         Assert.Throws<ArgumentException>(() => ExperimentRequestV2RouteEnumerator.Enumerate(R3(), catalog));
         Catalog(Request(shapes: ["triangle"], pools: CaptureReplayCatalog.Pools('a')), catalog, "routeShapes", "shape_unsatisfiable");
         Catalog(Request(dataset: "missing"), catalog, "datasetId", "unknown_dataset");
-        Catalog(Request(dataset: CaptureReplayCatalog.DatasetId.ToLowerInvariant()), catalog, "datasetId", "unknown_dataset");
+        Catalog(Request(dataset: CaptureReplayCatalog.DatasetId.ToUpperInvariant()), catalog, "datasetId", "unknown_dataset");
         Catalog(Request(strategy: "other"), catalog, "strategyVersion", "unsupported_strategy");
         Catalog(Request(start: Start.AddTicks(-1).AddMinutes(-1)), catalog, "window", "invalid_window");
         Catalog(Request(tokens: [CaptureReplayCatalog.Usdc, "Unknown"], pools: ["A", "B"]), catalog, "tokenIds", "incompatible_token");
@@ -100,6 +121,28 @@ public class ExperimentRequestV2Tests
         Catalog(Request(max: 1_000_000_001), catalog, "tradeSizeQuoteAtoms", "invalid_trade_size");
         Assert.Throws<ArgumentNullException>(() => ExperimentRequestV2Validator.Validate(R1(), null!));
         Assert.Equal(ExperimentRequestV2SyntaxValidator.Validate(null), ExperimentRequestV2Validator.Validate(null, catalog));
+    }
+
+    [Fact] public void CatalogAvailabilityQuoteBoundPriceInputsAndOrdinalIdentity()
+    {
+        var original = CaptureReplayCatalog.Create().FindDataset(CaptureReplayCatalog.DatasetId)!;
+        ResearchCatalog With(bool available, long datasetBound, long quoteBound) => new([
+            new DatasetMetadata(original.Id, original.MetadataVersion, original.Provenance, available,
+                original.Suitability, original.CoverageStartUtc, original.CoverageEndUtc,
+                original.SupportedStrategyVersions,
+                original.Tokens.Select(t => new TokenMetadata(t.Id, t.Decimals,
+                    t.Id == CaptureReplayCatalog.Usdc ? quoteBound : t.MaxResearchTradeSizeQuoteAtoms)).ToArray(),
+                original.Pools, datasetBound)]);
+        Catalog(R1(), With(false, 1_000_000_000, 1_000_000_000), "datasetId", "dataset_unavailable");
+        Catalog(Request(max: 11), With(true, 10, 100), "tradeSizeQuoteAtoms", "invalid_trade_size");
+        Catalog(Request(max: 11), With(true, 100, 10), "tradeSizeQuoteAtoms", "invalid_trade_size");
+        Assert.Empty(ExperimentRequestV2Validator.Validate(Request(max: 10), With(true, 10, 10)));
+        var withOverlappingPricePool = Request(price: [CaptureReplayCatalog.Pools('a')[0], CaptureReplayCatalog.Pools('b')[0]]);
+        Assert.Empty(ExperimentRequestV2Validator.Validate(withOverlappingPricePool, CaptureReplayCatalog.Create()));
+        Assert.Equal(120, ExperimentRequestV2RouteEnumerator.Enumerate(withOverlappingPricePool, CaptureReplayCatalog.Create()).Count);
+        var outsideWindow = Request(start: original.CoverageStartUtc.AddTicks(-1));
+        Catalog(outsideWindow, CaptureReplayCatalog.Create(), "window", "invalid_window");
+        Assert.Empty(ExperimentRequestV2Validator.Validate(Request(start: Start.ToOffset(TimeSpan.FromHours(3))), CaptureReplayCatalog.Create()));
     }
 
     [Theory] [InlineData("r1")] [InlineData("r2")] [InlineData("r3")]
@@ -117,7 +160,9 @@ public class ExperimentRequestV2Tests
     }
     static readonly Dictionary<string, string> GoldenHashes = new()
     {
-        ["r1"] = "PENDING", ["r2"] = "PENDING", ["r3"] = "PENDING"
+        ["r1"] = "e788d5b9ed37d5dc122c34f3eeb0e2069193fa44ba72e5aa1c3d71f14a03498b",
+        ["r2"] = "bf41b52a0a6bd29392025c2033e058f75a6d366e3b3bbc893cb415310e43c844",
+        ["r3"] = "ff9f467fd1e27be2d98b3eed1168064d81e06e3091a3ca26484839c430c64f74"
     };
 
     [Fact] public void CanonicalSortingCultureOffsetsAndInvalidInput()
@@ -137,6 +182,24 @@ public class ExperimentRequestV2Tests
         Assert.NotEqual(baseline.Content, ExperimentRequestV2Canonicalizer.Canonicalize(Request(max: 999_999_999, shapes: ["two_leg", "triangle"])).Content);
         Assert.Throws<ArgumentNullException>(() => ExperimentRequestV2Canonicalizer.Canonicalize(null!));
         Assert.Throws<ArgumentException>(() => ExperimentRequestV2Canonicalizer.Canonicalize(Request(min: 0)));
+    }
+
+    [Fact] public void CanonicalSemanticChangesRemainDistinct()
+    {
+        string Canon(ExperimentRequestV2 request) => ExperimentRequestV2Canonicalizer.Canonicalize(request).Content;
+        var baseline = Canon(R1());
+        foreach (var changed in new[] {
+            Request(dataset: "Other"), Request(strategy: "other"), Request(quote: CaptureReplayCatalog.Sol),
+            Request(pools: AllPools().Skip(1).ToArray()), Request(shapes: ["two_leg"]),
+            Request(price: [CaptureReplayCatalog.Pools('a')[0]]), Request(min: 2), Request(max: 999_999_999),
+            Request(start: Start.AddTicks(1)), Request(end: End.AddTicks(-1)) })
+            Assert.NotEqual(baseline, Canon(changed));
+        Assert.NotEqual(Canon(Request(min: 9_007_199_254_740_992, max: long.MaxValue)),
+            Canon(Request(min: 9_007_199_254_740_993, max: long.MaxValue)));
+        Assert.Throws<ArgumentException>(() => Canon(Request(shapes: ["invalid"])));
+        Assert.Throws<ArgumentException>(() => Canon(Request(tokens: ["A", "A"])));
+        Assert.Throws<ArgumentException>(() => Canon(Request(price: ["P", "P"])));
+        Assert.Throws<ArgumentException>(() => Canon(Request(end: Start)));
     }
 
     [Fact] public void V1FixtureFingerprintsStayUnchanged()

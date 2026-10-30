@@ -11,6 +11,7 @@ public sealed record RequestFingerprint(int CanonicalizationVersion, string Sha2
         return new(canonical.Version, Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(canonical.Content))));
     }
 
+    // The optional parameter keeps existing literal-null calls bound to the v1 overload.
     public static RequestFingerprint FromRequest(ExperimentRequestV2 request, bool versionTwo = true)
     {
         var canonical = ExperimentRequestV2Canonicalizer.Canonicalize(request);
@@ -59,6 +60,7 @@ public static class ExperimentResultValidator
     }
 
     /// <summary>Checks v2 linkage while retaining the unchanged v1-only result syntax path.</summary>
+    // The optional parameter keeps existing literal-null calls bound to the v1 overload.
     public static IReadOnlyList<ValidationIssue> Validate(ExperimentResult? result, ResearchCatalog catalog, ExperimentRequestV2? request, bool versionTwo = true)
     {
         ArgumentNullException.ThrowIfNull(catalog);
