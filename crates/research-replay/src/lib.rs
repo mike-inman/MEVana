@@ -17,6 +17,8 @@ use yellowstone_grpc_proto::prelude::{subscribe_update::UpdateOneof, SubscribeUp
 pub mod engine;
 pub mod policy;
 pub mod slot;
+pub mod v2;
+pub mod v2_engine;
 
 pub const SOL: &str = "So11111111111111111111111111111111111111112";
 pub const USDC: &str = "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v";

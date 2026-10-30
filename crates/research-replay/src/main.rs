@@ -14,6 +14,8 @@ use std::{
     path::PathBuf,
 };
 
+mod v2_main;
+
 const REFERENCE_A: &str = "83v8iPyZihDEjDdY8RdZddyZNyUtXngz69Lgo9Kt5d6d";
 const REFERENCE_B: &str = "FwewVm8u6tFPGewAyHmWAqad9hmF7mvqxK4mJ7iNqqGC";
 
@@ -238,6 +240,9 @@ fn main() -> Result<()> {
         "invalid run id"
     );
     ensure!(!output.exists(), "output exists; refusing to overwrite");
+    if profile.starts_with("v2-") {
+        return v2_main::run(&capture_root, &output, profile, git_commit, toolchain);
+    }
     let config = config(profile)?;
     let capture =
         research_replay::load_capture(&capture_root).context("capture validation failed")?;

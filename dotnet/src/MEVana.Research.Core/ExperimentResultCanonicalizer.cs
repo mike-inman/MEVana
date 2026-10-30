@@ -13,6 +13,12 @@ public static class ExperimentResultCanonicalizer
         ArgumentNullException.ThrowIfNull(result);
         if (ExperimentResultSyntaxValidator.Validate(result).Count != 0)
             throw new ArgumentException("Invalid typed result.", nameof(result));
+        return new(1, WriteCanonical(result));
+    }
+
+    // Shared JSON writer; the v1 entry point retains its original validation and bytes.
+    internal static string WriteCanonical(ExperimentResult result)
+    {
         using var stream = new MemoryStream();
         using (var writer = new Utf8JsonWriter(stream))
         {
@@ -70,6 +76,6 @@ public static class ExperimentResultCanonicalizer
             }
             writer.WriteEndObject();
         }
-        return new(1, Encoding.UTF8.GetString(stream.ToArray()));
+        return Encoding.UTF8.GetString(stream.ToArray());
     }
 }

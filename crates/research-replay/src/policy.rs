@@ -1,4 +1,5 @@
 //! Deterministic policy decisions over a common per-slot route set.
+use crate::v2::RouteV2;
 use crate::Route;
 use serde::{Deserialize, Serialize};
 use std::cmp::Ordering;
@@ -55,6 +56,11 @@ pub struct CandidateRow {
 #[derive(Clone)]
 pub struct CandidateInput {
     pub route: Route,
+    pub sizes: Vec<SizeQuote>,
+}
+#[derive(Clone)]
+pub struct CandidateInputV2 {
+    pub route: RouteV2,
     pub sizes: Vec<SizeQuote>,
 }
 
@@ -140,6 +146,65 @@ pub fn decide(inputs: &[CandidateInput], min_net: i64, top_k: usize) -> Vec<[Dec
     result
 }
 
+/// The v2 policies compete across all shapes and consider every pool on each route.
+pub fn decide_v2(inputs: &[CandidateInputV2], min_net: i64, top_k: usize) -> Vec<[Decision; 3]> {
+    let mut result = Vec::with_capacity(inputs.len());
+    for item in inputs {
+        let fixed = &item.sizes[0];
+        let fixed_decision = match (fixed.estimated_net, fixed.failure.as_deref()) {
+            (Some(net), _) if net > 0 => Decision::select(fixed.input, net),
+            (Some(net), _) => Decision::reject(Some(fixed.input), Some(net), "below_threshold"),
+            (_, Some(reason)) => Decision::reject(Some(fixed.input), None, reason),
+            _ => Decision::reject(Some(fixed.input), None, "insufficient_state"),
+        };
+        let baseline = match best(&item.sizes) {
+            Some((size, net)) if net >= min_net && net > 0 => Decision::select(size, net),
+            Some((size, net)) => Decision::reject(Some(size), Some(net), "below_threshold"),
+            None => Decision::reject(None, None, failure(&item.sizes)),
+        };
+        result.push([fixed_decision, baseline.clone(), baseline]);
+    }
+    for policy in [1, 2] {
+        let mut order: Vec<usize> = (0..inputs.len())
+            .filter(|&i| result[i][policy].selected)
+            .collect();
+        order.sort_by(|&a, &b| {
+            let left = (
+                result[a][policy].size.unwrap(),
+                result[a][policy].estimated_net.unwrap(),
+            );
+            let right = (
+                result[b][policy].size.unwrap(),
+                result[b][policy].estimated_net.unwrap(),
+            );
+            let relative = if policy == 1 {
+                left.1.cmp(&right.1)
+            } else {
+                ratio_cmp(left, right)
+            };
+            relative
+                .reverse()
+                .then_with(|| inputs[a].route.pools.cmp(&inputs[b].route.pools))
+        });
+        let mut used = std::collections::BTreeSet::new();
+        let mut count = 0;
+        for i in order {
+            let route = &inputs[i].route;
+            if route.pools.iter().any(|pool| used.contains(pool)) {
+                result[i][policy].selected = false;
+                result[i][policy].reason = Some("pool_conflict".into());
+            } else if policy == 2 && count >= top_k {
+                result[i][policy].selected = false;
+                result[i][policy].reason = Some("not_top_k".into());
+            } else {
+                used.extend(route.pools.iter().copied());
+                count += 1;
+            }
+        }
+    }
+    result
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -183,5 +248,41 @@ mod tests {
     #[test]
     fn synthetic_ratio_ranking_uses_integer_cross_product() {
         assert_eq!(ratio_cmp((10, 2), (100, 10)), Ordering::Greater);
+    }
+    #[test]
+    fn v2_third_pool_conflict_and_order_are_deterministic() {
+        fn item(pools: &[u8], net: i64) -> CandidateInputV2 {
+            CandidateInputV2 {
+                route: RouteV2 {
+                    shape: if pools.len() == 3 {
+                        "triangle"
+                    } else {
+                        "two_leg"
+                    }
+                    .into(),
+                    pools: pools
+                        .iter()
+                        .map(|i| Pubkey::new_from_array([*i; 32]))
+                        .collect(),
+                    tokens: vec![Pubkey::new_unique(); pools.len() + 1],
+                },
+                sizes: vec![SizeQuote {
+                    input: 10,
+                    estimated_net: Some(net),
+                    failure: None,
+                }],
+            }
+        }
+        let inputs = [item(&[1, 2, 3], 10), item(&[4, 3], 9), item(&[5, 6], 8)];
+        let first = decide_v2(&inputs, 1, 1);
+        let second = decide_v2(&inputs, 1, 1);
+        assert_eq!(
+            serde_json::to_vec(&first).unwrap(),
+            serde_json::to_vec(&second).unwrap()
+        );
+        assert_eq!(first[1][1].reason.as_deref(), Some("pool_conflict"));
+        assert_eq!(first[1][2].reason.as_deref(), Some("pool_conflict"));
+        assert_eq!(first[2][2].reason.as_deref(), Some("not_top_k"));
+        assert!(first[0][0].selected && first[1][0].selected);
     }
 }
