@@ -135,11 +135,24 @@ git commit -m "feat: Add adaptive position sizing to HotPath engine"
 
 ## Important Context
 
-### Active Development Areas
-1. **HotPath Optimization**: Primary focus on reducing latency
-2. **Adaptive Intelligence**: ML-based position sizing and slippage prediction
-3. **Multi-Region Support**: Expanding to global Geyser endpoints
-4. **Jupiter Integration**: Adding Jupiter v6 aggregator support
+### Current Focus (updated 2026-10-29): Stage 0 research track
+The project is in a **research phase with trading disabled**. The question being answered is: *does ranked route selection beat simple baselines on executable, cost-adjusted opportunities?*
+
+Work proceeds through dated handoffs in `docs/`. The latest one is the authority.
+
+1. **Handoffs 07–08 (done):** research contracts (experiments, rankings, execution outcomes) in `dotnet/` plus OpenSpec.
+2. **Handoff 09 (active):** read-only Geyser capture of Orca Whirlpool data, in a new crate `crates/geyser-capture`, plus the `whirlpool-core` decoder fix.
+   - Providers are Sodae (primary) and Tatum (secondary).
+   - Follow the stream-discipline rules: no idle streams, and no quota wasted.
+3. **Handoff 10:** exact Whirlpool quote math.
+4. **Handoff 11:** replay of captures, producing simulated experiment results.
+5. **Handoffs 12–13:** read-only Research API and MEVana-UI research page.
+
+**Not in focus right now:**
+- HotPath latency work, executor or Jito, wallets, live or paper trading;
+- the Kafka pipeline, ML sizing, multi-region and Jupiter.
+
+Do not change `hotpath_arb_engine`, `executor-service` or `shared-core` unless a handoff says to. Implement directly in this repo with OpenSpec. Do not use the old AgentEngineering factory process.
 
 ### Known Issues
 - Kafka consumer lag during high throughput (legacy pipeline)
