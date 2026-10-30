@@ -60,6 +60,37 @@ These changes override the *Credentials* section and the preflight gate below wh
   - Never run an unfiltered owner subscription beyond preflight. The 5-minute discovery run (pools only) and the 10-minute allowlist run should together use well under 0.5 GB.
   - Report the bytes used by each run in the closeout.
 
+## Revision 3 — 2026-10-29 21:50 CDT: stream discipline (do not waste provider quota)
+
+The operator requires that **no provider stream is open unless it is doing productive work**. Free and trial quota is finite: Sodae allows 5 GB over 7 days, and Tatum's limits are unknown. These rules override anything else in this document.
+
+**1. Live connections are allowed only for these purposes:**
+- **(a) Filter-support check.** At most 60 seconds per provider, to confirm that `datasize` and `memcmp` account filters and the transaction filter are accepted. Use Sodae first. Check Tatum only if Sodae fails.
+- **(b) Discovery run.** Step 7a, 5 minutes, pool accounts only.
+- **(c) Allowlist run.** Step 7c, 10 minutes.
+- **(d) Optional kill test.** One run of 1–2 minutes to produce a real `.part` file, and only if 7c cannot demonstrate it.
+
+  The total live time is about 20 minutes and must stay under 0.5 GB. **Unfiltered owner-wide subscriptions are forbidden.** The preflight is already done.
+
+**2. Development is offline.**
+- Write, debug and iterate code against the mock source and unit tests.
+- Develop `capture_inspect`, the decoder fixtures and the decoder fixes against **files already captured**. Never open a new stream to re-get data you already have.
+- Do not start a live run until the offline tests pass.
+
+**3. Every live run is bounded and supervised.**
+- Use a hard `--duration` and run in the foreground, or with a tracked PID inside the same session.
+- Never use `nohup`, `&` without a wait, `launchd`, `cron`, `tmux` or `screen`, and never leave a run unattended.
+- The tool must exit when the duration expires, or after a configurable number of consecutive failed reconnects (default 5). It must never retry forever.
+
+**4. Check after every run.** Confirm all three, and record the results in the closeout:
+- no `geyser-capture` or probe process remains (`pgrep -fl geyser`);
+- `lsof -nP -iTCP -sTCP:ESTABLISHED` shows no connection to the provider IPs. For reference, Sodae's `ams.*.sodae.io` resolved to 45.154.33.73 and Tatum's gRPC host to 34.160.43.88 on 2026-10-29; re-resolve them, since they can change;
+- the run's bytes received, from the manifest.
+
+**5. Track a running total** of bytes received for each provider across the slice, and report it in the closeout. If a provider reports quota exhaustion, stop. Do not switch providers just to keep streaming.
+
+**6. Stop and report** instead of re-running when a live run fails for a reason that code changes must fix.
+
 ## Execution model (not the old factory process)
 
 This slice is implemented **directly in this repository** by an interactive coding-assistant session (Claude Code or Codex), working with the operator. It follows this repo's own OpenSpec workflow, as handoffs 07 and 08 did.
