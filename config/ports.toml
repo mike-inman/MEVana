@@ -68,6 +68,8 @@ system_orchestrator = 9999          # Service lifecycle management (reserved)
 # DEVELOPMENT AND TESTING
 # =============================================================================
 [development]
+# 2026-10-29: read-only capture metrics, fixed loopback bind.
+geyser_capture_metrics = 8121
 # Test Services (when needed)
 test_api = 8093                     # Testing API endpoints
 test_metrics = 9105                 # Testing metrics collection

@@ -2,18 +2,18 @@
 
 ## 1. Required connectivity gate
 
-- [x] 1.1 Execute a bounded owner-filtered Processed preflight; record connect/first-account timing, update count and sanitized error class. On connection/auth failure deliver blocker closeout and stop before group 2.
+- [x] 1.1 Record the already passed Sodae/Tatum preflight results without repeating the gate; preserve the superseded Shyft blocker as history.
 
 Historical Shyft failure remains in the earlier closeout. Superseded gate: Sodae passed (683 ms connect, 208 ms first account, 1,403 updates/20 s); Tatum passed (423 ms, 410 ms, 2,212 updates/20 s). Neither gate is to be repeated.
 
 ## 2. Recorder and offline evidence (preflight already passed)
 
-- [ ] 2.1 Add isolated crate/workspace member and locked dependencies; verify lock diff only adds package, document IDL-derived sizes/offsets and pass filter tests.
-- [ ] 2.2 Add approved-key configuration, secret type/redaction and source classification; test provider pairing and same-key environment precedence, private-source rejection and Synthetic manifests; document CLI and safe startup logs.
-- [ ] 2.3 Implement byte-preserving framed writer, rotation, SHA-256 manifests and session provenance; pass round-trip, atomic rename, corruption, .part and hash tests; document format v1 and DatasetMetadata mapping.
-- [ ] 2.4 Implement mockable source, subscriptions, ping response, reconnect, jitter, stalls and slot gaps; pass mock gap/backoff tests and document semantics.
-- [ ] 2.5 Implement fixed-port loopback geyser_capture_ metrics and signal/duration finalization; test occupied-port failure and PortConfig loading before registering port 8121; document start/stop commands.
-- [ ] 2.6 Implement capture_inspect integrity checks, decode summaries and pool inventory; test corrupt/incomplete input rejection and unexpected account reporting; document usage.
+- [x] 2.1 Add isolated crate/workspace member and locked dependencies; verify lock diff only adds package, document IDL-derived sizes/offsets and pass filter tests.
+- [x] 2.2 Add approved-key configuration, secret type/redaction and source classification; test provider pairing and same-key environment precedence, private-source rejection and Synthetic manifests; document CLI and safe startup logs.
+- [x] 2.3 Implement byte-preserving framed writer, rotation, SHA-256 manifests and session provenance; pass round-trip, atomic rename, corruption, .part and hash tests; document format v1 and DatasetMetadata mapping.
+- [x] 2.4 Implement mockable source, subscriptions, ping response, reconnect, jitter, stalls and slot gaps; pass mock gap/backoff tests and document semantics.
+- [x] 2.5 Implement fixed-port loopback geyser_capture_ metrics and signal/duration finalization; test occupied-port failure and PortConfig loading before registering port 8121; document start/stop commands.
+- [x] 2.6 Implement capture_inspect integrity checks, decode summaries and pool inventory; test corrupt/incomplete input rejection and unexpected account reporting; document usage.
 
 ## 3. Bounded live validation and decoder evidence
 
@@ -33,6 +33,6 @@ Historical Shyft failure remains in the earlier closeout. Superseded gate: Sodae
 
 ## Revision 3 implementation additions — 2026-10-29
 
-- [ ] 5.1 Identify 653, 9988, 148+112*n, 216 and 254-byte accounts from discriminators and IDL/current Orca source without provider calls; derive all offsets.
-- [ ] 5.2 Test bound provider profiles, TLS-only Sodae override, dynamic capture and unsupported decode reporting, reconnect limit (default 5), aggregate 0.5 GB limit and no owner-wide requests.
+- [x] 5.1 Identify 653, 9988, 148+112*n, 216 and 254-byte accounts from discriminators and IDL/current Orca source without provider calls; derive all offsets.
+- [x] 5.2 Test bound provider profiles, TLS-only Sodae override, dynamic capture and unsupported decode reporting, reconnect limit (default 5), aggregate 0.5 GB limit and no owner-wide requests.
 - [ ] 5.3 After offline tests pass run filter-support check before discovery; after every run record manifest bytes, resolved provider IPs, pgrep and lsof checks and per-provider totals.

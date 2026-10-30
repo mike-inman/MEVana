@@ -2761,6 +2761,33 @@ dependencies = [
 ]
 
 [[package]]
+name = "geyser-capture"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "async-trait",
+ "borsh 1.5.7",
+ "bs58",
+ "bytes",
+ "chrono",
+ "clap",
+ "prost 0.13.5",
+ "rand 0.8.5",
+ "serde",
+ "serde_json",
+ "sha2 0.10.9",
+ "shared-core",
+ "tempfile",
+ "tokio",
+ "tokio-stream",
+ "toml 0.8.23",
+ "tonic",
+ "url",
+ "whirlpool-core",
+ "yellowstone-grpc-proto",
+]
+
+[[package]]
 name = "ghash"
 version = "0.5.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"

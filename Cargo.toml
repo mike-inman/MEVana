@@ -3,6 +3,7 @@
 resolver = "2"
 
 members = [
+  "crates/geyser-capture",
   # PRODUCTION HOTPATH SYSTEM
   "crates/hotpath_arb_engine",          # Zero-latency MEV detection
   "crates/executor-service",            # Trade execution engine

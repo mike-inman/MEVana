@@ -2,23 +2,24 @@ use borsh::{BorshDeserialize, BorshSerialize};
 use serde::{Deserialize, Serialize};
 use solana_sdk::pubkey::Pubkey;
 
-// On-chain Tick layout (no explicit "initialized" flag).
+// On-chain packed Borsh Tick layout, verified against the IDL (2026-10-29).
 #[derive(Clone, Debug, PartialEq, BorshDeserialize, BorshSerialize, Serialize, Deserialize)]
 pub struct Tick {
+    pub initialized: bool,          // 1
     pub liquidity_net: i128,        // 16
     pub liquidity_gross: u128,      // 16
     pub fee_growth_outside_a: u128, // 16
     pub fee_growth_outside_b: u128, // 16
     pub reward_growths_outside: [u128; 3], // 48
-                                    // Total per tick = 112 bytes
+                                    // Total per tick = 113 bytes
 }
 
 #[derive(Clone, Debug, PartialEq, BorshDeserialize, BorshSerialize)]
 pub struct TickArray {
     pub start_tick_index: i32, // 4
-    pub whirlpool: Pubkey,     // 32
-    pub ticks: [Tick; 88],     // 9856
-                               // Total data after discriminator = 4 + 32 + 88*112 = 9892 bytes; with 8-byte disc => 9900 bytes
+    pub ticks: [Tick; 88],     // 9944
+    pub whirlpool: Pubkey,     // 32; offset 9956 including discriminator
+                               // Total account size including discriminator: 8 + 4 + 88*113 + 32 = 9988.
 }
 
 // Minimal subset of Whirlpool account (order matters — must match on-chain).
@@ -42,7 +43,7 @@ pub struct WhirlpoolMinimal {
     pub token_vault_b: Pubkey,              // 32
     pub fee_growth_global_b: u128,          // 16
     pub reward_last_updated_timestamp: u64, // 8
-    pub reward_infos: [RewardInfo; 3],      // 3 * 96
+    pub reward_infos: [RewardInfo; 3],      // 3 * 128
 }
 
 #[derive(Clone, Debug, PartialEq, BorshDeserialize, BorshSerialize, Serialize, Deserialize)]

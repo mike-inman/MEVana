@@ -142,3 +142,8 @@ infrastructure/keys/
 
 # Runtime AI logs produced by local tests and development
 crates/arb-engine/ai_logs/
+
+# 2026-10-29: raw captures belong outside the checkout.
+*.cap
+*.cap.part
+MEVanaData/

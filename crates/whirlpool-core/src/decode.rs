@@ -31,7 +31,7 @@ pub fn decode_whirlpool(data: &[u8]) -> Result<WhirlpoolMinimal> {
 }
 
 pub fn decode_tick_array(data: &[u8]) -> Result<TickArray> {
-    if data.len() < 8 || data[..8] != disc_tick_array() {
+    if data.len() != 8 + 4 + 88 * 113 + 32 || data[..8] != disc_tick_array() {
         return Err(anyhow!("wrong discriminator for TickArray"));
     }
     let mut cursor = &data[8..];
