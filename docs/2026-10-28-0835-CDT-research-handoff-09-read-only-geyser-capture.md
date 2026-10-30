@@ -23,11 +23,19 @@ These changes override the *Credentials* section and the preflight gate below wh
 - **Shyft is blocked and Sodae is now the primary provider.**
   - Shyft (`grpc.va.shyft.to`) returned UNAUTHENTICATED for **both** `X_TOKEN` and `SHYFT_GEYSER_X_TOKEN`. See `docs/2026-10-29-1745-CDT-research-handoff-09-closeout.md` on branch `feat/geyser-capture-20261029`. Treat Shyft as blocked until the operator renews its access.
   - The primary provider is now the **Sodae Yellowstone trial**: 5 GB for 7 days, as described in `docs/2026-10-29-2032-CDT-tatum-sodae-geyser-development-setup.md`.
-  - Tatum (header `x-api-key`) is the secondary provider. Its key is not in `.env` yet.
+  - **Tatum is the verified secondary provider.**
+    - Endpoint `https://solana-mainnet-grpc.gateway.tatum.io:443`; header `x-api-key`; token `.env` key `TATUM_MAINNET`.
+    - `TATUM_TESTNET` also exists in `.env`. Do not use it for market-data capture: testnet pools are not market data.
+    - **Preflight passed on 2026-10-29 21:25 CDT:** 20 s, owner `ORCA_WHIRLPOOL`, Processed commitment, 4.2.1 protos. Results:
+      - connected in 423 ms; the first account arrived 410 ms later;
+      - 2,212 account updates (about 110/s); last slot 463,113,490;
+      - no errors;
+      - the same account-size families as Sodae (653, 9,988, 148 + 112·n, 216, 254).
+    - Free-plan quotas are unknown. Check them before running anything longer than the bounded runs.
 - **Credential mapping.** The capture tool reads these keys from the process environment first, then from `.env`. The `.env` names contain dots, so they must be parsed explicitly; they cannot be exported as shell variables.
   - **Token:** `SODAE.IO_API_KEY`, sent in the `x-token` header.
   - **Endpoint:** `SODAE.IO_YELLOWSTONE_GRPC_URL` is plaintext `http://ams.rpc.sodae.io:10201`. Use the documented TLS endpoint **`https://ams.tls.sodae.io:443`** instead, and refuse plaintext endpoints.
-  - **Pairing.** Endpoints and tokens are chosen together, as a named provider profile with `--provider sodae|tatum|shyft|custom`. They are never chosen by independent alias fallback.
+  - **Pairing.** Endpoints and tokens are chosen together, as a named provider profile with `--provider sodae|tatum|shyft|custom` (Tatum token key `TATUM_MAINNET`). They are never chosen by independent alias fallback.
   - **Auth header.** The header name is set per provider: `x-token` for Sodae and Shyft, `x-api-key` for Tatum.
   - Do not edit `.env`.
 - **The preflight already passed on Sodae, on 2026-10-29.** A 20-second subscription filtered by `ORCA_WHIRLPOOL` owner, at Processed commitment, using bindings generated from the locally cached yellowstone-grpc-proto **4.2.1** protos:
