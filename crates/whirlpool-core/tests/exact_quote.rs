@@ -1,4 +1,4 @@
-use std::{collections::BTreeMap, io::Cursor};
+use std::{collections::BTreeMap, io::Cursor, sync::mpsc, time::Duration};
 
 use orca_whirlpools_core::{TickArrayFacade, TickFacade};
 use solana_sdk::pubkey::Pubkey;
@@ -114,4 +114,49 @@ fn captured_dynamic_array_decodes() {
             .filter(|tick| tick.initialized)
             .count()
     );
+}
+
+#[test]
+fn exhausting_supplied_arrays_terminates_as_missing_array() {
+    let mut pool = pool();
+    pool.tick_spacing = 1;
+    pool.tick_spacing_seed = 1_u16.to_le_bytes();
+    pool.tick_current_index = 0;
+    pool.sqrt_price = 1_u128 << 64;
+    pool.liquidity = 1_000;
+    let program = Pubkey::new_unique();
+    let pool_id = Pubkey::new_unique();
+    let arrays: BTreeMap<_, _> = [-88, 0]
+        .into_iter()
+        .map(|start_tick_index| {
+            let (key, _) = exact::derive_tick_array_address(&program, &pool_id, start_tick_index);
+            (
+                key,
+                exact::DecodedTickArray {
+                    whirlpool: pool_id,
+                    facade: TickArrayFacade {
+                        start_tick_index,
+                        ticks: [TickFacade::default(); 88],
+                    },
+                },
+            )
+        })
+        .collect();
+    for a_to_b in [true, false] {
+        let (send, receive) = mpsc::channel();
+        let pool = pool.clone();
+        let arrays = arrays.clone();
+        std::thread::spawn(move || {
+            let result =
+                exact::quote_exact_in(&program, &pool_id, &pool, &arrays, 1_000_000, a_to_b);
+            let _ = send.send(result);
+        });
+        let result = receive
+            .recv_timeout(Duration::from_secs(10))
+            .expect("exact quote exceeded 10 s watchdog");
+        assert!(matches!(
+            result,
+            Err(exact::ExactError::MissingTickArray { .. })
+        ));
+    }
 }

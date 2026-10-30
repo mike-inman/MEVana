@@ -1,8 +1,8 @@
 //! Integer-only standard-fee Whirlpool quotes. Legacy `quoter` is not used here.
 use crate::{decode, pda, types::WhirlpoolMinimal};
 use orca_whirlpools_core::{
-    compute_swap, TickArrayFacade, TickArraySequence, TickFacade, WhirlpoolFacade,
-    WhirlpoolRewardInfoFacade,
+    compute_swap, tick_index_to_sqrt_price, TickArrayFacade, TickArraySequence, TickFacade,
+    WhirlpoolFacade, WhirlpoolRewardInfoFacade,
 };
 use solana_sdk::pubkey::Pubkey;
 use std::collections::BTreeMap;
@@ -214,7 +214,22 @@ fn quote(
     }
     let sequence = TickArraySequence::new(items, pool.tick_spacing)
         .map_err(|e| ExactError::Quote(format!("{e:?}")))?;
-    let result = compute_swap(amount, 0, facade, sequence, a_to_b, exact_in, 0)
+    // Bound the swap to the supplied arrays. With a zero limit the pinned core
+    // re-targets the sequence edge forever once the arrays are exhausted; a
+    // limit at that edge stops there, and the partial-fill check below reports
+    // the missing array. Quotes that finish inside the arrays are unaffected.
+    let edge = if a_to_b {
+        sequence.start_index()
+    } else {
+        sequence.end_index()
+    };
+    let limit = tick_index_to_sqrt_price(edge);
+    if (a_to_b && limit >= pool.sqrt_price) || (!a_to_b && limit <= pool.sqrt_price) {
+        return Err(ExactError::MissingTickArray {
+            start_tick_index: first_missing.unwrap_or(current_start),
+        });
+    }
+    let result = compute_swap(amount, limit, facade, sequence, a_to_b, exact_in, 0)
         .map_err(|e| ExactError::Quote(format!("{e:?}")))?;
     let (input, output) = if a_to_b {
         (result.token_a, result.token_b)
