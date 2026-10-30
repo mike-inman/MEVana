@@ -17,8 +17,8 @@ Historical Shyft failure remains in the earlier closeout. Superseded gate: Sodae
 
 ## 3. Bounded live validation and decoder evidence
 
-- [ ] 3.1 Capture five-minute pool discovery with hard stop; inspect inventory, confirm mints/cluster, measure rates, volume and peak memory, choose and commit observed-pair allowlist.
-- [ ] 3.2 Correct permitted Tick/TickArray layout and exact-length rejection offline before live runs; then add compact real public-account fixtures with slot/pubkey, run decoder tests and document caller impact without caller edits.
+- [x] 3.1 Capture five-minute pool discovery with hard stop; inspect inventory, confirm mints/cluster, measure rates, volume and peak memory, choose and commit observed-pair allowlist.
+- [x] 3.2 Correct permitted Tick/TickArray layout and exact-length rejection offline before live runs; then add compact real public-account fixtures with slot/pubkey, run decoder tests and document caller impact without caller edits.
 - [ ] 3.3 Run allowlist capture with transactions, at most ten minutes, 2–3 minute rotation and signal shutdown before deadline; inspect all files, prove no remaining process and report rates, gaps, decoder success and memory.
 
 ## 4. Integration and closeout

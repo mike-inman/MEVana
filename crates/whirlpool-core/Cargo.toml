@@ -12,3 +12,6 @@ sha2 = "0.10"
 solana-sdk = "2.1.7"
 solana-client = "2.1.7"
 ethnum = "1.5"
+
+[dev-dependencies]
+zstd = "0.13"
