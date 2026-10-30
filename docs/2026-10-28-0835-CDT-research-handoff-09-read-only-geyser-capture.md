@@ -26,7 +26,7 @@ These changes override the *Credentials* section and the preflight gate below wh
   - **Tatum is the verified secondary provider.**
     - Endpoint `https://solana-mainnet-grpc.gateway.tatum.io:443`; header `x-api-key`; token `.env` key `TATUM_MAINNET`.
     - `TATUM_TESTNET` also exists in `.env`. Do not use it for market-data capture: testnet pools are not market data.
-    - **Preflight passed on 2026-10-29 21:25 CDT:** 20 s, owner `ORCA_WHIRLPOOL`, Processed commitment, 4.2.1 protos. Results:
+    - **Preflight passed on 2026-10-29 at about 21:20 CDT:** 20 s, owner `ORCA_WHIRLPOOL`, Processed commitment, 4.2.1 protos. Results:
       - connected in 423 ms; the first account arrived 410 ms later;
       - 2,212 account updates (about 110/s); last slot 463,113,490;
       - no errors;
@@ -60,7 +60,7 @@ These changes override the *Credentials* section and the preflight gate below wh
   - Never run an unfiltered owner subscription beyond preflight. The 5-minute discovery run (pools only) and the 10-minute allowlist run should together use well under 0.5 GB.
   - Report the bytes used by each run in the closeout.
 
-## Revision 3 — 2026-10-29 21:50 CDT: stream discipline (do not waste provider quota)
+## Revision 3 — 2026-10-29 21:23 CDT: stream discipline (do not waste provider quota)
 
 The operator requires that **no provider stream is open unless it is doing productive work**. Free and trial quota is finite: Sodae allows 5 GB over 7 days, and Tatum's limits are unknown. These rules override anything else in this document.
 
