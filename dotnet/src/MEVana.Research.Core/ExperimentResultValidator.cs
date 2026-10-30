@@ -10,6 +10,13 @@ public sealed record RequestFingerprint(int CanonicalizationVersion, string Sha2
         var canonical = ExperimentRequestCanonicalizer.Canonicalize(request);
         return new(canonical.Version, Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(canonical.Content))));
     }
+
+    // The optional parameter keeps existing literal-null calls bound to the v1 overload.
+    public static RequestFingerprint FromRequest(ExperimentRequestV2 request, bool versionTwo = true)
+    {
+        var canonical = ExperimentRequestV2Canonicalizer.Canonicalize(request);
+        return new(canonical.Version, Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(canonical.Content))));
+    }
 }
 
 public static class ExperimentResultValidator
@@ -48,6 +55,37 @@ public static class ExperimentResultValidator
         if (r.RequestSha256 != fingerprint.Sha256 || r.RequestCanonicalizationVersion != fingerprint.CanonicalizationVersion
             || r.DatasetId != request!.DatasetId || r.StrategyVersion != request.StrategyVersion
             || r.WindowStartUtc != request.WindowStartUtc || r.WindowEndUtc != request.WindowEndUtc)
+            errors.Add(new("request", "request_mismatch"));
+        return errors.AsReadOnly();
+    }
+
+    /// <summary>Checks v2 linkage while retaining the unchanged v1-only result syntax path.</summary>
+    // The optional parameter keeps existing literal-null calls bound to the v1 overload.
+    public static IReadOnlyList<ValidationIssue> Validate(ExperimentResult? result, ResearchCatalog catalog, ExperimentRequestV2? request, bool versionTwo = true)
+    {
+        ArgumentNullException.ThrowIfNull(catalog);
+        if (result is null) return Validate(result, catalog);
+        // Result syntax accepts version 1 only. Normalize that single field in a copy
+        // to reuse every other established syntax and catalog check without widening v1.
+        var normalized = new ExperimentResult(result.ResultId, result.RequestSha256, 1,
+            result.DatasetId, result.DatasetMetadataVersion, result.StrategyVersion,
+            result.EngineVersion, result.CostModelVersion, result.CreatedAtUtc,
+            result.WindowStartUtc, result.WindowEndUtc, result.EvidenceKind, result.Status,
+            result.ErrorCode, result.Policies);
+        var errors = Validate(normalized, catalog).ToList();
+        if (result.RequestCanonicalizationVersion is null)
+            errors.Add(new("requestCanonicalizationVersion", "required"));
+        if (ExperimentResultSyntaxValidator.Validate(normalized).Count != 0
+            || result.RequestCanonicalizationVersion is null) return errors.AsReadOnly();
+        if (ExperimentRequestV2SyntaxValidator.Validate(request).Count != 0)
+        {
+            errors.Add(new("request", "invalid_request"));
+            return errors.AsReadOnly();
+        }
+        var fingerprint = RequestFingerprint.FromRequest(request!);
+        if (result.RequestCanonicalizationVersion != 2 || result.RequestSha256 != fingerprint.Sha256
+            || result.DatasetId != request!.DatasetId || result.StrategyVersion != request.StrategyVersion
+            || result.WindowStartUtc != request.WindowStartUtc || result.WindowEndUtc != request.WindowEndUtc)
             errors.Add(new("request", "request_mismatch"));
         return errors.AsReadOnly();
     }
