@@ -2,7 +2,7 @@
 
 ## Context
 
-See `proposal.md`. Handoff 09 provides four finalized raw capture files; handoff 10 provides standard-fee exact quotes. Revision 1 of handoff 11 defines three separately scoped v1 requests. The existing request/result validators remain unchanged.
+See `proposal.md`. Handoff 09 provides four finalized raw capture files; handoff 10 provides standard-fee exact quotes. Revisions 1 and 2 of handoff 11 define three separately scoped v1 requests and the bounded exact quote wrapper. The existing request/result validators remain unchanged. The wrapper fix and its watchdog regression are committed separately at `557e42b5` (`fix: bound exact Whirlpool quotes to supplied tick arrays`).
 
 ## Goals / Non-Goals
 
@@ -31,6 +31,7 @@ See `proposal.md`. Handoff 09 provides four finalized raw capture files; handoff
 - Reference pool is a captured price input; for A it also belongs to the required route universe → keep the cost quote distinct from route candidates and disclose the overlap.
 - Later-slot requote cannot establish fill order or success → call results Simulated only.
 - Exact quoter may reject valid routes needing unseen arrays → do not synthesize state.
+- Exhausting supplied arrays previously stalled at the sequence edge → the exact wrapper now sets the supplied edge as the price limit, returns `MissingTickArray` on a partial fill, and keeps the pinned Orca code unchanged. The 10-second watchdog regression covers both directions.
 
 ## Migration Plan
 
