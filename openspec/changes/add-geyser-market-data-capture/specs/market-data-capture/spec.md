@@ -11,7 +11,7 @@ Capture SHALL record public market data without signing, wallet access, transact
 
 #### Scenario: Credential selection
 - **WHEN** both environment and .env contain authorized aliases
-- **THEN** exported values win across endpoint aliases GEYSER_ENDPOINT, SHYFT_GEYSER_URL, ENDPOINT and token aliases GEYSER_X_TOKEN, X_TOKEN, SHYFT_GEYSER_X_TOKEN; unrelated keys are never loaded
+- **THEN** the selected provider uses its own key only (Sodae SODAE.IO_API_KEY with x-token, Tatum TATUM_MAINNET with x-api-key); exported values win over the same .env key; no other keys are loaded and cross-provider token/endpoint combinations fail
 
 ### Requirement: Source classification
 Capture SHALL reject private, loopback and localhost sources unless explicitly synthetic. Every manifest SHALL carry source classification, configurable connection tier defaulting to dev-test, host only and observed cluster.
@@ -21,7 +21,7 @@ Capture SHALL reject private, loopback and localhost sources unless explicitly s
 - **THEN** startup fails unless --synthetic-source is set; with it all outputs are marked Synthetic and excluded from market catalogs
 
 ### Requirement: Account and transaction subscriptions
-Capture SHALL subscribe at configurable commitment (Processed default) to slots, all Whirlpool pools by IDL-derived size and allowlisted TickArrays by IDL-derived size and pool offset. It SHALL exclude positions and optionally include non-vote pool transactions, including failures, enabled by default.
+Capture SHALL subscribe at configurable commitment (Processed default) to slots, all Whirlpool pools by source-derived size/discriminator and allowlisted fixed and dynamic TickArrays by their distinct source-derived discriminators and pool offsets. It SHALL exclude positions and optionally include non-vote pool transactions, including failures, enabled by default.
 
 #### Scenario: Empty and populated allowlists
 - **WHEN** discovery has an empty allowlist or targeted capture has selected pools
@@ -70,8 +70,15 @@ Filters and decoder lengths SHALL agree with the repository IDL. Offline tests S
 - **THEN** decoding fails instead of silently accepting a mismatched layout
 
 ### Requirement: Live validation boundary
-A failed connection/authentication preflight SHALL halt development with a blocker closeout. Successful preflight SHALL precede five-minute discovery and a bounded ten-minute allowlist run with 2–3 minute rotation and shutdown validation. No live run SHALL exceed ten minutes or remain running.
+The passed preflights SHALL NOT be repeated. Offline tests SHALL precede a 60-second filter check, five-minute pools-only discovery, allowlist selection and ten-minute targeted capture. Unfiltered owner streams SHALL be forbidden. Rejected filters, exhausted quotas or live failures requiring code fixes SHALL halt work.
 
 #### Scenario: Dev/test reporting
 - **WHEN** short-run evidence is reported
 - **THEN** report rates by type, bytes, gaps/stalls, decode rates and peak memory; qualify extrapolations and cluster, commit only small decoder fixtures and observed SOL/USDC, SOL/USDT, USDC/USDT allowlist, and make no profitability or production-completeness claims
+
+### Requirement: Quota and stream discipline
+Capture SHALL enforce hard duration and byte budgets, finite failed reconnects (default five), profile-bound TLS credentials and source-derived fixed/dynamic filters. Every run SHALL close both connections and report bytes per provider; development SHALL use mocks or captured files.
+
+#### Scenario: After-run audit
+- **WHEN** a live run exits
+- **THEN** manifest bytes and cumulative provider bytes are recorded and process/socket checks show no capture process or provider connection remains
