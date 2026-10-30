@@ -16,3 +16,6 @@ sha2 = "0.10"
 solana-sdk = "2.1.7"
 whirlpool-core = { path = "../whirlpool-core" }
 yellowstone-grpc-proto = "=4.2.1"
+
+[dev-dependencies]
+zstd = "0.13"

@@ -5880,6 +5880,7 @@ dependencies = [
  "solana-sdk 2.1.21",
  "whirlpool-core",
  "yellowstone-grpc-proto",
+ "zstd",
 ]
 
 [[package]]

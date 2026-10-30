@@ -388,7 +388,34 @@ mod tests {
     }
     #[test]
     fn synthetic_fee_units_and_costs() {
-        assert_eq!(400u64 * 1_000_000 / 1_000_000, 400); // 400/1e6 = 0.04%, not 400 bps.
+        let pool_bytes = zstd::decode_all(
+            &include_bytes!("../../whirlpool-core/tests/fixtures/usdc_usdt_pool.bin.zst")[..],
+        )
+        .unwrap();
+        let array_bytes = zstd::decode_all(
+            &include_bytes!("../../whirlpool-core/tests/fixtures/usdc_usdt_tick_array.bin.zst")[..],
+        )
+        .unwrap();
+        let mut pool = decode_whirlpool(&pool_bytes).unwrap();
+        pool.fee_rate = 400; // Synthetic mutation of a public captured account.
+        let pool_id = Pubkey::from_str("4fuUiYxTQ6QCrdSq9ouBYcTM7bqSwYTSyLueGZLTy4T4").unwrap();
+        let program = Pubkey::from_str(PROGRAM).unwrap();
+        let array = exact::decode_array(&array_bytes).unwrap();
+        let key =
+            exact::derive_tick_array_address(&program, &pool_id, array.facade.start_tick_index).0;
+        let arrays = BTreeMap::from([(key, array)]);
+        let quote =
+            exact::quote_exact_in(&program, &pool_id, &pool, &arrays, 1_000_000, true).unwrap();
+        assert_eq!(quote.fee_amount, 400); // 400 parts per million = 0.04% of input.
+        assert_eq!(
+            direction(&pool, pool.token_mint_a, pool.token_mint_b).unwrap(),
+            true
+        );
+        assert_eq!(
+            direction(&pool, pool.token_mint_b, pool.token_mint_a).unwrap(),
+            false
+        );
+        assert!(direction(&pool, pool.token_mint_a, Pubkey::new_unique()).is_err());
         assert_eq!(
             cost_lamports(5_000, 1_000, 400_000, 10_000).unwrap(),
             15_400
