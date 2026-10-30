@@ -16,7 +16,7 @@ The operator changed three things on 2026-10-29. Where any older text in this do
 
 It also adds an *Execution model* section, which rules out the old AgentEngineering factory process.
 
-## Revision 2 — 2026-10-29 21:05 CDT: provider is Sodae; Shyft is blocked
+## Revision 2 — 2026-10-29 21:15 CDT: provider is Sodae; Shyft is blocked
 
 These changes override the *Credentials* section and the preflight gate below where they conflict.
 
