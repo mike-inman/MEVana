@@ -23,7 +23,9 @@ cd sodae-docs/examples/rust
 SODAE_YELLOWSTONE_URL=https://ams.tls.sodae.io:443 cargo run --example yellowstone -- slots
 ```
 
-It also requires `SODAE_TOKEN` in the environment. Do not put a literal key into a command saved in history. The official example is a separate client and has not been cloned or run in this setup task. Use the bounded local diagnostic for a short entitlement check before a sustained stream. Rust is the natural starting point for MEVana; inspect dependency compatibility with the project's existing Yellowstone 4.2.1 client before adapting upstream examples.
+It also requires `SODAE_TOKEN` in the environment. Do not put a literal key into a command saved in history. The official example is a separate client. On 2026-10-29 the user successfully cloned `https://github.com/sodae-io/sodae-docs` from `/Users/michaelinman/Repos`, creating `/Users/michaelinman/Repos/sodae-docs` alongside MEVana. Git reported all 217 objects received and deltas resolved. The Rust examples are therefore available at `/Users/michaelinman/Repos/sodae-docs/examples/rust`; TypeScript examples are at `/Users/michaelinman/Repos/sodae-docs/examples/typescript`. This clone is a separate repository, not a MEVana submodule or vendored dependency. Successful compilation or streaming from these examples has not yet been demonstrated.
+
+Use the bounded local diagnostic for a short entitlement check before a sustained stream. Rust is the natural starting point for MEVana; inspect dependency compatibility with the project's existing Yellowstone 4.2.1 client before adapting upstream examples.
 
 Local `.env` entry names found, with values deliberately omitted:
 
