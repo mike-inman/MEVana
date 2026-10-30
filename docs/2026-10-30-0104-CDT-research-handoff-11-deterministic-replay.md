@@ -34,13 +34,69 @@ Codex stopped correctly at the contract gate (`docs/2026-10-30-0107-CDT-research
   - for A, a SOL/USDC standard-fee pool;
   - for B and C, a SOL/USDT standard-fee pool.
 
-  The reference pool is a **price input to the cost model only, never a traded or evaluated route**. Record it in the cost model and its `costModelVersion`, and state this in the closeout. This keeps each request's scope truthful.
+  The reference pool's **cost-conversion quote** is a price input to the cost model only; that conversion is never traded or evaluated as a route. The same pool **may** still appear as a leg in its own pair's routes (for A it is one of the six SOL/USDC pools), but that has nothing to do with its cost-model role (see Revision 2). Record it in the cost model and its `costModelVersion`, and state this in the closeout. This keeps each request's scope truthful.
 - **Runs** (replacing step 5's run list):
   - default parameters for **all three** pairs;
   - the L = 2 latency sensitivity and the cost sensitivity for **pair A only**.
   - Determinism (step 3) applies to each pair's default run.
 - **Where to work.** Continue on `feat/deterministic-replay-20261030`, rebased onto `origin/main`. Keep the blocker report as history.
 - **Shared code across pairs.** The three results share one replay over the allowlist session, with per-pair candidate sets, policies and accounting. The per-candidate JSONL records the pair.
+
+## Revision 2 — 2026-10-30 08:13 CDT: bounded exact quotes (operator-verified fix)
+
+Codex stopped correctly a second time (`docs/2026-10-30-0155-CDT-research-handoff-11-exact-quote-blocker.md`, branch commit `82f67708`): an exact quote on SOL/USDT pool `BmXV…` at slot `463131598` never returned. This revision overrides anything below that conflicts with it.
+
+**Root cause (verified independently against the Apache `orca_whirlpools_core` 1.0.4 source in the cargo registry).** This is a wrapper bug in our code, not bad capture state, and the Orca math itself is not wrong.
+- `exact::quote` calls `compute_swap` with `sqrt_price_limit = 0`, and the core turns that into the global `MIN_SQRT_PRICE` or `MAX_SQRT_PRICE`.
+- Once a swap uses up the tick arrays we supply:
+  - `TickArraySequence::next_initialized_tick` returns `(None, end_index)` for every later call;
+  - `prev_initialized_tick` likewise returns `start_index` for every later call.
+- Each loop iteration then targets the price it is already at. `compute_swap_step` moves zero, `amount_remaining` never decreases, and the global limit is never reached, so the loop never ends. Our partial-fill → `MissingTickArray` check after the loop never runs.
+- Thin pools exhaust their captured arrays even with tiny inputs. `BmXV…` has liquidity of about 1.2e8.
+
+**Required fix: in `crates/whirlpool-core/src/exact.rs` only, applied exactly as below.** It is a deterministic, integer-only fix and leaves the Orca code unchanged. Pass the edge of the supplied sequence as the price limit:
+
+```rust
+// imports: add `tick_index_to_sqrt_price` to the orca_whirlpools_core use list
+    // Bound the swap to the supplied arrays. With a zero limit the pinned core
+    // re-targets the sequence edge forever once the arrays are exhausted; a
+    // limit at that edge stops there, and the partial-fill check below reports
+    // the missing array. Quotes that finish inside the arrays are unaffected.
+    let edge = if a_to_b {
+        sequence.start_index()
+    } else {
+        sequence.end_index()
+    };
+    let limit = tick_index_to_sqrt_price(edge);
+    if (a_to_b && limit >= pool.sqrt_price) || (!a_to_b && limit <= pool.sqrt_price) {
+        return Err(ExactError::MissingTickArray {
+            start_tick_index: first_missing.unwrap_or(current_start),
+        });
+    }
+    let result = compute_swap(amount, limit, facade, sequence, a_to_b, exact_in, 0)
+```
+
+**Regression test.** Add `exhausting_supplied_arrays_terminates_as_missing_array` to `crates/whirlpool-core/tests/exact_quote.rs`:
+- Use a pool with liquidity 1,000 at tick spacing 1, with arrays at −88 and 0.
+- Quote 1,000,000 input in both directions.
+- Run the quote in a spawned thread with a 10 s `recv_timeout`.
+- Assert that both directions return `MissingTickArray`.
+
+**Operator evidence (scratch worktree, pinned `1.92.0-nightly`):**
+- On unpatched `main`, the test times out after 10 s, which reproduces the hang.
+- With the patch:
+  - all `whirlpool-core` tests pass;
+  - the real-swap golden test still asserts `exact_match` on every row, including tick crossings, so results inside the arrays are unchanged;
+  - `cargo clippy -p whirlpool-core --all-targets -D warnings` is clean.
+
+**Consequence for replay.** A route that exhausts its captured arrays now returns `MissingTickArray`, which maps to `insufficient_state`. That classification is now backed by evidence, so it is the correct outcome.
+- Do **not** shrink default sizes, exclude pools, or add timeouts to work around this.
+- The earlier slow SOL/USDC evaluation at the 1,000-unit size is very likely the same bug. Re-measure it after the fix before calling anything slow.
+- If any quote still takes more than about 1 s after the fix, stop and report it with the pool, slot and direction.
+
+**Reference-pool wording (resolves the blocker's second point).** The reference pool's cost-conversion quote is a price input only. The same pool may also be a normal route leg in its own pair (A). For B and C, the SOL/USDT reference pool is recorded in the cost model, not in `poolIds`.
+
+**Commits.** Make the fix and its test a separate commit on the branch: `fix: bound exact Whirlpool quotes to supplied tick arrays`. Record it in the active OpenSpec change. Then complete the replay as Revision 1 specifies.
 
 ## Execution model
 
