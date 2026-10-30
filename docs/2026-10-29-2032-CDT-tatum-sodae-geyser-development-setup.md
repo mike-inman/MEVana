@@ -2,6 +2,39 @@
 
 Created: 2026-10-29
 
+Last updated: 2026-10-29
+
+## Sodae quickstart and official examples — update 2026-10-29
+
+The user located the official quickstart at <https://docs.sodae.io/quickstart> and saved provider values locally in the repository-root `.env`. Do not copy those values into this document or version control.
+
+Official example repository: <https://github.com/sodae-io/sodae-docs>. Its `examples/` directory was checked on 2026-10-29 at repository HEAD `dec7da776d7deb68719048f8323abe04db45d2d5` and contains:
+
+- Rust: <https://github.com/sodae-io/sodae-docs/tree/main/examples/rust>
+- TypeScript: <https://github.com/sodae-io/sodae-docs/tree/main/examples/typescript>
+- Go: <https://github.com/sodae-io/sodae-docs/tree/main/examples/go>
+- Protobuf definitions: <https://github.com/sodae-io/sodae-docs/tree/main/examples/proto>
+
+The quickstart documents this Rust slot-stream example after cloning the official repository:
+
+```zsh
+git clone https://github.com/sodae-io/sodae-docs
+cd sodae-docs/examples/rust
+SODAE_YELLOWSTONE_URL=https://ams.tls.sodae.io:443 cargo run --example yellowstone -- slots
+```
+
+It also requires `SODAE_TOKEN` in the environment. Do not put a literal key into a command saved in history. The official example is a separate client and has not been cloned or run in this setup task. Use the bounded local diagnostic for a short entitlement check before a sustained stream. Rust is the natural starting point for MEVana; inspect dependency compatibility with the project's existing Yellowstone 4.2.1 client before adapting upstream examples.
+
+Local `.env` entry names found, with values deliberately omitted:
+
+| Local key | Consumer variable / purpose |
+| --- | --- |
+| `SODAE.IO_API_KEY` | Map to `SODAE_TOKEN` |
+| `SODAE.IO_YELLOWSTONE_GRPC_URL` | Map to `SODAE_YELLOWSTONE_URL` |
+| `SODAE.IO_RPC_URL` | Separate JSON-RPC endpoint; not the Yellowstone stream URL |
+
+The dotted names are valid text keys for an explicit file parser but cannot be assigned/exported as ordinary zsh variable names. The local sample tool currently reads process environment only and does not automatically load `.env` or translate these keys. Preserve the saved entries; a future launcher can parse only these specific keys and map them in process without sourcing the whole file or modifying existing Shyft settings. Presence of entries does not establish that the trial is approved or that authenticated Sodae streaming works.
+
 ## Purpose and current result
 
 Receive a bounded sample of real Solana Yellowstone slot updates from each provider without starting MEVana, connecting a wallet, or submitting transactions. This is provider connectivity setup, not implementation of the separate read-only market-data capture handoff.
