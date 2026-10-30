@@ -152,10 +152,14 @@ Work proceeds through dated handoffs in `docs/`. The latest one is the authority
 4. **Handoff 11 (done, 2026-10-30):** deterministic offline replay (`crates/research-replay`), producing three per-pair `Simulated` results (SOL/USDC, SOL/USDT, USDC/USDT).
    - No positive opportunity was found in the 10-minute capture, and missing state was heavy.
    - See `docs/2026-10-30-0828-CDT-research-handoff-11-closeout.md`.
-5. **Next candidates (not yet authorized):**
-   - better captures: a tick-array snapshot at start, longer runs, a server host;
+5. **Handoff 12 (active):** slot-correct replay and bounded Tatum RPC tick-array snapshots.
+   - Offline Part A runs first.
+   - Then one ≤10-minute capture.
+   - See `docs/2026-10-30-0859-CDT-research-handoff-12-capture-snapshot-and-slot-semantics.md`.
+6. **Later:**
+   - a server-host capture;
    - a v2 request contract for triangles;
-   - handoffs 12–13, the read-only Research API and MEVana-UI research page.
+   - handoffs 13–14, the read-only Research API and MEVana-UI research page.
 
 **Not in focus right now:**
 - HotPath latency work, executor or Jito, wallets, live or paper trading;
