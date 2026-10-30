@@ -20,7 +20,7 @@
 ## 4. Integration validation
 
 - [x] 4.1 Run handoff step 8 validation, including dependent builds/checks and non-printing secret scan; record outcomes in a dated closeout.
-- [ ] 4.2 Confirm no disallowed files or data changed; verify clean diff and synchronization before publication.
+- [x] 4.2 Confirm no disallowed files or data changed; verify clean diff and synchronization before publication.
 
 ## Workflow follow-up
 
