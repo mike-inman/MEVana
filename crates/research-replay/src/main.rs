@@ -18,7 +18,11 @@ const REFERENCE_B: &str = "FwewVm8u6tFPGewAyHmWAqad9hmF7mvqxK4mJ7iNqqGC";
 
 fn utc(ns: u64) -> Result<String> {
     let instant = chrono::DateTime::<chrono::Utc>::from_timestamp_nanos(i64::try_from(ns)?);
-    Ok(instant.format("%Y-%m-%dT%H:%M:%S%.7fZ").to_string())
+    Ok(format!(
+        "{}.{:07}Z",
+        instant.format("%Y-%m-%dT%H:%M:%S"),
+        instant.timestamp_subsec_nanos() / 100
+    ))
 }
 fn sha(bytes: &[u8]) -> String {
     format!("{:x}", Sha256::digest(bytes))
@@ -269,4 +273,16 @@ fn main() -> Result<()> {
         &serde_json::to_vec(&manifest)?,
     )?;
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    #[test]
+    fn canonical_utc_uses_seven_fractional_digits() {
+        assert_eq!(
+            utc(1_793_330_491_340_529_000).unwrap(),
+            "2026-10-30T03:21:31.3405290Z"
+        );
+    }
 }
