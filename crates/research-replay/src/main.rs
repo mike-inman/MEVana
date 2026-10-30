@@ -2,6 +2,7 @@
 use anyhow::{bail, ensure, Context, Result};
 use research_replay::{
     engine::{self, Config, PairSummary, PolicySummary},
+    slot::{self, ClassifiedGap, CommitmentMode},
     DATASET_ID, STRATEGY_VERSION,
 };
 use serde::Serialize;
@@ -120,17 +121,21 @@ struct RunManifest<'a> {
     toolchain: &'a str,
     first_slot: u64,
     last_slot: u64,
+    classified_gaps: &'a [ClassifiedGap],
+    dropped_fork_writes: &'a BTreeMap<u64, u64>,
     output_hashes: BTreeMap<String, String>,
 }
 
 fn config(profile: &str) -> Result<Config> {
-    let (latency_slots, tip_lamports) = match profile {
-        "default" => (1, 10_000),
-        "latency2" => (2, 10_000),
-        "cost" => (1, 100_000),
+    let (latency_slots, tip_lamports, commitment_mode) = match profile {
+        "default" => (1, 10_000, CommitmentMode::Confirmed),
+        "latency2" => (2, 10_000, CommitmentMode::Confirmed),
+        "cost" => (1, 100_000, CommitmentMode::Confirmed),
+        "processed" => (1, 10_000, CommitmentMode::Processed),
         _ => bail!("unknown profile"),
     };
     Ok(Config {
+        commitment_mode,
         sizes_quote_atoms: [10_000_000, 100_000_000, 1_000_000_000],
         base_fee_lamports: 5_000,
         priority_micro_lamports_per_cu: 1_000,
@@ -177,15 +182,21 @@ fn write_pair(
     let result = ResultJson {
         canonicalization_version: 1,
         result_id: format!(
-            "replay-20261029-{}-l{}-tip{}",
-            prefix, config.latency_slots, config.tip_lamports
+            "replay-v2-{}-{}-l{}-tip{}",
+            prefix,
+            match config.commitment_mode {
+                CommitmentMode::Confirmed => "confirmed",
+                CommitmentMode::Processed => "processed",
+            },
+            config.latency_slots,
+            config.tip_lamports
         ),
         request_sha256: request_hash,
         request_canonicalization_version: 1,
         dataset_id: DATASET_ID,
         dataset_metadata_version: "capture-v1",
         strategy_version: STRATEGY_VERSION,
-        engine_version: "research-replay-0_1_0",
+        engine_version: "research-replay-0_2_0",
         cost_model_version: config.cost_version(pair),
         created_at_utc: end,
         window_start_utc: start,
@@ -205,7 +216,7 @@ fn write_pair(
 }
 fn main() -> Result<()> {
     let args: Vec<String> = std::env::args().collect();
-    ensure!(args.len() == 7, "usage: research-replay CAPTURE_SESSION OUTPUT_DIR default|latency2|cost GIT_COMMIT TOOLCHAIN RUN_ID");
+    ensure!(args.len() == 7, "usage: research-replay CAPTURE_SESSION OUTPUT_DIR default|latency2|cost|processed GIT_COMMIT TOOLCHAIN RUN_ID");
     let capture_root = PathBuf::from(&args[1]);
     let output = PathBuf::from(&args[2]);
     let profile = &args[3];
@@ -246,19 +257,26 @@ fn main() -> Result<()> {
         candidates_name.into(),
         geyser_capture::format::hash_file(&output.join(candidates_name))?,
     );
-    let summary_bytes = serde_json::to_vec(&replay.summaries)?;
+    let summary_bytes = serde_json::to_vec(&serde_json::json!({
+        "pairs": replay.summaries,
+        "classifiedGaps": replay.classified_gaps,
+        "droppedForkWrites": replay.dropped_fork_writes,
+    }))?;
     output_hashes.insert(
         "summary.json".into(),
         write(&output.join("summary.json"), &summary_bytes)?,
     );
-    let start = utc(capture.first_receive_ns)?;
-    let end = utc(capture.last_receive_ns)?;
+    let boundaries = slot::boundaries(&capture.slot_nodes, config.commitment_mode);
+    let first = boundaries.first().context("no replay boundaries")?;
+    let last = boundaries.last().context("no replay boundaries")?;
+    let start = utc(first.event.receive_ns)?;
+    let end = utc(last.event.receive_ns)?;
     for summary in &replay.summaries {
         write_pair(&output, summary, &config, &start, &end, &mut output_hashes)?;
     }
     let manifest = RunManifest {
-        format_version: 1,
-        source: "Simulated public Processed dev-test capture",
+        format_version: 2,
+        source: "Simulated public dev-test capture",
         input_hashes: &capture.hashes,
         config: &config,
         crate_version: env!("CARGO_PKG_VERSION"),
@@ -266,6 +284,8 @@ fn main() -> Result<()> {
         toolchain,
         first_slot: capture.first_slot,
         last_slot: capture.last_slot,
+        classified_gaps: &replay.classified_gaps,
+        dropped_fork_writes: &replay.dropped_fork_writes,
         output_hashes,
     };
     write(

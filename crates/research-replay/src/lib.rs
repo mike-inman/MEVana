@@ -15,6 +15,7 @@ use whirlpool_core::{decode::decode_whirlpool, exact, types::WhirlpoolMinimal};
 use yellowstone_grpc_proto::prelude::{subscribe_update::UpdateOneof, SubscribeUpdate};
 pub mod engine;
 pub mod policy;
+pub mod slot;
 
 pub const SOL: &str = "So11111111111111111111111111111111111111112";
 pub const USDC: &str = "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v";
@@ -56,6 +57,7 @@ impl Pair {
 #[derive(Clone)]
 pub struct AccountWrite {
     pub slot: u64,
+    pub receive_ns: u64,
     pub write_version: u64,
     pub sequence: u64,
     pub key: Pubkey,
@@ -63,7 +65,10 @@ pub struct AccountWrite {
 }
 #[derive(Clone)]
 pub struct GapEvent {
-    pub slot: u64,
+    pub reason: String,
+    pub previous_slot: Option<u64>,
+    pub next_slot: Option<u64>,
+    pub receive_ns: u64,
     pub sequence: u64,
 }
 #[derive(Clone, Default)]
@@ -115,6 +120,7 @@ impl MarketState {
 pub struct Capture {
     pub writes: Vec<AccountWrite>,
     pub gaps: Vec<GapEvent>,
+    pub slot_nodes: BTreeMap<u64, slot::SlotNode>,
     pub slots: BTreeSet<u64>,
     pub allowlist: BTreeSet<Pubkey>,
     pub hashes: BTreeMap<String, String>,
@@ -147,6 +153,7 @@ pub fn load_capture(root: &Path) -> Result<Capture> {
         .collect::<std::result::Result<_, _>>()?;
     let mut writes = Vec::new();
     let mut gaps = Vec::new();
+    let mut slot_nodes = BTreeMap::<u64, slot::SlotNode>::new();
     let mut slots = BTreeSet::new();
     let mut slot_receive_ns = BTreeMap::<u64, u64>::new();
     let mut hashes = BTreeMap::new();
@@ -196,12 +203,11 @@ pub fn load_capture(root: &Path) -> Result<Capture> {
             if record.gap {
                 if record.connection == 0 {
                     let gap: format::Gap = serde_json::from_slice(&record.payload)?;
-                    let slot = gap
-                        .next_slot
-                        .or_else(|| gap.previous_slot.and_then(|s| s.checked_add(1)))
-                        .unwrap_or(last_slot);
                     gaps.push(GapEvent {
-                        slot,
+                        reason: gap.reason,
+                        previous_slot: gap.previous_slot,
+                        next_slot: gap.next_slot,
+                        receive_ns: record.receive_ns,
                         sequence: record.sequence,
                     });
                 }
@@ -214,6 +220,7 @@ pub fn load_capture(root: &Path) -> Result<Capture> {
                     if matches!(layout::kind(&info.data), "pool" | "fixed" | "dynamic") {
                         writes.push(AccountWrite {
                             slot: account.slot,
+                            receive_ns: record.receive_ns,
                             write_version: info.write_version,
                             sequence: record.sequence,
                             key: Pubkey::try_from(info.pubkey.as_slice())?,
@@ -221,12 +228,33 @@ pub fn load_capture(root: &Path) -> Result<Capture> {
                         });
                     }
                 }
-                Some(UpdateOneof::Slot(slot)) if record.connection == 0 && slot.status == 0 => {
-                    slots.insert(slot.slot);
-                    slot_receive_ns
-                        .entry(slot.slot)
-                        .and_modify(|t| *t = (*t).min(record.receive_ns))
-                        .or_insert(record.receive_ns);
+                Some(UpdateOneof::Slot(slot)) if record.connection == 0 => {
+                    let node = slot_nodes.entry(slot.slot).or_default();
+                    if let Some(parent) = slot.parent {
+                        if let Some(existing) = node.parent {
+                            ensure!(existing == parent, "slot parent changed");
+                        }
+                        node.parent = Some(parent);
+                    }
+                    let event = slot::SeenStatus {
+                        receive_ns: record.receive_ns,
+                        sequence: record.sequence,
+                    };
+                    node.statuses
+                        .entry(slot.status)
+                        .and_modify(|old| {
+                            if (event.receive_ns, event.sequence) < (old.receive_ns, old.sequence) {
+                                *old = event;
+                            }
+                        })
+                        .or_insert(event);
+                    if slot.status == 0 {
+                        slots.insert(slot.slot);
+                        slot_receive_ns
+                            .entry(slot.slot)
+                            .and_modify(|t| *t = (*t).min(record.receive_ns))
+                            .or_insert(record.receive_ns);
+                    }
                 }
                 _ => {}
             }
@@ -237,7 +265,7 @@ pub fn load_capture(root: &Path) -> Result<Capture> {
         "empty capture window"
     );
     writes.sort_by_key(|w| (w.slot, w.write_version, w.sequence));
-    gaps.sort_by_key(|g| (g.slot, g.sequence));
+    gaps.sort_by_key(|g| (g.receive_ns, g.sequence));
     slots.extend(writes.iter().map(|w| w.slot));
     // Window endpoints are observed Processed slot notifications, not arbitrary first/last frames.
     if let (Some((&start_slot, &start_ns)), Some((&end_slot, &end_ns))) = (
@@ -256,6 +284,7 @@ pub fn load_capture(root: &Path) -> Result<Capture> {
     Ok(Capture {
         writes,
         gaps,
+        slot_nodes,
         slots,
         allowlist,
         hashes,
@@ -436,6 +465,7 @@ mod tests {
         let mut writes = [
             AccountWrite {
                 slot: 2,
+                receive_ns: 3,
                 write_version: 1,
                 sequence: 3,
                 key,
@@ -443,6 +473,7 @@ mod tests {
             },
             AccountWrite {
                 slot: 1,
+                receive_ns: 2,
                 write_version: 2,
                 sequence: 2,
                 key,
@@ -450,6 +481,7 @@ mod tests {
             },
             AccountWrite {
                 slot: 1,
+                receive_ns: 1,
                 write_version: 1,
                 sequence: 1,
                 key,
