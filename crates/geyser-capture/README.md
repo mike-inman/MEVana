@@ -1,5 +1,17 @@
 # 2026-10-29 — Read-only Geyser capture v1
 
+## 2026-10-30 — Opt-in tick-array snapshot format v2
+
+Handoff 12 adds `--snapshot-rpc tatum` for one bounded capture. Without the flag, format v1 and the existing stream behavior remain unchanged. With it, the Sodae TLS Geyser stream starts first; after its first Confirmed slot and after each successful accounts reconnect, a separate read-only Tatum RPC client calls only `https://solana-mainnet.gateway.tatum.io/`. It reads only `TATUM_MAINNET` with environment precedence over the approved root `.env`, sends it only as `x-api-key`, and never stores the key in frames or manifests. The client uses rustls, a 10-second call timeout, at most two retries except on 401/403, at most six calls per snapshot, five snapshots per session and 25 MB aggregate response bytes. The capture continues after one failed snapshot and stops after two. This mode is intended only for the handoff's single authorized session.
+
+The kind-2 frame payload is UTF-8 JSON with a tagged `type` and `version: 1`:
+
+- `account`: `snapshot_id`, `account_kind` (`pool` or `tick_array`), `pool_id`, `key`, `context_slot`, `present`; a present account additionally carries `owner`, `lamports`, `data_base64` (raw account bytes) and `sha256` of decoded bytes. An absent account has all four additional fields null.
+- `stats`: `snapshot_id`, `calls`, `rpc_bytes` (response bytes).
+- `failed`: `snapshot_id` and a fixed, secret-free `reason`.
+
+Snapshot-enabled sessions and file manifests have `format_version: 2`; file manifests count snapshot frames, present/absent accounts, calls and RPC response bytes. The existing frame envelope and magic stay the same. The inspector validates kind 2, account hashes, Whirlpool ownership and decoded account identity. Old v1 captures remain valid. This snapshot is a price/state input to offline research only; it does not create a transaction or trading authority.
+
 ## 2026-10-29 — Offline swap cases v1
 
 `swap_cases CAPTURE_ROOT OUTPUT_ROOT [DYNAMIC_FIXTURE]` reads only the six finalized handoff 09 `.cap` files. Use `~/MEVanaData/captures/handoff09-20261029/` and `~/MEVanaData/golden/whirlpool-20261029/` respectively. The optional third argument writes one compressed real dynamic-array account fixture. No provider connection is made.

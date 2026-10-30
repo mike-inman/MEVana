@@ -7,26 +7,34 @@ Offline research replay reconstructs captured market state and produces reproduc
 ## Requirements
 
 ### Requirement: Verified offline input
-Replay SHALL use only the finalized allowlist capture session, verify each file against its manifest SHA-256, and record input hashes and configuration in an output manifest. It SHALL perform no provider, RPC, signing or transaction operation.
+Replay SHALL accept finalized allowlist captures of format v1 or v2, verify each file against its manifest SHA-256, and record input hashes and configuration in an output manifest. It SHALL perform no provider, RPC, signing or transaction operation.
 
 #### Scenario: Input identity
 - **WHEN** a finalized allowlist capture is replayed twice with identical configuration
 - **THEN** each output file has identical bytes and hashes
 
 #### Scenario: Corrupt input
-- **WHEN** a capture file differs from its manifest or is incomplete
+- **WHEN** a capture file differs from its manifest, contains an unknown frame kind or is incomplete
 - **THEN** replay rejects the input without producing a completed result
 
 ### Requirement: Event-time state
-Replay SHALL order account writes by slot, write version and capture sequence, apply all writes before evaluating a slot boundary, and reject routes touching pools stale after a recorded account gap until those pools are written again. Unseen pool or tick-array state SHALL be insufficient state, never assumed empty.
+Replay SHALL reconstruct slot parent/status history, buffer account writes, and by default apply only confirmed-fork writes at each slot's first Confirmed event. Evaluation and latency SHALL use confirmed-slot order. Processed mode SHALL remain available. Skipped leader slots SHALL not mark state stale; true gaps SHALL. Unseen pool or tick-array state SHALL be insufficient state, never assumed empty.
 
 #### Scenario: Gap
-- **WHEN** an account connection gap occurs before a pool is refreshed
-- **THEN** candidates touching that pool receive `state_gap`
+- **WHEN** a non-discontinuity capture gap, an unseen parent, or an unexplained discontinuity occurs
+- **THEN** candidates touching stale pools receive `state_gap` until a covering snapshot or later pool write restores state
 
 #### Scenario: Missing array
 - **WHEN** an exact quote needs an unseen tick array
-- **THEN** the candidate receives `insufficient_state`
+- **THEN** the candidate receives `insufficient_state`, unless a current snapshot proves the array absent, in which case it receives `tick_array_absent`
+
+#### Scenario: Skipped slot
+- **WHEN** a slot jump has a known parent link
+- **THEN** the jump does not create a state gap
+
+#### Scenario: Abandoned fork
+- **WHEN** writes belong to slots never Confirmed in the capture
+- **THEN** confirmed replay drops and counts those writes, and they never alter state
 
 ### Requirement: Scoped same-pair routes
 Replay SHALL evaluate ordered distinct-pool two-leg routes for each standard-fee pair separately: six SOL/USDC pools, five SOL/USDT pools and two USDC/USDT pools. Each pair SHALL have a canonical v1 request naming exactly its evaluated pools; its second token SHALL be the quote asset. Token continuity and mint-derived direction SHALL be checked at every hop. Adaptive-fee pools and triangles SHALL not be evaluated.

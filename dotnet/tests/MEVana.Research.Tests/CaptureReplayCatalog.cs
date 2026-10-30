@@ -38,4 +38,19 @@ internal static class CaptureReplayCatalog
             "capture-1793330490539629000-dev-test-processed", true, "Simulated research only",
             start, end, [StrategyVersion], tokens, pools, bound)]);
     }
+
+    internal static ResearchCatalog CreateSnapshot()
+    {
+        // 2026-10-30 CDT: one finalized public Processed dev/test snapshot session.
+        const long bound = 1_000_000_000;
+        var start = DateTimeOffset.Parse("2026-10-30T16:24:15.7075850Z");
+        var end = DateTimeOffset.Parse("2026-10-30T16:32:14.7603190Z");
+        var tokens = new[] { new TokenMetadata(Sol, 9, bound), new TokenMetadata(Usdc, 6, bound), new TokenMetadata(Usdt, 6, bound) };
+        var pools = PairA.Select(id => new PoolMetadata(id, [Sol, Usdc]))
+            .Concat(PairB.Select(id => new PoolMetadata(id, [Sol, Usdt])))
+            .Concat(PairC.Select(id => new PoolMetadata(id, [Usdc, Usdt]))).ToArray();
+        return new ResearchCatalog([new DatasetMetadata("orca-wp-snapshot-20261030", "capture-v2",
+            "capture-1793377454811581000-dev-test-processed-snapshot", true, "Simulated research only",
+            start, end, [StrategyVersion], tokens, pools, bound)]);
+    }
 }

@@ -1,12 +1,13 @@
 [package]
 name = "research-replay"
-version = "0.1.0"
+version = "0.2.0"
 edition = "2021"
 license = "Apache-2.0"
 
 [dependencies]
 anyhow = "1.0"
 bs58 = "0.5"
+base64 = "0.22"
 chrono = { version = "0.4.41", features = ["serde"] }
 geyser-capture = { path = "../geyser-capture" }
 prost = "0.13.5"

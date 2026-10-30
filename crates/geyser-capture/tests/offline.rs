@@ -41,6 +41,71 @@ fn raw_slot(slot: u64) -> Vec<u8> {
     .encode_to_vec()
 }
 #[test]
+fn synthetic_snapshot_v2_round_trip_and_inspection() {
+    let temp = tempfile::tempdir().unwrap();
+    let dir = temp.path().join("v2");
+    let mut metadata = metadata();
+    metadata.format_version = 2;
+    let mut writer = Writer::new(dir.clone(), metadata, 3600, 1_000_000).unwrap();
+    let key = solana_sdk::pubkey::Pubkey::new_unique().to_string();
+    writer.write(0, 100, raw_slot(42), false).unwrap();
+    writer
+        .write_snapshot(
+            101,
+            &geyser_capture::format::SnapshotRecord::Account {
+                version: 1,
+                snapshot_id: 1,
+                account_kind: "tick_array".into(),
+                pool_id: key.clone(),
+                key,
+                context_slot: 42,
+                present: false,
+                owner: None,
+                lamports: None,
+                data_base64: None,
+                sha256: None,
+            },
+        )
+        .unwrap();
+    writer
+        .write_snapshot(
+            102,
+            &geyser_capture::format::SnapshotRecord::Stats {
+                version: 1,
+                snapshot_id: 1,
+                calls: 4,
+                rpc_bytes: 1024,
+            },
+        )
+        .unwrap();
+    writer.finish("duration").unwrap();
+    let report = geyser_capture::inspect::inspect(&dir).unwrap();
+    assert_eq!(report.files, 1);
+    let manifest: geyser_capture::format::Manifest =
+        serde_json::from_slice(&std::fs::read(dir.join("000000.cap.json")).unwrap()).unwrap();
+    assert_eq!(
+        (
+            manifest.snapshot_frames,
+            manifest.snapshot_absent,
+            manifest.snapshot_calls,
+            manifest.snapshot_rpc_bytes
+        ),
+        (2, 1, 4, 1024)
+    );
+    let mut invalid = Record {
+        sequence: 1,
+        receive_ns: 1,
+        connection: 0,
+        gap: false,
+        snapshot: false,
+        payload: raw_slot(1),
+    }
+    .encode()
+    .unwrap();
+    invalid[4] = 3;
+    assert!(geyser_capture::format::read_record(&mut std::io::Cursor::new(invalid)).is_err());
+}
+#[test]
 fn frame_round_trip_preserves_unknown_protobuf_fields() {
     let mut payload = raw_slot(42);
     payload.extend([0xf8, 0x07, 0x01]);
@@ -49,6 +114,7 @@ fn frame_round_trip_preserves_unknown_protobuf_fields() {
         receive_ns: 123,
         connection: 0,
         gap: false,
+        snapshot: false,
         payload: payload.clone(),
     };
     let mut c = Cursor::new(r.encode().unwrap());

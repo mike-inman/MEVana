@@ -12,6 +12,10 @@ pub enum Provider {
     Sodae,
     Tatum,
 }
+#[derive(Clone, Copy, Debug, PartialEq, Eq, ValueEnum)]
+pub enum SnapshotRpc {
+    Tatum,
+}
 impl Provider {
     pub fn host(self) -> &'static str {
         match self {
@@ -136,6 +140,8 @@ pub fn private_ip(ip: IpAddr) -> bool {
 #[derive(Parser, Debug, Clone)]
 #[command(about = "Bounded, read-only public market-data capture")]
 pub struct Args {
+    #[arg(long, value_enum)]
+    pub snapshot_rpc: Option<SnapshotRpc>,
     #[arg(long, value_enum, default_value = "sodae")]
     pub provider: Provider,
     #[arg(long)]

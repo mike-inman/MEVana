@@ -2766,6 +2766,7 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "async-trait",
+ "base64 0.22.1",
  "borsh 1.5.7",
  "bs58",
  "bytes",
@@ -2773,6 +2774,7 @@ dependencies = [
  "clap",
  "prost 0.13.5",
  "rand 0.8.5",
+ "reqwest 0.11.27",
  "serde",
  "serde_json",
  "sha2 0.10.9",
@@ -5867,9 +5869,10 @@ dependencies = [
 
 [[package]]
 name = "research-replay"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "anyhow",
+ "base64 0.22.1",
  "bs58",
  "chrono",
  "geyser-capture",

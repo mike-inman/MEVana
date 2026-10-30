@@ -1,5 +1,6 @@
 //! Slot-boundary evaluation and later-slot simulation.
 use crate::policy::{decide, CandidateInput, CandidateRow, SizeQuote};
+use crate::slot::{self, ClassifiedGap, CommitmentMode, GapClass};
 use crate::{
     cost_lamports, net, quote_leg, quote_route, routes, Capture, MarketState, Pair, QuoteFailure,
     Route, PROGRAM, SOL,
@@ -13,6 +14,7 @@ use whirlpool_core::types::WhirlpoolMinimal;
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Config {
+    pub commitment_mode: CommitmentMode,
     pub sizes_quote_atoms: [u64; 3],
     pub base_fee_lamports: u64,
     pub priority_micro_lamports_per_cu: u64,
@@ -89,6 +91,8 @@ pub struct PairSummary {
 pub struct ReplayOutput {
     pub rows: Vec<CandidateRow>,
     pub summaries: Vec<PairSummary>,
+    pub classified_gaps: Vec<ClassifiedGap>,
+    pub dropped_fork_writes: BTreeMap<u64, u64>,
 }
 type CachedRouteQuotes = Option<([u64; 3], Vec<SizeQuote>)>;
 
@@ -108,6 +112,25 @@ fn standard_pair(pool: &WhirlpoolMinimal) -> Option<Pair> {
 }
 pub fn inventory(capture: &Capture) -> Result<BTreeMap<String, Vec<Pubkey>>> {
     let mut latest = BTreeMap::<Pubkey, WhirlpoolMinimal>::new();
+    for event in &capture.snapshots {
+        if let geyser_capture::format::SnapshotRecord::Account {
+            account_kind,
+            key,
+            present: true,
+            data_base64: Some(data),
+            ..
+        } = &event.record
+        {
+            if account_kind == "pool" {
+                let id = Pubkey::from_str(key)?;
+                if capture.allowlist.contains(&id) {
+                    let raw =
+                        base64::Engine::decode(&base64::engine::general_purpose::STANDARD, data)?;
+                    latest.insert(id, whirlpool_core::decode::decode_whirlpool(&raw)?);
+                }
+            }
+        }
+    }
     for write in &capture.writes {
         if capture.allowlist.contains(&write.key)
             && geyser_capture::layout::kind(&write.data) == "pool"
@@ -199,6 +222,14 @@ pub fn replay(capture: &Capture, config: &Config, pairs: &[Pair]) -> Result<Repl
     );
     let program = Pubkey::from_str(PROGRAM)?;
     let universe = inventory(capture)?;
+    slot::validate_confirmed_graph(&capture.slot_nodes)?;
+    let boundaries = slot::boundaries(&capture.slot_nodes, config.commitment_mode);
+    let classified_gaps = slot::classify(&capture.slot_nodes, &capture.gaps, capture.first_slot);
+    let dropped_fork_writes = slot::dropped_fork_writes(&capture.slot_nodes, &capture.writes);
+    let mut writes_by_slot = BTreeMap::<u64, Vec<&crate::AccountWrite>>::new();
+    for write in &capture.writes {
+        writes_by_slot.entry(write.slot).or_default().push(write);
+    }
     let mut summaries = Vec::new();
     let mut route_sets = BTreeMap::new();
     for &pair in pairs {
@@ -235,23 +266,74 @@ pub fn replay(capture: &Capture, config: &Config, pairs: &[Pair]) -> Result<Repl
         .collect();
     let mut cost_cache: Vec<Option<(u64, std::result::Result<u64, QuoteFailure>)>> =
         vec![None; summaries.len()];
-    let mut pending = BTreeMap::<u64, Vec<(usize, usize, usize)>>::new();
+    let mut pending = BTreeMap::<usize, Vec<(usize, usize, usize)>>::new();
     let mut write_index = 0;
     let mut gap_index = 0;
-    for &slot in &capture.slots {
+    let mut snapshot_index = 0;
+    for (boundary_index, boundary) in boundaries.iter().enumerate() {
+        let slot = boundary.slot;
         if slot < capture.first_slot || slot > capture.last_slot {
             continue;
         }
-        // Gaps at this boundary invalidate old pool state before same-slot writes restore it.
-        while gap_index < capture.gaps.len() && capture.gaps[gap_index].slot <= slot {
-            state.gap();
-            gap_index += 1;
+        // Interleave gaps and snapshots in captured receive order. A covering
+        // snapshot clears an earlier true gap, never a later one.
+        loop {
+            let gap_time = classified_gaps
+                .get(gap_index)
+                .map(|g| (g.receive_ns, g.sequence));
+            let snapshot_time = capture
+                .snapshots
+                .get(snapshot_index)
+                .map(|s| (s.receive_ns, s.sequence));
+            let due = (boundary.event.receive_ns, boundary.event.sequence);
+            match (
+                gap_time.filter(|&t| t <= due),
+                snapshot_time.filter(|&t| t <= due),
+            ) {
+                (Some(g), Some(s)) if s < g => {
+                    state.apply_snapshot(
+                        &capture.snapshots[snapshot_index].record,
+                        &capture.allowlist,
+                    )?;
+                    snapshot_index += 1;
+                }
+                (Some(_), _) => {
+                    if classified_gaps[gap_index].class == GapClass::TrueGap {
+                        state.gap();
+                    }
+                    gap_index += 1;
+                }
+                (None, Some(_)) => {
+                    state.apply_snapshot(
+                        &capture.snapshots[snapshot_index].record,
+                        &capture.allowlist,
+                    )?;
+                    snapshot_index += 1;
+                }
+                (None, None) => break,
+            }
         }
-        while write_index < capture.writes.len() && capture.writes[write_index].slot <= slot {
-            state.apply(&capture.writes[write_index], &capture.allowlist)?;
-            write_index += 1;
+        match config.commitment_mode {
+            CommitmentMode::Confirmed => {
+                if let Some(writes) = writes_by_slot.get(&slot) {
+                    slot::apply_confirmed_writes(
+                        &mut state,
+                        &capture.slot_nodes,
+                        slot,
+                        writes,
+                        &capture.allowlist,
+                    )?;
+                }
+            }
+            CommitmentMode::Processed => {
+                while write_index < capture.writes.len() && capture.writes[write_index].slot <= slot
+                {
+                    state.apply(&capture.writes[write_index], &capture.allowlist)?;
+                    write_index += 1;
+                }
+            }
         }
-        if let Some(due) = pending.remove(&slot) {
+        if let Some(due) = pending.remove(&boundary_index) {
             for (row_idx, policy_idx, summary_idx) in due {
                 let row = &mut rows[row_idx];
                 let pair = summaries[summary_idx].pair;
@@ -352,7 +434,9 @@ pub fn replay(capture: &Capture, config: &Config, pairs: &[Pair]) -> Result<Repl
                             .estimated_net_profit_quote_atoms
                             .checked_add(decision.estimated_net.unwrap())
                             .ok_or(anyhow::anyhow!("estimated total overflow"))?;
-                        if let Some(target) = slot.checked_add(config.latency_slots) {
+                        if let Some(target) =
+                            boundary_index.checked_add(usize::try_from(config.latency_slots)?)
+                        {
                             pending.entry(target).or_default().push((
                                 row_idx,
                                 policy_idx,
@@ -396,7 +480,12 @@ pub fn replay(capture: &Capture, config: &Config, pairs: &[Pair]) -> Result<Repl
             );
         }
     }
-    Ok(ReplayOutput { rows, summaries })
+    Ok(ReplayOutput {
+        rows,
+        summaries,
+        classified_gaps,
+        dropped_fork_writes,
+    })
 }
 
 #[cfg(test)]

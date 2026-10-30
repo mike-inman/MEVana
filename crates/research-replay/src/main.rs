@@ -2,6 +2,7 @@
 use anyhow::{bail, ensure, Context, Result};
 use research_replay::{
     engine::{self, Config, PairSummary, PolicySummary},
+    slot::{self, ClassifiedGap, CommitmentMode},
     DATASET_ID, STRATEGY_VERSION,
 };
 use serde::Serialize;
@@ -38,7 +39,7 @@ fn write(path: &std::path::Path, bytes: &[u8]) -> Result<String> {
 #[serde(rename_all = "camelCase")]
 struct Request<'a> {
     canonicalization_version: u8,
-    dataset_id: &'static str,
+    dataset_id: &'a str,
     strategy_version: &'static str,
     window_start_utc: &'a str,
     window_end_utc: &'a str,
@@ -95,8 +96,8 @@ struct ResultJson<'a> {
     result_id: String,
     request_sha256: String,
     request_canonicalization_version: u8,
-    dataset_id: &'static str,
-    dataset_metadata_version: &'static str,
+    dataset_id: &'a str,
+    dataset_metadata_version: &'a str,
     strategy_version: &'static str,
     engine_version: &'static str,
     cost_model_version: String,
@@ -112,6 +113,7 @@ struct ResultJson<'a> {
 #[serde(rename_all = "camelCase")]
 struct RunManifest<'a> {
     format_version: u8,
+    input_format_version: u32,
     source: &'static str,
     input_hashes: &'a BTreeMap<String, String>,
     config: &'a Config,
@@ -120,17 +122,28 @@ struct RunManifest<'a> {
     toolchain: &'a str,
     first_slot: u64,
     last_slot: u64,
+    classified_gaps: &'a [ClassifiedGap],
+    dropped_fork_writes: &'a BTreeMap<u64, u64>,
     output_hashes: BTreeMap<String, String>,
+}
+struct PairContext<'a> {
+    start: &'a str,
+    end: &'a str,
+    dataset_id: &'a str,
+    metadata_version: &'a str,
+    last_slot: u64,
 }
 
 fn config(profile: &str) -> Result<Config> {
-    let (latency_slots, tip_lamports) = match profile {
-        "default" => (1, 10_000),
-        "latency2" => (2, 10_000),
-        "cost" => (1, 100_000),
+    let (latency_slots, tip_lamports, commitment_mode) = match profile {
+        "default" => (1, 10_000, CommitmentMode::Confirmed),
+        "latency2" => (2, 10_000, CommitmentMode::Confirmed),
+        "cost" => (1, 100_000, CommitmentMode::Confirmed),
+        "processed" => (1, 10_000, CommitmentMode::Processed),
         _ => bail!("unknown profile"),
     };
     Ok(Config {
+        commitment_mode,
         sizes_quote_atoms: [10_000_000, 100_000_000, 1_000_000_000],
         base_fee_lamports: 5_000,
         priority_micro_lamports_per_cu: 1_000,
@@ -149,8 +162,7 @@ fn write_pair(
     out: &std::path::Path,
     summary: &PairSummary,
     config: &Config,
-    start: &str,
-    end: &str,
+    context: &PairContext<'_>,
     output_hashes: &mut BTreeMap<String, String>,
 ) -> Result<()> {
     let pair = summary.pair;
@@ -158,10 +170,10 @@ fn write_pair(
     let (base, quote) = pair.tokens();
     let request = Request {
         canonicalization_version: 1,
-        dataset_id: DATASET_ID,
+        dataset_id: context.dataset_id,
         strategy_version: STRATEGY_VERSION,
-        window_start_utc: start,
-        window_end_utc: end,
+        window_start_utc: context.start,
+        window_end_utc: context.end,
         token_pair: [base, quote],
         pool_ids: &summary.pools,
         min_trade_size_quote_atoms: config.sizes_quote_atoms[0],
@@ -177,19 +189,26 @@ fn write_pair(
     let result = ResultJson {
         canonicalization_version: 1,
         result_id: format!(
-            "replay-20261029-{}-l{}-tip{}",
-            prefix, config.latency_slots, config.tip_lamports
+            "replay-v2-{}-{}-{}-l{}-tip{}",
+            context.last_slot,
+            prefix,
+            match config.commitment_mode {
+                CommitmentMode::Confirmed => "confirmed",
+                CommitmentMode::Processed => "processed",
+            },
+            config.latency_slots,
+            config.tip_lamports
         ),
         request_sha256: request_hash,
         request_canonicalization_version: 1,
-        dataset_id: DATASET_ID,
-        dataset_metadata_version: "capture-v1",
+        dataset_id: context.dataset_id,
+        dataset_metadata_version: context.metadata_version,
         strategy_version: STRATEGY_VERSION,
-        engine_version: "research-replay-0_1_0",
+        engine_version: "research-replay-0_2_0",
         cost_model_version: config.cost_version(pair),
-        created_at_utc: end,
-        window_start_utc: start,
-        window_end_utc: end,
+        created_at_utc: context.end,
+        window_start_utc: context.start,
+        window_end_utc: context.end,
         evidence_kind: "Simulated",
         status: "Completed",
         error_code: None,
@@ -205,7 +224,7 @@ fn write_pair(
 }
 fn main() -> Result<()> {
     let args: Vec<String> = std::env::args().collect();
-    ensure!(args.len() == 7, "usage: research-replay CAPTURE_SESSION OUTPUT_DIR default|latency2|cost GIT_COMMIT TOOLCHAIN RUN_ID");
+    ensure!(args.len() == 7, "usage: research-replay CAPTURE_SESSION OUTPUT_DIR default|latency2|cost|processed GIT_COMMIT TOOLCHAIN RUN_ID");
     let capture_root = PathBuf::from(&args[1]);
     let output = PathBuf::from(&args[2]);
     let profile = &args[3];
@@ -246,19 +265,39 @@ fn main() -> Result<()> {
         candidates_name.into(),
         geyser_capture::format::hash_file(&output.join(candidates_name))?,
     );
-    let summary_bytes = serde_json::to_vec(&replay.summaries)?;
+    let summary_bytes = serde_json::to_vec(&serde_json::json!({
+        "pairs": replay.summaries,
+        "classifiedGaps": replay.classified_gaps,
+        "droppedForkWrites": replay.dropped_fork_writes,
+    }))?;
     output_hashes.insert(
         "summary.json".into(),
         write(&output.join("summary.json"), &summary_bytes)?,
     );
-    let start = utc(capture.first_receive_ns)?;
-    let end = utc(capture.last_receive_ns)?;
+    let boundaries = slot::boundaries(&capture.slot_nodes, config.commitment_mode);
+    let first = boundaries.first().context("no replay boundaries")?;
+    let last = boundaries.last().context("no replay boundaries")?;
+    let start = utc(first.event.receive_ns)?;
+    let end = utc(last.event.receive_ns)?;
+    let (dataset_id, metadata_version) = if capture.format_version == 2 {
+        ("orca-wp-snapshot-20261030", "capture-v2")
+    } else {
+        (DATASET_ID, "capture-v1")
+    };
+    let pair_context = PairContext {
+        start: &start,
+        end: &end,
+        dataset_id,
+        metadata_version,
+        last_slot: capture.last_slot,
+    };
     for summary in &replay.summaries {
-        write_pair(&output, summary, &config, &start, &end, &mut output_hashes)?;
+        write_pair(&output, summary, &config, &pair_context, &mut output_hashes)?;
     }
     let manifest = RunManifest {
-        format_version: 1,
-        source: "Simulated public Processed dev-test capture",
+        format_version: 2,
+        input_format_version: capture.format_version,
+        source: "Simulated public dev-test capture",
         input_hashes: &capture.hashes,
         config: &config,
         crate_version: env!("CARGO_PKG_VERSION"),
@@ -266,6 +305,8 @@ fn main() -> Result<()> {
         toolchain,
         first_slot: capture.first_slot,
         last_slot: capture.last_slot,
+        classified_gaps: &replay.classified_gaps,
+        dropped_fork_writes: &replay.dropped_fork_writes,
         output_hashes,
     };
     write(
