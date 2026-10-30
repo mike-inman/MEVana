@@ -5866,6 +5866,23 @@ dependencies = [
 ]
 
 [[package]]
+name = "research-replay"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "bs58",
+ "chrono",
+ "geyser-capture",
+ "prost 0.13.5",
+ "serde",
+ "serde_json",
+ "sha2 0.10.9",
+ "solana-sdk 2.1.21",
+ "whirlpool-core",
+ "yellowstone-grpc-proto",
+]
+
+[[package]]
 name = "resilience-framework"
 version = "0.1.0"
 dependencies = [
