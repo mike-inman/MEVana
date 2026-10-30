@@ -2777,6 +2777,7 @@ dependencies = [
  "serde_json",
  "sha2 0.10.9",
  "shared-core",
+ "solana-sdk 2.1.21",
  "tempfile",
  "tokio",
  "tokio-stream",
@@ -2785,6 +2786,7 @@ dependencies = [
  "url",
  "whirlpool-core",
  "yellowstone-grpc-proto",
+ "zstd",
 ]
 
 [[package]]
@@ -4699,6 +4701,27 @@ name = "option-ext"
 version = "0.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "04744f49eae99ab78e0d5c0b603ab218f515ea8cfe5a456d7629ad883a3b6e7d"
+
+[[package]]
+name = "orca_whirlpools_core"
+version = "1.0.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b884e3d6f39337baeb00c096b9d2d30682aeff8ead301303d039f84dcac24bec"
+dependencies = [
+ "ethnum",
+ "orca_whirlpools_macros",
+]
+
+[[package]]
+name = "orca_whirlpools_macros"
+version = "1.0.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "3db647505a145cbb680f08725e0112b1691d984334cd1abe0d9f5c5a6e2ec91e"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn 2.0.106",
+]
 
 [[package]]
 name = "ordered-multimap"
@@ -10707,10 +10730,14 @@ dependencies = [
  "anyhow",
  "borsh 1.5.7",
  "ethnum",
+ "orca_whirlpools_core",
+ "orca_whirlpools_macros",
  "serde",
+ "serde_json",
  "sha2 0.10.9",
  "solana-client",
  "solana-sdk 2.1.21",
+ "toml 0.8.23",
  "zstd",
 ]
 

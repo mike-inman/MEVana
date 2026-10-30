@@ -12,6 +12,10 @@ sha2 = "0.10"
 solana-sdk = "2.1.7"
 solana-client = "2.1.7"
 ethnum = "1.5"
+orca_whirlpools_core = { version = "=1.0.4", default-features = false }
+orca_whirlpools_macros = { version = "=1.0.4", default-features = false }
 
 [dev-dependencies]
 zstd = "0.13"
+toml = "0.8.23"
+serde_json = "1.0"
