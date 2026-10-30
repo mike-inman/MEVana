@@ -87,6 +87,11 @@ The operator requires that **no provider stream is open unless it is doing produ
 - `lsof -nP -iTCP -sTCP:ESTABLISHED` shows no connection to the provider IPs. For reference, Sodae's `ams.*.sodae.io` resolved to 45.154.33.73 and Tatum's gRPC host to 34.160.43.88 on 2026-10-29; re-resolve them, since they can change;
 - the run's bytes received, from the manifest.
 
+**Clarification (2026-10-29 22:04 CDT).** The socket check covers only processes started by this work, meaning the capture or probe PID and its children. For the process check, match exact executable names, because `pgrep -fl geyser` also matches build commands whose path contains `geyser`.
+- A `Codex (Service)` or other browser-helper socket to the Sodae IP is a browser keep-alive, not a market-data stream. The operator measured one at about 3 bytes/s, roughly 2.5 KB lifetime, against about 15 KB/s for a filtered capture.
+- Such a socket does not fail the check. Record its presence and byte rate, then continue.
+- Treat a non-capture socket as a blocker only if it shows sustained traffic above 1 KB/s.
+
 **5. Track a running total** of bytes received for each provider across the slice, and report it in the closeout. If a provider reports quota exhaustion, stop. Do not switch providers just to keep streaming.
 
 **6. Stop and report** instead of re-running when a live run fails for a reason that code changes must fix.
@@ -246,7 +251,7 @@ The 2026-10-07 to 2026-10-10 slice specifications in `docs/` (Experiment Request
    - Every live run uses `--duration` (or an equivalent hard stop) so it cannot overrun.
    - No run in this slice lasts longer than 10 minutes. Longer or continuous capture is the operator's later decision.
    - **(a) A 5-minute discovery run** with an empty TickArray allowlist, capturing pool accounts only. Use `capture_inspect` to build the inventory.
-   - **(b) Choose the allowlist** from that inventory: every observed pool whose mint pair is SOL/USDC, SOL/USDT or USDC/USDT. The mints are wrapped SOL `So11111111111111111111111111111111111111112`, USDC `EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v` and USDT `Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCE8BenwNYb`; verify all three against the decoded data. These pairs give both same-pair, multi-pool routes and SOL–USDC–USDT triangles. Commit the allowlist file.
+   - **(b) Choose the allowlist** from that inventory: every observed pool whose mint pair is SOL/USDC, SOL/USDT or USDC/USDT. The mints are wrapped SOL `So11111111111111111111111111111111111111112`, USDC `EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v` and USDT `Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB`; verify all three against the decoded data. These pairs give both same-pair, multi-pool routes and SOL–USDC–USDT triangles. Commit the allowlist file.
    - **(c) A 10-minute allowlist run** with that allowlist and the transaction stream on.
      - Set the rotation interval to 2–3 minutes, so the run produces several finalized files plus their manifests.
      - At the end, stop the run early with SIGINT or SIGTERM, before `--duration` expires, and confirm that shutdown finalizes the current `.part` file cleanly. If that is impractical, kill a separate short run of 1–2 minutes so that `capture_inspect` sees a real `.part` file.
