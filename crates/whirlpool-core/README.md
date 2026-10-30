@@ -1,5 +1,9 @@
 How to integrate
 
+2026-10-29 research note: `exact::quote_exact_in` and `exact::quote_exact_out` are the integer-only standard-fee quoting APIs for research. Pass a captured pool and keyed fixed/dynamic tick arrays. Adaptive-fee pools and missing arrays return typed errors. Orca core/macros are pinned to the Apache-2.0 1.0.4 releases; see `THIRD_PARTY.md`. The 1.0.4 swap result exposes amounts and fees, not next pool state.
+
+`math.rs`, `quoter.rs`, and `tick_window.rs` are legacy approximations still used by `edge-assembler`. Do not use their output for research results.
+
 
 Add this crate to your workspace and build: cargo build -p whirlpool-core
 

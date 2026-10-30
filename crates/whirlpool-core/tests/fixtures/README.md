@@ -8,3 +8,7 @@ These are zstd-compressed, unmodified public account data bytes from bounded Sod
 | `usdc_usdt_tick_array.bin.zst` | `FqFkv2xNNCUyx1RYV61pGZ9AMzGfgcD8uXC9zCF5JKnR` | 463131460 | 9,988 | `capture-1793330490539629000` |
 
 The TickArray stores the pool pubkey at byte offset 9,956. Both source captures remain outside the repository under `~/MEVanaData/captures/handoff09-20261029/`.
+
+## 2026-10-29 handoff 10 dynamic fixture
+
+`dynamic_tick_array.bin.zst` is a real public DynamicTickArray account from the six finalized handoff 09 captures. It is the largest dynamic account captured: 820 bytes raw with six initialized ticks, compressed to 247 bytes. It verifies the 148 + 112·n layout without importing later Orca source.

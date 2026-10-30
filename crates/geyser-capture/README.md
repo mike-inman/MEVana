@@ -1,5 +1,11 @@
 # 2026-10-29 — Read-only Geyser capture v1
 
+## 2026-10-29 — Offline swap cases v1
+
+`swap_cases CAPTURE_ROOT OUTPUT_ROOT [DYNAMIC_FIXTURE]` reads only the six finalized handoff 09 `.cap` files. Use `~/MEVanaData/captures/handoff09-20261029/` and `~/MEVanaData/golden/whirlpool-20261029/` respectively. The optional third argument writes one compressed real dynamic-array account fixture. No provider connection is made.
+
+The output `cases-v1.jsonl` has one JSON object per evaluable candidate, with `version: 1`, base58 signature/pool, slot, direction, integer observed vault input/output, raw pre/post pool bytes, keyed raw tick-array bytes, both quote results, classification, and an initialized-tick-crossing flag. `report-v1.json` gives totals, per-pool classes, coverage and limited unexplained signature/slot examples. Both are public on-chain quote-correctness data, not evidence of opportunities. Keep the full corpus outside Git; only the bounded compressed subset under `whirlpool-core/tests/golden/` is committed.
+
 This isolated tool records public Orca market data for later research. It contains no wallet, signing or submission path. Processed dev/test data is not a profitability result or production latency/completeness benchmark. Data stays in `~/MEVanaData/captures/`; only small public decoder fixtures belong in Git.
 
 Provider profiles bind all three credential properties together:
