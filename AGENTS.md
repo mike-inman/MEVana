@@ -156,10 +156,12 @@ Work proceeds through dated handoffs in `docs/`. The latest one is the authority
    - Offline Part A runs first.
    - Then one ≤10-minute capture.
    - See `docs/2026-10-30-0859-CDT-research-handoff-12-capture-snapshot-and-slot-semantics.md`.
-6. **Later:**
-   - a server-host capture;
-   - a v2 request contract for triangles;
-   - handoffs 13–14, the read-only Research API and MEVana-UI research page.
+6. **Handoff 13 (active, in parallel with 12):** experiment request contract v2, for multi-pair route universes and triangles. It is .NET plus OpenSpec only, and v1 stays frozen. See `docs/2026-10-30-1118-CDT-research-handoff-13-experiment-request-contract-v2.md`.
+7. **Next:**
+   - handoff 14: triangle and multi-pair replay (needs 12 and 13);
+   - handoff 15: read-only Research API;
+   - handoff 16: MEVana-UI research page.
+   - Later: a server-host capture.
 
 **Not in focus right now:**
 - HotPath latency work, executor or Jito, wallets, live or paper trading;
