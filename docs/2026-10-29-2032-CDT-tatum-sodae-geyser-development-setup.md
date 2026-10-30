@@ -4,6 +4,32 @@ Created: 2026-10-29
 
 Last updated: 2026-10-29
 
+## Successful official Rust example check — 2026-10-29
+
+At the user's request, the official `yellowstone` Rust example from the local Sodae checkout (`dec7da776d7deb68719048f8323abe04db45d2d5`) was compiled and run in `slots` mode using only the Sodae key and Yellowstone URL entries from MEVana's `.env`. Secret values were passed through the child process environment and were not printed or saved in the evidence.
+
+Result: **186 slot-status updates in a bounded 15-second run**, with no reported provider authentication or entitlement errors. This count includes multiple statuses for a slot, not 186 unique slots. Sample output:
+
+```text
+463109770 SLOT_CONFIRMED
+463109770 SLOT_FINALIZED
+463109771 SLOT_PROCESSED
+463109771 SLOT_CONFIRMED
+463109771 SLOT_FINALIZED
+463109772 SLOT_PROCESSED
+```
+
+The harness deliberately terminated the sustained example at 15 seconds (SIGTERM / return code -15); this was the test limit, not a provider disconnect. Successful slot streaming does not establish account or transaction filter support, historical replay, cluster identity, completeness or production latency.
+
+Build details and preservation:
+
+- Installed stable Rust 1.89.0 built the example successfully with its existing lockfile and Yellowstone 14 dependencies.
+- Building directly from the sibling checkout encountered an unrelated ancestor workspace at `/Users/michaelinman/Cargo.toml`, referencing missing `crates/wallet-core`. The check therefore used a temporary copy at `/tmp/mevana-sodae-rust-check-20261029`, with only an empty `[workspace]` appended to its manifest to isolate it. The example source and lockfile were unchanged.
+- The saved URL uses Sodae's plaintext `ams.rpc.sodae.io` endpoint. For this check it was mapped in process to the documented TLS endpoint `https://ams.tls.sodae.io:443`, protecting the key in transit. No `.env` entry was changed.
+- The Sodae checkout, MEVana Rust source, existing credentials and toolchain configuration were not modified. No trading engine or wallet was started.
+
+Earlier pending-status statements below describe the state before this successful check and are superseded by this section.
+
 ## Sodae quickstart and official examples — update 2026-10-29
 
 The user located the official quickstart at <https://docs.sodae.io/quickstart> and saved provider values locally in the repository-root `.env`. Do not copy those values into this document or version control.
