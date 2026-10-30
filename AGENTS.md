@@ -145,12 +145,17 @@ The project is in a **research phase with trading disabled**. The question being
 Work proceeds through dated handoffs in `docs/`. The latest one is the authority.
 
 1. **Handoffs 07–08 (done):** research contracts (experiments, rankings, execution outcomes) in `dotnet/` plus OpenSpec.
-2. **Handoff 09 (active):** read-only Geyser capture of Orca Whirlpool data, in a new crate `crates/geyser-capture`, plus the `whirlpool-core` decoder fix.
+2. **Handoff 09 (done):** read-only Geyser capture of Orca Whirlpool data (`crates/geyser-capture`).
    - Providers are Sodae (primary) and Tatum (secondary).
    - Follow the stream-discipline rules: no idle streams, and no quota wasted.
-3. **Handoff 10:** exact Whirlpool quote math.
-4. **Handoff 11:** replay of captures, producing simulated experiment results.
-5. **Handoffs 12–13:** read-only Research API and MEVana-UI research page.
+3. **Handoff 10 (done):** exact Whirlpool quote math (`whirlpool_core::exact`, Apache Orca core pinned at 1.0.4). Quotes are bounded to the supplied tick arrays.
+4. **Handoff 11 (done, 2026-10-30):** deterministic offline replay (`crates/research-replay`), producing three per-pair `Simulated` results (SOL/USDC, SOL/USDT, USDC/USDT).
+   - No positive opportunity was found in the 10-minute capture, and missing state was heavy.
+   - See `docs/2026-10-30-0828-CDT-research-handoff-11-closeout.md`.
+5. **Next candidates (not yet authorized):**
+   - better captures: a tick-array snapshot at start, longer runs, a server host;
+   - a v2 request contract for triangles;
+   - handoffs 12–13, the read-only Research API and MEVana-UI research page.
 
 **Not in focus right now:**
 - HotPath latency work, executor or Jito, wallets, live or paper trading;
