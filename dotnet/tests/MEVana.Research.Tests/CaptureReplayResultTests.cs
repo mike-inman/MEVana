@@ -33,8 +33,7 @@ public class CaptureReplayResultTests
             Enum.Parse<ExperimentResultStatus>(root.GetProperty("status").GetString()!), null, policies);
     }
 
-    // 2026-10-30 CDT: pending completed replay artifacts; see the handoff 11 quote blocker.
-    [Theory(Skip = "Exact replay quote has not completed on captured BmXV state; no result fixtures exist")]
+    [Theory]
     [InlineData('a', CaptureReplayCatalog.Sol, CaptureReplayCatalog.Usdc, 6)]
     [InlineData('b', CaptureReplayCatalog.Sol, CaptureReplayCatalog.Usdt, 5)]
     [InlineData('c', CaptureReplayCatalog.Usdc, CaptureReplayCatalog.Usdt, 2)]
