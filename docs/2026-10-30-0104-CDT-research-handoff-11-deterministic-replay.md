@@ -5,13 +5,42 @@
 This slice turns handoff 09's raw captures and handoff 10's exact quoter into the **first honest, reproducible experiment result** from real market data. It does four things:
 
 1. replays captured Whirlpool state deterministically in event time;
-2. generates 2-leg and 3-leg route candidates over the standard-fee allowlisted pools;
+2. generates same-pair 2-leg route candidates over the standard-fee allowlisted pools, separately for each pair (Revision 1);
 3. evaluates three selection policies under one explicit cost model;
-4. emits one `Simulated` `ExperimentResult` that the existing C# validators accept.
+4. emits three `Simulated` `ExperimentResult`s, one per pair, that the existing C# validators accept.
 
 This is the first point at which MEVana can say anything evidence-based about the research question. Even so, the result is a **ten-minute, dev/test-feed simulation**. It is not evidence of profitability. A zero-opportunity or negative result is a valid, honest outcome.
 
 It does **not** trade, sign, stream, train a model, or change any live service.
+
+## Revision 1 — 2026-10-30 01:14 CDT: same-pair 2-leg routes, three per-pair results (operator decision)
+
+Codex stopped correctly at the contract gate (`docs/2026-10-30-0107-CDT-research-handoff-11-contract-blocker.md`, commit `35c520a8` on the branch).
+- **The problem:** a v1 `ExperimentRequest` names exactly one `tokenPair` (`ExperimentRequestSyntaxValidator.cs:21`), and every requested pool must contain both of its tokens (`ExperimentRequestValidator.cs:17`). A SOL–USDC–USDT triangle cannot be expressed truthfully.
+- **The operator's choice:** split the work. This revision overrides anything below that conflicts with it.
+
+**Scope.** This slice produces **three separate `Simulated` results, one per token pair**, each covering **same-pair 2-leg routes only** over that pair's standard-fee pools:
+
+| Result | `tokenPair` [base, quote] | Pools (`poolIds`) | Ordered 2-leg routes | Profit unit |
+| --- | --- | --- | ---: | --- |
+| A | [SOL, USDC] | the 6 standard-fee SOL/USDC pools | 30 | USDC atoms |
+| B | [SOL, USDT] | the 5 standard-fee SOL/USDT pools | 20 | USDT atoms |
+| C | [USDC, USDT] | the 2 standard-fee USDC/USDT pools | 2 | USDT atoms |
+
+- **Each result's quote asset is the second token of its pair.** All of its sizes and profits are in that token's atoms, within the catalog's `MaxResearchTradeSizeQuoteAtoms` bounds.
+- **Request and result validation.** Each result has its own canonical `ExperimentRequest`, whose `poolIds` are exactly the pools evaluated. Each must validate under the **existing, unchanged v1** contract.
+- **Triangles (3-leg) are out of scope.** They move to a later slice, after a versioned multi-pair request contract (v2) that leaves v1 unchanged.
+- **Cost conversion.** Convert SOL-denominated costs (base fee, priority fee, tip) into each result's quote asset through a **declared reference pool**, quoted exactly at the evaluation slot:
+  - for A, a SOL/USDC standard-fee pool;
+  - for B and C, a SOL/USDT standard-fee pool.
+
+  The reference pool is a **price input to the cost model only, never a traded or evaluated route**. Record it in the cost model and its `costModelVersion`, and state this in the closeout. This keeps each request's scope truthful.
+- **Runs** (replacing step 5's run list):
+  - default parameters for **all three** pairs;
+  - the L = 2 latency sensitivity and the cost sensitivity for **pair A only**.
+  - Determinism (step 3) applies to each pair's default run.
+- **Where to work.** Continue on `feat/deterministic-replay-20261030`, rebased onto `origin/main`. Keep the blocker report as history.
+- **Shared code across pairs.** The three results share one replay over the allowlist session, with per-pair candidate sets, policies and accounting. The per-candidate JSONL records the pair.
 
 ## Execution model
 
@@ -74,17 +103,17 @@ Record all of these in the OpenSpec design, with their concrete parameter values
    - Candidates touching stale pools are rejected as `state_gap`.
 4. **Routes.**
    - **2-leg:** same pair, buy on pool X and sell on pool Y, for every ordered pair of distinct standard-fee pools with the same mint pair.
-   - **3-leg:** SOL→USDC→USDT→SOL and its reverse, over every combination of one pool per pair.
+   - **3-leg: deferred by Revision 1.** Triangles need a v2 multi-pair request contract.
    - **Token alignment** is checked at every hop: one leg's output mint must equal the next leg's input mint.
    - **Direction** comes from mint order (`a_to_b` when the input is mint A).
-   - The **quote asset is USDC**, and all profits are in USDC atoms.
-5. **Sizing.** Use a fixed, declared trade-size ladder in USDC atoms, for example 10, 100 and 1,000 USDC equivalent. Convert the start size for SOL-start triangles with the exact quoter at the evaluation slot. Every size is quoted exactly and leg by leg; there is no `f64` anywhere in money or price math.
+   - The **quote asset is each pair's second token** (Revision 1). Profits are in that token's atoms.
+5. **Sizing.** Use a fixed, declared trade-size ladder in each pair's quote-asset atoms, for example 10, 100 and 1,000 units, within the catalog bounds. Every size is quoted exactly and leg by leg; there is no `f64` anywhere in money or price math.
 6. **Cost model.** Version it (`costModelVersion`) and declare every parameter:
    - base fee of 5,000 lamports per signature;
    - a declared priority fee (micro-lamports × compute-unit estimate per route shape);
    - a declared tip in lamports.
 
-   Convert lamports to USDC atoms through the exact quoter on a declared SOL/USDC pool at the evaluation slot. Defaults must be conservative, meaning nonzero priority fee and tip. Net profit = output − input − costs, and it may be negative.
+   Convert lamports to the result's quote-asset atoms through the exact quoter on the declared **reference pool** (Revision 1) at the evaluation slot. Defaults must be conservative, meaning nonzero priority fee and tip. Net profit = output − input − costs, and it may be negative.
 7. **Estimated vs simulated profit.** These must not collapse into the same number.
    - **Estimated** profit is quoted against state at detection slot S.
    - **Simulated** profit re-quotes the same route and size against state at slot S + L, where L is a declared latency in slots (default 1).
@@ -167,7 +196,8 @@ Record all of these in the OpenSpec design, with their concrete parameter values
    Then archive the OpenSpec change.
 8. **Closeout.** Write `docs/2026-10-XX-HHMM-CDT-research-handoff-11-closeout.md`. It must record:
    - every parameter;
-   - the results of all three runs, with the policy comparison table;
+   - the results of all runs (three default per-pair runs plus the pair A sensitivities), with a policy comparison table per pair;
+   - the reference pools and the statement that they are price inputs only;
    - the `insufficient_state` and `state_gap` shares;
    - the determinism hashes;
    - the contract validation;
@@ -193,7 +223,7 @@ Either the slice stopped with a precise report (contract cannot express the resu
 
 - `research-replay` exists, is specified and is tested;
 - replay is deterministic, with matching hashes;
-- one `Simulated` `ExperimentResult` from the real allowlist session validates under the existing C# validators;
+- three `Simulated` `ExperimentResult`s (SOL/USDC, SOL/USDT and USDC/USDT) from the real allowlist session validate under the existing, unchanged v1 C# validators;
 - the sensitivity runs are reported;
 - the closeout states the limitations plainly;
 - the OpenSpec change is archived and the branch is pushed, clean and synchronized.
@@ -201,6 +231,8 @@ Either the slice stopped with a precise report (contract cannot express the resu
 This result shows what the replay produced on ten minutes of dev/test data. It does not show that any strategy is profitable.
 
 ## Later slices
+
+- **Request contract v2 and triangles:** a versioned multi-pair route-universe request, leaving v1 unchanged, followed by SOL–USDC–USDT 3-leg replay.
 
 - **Capture improvements:** an RPC tick-array snapshot at capture start, Confirmed/Finalized reconciliation, and longer captures on a server host (needs an operator decision on Vultr or Hetzner and on a provider plan).
 - **First learned ranker:** this is where `ModelRanking` stops being heuristic.
