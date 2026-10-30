@@ -1,5 +1,6 @@
 //! Offline, integer-only Whirlpool research replay. No provider or trading path.
 use anyhow::{bail, ensure, Context, Result};
+use geyser_capture::format::SnapshotRecord;
 use geyser_capture::{format, layout};
 use prost::Message;
 use serde::{Deserialize, Serialize};
@@ -71,16 +72,25 @@ pub struct GapEvent {
     pub receive_ns: u64,
     pub sequence: u64,
 }
+#[derive(Clone)]
+pub struct SnapshotEvent {
+    pub receive_ns: u64,
+    pub sequence: u64,
+    pub record: SnapshotRecord,
+}
 #[derive(Clone, Default)]
 pub struct PoolState {
     pub pool: Option<WhirlpoolMinimal>,
     pub arrays: BTreeMap<Pubkey, exact::DecodedTickArray>,
+    pub absent_arrays: BTreeSet<Pubkey>,
     pub stale: bool,
     pub generation: u64,
 }
 #[derive(Clone, Default)]
 pub struct MarketState {
     pub pools: BTreeMap<Pubkey, PoolState>,
+    pub snapshot_context: BTreeMap<Pubkey, u64>,
+    pub latest_write_slot: BTreeMap<Pubkey, u64>,
 }
 impl MarketState {
     pub fn gap(&mut self) {
@@ -93,6 +103,20 @@ impl MarketState {
         self.pools.get(id).map_or(0, |state| state.generation)
     }
     pub fn apply(&mut self, write: &AccountWrite, allowlist: &BTreeSet<Pubkey>) -> Result<()> {
+        if self
+            .snapshot_context
+            .get(&write.key)
+            .is_some_and(|&c| write.slot <= c)
+        {
+            return Ok(());
+        }
+        if self
+            .latest_write_slot
+            .get(&write.key)
+            .is_some_and(|&s| write.slot < s)
+        {
+            return Ok(());
+        }
         match layout::kind(&write.data) {
             "pool" if allowlist.contains(&write.key) => {
                 let pool = decode_whirlpool(&write.data)?;
@@ -100,6 +124,7 @@ impl MarketState {
                 state.pool = Some(pool);
                 state.stale = false;
                 state.generation += 1;
+                self.latest_write_slot.insert(write.key, write.slot);
             }
             "fixed" | "dynamic" => {
                 let array = exact::decode_array(&write.data)?;
@@ -107,20 +132,91 @@ impl MarketState {
                 if allowlist.contains(&owner) {
                     let state = self.pools.entry(owner).or_default();
                     state.arrays.insert(write.key, array);
+                    state.absent_arrays.remove(&write.key);
                     state.generation += 1;
+                    self.latest_write_slot.insert(write.key, write.slot);
                 }
             }
             _ => {}
         }
         Ok(())
     }
+    pub fn apply_snapshot(
+        &mut self,
+        record: &SnapshotRecord,
+        allowlist: &BTreeSet<Pubkey>,
+    ) -> Result<()> {
+        let SnapshotRecord::Account {
+            account_kind,
+            pool_id,
+            key,
+            context_slot,
+            present,
+            data_base64,
+            ..
+        } = record
+        else {
+            return Ok(());
+        };
+        let pool_id = Pubkey::from_str(pool_id)?;
+        let key = Pubkey::from_str(key)?;
+        if !allowlist.contains(&pool_id) {
+            return Ok(());
+        }
+        let previous_context = self.snapshot_context.get(&key).copied().unwrap_or(0);
+        if *context_slot < previous_context {
+            return Ok(());
+        }
+        self.snapshot_context.insert(key, *context_slot);
+        if self
+            .latest_write_slot
+            .get(&key)
+            .is_some_and(|&slot| slot > *context_slot)
+        {
+            return Ok(());
+        }
+        let state = self.pools.entry(pool_id).or_default();
+        match (account_kind.as_str(), present) {
+            ("pool", true) => {
+                let data = base64::Engine::decode(
+                    &base64::engine::general_purpose::STANDARD,
+                    data_base64.as_deref().context("missing snapshot pool")?,
+                )?;
+                state.pool = Some(decode_whirlpool(&data)?);
+                state.stale = false;
+            }
+            ("pool", false) => {
+                state.pool = None;
+                state.stale = false;
+            }
+            ("tick_array", true) => {
+                let data = base64::Engine::decode(
+                    &base64::engine::general_purpose::STANDARD,
+                    data_base64.as_deref().context("missing snapshot array")?,
+                )?;
+                state.arrays.insert(key, exact::decode_array(&data)?);
+                state.absent_arrays.remove(&key);
+            }
+            ("tick_array", false) => {
+                state.arrays.remove(&key);
+                state.absent_arrays.insert(key);
+            }
+            _ => anyhow::bail!("invalid snapshot account kind"),
+        }
+        state.generation += 1;
+        self.latest_write_slot.insert(key, *context_slot);
+        Ok(())
+    }
 }
 
 #[derive(Clone)]
 pub struct Capture {
+    pub format_version: u32,
+    pub session_id: String,
     pub writes: Vec<AccountWrite>,
     pub gaps: Vec<GapEvent>,
     pub slot_nodes: BTreeMap<u64, slot::SlotNode>,
+    pub snapshots: Vec<SnapshotEvent>,
     pub slots: BTreeSet<u64>,
     pub allowlist: BTreeSet<Pubkey>,
     pub hashes: BTreeMap<String, String>,
@@ -134,7 +230,8 @@ pub fn load_capture(root: &Path) -> Result<Capture> {
     let session: format::Session =
         serde_json::from_slice(&std::fs::read(root.join("session.json"))?)?;
     ensure!(
-        session.metadata.format_version == 1 && session.metadata.commitment == "processed",
+        matches!(session.metadata.format_version, 1 | 2)
+            && session.metadata.commitment == "processed",
         "unsupported capture"
     );
     ensure!(
@@ -142,7 +239,9 @@ pub fn load_capture(root: &Path) -> Result<Capture> {
         "wrong dataset"
     );
     ensure!(
-        session.files.len() == 4 && session.metadata.allowlist.len() == 18,
+        (!session.files.is_empty())
+            && (session.metadata.format_version == 2 || session.files.len() == 4)
+            && session.metadata.allowlist.len() == 18,
         "wrong allowlist session"
     );
     let allowlist: BTreeSet<Pubkey> = session
@@ -154,6 +253,7 @@ pub fn load_capture(root: &Path) -> Result<Capture> {
     let mut writes = Vec::new();
     let mut gaps = Vec::new();
     let mut slot_nodes = BTreeMap::<u64, slot::SlotNode>::new();
+    let mut snapshots = Vec::<SnapshotEvent>::new();
     let mut slots = BTreeSet::new();
     let mut slot_receive_ns = BTreeMap::<u64, u64>::new();
     let mut hashes = BTreeMap::new();
@@ -170,7 +270,7 @@ pub fn load_capture(root: &Path) -> Result<Capture> {
         let manifest: format::Manifest = serde_json::from_slice(&std::fs::read(root.join(name))?)?;
         ensure!(
             manifest.metadata.session_id == session.metadata.session_id
-                && manifest.metadata.format_version == 1,
+                && manifest.metadata.format_version == session.metadata.format_version,
             "manifest identity mismatch"
         );
         ensure!(
@@ -211,6 +311,20 @@ pub fn load_capture(root: &Path) -> Result<Capture> {
                         sequence: record.sequence,
                     });
                 }
+                continue;
+            }
+            if record.snapshot {
+                ensure!(
+                    session.metadata.format_version == 2,
+                    "snapshot in v1 capture"
+                );
+                let payload: SnapshotRecord = serde_json::from_slice(&record.payload)?;
+                payload.validate()?;
+                snapshots.push(SnapshotEvent {
+                    receive_ns: record.receive_ns,
+                    sequence: record.sequence,
+                    record: payload,
+                });
                 continue;
             }
             let update = SubscribeUpdate::decode(record.payload.as_slice())?;
@@ -266,6 +380,7 @@ pub fn load_capture(root: &Path) -> Result<Capture> {
     );
     writes.sort_by_key(|w| (w.slot, w.write_version, w.sequence));
     gaps.sort_by_key(|g| (g.receive_ns, g.sequence));
+    snapshots.sort_by_key(|s| (s.receive_ns, s.sequence));
     slots.extend(writes.iter().map(|w| w.slot));
     // Window endpoints are observed Processed slot notifications, not arbitrary first/last frames.
     if let (Some((&start_slot, &start_ns)), Some((&end_slot, &end_ns))) = (
@@ -282,9 +397,12 @@ pub fn load_capture(root: &Path) -> Result<Capture> {
         last_receive_ns = end_ns;
     }
     Ok(Capture {
+        format_version: session.metadata.format_version,
+        session_id: session.metadata.session_id,
         writes,
         gaps,
         slot_nodes,
+        snapshots,
         slots,
         allowlist,
         hashes,
@@ -337,6 +455,7 @@ pub fn direction(pool: &WhirlpoolMinimal, input: Pubkey, output: Pubkey) -> Resu
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum QuoteFailure {
     InsufficientState,
+    TickArrayAbsent,
     StateGap,
     AdaptiveFeeUnsupported,
     InvalidQuote,
@@ -345,6 +464,7 @@ impl QuoteFailure {
     pub fn code(self) -> &'static str {
         match self {
             Self::InsufficientState => "insufficient_state",
+            Self::TickArrayAbsent => "tick_array_absent",
             Self::StateGap => "state_gap",
             Self::AdaptiveFeeUnsupported => "adaptive_fee_unsupported",
             Self::InvalidQuote => "invalid_quote",
@@ -375,11 +495,18 @@ pub fn quote_leg(
     }
     let pool = entry.pool.as_ref().ok_or(QuoteFailure::InsufficientState)?;
     let a_to_b = direction(pool, input, output).map_err(|_| QuoteFailure::InvalidQuote)?;
-    Ok(
-        exact::quote_exact_in(program, pool_id, pool, &entry.arrays, amount, a_to_b)
-            .map_err(exact_failure)?
-            .output_amount,
-    )
+    match exact::quote_exact_in(program, pool_id, pool, &entry.arrays, amount, a_to_b) {
+        Ok(quote) => Ok(quote.output_amount),
+        Err(exact::ExactError::MissingTickArray { start_tick_index }) => {
+            let key = exact::derive_tick_array_address(program, pool_id, start_tick_index).0;
+            Err(if entry.absent_arrays.contains(&key) {
+                QuoteFailure::TickArrayAbsent
+            } else {
+                QuoteFailure::InsufficientState
+            })
+        }
+        Err(error) => Err(exact_failure(error)),
+    }
 }
 pub fn quote_route(
     state: &MarketState,
@@ -413,6 +540,7 @@ pub fn net(output: u64, input: u64, cost: u64) -> Result<i64> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use sha2::Digest;
     #[test]
     fn synthetic_routes_and_direction() {
         let ids: Vec<_> = (1..=6).map(|i| Pubkey::new_from_array([i; 32])).collect();
@@ -493,5 +621,93 @@ mod tests {
             writes.iter().map(|w| w.sequence).collect::<Vec<_>>(),
             vec![1, 2, 3]
         );
+    }
+    #[test]
+    fn synthetic_snapshot_context_and_absent_array() {
+        let raw = zstd::decode_all(
+            &include_bytes!("../../whirlpool-core/tests/fixtures/usdc_usdt_pool.bin.zst")[..],
+        )
+        .unwrap();
+        let pool = decode_whirlpool(&raw).unwrap();
+        let pool_id = Pubkey::from_str("4fuUiYxTQ6QCrdSq9ouBYcTM7bqSwYTSyLueGZLTy4T4").unwrap();
+        let program = Pubkey::from_str(PROGRAM).unwrap();
+        let encoded = base64::Engine::encode(&base64::engine::general_purpose::STANDARD, &raw);
+        let record = SnapshotRecord::Account {
+            version: 1,
+            snapshot_id: 1,
+            account_kind: "pool".into(),
+            pool_id: pool_id.to_string(),
+            key: pool_id.to_string(),
+            context_slot: 100,
+            present: true,
+            owner: Some(PROGRAM.into()),
+            lamports: Some(1),
+            data_base64: Some(encoded),
+            sha256: Some(format!("{:x}", sha2::Sha256::digest(&raw))),
+        };
+        let mut state = MarketState::default();
+        let allowlist = BTreeSet::from([pool_id]);
+        state.apply_snapshot(&record, &allowlist).unwrap();
+        let generation = state.generation(&pool_id);
+        state
+            .apply(
+                &AccountWrite {
+                    slot: 99,
+                    receive_ns: 99,
+                    write_version: 1,
+                    sequence: 1,
+                    key: pool_id,
+                    data: raw.clone(),
+                },
+                &allowlist,
+            )
+            .unwrap();
+        assert_eq!(state.generation(&pool_id), generation);
+        let missing =
+            exact::quote_exact_in(&program, &pool_id, &pool, &BTreeMap::new(), 1_000_000, true)
+                .unwrap_err();
+        let exact::ExactError::MissingTickArray { start_tick_index } = missing else {
+            panic!("expected missing array")
+        };
+        let key = exact::derive_tick_array_address(&program, &pool_id, start_tick_index).0;
+        let absent = SnapshotRecord::Account {
+            version: 1,
+            snapshot_id: 1,
+            account_kind: "tick_array".into(),
+            pool_id: pool_id.to_string(),
+            key: key.to_string(),
+            context_slot: 100,
+            present: false,
+            owner: None,
+            lamports: None,
+            data_base64: None,
+            sha256: None,
+        };
+        state.apply_snapshot(&absent, &allowlist).unwrap();
+        assert_eq!(
+            quote_leg(
+                &state,
+                &program,
+                &pool_id,
+                pool.token_mint_a,
+                pool.token_mint_b,
+                1_000_000
+            ),
+            Err(QuoteFailure::TickArrayAbsent)
+        );
+        state
+            .apply(
+                &AccountWrite {
+                    slot: 101,
+                    receive_ns: 101,
+                    write_version: 1,
+                    sequence: 2,
+                    key: pool_id,
+                    data: raw,
+                },
+                &allowlist,
+            )
+            .unwrap();
+        assert!(state.generation(&pool_id) > generation);
     }
 }

@@ -1,4 +1,4 @@
-use crate::format::{hash_file, read_record, Manifest, Session, MAGIC};
+use crate::format::{hash_file, read_record, Manifest, Session, SnapshotRecord, MAGIC};
 use anyhow::{ensure, Context, Result};
 use prost::Message;
 use serde::{Deserialize, Serialize};
@@ -29,6 +29,11 @@ pub struct Pool {
 pub struct Report {
     pub files: u64,
     pub bytes_received: u64,
+    pub snapshot_frames: u64,
+    pub snapshot_present: u64,
+    pub snapshot_absent: u64,
+    pub snapshot_calls: u64,
+    pub snapshot_rpc_bytes: u64,
     pub counts: BTreeMap<String, u64>,
     pub decode: BTreeMap<String, u64>,
     pub unexpected: BTreeMap<String, u64>,
@@ -70,7 +75,9 @@ pub fn inspect(directory: &Path) -> Result<Report> {
             "capture byte count mismatch"
         );
         ensure!(
-            m.metadata.session_id == session.metadata.session_id && m.metadata.format_version == 1,
+            m.metadata.session_id == session.metadata.session_id
+                && m.metadata.format_version == session.metadata.format_version
+                && matches!(m.metadata.format_version, 1 | 2),
             "manifest identity/version mismatch"
         );
         let mut r = BufReader::new(File::open(path)?);
@@ -83,6 +90,11 @@ pub fn inspect(directory: &Path) -> Result<Report> {
         let mut first = None;
         let mut last = None;
         let mut counts = BTreeMap::<String, u64>::new();
+        let mut snapshot_frames = 0;
+        let mut snapshot_present = 0;
+        let mut snapshot_absent = 0;
+        let mut snapshot_calls = 0;
+        let mut snapshot_rpc_bytes = 0;
         while let Some(rec) = read_record(&mut r)? {
             ensure!(rec.sequence == previous + 1, "non-monotonic sequence");
             previous = rec.sequence;
@@ -95,6 +107,29 @@ pub fn inspect(directory: &Path) -> Result<Report> {
                 report.gaps += 1;
                 if g.reason == "stall" {
                     report.stalls += 1;
+                }
+                continue;
+            }
+            if rec.snapshot {
+                ensure!(m.metadata.format_version == 2, "kind 2 in v1 capture");
+                let record: SnapshotRecord = serde_json::from_slice(&rec.payload)?;
+                record.validate()?;
+                snapshot_frames += 1;
+                match record {
+                    SnapshotRecord::Account { present, .. } => {
+                        if present {
+                            snapshot_present += 1;
+                        } else {
+                            snapshot_absent += 1;
+                        }
+                    }
+                    SnapshotRecord::Stats {
+                        calls, rpc_bytes, ..
+                    } => {
+                        snapshot_calls += calls;
+                        snapshot_rpc_bytes += rpc_bytes;
+                    }
+                    SnapshotRecord::Failed { .. } => {}
                 }
                 continue;
             }
@@ -172,11 +207,21 @@ pub fn inspect(directory: &Path) -> Result<Report> {
                 && gaps == m.gaps.len() as u64
                 && first == m.first_sequence
                 && last == m.last_sequence
-                && counts == m.counts,
+                && counts == m.counts
+                && snapshot_frames == m.snapshot_frames
+                && snapshot_present == m.snapshot_present
+                && snapshot_absent == m.snapshot_absent
+                && snapshot_calls == m.snapshot_calls
+                && snapshot_rpc_bytes == m.snapshot_rpc_bytes,
             "manifest summary mismatch"
         );
         report.files += 1;
         report.bytes_received += bytes;
+        report.snapshot_frames += snapshot_frames;
+        report.snapshot_present += snapshot_present;
+        report.snapshot_absent += snapshot_absent;
+        report.snapshot_calls += snapshot_calls;
+        report.snapshot_rpc_bytes += snapshot_rpc_bytes;
         total += bytes;
     }
     ensure!(total == session.bytes_received, "session bytes mismatch");

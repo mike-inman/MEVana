@@ -112,6 +112,25 @@ fn standard_pair(pool: &WhirlpoolMinimal) -> Option<Pair> {
 }
 pub fn inventory(capture: &Capture) -> Result<BTreeMap<String, Vec<Pubkey>>> {
     let mut latest = BTreeMap::<Pubkey, WhirlpoolMinimal>::new();
+    for event in &capture.snapshots {
+        if let geyser_capture::format::SnapshotRecord::Account {
+            account_kind,
+            key,
+            present: true,
+            data_base64: Some(data),
+            ..
+        } = &event.record
+        {
+            if account_kind == "pool" {
+                let id = Pubkey::from_str(key)?;
+                if capture.allowlist.contains(&id) {
+                    let raw =
+                        base64::Engine::decode(&base64::engine::general_purpose::STANDARD, data)?;
+                    latest.insert(id, whirlpool_core::decode::decode_whirlpool(&raw)?);
+                }
+            }
+        }
+    }
     for write in &capture.writes {
         if capture.allowlist.contains(&write.key)
             && geyser_capture::layout::kind(&write.data) == "pool"
@@ -250,22 +269,49 @@ pub fn replay(capture: &Capture, config: &Config, pairs: &[Pair]) -> Result<Repl
     let mut pending = BTreeMap::<usize, Vec<(usize, usize, usize)>>::new();
     let mut write_index = 0;
     let mut gap_index = 0;
+    let mut snapshot_index = 0;
     for (boundary_index, boundary) in boundaries.iter().enumerate() {
         let slot = boundary.slot;
         if slot < capture.first_slot || slot > capture.last_slot {
             continue;
         }
-        // Only causal loss events stale state. Skipped leaders and abandoned forks do not.
-        while gap_index < classified_gaps.len()
-            && (
-                classified_gaps[gap_index].receive_ns,
-                classified_gaps[gap_index].sequence,
-            ) <= (boundary.event.receive_ns, boundary.event.sequence)
-        {
-            if classified_gaps[gap_index].class == GapClass::TrueGap {
-                state.gap();
+        // Interleave gaps and snapshots in captured receive order. A covering
+        // snapshot clears an earlier true gap, never a later one.
+        loop {
+            let gap_time = classified_gaps
+                .get(gap_index)
+                .map(|g| (g.receive_ns, g.sequence));
+            let snapshot_time = capture
+                .snapshots
+                .get(snapshot_index)
+                .map(|s| (s.receive_ns, s.sequence));
+            let due = (boundary.event.receive_ns, boundary.event.sequence);
+            match (
+                gap_time.filter(|&t| t <= due),
+                snapshot_time.filter(|&t| t <= due),
+            ) {
+                (Some(g), Some(s)) if s < g => {
+                    state.apply_snapshot(
+                        &capture.snapshots[snapshot_index].record,
+                        &capture.allowlist,
+                    )?;
+                    snapshot_index += 1;
+                }
+                (Some(_), _) => {
+                    if classified_gaps[gap_index].class == GapClass::TrueGap {
+                        state.gap();
+                    }
+                    gap_index += 1;
+                }
+                (None, Some(_)) => {
+                    state.apply_snapshot(
+                        &capture.snapshots[snapshot_index].record,
+                        &capture.allowlist,
+                    )?;
+                    snapshot_index += 1;
+                }
+                (None, None) => break,
             }
-            gap_index += 1;
         }
         match config.commitment_mode {
             CommitmentMode::Confirmed => {

@@ -62,6 +62,7 @@ fn failure(sizes: &[SizeQuote]) -> &'static str {
     for reason in [
         "state_gap",
         "insufficient_state",
+        "tick_array_absent",
         "adaptive_fee_unsupported",
         "invalid_quote",
     ] {

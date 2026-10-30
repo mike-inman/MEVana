@@ -9,9 +9,9 @@
 
 ## Part B — one bounded capture
 
-- [ ] B1 Add opt-in Tatum snapshot client, HTTPS/credential isolation, 13-array coverage, call/byte/snapshot budgets and failure records.
-- [ ] B2 Add formatVersion 2 kind-2 frame records and inspection; preserve v1 behavior and tests.
-- [ ] B3 Replay snapshot presence/absence, context-slot precedence and `tick_array_absent` classification; test unchanged v1 reasonCode acceptance.
+- [x] B1 Add opt-in Tatum snapshot client, HTTPS/credential isolation, 13-array coverage, call/byte/snapshot budgets and failure records.
+- [x] B2 Add formatVersion 2 kind-2 frame records and inspection; preserve v1 behavior and tests.
+- [x] B3 Replay snapshot presence/absence, context-slot precedence and `tick_array_absent` classification; test unchanged v1 reasonCode acceptance.
 - [ ] B4 Audit processes/sockets, run exactly one ≤600-second capture, audit shutdown and provider use.
 - [ ] B5 Replay new capture defaults twice and A latency, cost and processed sensitivities; verify hashes and three C# results.
 - [ ] B6 Complete full pinned validation, credential scans, dated closeout, OpenSpec archive, commit and push clean branch.

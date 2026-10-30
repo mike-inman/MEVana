@@ -1,5 +1,6 @@
 using System.Text;
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using MEVana.Research.Core;
 using Xunit;
 
@@ -55,5 +56,21 @@ public class CaptureReplayResultTests
         Assert.Equal(Fixture(pair, "result"), ExperimentResultCanonicalizer.Canonicalize(result).Content);
         Assert.Equal(EvidenceKind.Simulated, result.EvidenceKind);
         Assert.All(result.Policies!, p => Assert.Null(p!.RealizedNetProfitQuoteAtoms));
+    }
+
+    [Fact]
+    public void SnapshotProvenTickArrayAbsentIsValidV1ReasonCode()
+    {
+        // Synthetic mutation of a public Simulated fixture; this asserts only contract syntax.
+        using var requestJson = JsonDocument.Parse(Fixture('a', "request"));
+        var root = JsonNode.Parse(Fixture('a', "result"))!;
+        var rejections = root["policies"]![0]!["rejectedCandidates"]!.AsArray();
+        var missing = rejections.First(r => r!["reasonCode"]!.GetValue<string>() == "insufficient_state")!;
+        missing["reasonCode"] = "tick_array_absent";
+        using var resultJson = JsonDocument.Parse(root.ToJsonString());
+        var request = ReadRequest(requestJson.RootElement);
+        var result = ReadResult(resultJson.RootElement);
+        Assert.Empty(ExperimentResultSyntaxValidator.Validate(result));
+        Assert.Empty(ExperimentResultValidator.Validate(result, CaptureReplayCatalog.Create(), request));
     }
 }

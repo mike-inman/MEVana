@@ -13,6 +13,9 @@ use yellowstone_grpc_proto::prelude::{subscribe_update::UpdateOneof, SubscribeUp
 
 pub const MAGIC: &[u8; 8] = b"MEVCAP01";
 pub const MAX_FRAME: usize = 16 * 1024 * 1024;
+fn is_zero(value: &u64) -> bool {
+    *value == 0
+}
 pub fn now_ns() -> u64 {
     chrono::Utc::now()
         .timestamp_nanos_opt()
@@ -31,6 +34,7 @@ pub struct Record {
     pub receive_ns: u64,
     pub connection: u8,
     pub gap: bool,
+    pub snapshot: bool,
     pub payload: Vec<u8>,
 }
 impl Record {
@@ -38,7 +42,7 @@ impl Record {
         ensure!(self.payload.len() + 18 <= MAX_FRAME, "frame too large");
         let mut v = Vec::with_capacity(self.payload.len() + 22);
         v.extend_from_slice(&((self.payload.len() + 18) as u32).to_le_bytes());
-        v.push(u8::from(self.gap));
+        v.push(if self.snapshot { 2 } else { u8::from(self.gap) });
         v.push(self.connection);
         v.extend_from_slice(&self.sequence.to_le_bytes());
         v.extend_from_slice(&self.receive_ns.to_le_bytes());
@@ -57,9 +61,10 @@ pub fn read_record(r: &mut impl Read) -> Result<Option<Record>> {
     ensure!((18..=MAX_FRAME).contains(&n), "invalid frame length");
     let mut b = vec![0; n];
     r.read_exact(&mut b).context("truncated frame")?;
-    ensure!(b[0] <= 1 && b[1] <= 1, "invalid frame kind/connection");
+    ensure!(b[0] <= 2 && b[1] <= 1, "invalid frame kind/connection");
     Ok(Some(Record {
         gap: b[0] == 1,
+        snapshot: b[0] == 2,
         connection: b[1],
         sequence: u64::from_le_bytes(b[2..10].try_into()?),
         receive_ns: u64::from_le_bytes(b[10..18].try_into()?),
@@ -98,6 +103,114 @@ pub struct Manifest {
     pub last_slot: Option<u64>,
     pub counts: BTreeMap<String, u64>,
     pub gaps: Vec<Gap>,
+    #[serde(default, skip_serializing_if = "is_zero")]
+    pub snapshot_frames: u64,
+    #[serde(default, skip_serializing_if = "is_zero")]
+    pub snapshot_present: u64,
+    #[serde(default, skip_serializing_if = "is_zero")]
+    pub snapshot_absent: u64,
+    #[serde(default, skip_serializing_if = "is_zero")]
+    pub snapshot_calls: u64,
+    #[serde(default, skip_serializing_if = "is_zero")]
+    pub snapshot_rpc_bytes: u64,
+}
+
+/// Kind-2 payload is JSON encoded with this tagged v1 schema. Account data is
+/// base64 of raw account bytes; no URL, header or credential field is permitted.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(tag = "type", rename_all = "snake_case")]
+pub enum SnapshotRecord {
+    Account {
+        version: u8,
+        snapshot_id: u8,
+        account_kind: String,
+        pool_id: String,
+        key: String,
+        context_slot: u64,
+        present: bool,
+        owner: Option<String>,
+        lamports: Option<u64>,
+        data_base64: Option<String>,
+        sha256: Option<String>,
+    },
+    Stats {
+        version: u8,
+        snapshot_id: u8,
+        calls: u64,
+        rpc_bytes: u64,
+    },
+    Failed {
+        version: u8,
+        snapshot_id: u8,
+        reason: String,
+    },
+}
+impl SnapshotRecord {
+    pub fn validate(&self) -> Result<()> {
+        match self {
+            Self::Account {
+                version,
+                account_kind,
+                pool_id,
+                key,
+                present,
+                owner,
+                lamports,
+                data_base64,
+                sha256,
+                ..
+            } => {
+                ensure!(
+                    *version == 1 && matches!(account_kind.as_str(), "pool" | "tick_array"),
+                    "invalid snapshot account version/kind"
+                );
+                ensure!(
+                    bs58::decode(pool_id)
+                        .into_vec()
+                        .is_ok_and(|v| v.len() == 32)
+                        && bs58::decode(key).into_vec().is_ok_and(|v| v.len() == 32),
+                    "invalid snapshot public key"
+                );
+                if *present {
+                    let raw = base64::Engine::decode(
+                        &base64::engine::general_purpose::STANDARD,
+                        data_base64.as_deref().context("missing snapshot data")?,
+                    )?;
+                    ensure!(
+                        owner.as_deref() == Some(crate::snapshot::WHIRLPOOL_PROGRAM),
+                        "wrong snapshot owner"
+                    );
+                    ensure!(
+                        lamports.is_some()
+                            && sha256.as_deref() == Some(&format!("{:x}", Sha256::digest(&raw))),
+                        "invalid snapshot account hash"
+                    );
+                    if account_kind == "pool" {
+                        ensure!(key == pool_id, "snapshot pool key mismatch");
+                        whirlpool_core::decode::decode_whirlpool(&raw)?;
+                    } else {
+                        let array = whirlpool_core::exact::decode_array(&raw)?;
+                        ensure!(
+                            array.whirlpool.to_string() == pool_id.as_str(),
+                            "snapshot array pool mismatch"
+                        );
+                    }
+                } else {
+                    ensure!(
+                        owner.is_none()
+                            && lamports.is_none()
+                            && data_base64.is_none()
+                            && sha256.is_none(),
+                        "absent snapshot has account data"
+                    );
+                }
+            }
+            Self::Stats { version, .. } | Self::Failed { version, .. } => {
+                ensure!(*version == 1, "unknown snapshot version")
+            }
+        }
+        Ok(())
+    }
 }
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Session {
@@ -212,6 +325,11 @@ impl Writer {
             last_slot: None,
             counts: BTreeMap::new(),
             gaps: vec![],
+            snapshot_frames: 0,
+            snapshot_present: 0,
+            snapshot_absent: 0,
+            snapshot_calls: 0,
+            snapshot_rpc_bytes: 0,
         }
     }
     fn part(&self) -> PathBuf {
@@ -235,6 +353,24 @@ impl Writer {
         payload: Vec<u8>,
         gap: bool,
     ) -> Result<()> {
+        self.write_inner(connection, receive_ns, payload, gap, false)
+    }
+    pub fn write_snapshot(&mut self, receive_ns: u64, record: &SnapshotRecord) -> Result<()> {
+        ensure!(
+            self.session.metadata.format_version == 2,
+            "snapshot requires format v2"
+        );
+        record.validate()?;
+        self.write_inner(0, receive_ns, serde_json::to_vec(record)?, false, true)
+    }
+    fn write_inner(
+        &mut self,
+        connection: u8,
+        receive_ns: u64,
+        payload: Vec<u8>,
+        gap: bool,
+        snapshot: bool,
+    ) -> Result<()> {
         if self.manifest.frames > 0
             && (self.manifest.bytes + payload.len() as u64 + 22 > self.rotation_bytes
                 || self.opened.elapsed().as_secs() >= self.rotation_seconds)
@@ -249,6 +385,7 @@ impl Writer {
             receive_ns,
             connection,
             gap,
+            snapshot,
             payload,
         };
         let encoded = rec.encode()?;
@@ -267,6 +404,24 @@ impl Writer {
             self.manifest
                 .gaps
                 .push(serde_json::from_slice(&rec.payload)?);
+        } else if snapshot {
+            self.manifest.snapshot_frames += 1;
+            match serde_json::from_slice::<SnapshotRecord>(&rec.payload)? {
+                SnapshotRecord::Account { present, .. } => {
+                    if present {
+                        self.manifest.snapshot_present += 1;
+                    } else {
+                        self.manifest.snapshot_absent += 1;
+                    }
+                }
+                SnapshotRecord::Stats {
+                    calls, rpc_bytes, ..
+                } => {
+                    self.manifest.snapshot_calls += calls;
+                    self.manifest.snapshot_rpc_bytes += rpc_bytes;
+                }
+                SnapshotRecord::Failed { .. } => {}
+            }
         } else {
             self.manifest.bytes_received += rec.payload.len() as u64;
             self.session.bytes_received += rec.payload.len() as u64;
