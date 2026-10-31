@@ -21,8 +21,9 @@ services:
     image: grafana/grafana:10.4.5
     container_name: mevana-research-grafana
     restart: 'no'
-    env_file: ./research.env
     environment:
+      RESEARCH_READER_PASSWORD: ${RESEARCH_READER_PASSWORD:?Run scripts/research/grafana-up.sh}
+      GF_SECURITY_ADMIN_PASSWORD: ${GF_SECURITY_ADMIN_PASSWORD:?Run scripts/research/grafana-up.sh}
       GF_SERVER_HTTP_ADDR: 0.0.0.0
       GF_AUTH_ANONYMOUS_ENABLED: 'true'
       GF_AUTH_ANONYMOUS_ORG_ROLE: Viewer

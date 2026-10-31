@@ -10,10 +10,10 @@ if ls dashboards/*.json >/dev/null 2>&1; then
   fail "Found dashboards/ at repo root. Move JSON files to infrastructure/grafana/dashboards/."
 fi
 
-stray=$(find . -type f -name '*.json' -path '*/dashboards/*' ! -path './infrastructure/grafana/dashboards/*' ! -path './infrastructure/research/grafana/dashboards/mevana-research-evidence.json' | wc -l | xargs)
+stray=$(find . -type f -name '*.json' -path '*/dashboards/*' ! -path './infrastructure/grafana/dashboards/*' ! -path './infrastructure/research/grafana/dashboards/*' | wc -l | xargs)
 if [ "$stray" != "0" ]; then
   echo "Stray dashboard files:" >&2
-  find . -type f -name '*.json' -path '*/dashboards/*' ! -path './infrastructure/grafana/dashboards/*' ! -path './infrastructure/research/grafana/dashboards/mevana-research-evidence.json' >&2 || true
+  find . -type f -name '*.json' -path '*/dashboards/*' ! -path './infrastructure/grafana/dashboards/*' ! -path './infrastructure/research/grafana/dashboards/*' >&2 || true
   fail "Dashboard JSON must live in an approved Grafana dashboard directory."
 fi
 

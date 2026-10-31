@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
-compose=(docker compose -p mevana-research -f "$repo_root/infrastructure/docker-compose.research.yml")
+compose=(docker compose --env-file "$repo_root/infrastructure/research.env" -p mevana-research -f "$repo_root/infrastructure/docker-compose.research.yml")
 temp_dir="$(mktemp -d /tmp/mevana-research-load.XXXXXX)"
 trap 'if [[ -e "$temp_dir/seed.sql" ]]; then unlink "$temp_dir/seed.sql"; fi; rmdir "$temp_dir"' EXIT
 

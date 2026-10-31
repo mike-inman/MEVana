@@ -24,4 +24,4 @@ if lsof -nP -iTCP:5434 -sTCP:LISTEN >/dev/null || lsof -nP -iTCP:3010 -sTCP:LIST
   echo 'Research port is occupied; refusing to start' >&2
   exit 1
 fi
-docker compose -p mevana-research -f "$repo_root/infrastructure/docker-compose.research.yml" up -d
+docker compose --env-file "$env_file" -p mevana-research -f "$repo_root/infrastructure/docker-compose.research.yml" up -d

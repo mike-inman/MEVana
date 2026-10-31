@@ -96,21 +96,32 @@ CREATE TABLE IF NOT EXISTS research.pool_direction_probes (
 CREATE OR REPLACE VIEW research.v_policy_evidence AS
 SELECT p.*, e.evidence_kind, e.status, e.scope_label, e.quote_symbol, e.quote_decimals,
   round(100::numeric * p.evaluable_candidates / NULLIF(p.candidates_evaluated, 0), 2) AS evaluable_share_pct,
-  p.estimated_net_profit_quote_atoms::numeric / power(10::numeric, e.quote_decimals) AS estimated_net_profit_quote,
-  p.simulated_net_profit_quote_atoms::numeric / power(10::numeric, e.quote_decimals) AS simulated_net_profit_quote,
-  p.realized_net_profit_quote_atoms::numeric / power(10::numeric, e.quote_decimals) AS realized_net_profit_quote
+  trim_scale(p.estimated_net_profit_quote_atoms::numeric / power(10::numeric, e.quote_decimals)) AS estimated_net_profit_quote,
+  trim_scale(p.simulated_net_profit_quote_atoms::numeric / power(10::numeric, e.quote_decimals)) AS simulated_net_profit_quote,
+  trim_scale(p.realized_net_profit_quote_atoms::numeric / power(10::numeric, e.quote_decimals)) AS realized_net_profit_quote
 FROM research.policy_results p JOIN research.experiments e USING (result_id);
 CREATE OR REPLACE VIEW research.v_shape_evidence AS
 SELECT s.*, e.evidence_kind, e.scope_label, e.quote_symbol, e.quote_decimals,
   round(100::numeric * s.evaluable_candidates / NULLIF(s.candidates_evaluated, 0), 2) AS evaluable_share_pct,
-  s.estimated_net_profit_quote_atoms::numeric / power(10::numeric, e.quote_decimals) AS estimated_net_profit_quote,
-  s.simulated_net_profit_quote_atoms::numeric / power(10::numeric, e.quote_decimals) AS simulated_net_profit_quote,
-  s.realized_net_profit_quote_atoms::numeric / power(10::numeric, e.quote_decimals) AS realized_net_profit_quote
+  trim_scale(s.estimated_net_profit_quote_atoms::numeric / power(10::numeric, e.quote_decimals)) AS estimated_net_profit_quote,
+  trim_scale(s.simulated_net_profit_quote_atoms::numeric / power(10::numeric, e.quote_decimals)) AS simulated_net_profit_quote,
+  trim_scale(s.realized_net_profit_quote_atoms::numeric / power(10::numeric, e.quote_decimals)) AS realized_net_profit_quote
 FROM research.shape_results s JOIN research.experiments e USING (result_id);
 CREATE OR REPLACE VIEW research.v_policy_rejections AS
 SELECT r.*, e.scope_label, e.quote_symbol FROM research.policy_rejections r JOIN research.experiments e USING (result_id);
 CREATE OR REPLACE VIEW research.v_probe_evidence AS
-SELECT p.*, e.seed_loaded_at, e.scope_label FROM research.pool_direction_probes p JOIN research.experiments e USING (result_id);
+SELECT p.*, e.seed_loaded_at, e.scope_label,
+  CASE p.input_token
+    WHEN 'EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v' THEN 'USDC'
+    WHEN 'Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB' THEN 'USDT'
+    WHEN 'So11111111111111111111111111111111111111112' THEN 'SOL'
+    ELSE p.input_token END AS input_symbol,
+  CASE p.output_token
+    WHEN 'EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v' THEN 'USDC'
+    WHEN 'Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB' THEN 'USDT'
+    WHEN 'So11111111111111111111111111111111111111112' THEN 'SOL'
+    ELSE p.output_token END AS output_symbol
+FROM research.pool_direction_probes p JOIN research.experiments e USING (result_id);
 
 REVOKE ALL ON SCHEMA public FROM PUBLIC;
 GRANT USAGE ON SCHEMA research TO research_reader;

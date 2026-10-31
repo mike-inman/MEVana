@@ -43,7 +43,7 @@
           "editorMode": "code",
           "format": "table",
           "rawQuery": true,
-          "rawSql": "SELECT result_id AS \"Experiment\", evidence_kind AS \"Evidence kind\", status AS \"Status\", scope_label AS \"Scope\", scope->'routeShapes' AS \"Route shapes\", scope->>'poolCount' AS \"Pool count\", quote_symbol AS \"Quote asset\", window_start_utc AS \"Window start UTC\", window_end_utc AS \"Window end UTC\" FROM research.experiments ORDER BY result_id"
+          "rawSql": "SELECT e.scope_label AS \"Experiment scope\", e.evidence_kind AS \"Evidence kind\", e.status AS \"Status\", array_to_string(ARRAY(SELECT jsonb_array_elements_text(e.scope->'routeShapes')), ', ') AS \"Route shapes\", (e.scope->>'poolCount')::integer AS \"Pools\", e.quote_symbol AS \"Quote asset\", to_char(e.window_start_utc AT TIME ZONE 'UTC','YYYY-MM-DD HH24:MI:SS') || ' UTC' AS \"Window start\", to_char(e.window_end_utc AT TIME ZONE 'UTC','YYYY-MM-DD HH24:MI:SS') || ' UTC' AS \"Window end\" FROM research.experiments e ORDER BY e.result_id"
         }
       ],
       "gridPos": {
@@ -70,14 +70,117 @@
             ]
           }
         },
-        "overrides": []
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Experiment scope"
+            },
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 290
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Evidence kind"
+            },
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 115
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Status"
+            },
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 100
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Route shapes"
+            },
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 140
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Pools"
+            },
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 70
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Quote asset"
+            },
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 105
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Window start"
+            },
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 180
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Window end"
+            },
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 180
+              }
+            ]
+          }
+        ]
       },
-      "options": {}
+      "options": {
+        "showHeader": true,
+        "cellHeight": "sm",
+        "footer": {
+          "show": false
+        }
+      }
     },
     {
       "id": 3,
-      "title": "Coverage: evaluable share per experiment and policy",
-      "type": "bargauge",
+      "title": "Coverage: evaluable share by scope and policy",
+      "type": "barchart",
       "description": "",
       "datasource": {
         "type": "postgres",
@@ -93,14 +196,14 @@
           "editorMode": "code",
           "format": "table",
           "rawQuery": true,
-          "rawSql": "SELECT result_id || ' / ' || policy_kind AS metric, evaluable_share_pct AS value FROM research.v_policy_evidence ORDER BY result_id, policy_kind"
+          "rawSql": "SELECT scope_label || ' — ' || policy_kind AS \"Scope and policy\", evaluable_share_pct AS \"Evaluable share\" FROM research.v_policy_evidence ORDER BY result_id, policy_kind"
         }
       ],
       "gridPos": {
         "x": 0,
         "y": 11,
-        "w": 12,
-        "h": 8
+        "w": 24,
+        "h": 16
       },
       "fieldConfig": {
         "defaults": {
@@ -118,14 +221,28 @@
                 "value": null
               }
             ]
-          }
+          },
+          "unit": "percent",
+          "decimals": 2,
+          "min": 0,
+          "max": 100
         },
         "overrides": []
       },
       "options": {
         "orientation": "horizontal",
-        "displayMode": "basic",
-        "showUnfilled": true
+        "xField": "Scope and policy",
+        "showValue": "always",
+        "barWidth": 0.7,
+        "xTickLabelRotation": 0,
+        "xTickLabelMaxLength": 48,
+        "legend": {
+          "showLegend": false
+        },
+        "stacking": {
+          "mode": "none",
+          "group": "A"
+        }
       }
     },
     {
@@ -147,14 +264,14 @@
           "editorMode": "code",
           "format": "table",
           "rawQuery": true,
-          "rawSql": "SELECT result_id AS \"Experiment\", policy_kind AS \"Policy\", evaluable_candidates AS \"Evaluable\", candidates_evaluated AS \"Evaluated\", unevaluable_candidates AS \"Unevaluable\", evaluable_share_pct AS \"Share percent\" FROM research.v_policy_evidence ORDER BY result_id, policy_kind"
+          "rawSql": "SELECT scope_label AS \"Experiment scope\", policy_kind AS \"Policy\", to_char(evaluable_candidates,'FM999,999,999,999') AS \"Evaluable\", to_char(candidates_evaluated,'FM999,999,999,999') AS \"Evaluated\", to_char(unevaluable_candidates,'FM999,999,999,999') AS \"Unevaluable\", to_char(evaluable_share_pct,'FM990.00') || '%' AS \"Share\" FROM research.v_policy_evidence ORDER BY result_id, policy_kind"
         }
       ],
       "gridPos": {
-        "x": 12,
-        "y": 11,
-        "w": 12,
-        "h": 8
+        "x": 0,
+        "y": 27,
+        "w": 24,
+        "h": 16
       },
       "fieldConfig": {
         "defaults": {
@@ -174,9 +291,88 @@
             ]
           }
         },
-        "overrides": []
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Experiment scope"
+            },
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 330
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Policy"
+            },
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 150
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Evaluable"
+            },
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 140
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Evaluated"
+            },
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 140
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Unevaluable"
+            },
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 140
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Share"
+            },
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 125
+              }
+            ]
+          }
+        ]
       },
-      "options": {}
+      "options": {
+        "showHeader": true,
+        "cellHeight": "sm",
+        "footer": {
+          "show": false
+        }
+      }
     },
     {
       "id": 5,
@@ -197,165 +393,7 @@
           "editorMode": "code",
           "format": "table",
           "rawQuery": true,
-          "rawSql": "SELECT policy_kind AS policy, max(rejected_count) FILTER (WHERE reason_code='below_threshold') AS below_threshold, max(rejected_count) FILTER (WHERE reason_code='insufficient_state') AS insufficient_state, max(rejected_count) FILTER (WHERE reason_code='tick_array_absent') AS tick_array_absent, max(rejected_count) FILTER (WHERE reason_code='state_gap') AS state_gap FROM research.policy_rejections WHERE result_id=${experiment:sqlstring} GROUP BY policy_kind ORDER BY policy_kind"
-        }
-      ],
-      "gridPos": {
-        "x": 0,
-        "y": 19,
-        "w": 24,
-        "h": 8
-      },
-      "fieldConfig": {
-        "defaults": {
-          "noValue": "Not measured",
-          "color": {
-            "mode": "fixed",
-            "fixedColor": "#7aa5d2"
-          },
-          "custom": {},
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "#7aa5d2",
-                "value": null
-              }
-            ]
-          }
-        },
-        "overrides": []
-      },
-      "options": {
-        "orientation": "horizontal",
-        "xField": "policy",
-        "stacking": {
-          "mode": "normal",
-          "group": "A"
-        },
-        "showValue": "auto"
-      }
-    },
-    {
-      "id": 6,
-      "title": "Policy comparison: selected experiment",
-      "type": "table",
-      "description": "",
-      "datasource": {
-        "type": "postgres",
-        "uid": "research-postgres"
-      },
-      "targets": [
-        {
-          "refId": "A",
-          "datasource": {
-            "type": "postgres",
-            "uid": "research-postgres"
-          },
-          "editorMode": "code",
-          "format": "table",
-          "rawQuery": true,
-          "rawSql": "SELECT policy_kind AS \"Policy\", opportunities_detected AS \"Detected\", selected_or_executed AS \"Selected or executed\", CASE WHEN estimated_net_profit_quote IS NULL THEN NULL ELSE estimated_net_profit_quote::text || ' ' || quote_symbol END AS \"Estimated net profit\", CASE WHEN simulated_net_profit_quote IS NULL THEN NULL ELSE simulated_net_profit_quote::text || ' ' || quote_symbol END AS \"Simulated net profit\", missed_candidates AS \"Missed\", CASE WHEN realized_net_profit_quote IS NULL THEN NULL ELSE realized_net_profit_quote::text || ' ' || quote_symbol END AS \"Realized net profit\" FROM research.v_policy_evidence WHERE result_id=${experiment:sqlstring} ORDER BY policy_kind"
-        }
-      ],
-      "gridPos": {
-        "x": 0,
-        "y": 27,
-        "w": 24,
-        "h": 8
-      },
-      "fieldConfig": {
-        "defaults": {
-          "noValue": "Not measured",
-          "color": {
-            "mode": "fixed",
-            "fixedColor": "#7aa5d2"
-          },
-          "custom": {},
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "#7aa5d2",
-                "value": null
-              }
-            ]
-          }
-        },
-        "overrides": []
-      },
-      "options": {}
-    },
-    {
-      "id": 7,
-      "title": "Shape coverage: triangle and two-leg within selected universe",
-      "type": "table",
-      "description": "",
-      "datasource": {
-        "type": "postgres",
-        "uid": "research-postgres"
-      },
-      "targets": [
-        {
-          "refId": "A",
-          "datasource": {
-            "type": "postgres",
-            "uid": "research-postgres"
-          },
-          "editorMode": "code",
-          "format": "table",
-          "rawQuery": true,
-          "rawSql": "SELECT shape AS \"Shape\", route_count AS \"Routes\", policy_kind AS \"Policy\", evaluable_candidates AS \"Evaluable\", candidates_evaluated AS \"Evaluated\", unevaluable_candidates AS \"Unevaluable\", evaluable_share_pct AS \"Share percent\", CASE WHEN estimated_net_profit_quote IS NULL THEN NULL ELSE estimated_net_profit_quote::text || ' ' || quote_symbol END AS \"Estimated net profit\", CASE WHEN simulated_net_profit_quote IS NULL THEN NULL ELSE simulated_net_profit_quote::text || ' ' || quote_symbol END AS \"Simulated net profit\" FROM research.v_shape_evidence WHERE result_id=${experiment:sqlstring} ORDER BY shape, policy_kind"
-        }
-      ],
-      "gridPos": {
-        "x": 0,
-        "y": 35,
-        "w": 24,
-        "h": 8
-      },
-      "fieldConfig": {
-        "defaults": {
-          "noValue": "Not measured",
-          "color": {
-            "mode": "fixed",
-            "fixedColor": "#7aa5d2"
-          },
-          "custom": {},
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "#7aa5d2",
-                "value": null
-              }
-            ]
-          }
-        },
-        "overrides": []
-      },
-      "options": {}
-    },
-    {
-      "id": 8,
-      "title": "Missing state by pool \u2014 Diagnostic probe: raw input amounts, not chained route amounts",
-      "type": "heatmap",
-      "description": "Diagnostic probe at raw input atoms. These values are not chained route amounts.",
-      "datasource": {
-        "type": "postgres",
-        "uid": "research-postgres"
-      },
-      "targets": [
-        {
-          "refId": "A",
-          "datasource": {
-            "type": "postgres",
-            "uid": "research-postgres"
-          },
-          "editorMode": "code",
-          "format": "table",
-          "rawQuery": true,
-          "rawSql": "SELECT seed_loaded_at AS time, pool_id || ' / ' || input_token || ' \u2192 ' || output_token || ' / ' || outcome AS metric, outcome_count AS value FROM research.v_probe_evidence WHERE result_id=${experiment:sqlstring} AND outcome IN ('state_gap','insufficient_state','tick_array_absent') ORDER BY pool_id, input_token, outcome"
+          "rawSql": "SELECT policy_kind AS \"Policy\", max(rejected_count) FILTER (WHERE reason_code='below_threshold') AS below_threshold, max(rejected_count) FILTER (WHERE reason_code='insufficient_state') AS insufficient_state, max(rejected_count) FILTER (WHERE reason_code='tick_array_absent') AS tick_array_absent, max(rejected_count) FILTER (WHERE reason_code='state_gap') AS state_gap FROM research.policy_rejections WHERE result_id=${experiment:sqlstring} GROUP BY policy_kind ORDER BY policy_kind"
         }
       ],
       "gridPos": {
@@ -380,14 +418,613 @@
                 "value": null
               }
             ]
-          }
+          },
+          "unit": "locale",
+          "decimals": 0
         },
-        "overrides": []
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "below_threshold"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "#4C78A8"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "insufficient_state"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "#826FB0"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "tick_array_absent"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "#B88B4A"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "state_gap"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "#718096"
+                }
+              }
+            ]
+          }
+        ]
       },
       "options": {
-        "calculate": true,
-        "yAxis": {
-          "axisPlacement": "left"
+        "orientation": "horizontal",
+        "xField": "Policy",
+        "stacking": {
+          "mode": "normal",
+          "group": "A"
+        },
+        "showValue": "auto",
+        "barWidth": 0.65,
+        "xTickLabelRotation": 0,
+        "xTickLabelMaxLength": 30,
+        "legend": {
+          "showLegend": true,
+          "displayMode": "list",
+          "placement": "bottom"
+        }
+      }
+    },
+    {
+      "id": 6,
+      "title": "Policy comparison: selected experiment",
+      "type": "table",
+      "description": "",
+      "datasource": {
+        "type": "postgres",
+        "uid": "research-postgres"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "postgres",
+            "uid": "research-postgres"
+          },
+          "editorMode": "code",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "SELECT policy_kind AS \"Policy\", to_char(opportunities_detected,'FM999,999,999,999') AS \"Detected\", to_char(selected_or_executed,'FM999,999,999,999') AS \"Selected or executed\", CASE WHEN estimated_net_profit_quote IS NULL THEN NULL ELSE estimated_net_profit_quote::text || ' ' || quote_symbol END AS \"Estimated net profit\", CASE WHEN simulated_net_profit_quote IS NULL THEN NULL ELSE simulated_net_profit_quote::text || ' ' || quote_symbol END AS \"Simulated net profit\", CASE WHEN missed_candidates IS NULL THEN NULL ELSE to_char(missed_candidates,'FM999,999,999,999') END AS \"Missed\", CASE WHEN realized_net_profit_quote IS NULL THEN NULL ELSE realized_net_profit_quote::text || ' ' || quote_symbol END AS \"Realized net profit\" FROM research.v_policy_evidence WHERE result_id=${experiment:sqlstring} ORDER BY policy_kind"
+        }
+      ],
+      "gridPos": {
+        "x": 0,
+        "y": 53,
+        "w": 24,
+        "h": 9
+      },
+      "fieldConfig": {
+        "defaults": {
+          "noValue": "Not measured",
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "#7aa5d2"
+          },
+          "custom": {},
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "#7aa5d2",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Policy"
+            },
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 155
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Detected"
+            },
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 105
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Selected or executed"
+            },
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 170
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Estimated net profit"
+            },
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 200
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Simulated net profit"
+            },
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 200
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Missed"
+            },
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 120
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Realized net profit"
+            },
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 190
+              }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "showHeader": true,
+        "cellHeight": "sm",
+        "footer": {
+          "show": false
+        }
+      }
+    },
+    {
+      "id": 7,
+      "title": "Shape coverage: triangle and two-leg within selected universe",
+      "type": "table",
+      "description": "",
+      "datasource": {
+        "type": "postgres",
+        "uid": "research-postgres"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "postgres",
+            "uid": "research-postgres"
+          },
+          "editorMode": "code",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "SELECT shape AS \"Shape\", to_char(route_count,'FM999,999,999,999') AS \"Routes\", policy_kind AS \"Policy\", to_char(evaluable_candidates,'FM999,999,999,999') AS \"Evaluable\", to_char(candidates_evaluated,'FM999,999,999,999') AS \"Evaluated\", to_char(unevaluable_candidates,'FM999,999,999,999') AS \"Unevaluable\", to_char(evaluable_share_pct,'FM990.00') || '%' AS \"Share\", CASE WHEN simulated_net_profit_quote IS NULL THEN NULL ELSE simulated_net_profit_quote::text || ' ' || quote_symbol END AS \"Simulated net profit\" FROM research.v_shape_evidence WHERE result_id=${experiment:sqlstring} UNION ALL SELECT 'Not measured for this experiment', NULL::text, NULL::text, NULL::text, NULL::text, NULL::text, NULL::text, NULL::text WHERE NOT EXISTS (SELECT 1 FROM research.v_shape_evidence WHERE result_id=${experiment:sqlstring}) ORDER BY \"Shape\", \"Policy\""
+        }
+      ],
+      "gridPos": {
+        "x": 0,
+        "y": 62,
+        "w": 24,
+        "h": 10
+      },
+      "fieldConfig": {
+        "defaults": {
+          "noValue": "Not measured",
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "#7aa5d2"
+          },
+          "custom": {},
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "#7aa5d2",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Shape"
+            },
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 270
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Routes"
+            },
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 100
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Policy"
+            },
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 160
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Evaluable"
+            },
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 135
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Evaluated"
+            },
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 135
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Unevaluable"
+            },
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 135
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Share"
+            },
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 110
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Simulated net profit"
+            },
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 200
+              }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "showHeader": true,
+        "cellHeight": "sm",
+        "footer": {
+          "show": false
+        }
+      }
+    },
+    {
+      "id": 8,
+      "title": "Missing state by pool — Diagnostic probe: raw input amounts, not chained route amounts",
+      "type": "table",
+      "description": "Each row is a raw input amount probe for one pool direction. Missing reason cells have no separate outcome row; they are not inferred as zero.",
+      "datasource": {
+        "type": "postgres",
+        "uid": "research-postgres"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "postgres",
+            "uid": "research-postgres"
+          },
+          "editorMode": "code",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "WITH directions AS ( SELECT pool_id,input_symbol,output_symbol,probe_input_atoms,max(attempts) AS attempts, max(outcome_count) FILTER (WHERE outcome='insufficient_state') AS insufficient_state, max(outcome_count) FILTER (WHERE outcome='tick_array_absent') AS tick_array_absent, max(outcome_count) FILTER (WHERE outcome='state_gap') AS state_gap FROM research.v_probe_evidence WHERE result_id=${experiment:sqlstring} GROUP BY pool_id,input_symbol,output_symbol,probe_input_atoms ) SELECT pool_id AS \"Pool\", input_symbol || ' → ' || output_symbol AS \"Direction\", to_char(attempts,'FM999,999,999,999') AS \"Attempts\", insufficient_state AS \"insufficient_state\", tick_array_absent AS \"tick_array_absent\", state_gap AS \"state_gap\", array_to_string(ARRAY(SELECT to_char(atom,'FM999,999,999,999') FROM unnest(probe_input_atoms) atom), ', ') AS \"Probe input atoms\" FROM directions UNION ALL SELECT 'Not measured for this experiment', NULL::text, NULL::text, NULL::bigint, NULL::bigint, NULL::bigint, NULL::text WHERE NOT EXISTS (SELECT 1 FROM directions) ORDER BY \"Pool\", \"Direction\""
+        }
+      ],
+      "gridPos": {
+        "x": 0,
+        "y": 72,
+        "w": 24,
+        "h": 22
+      },
+      "fieldConfig": {
+        "defaults": {
+          "noValue": "Not measured",
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "#7aa5d2"
+          },
+          "custom": {},
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "#7aa5d2",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Pool"
+            },
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 370
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Direction"
+            },
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 130
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Attempts"
+            },
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 105
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "insufficient_state"
+            },
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 145
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "tick_array_absent"
+            },
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 145
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "state_gap"
+            },
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 120
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Probe input atoms"
+            },
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 260
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "insufficient_state"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "locale"
+              },
+              {
+                "id": "decimals",
+                "value": 0
+              },
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "#7aa5d2"
+                }
+              },
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "type": "color-background",
+                  "mode": "gradient"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "tick_array_absent"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "locale"
+              },
+              {
+                "id": "decimals",
+                "value": 0
+              },
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "#7aa5d2"
+                }
+              },
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "type": "color-background",
+                  "mode": "gradient"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "state_gap"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "locale"
+              },
+              {
+                "id": "decimals",
+                "value": 0
+              },
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "#7aa5d2"
+                }
+              },
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "type": "color-background",
+                  "mode": "gradient"
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "showHeader": true,
+        "cellHeight": "sm",
+        "footer": {
+          "show": false
         }
       }
     }
@@ -408,11 +1045,15 @@
           "type": "postgres",
           "uid": "research-postgres"
         },
-        "query": "SELECT result_id AS __text, result_id AS __value FROM research.experiments ORDER BY result_id",
+        "query": "SELECT scope_label AS __text, result_id AS __value FROM research.experiments ORDER BY result_id",
         "refresh": 1,
         "includeAll": false,
         "multi": false,
-        "current": {},
+        "current": {
+          "selected": true,
+          "text": "USDC/USDT/SOL universe (152 routes)",
+          "value": "replay-v2-463353643-usdc-confirmed-l1-tip10000"
+        },
         "options": []
       }
     ]

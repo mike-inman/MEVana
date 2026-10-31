@@ -10,10 +10,11 @@ from decimal import Decimal
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
-COMPOSE = ['docker', 'compose', '-p', 'mevana-research', '-f', str(ROOT / 'infrastructure/docker-compose.research.yml'), 'exec', '-T', 'postgres']
+COMPOSE = ['docker', 'compose', '--env-file', str(ROOT / 'infrastructure/research.env'), '-p', 'mevana-research', '-f', str(ROOT / 'infrastructure/docker-compose.research.yml'), 'exec', '-T', 'postgres']
 PSQL = COMPOSE + ['psql', '-U', 'postgres', '-d', 'research', '-A', '-F', ',', '-t', '-c']
 API = 'http://127.0.0.1:3010'
 SELECTED = 'replay-v2-463353643-usdc-confirmed-l1-tip10000'
+V1 = 'replay-v2-463353643-a-confirmed-l1-tip10000'
 TABLES = ('experiments', 'policy_results', 'policy_rejections', 'shape_results', 'shape_rejections', 'pool_direction_probes')
 
 
@@ -54,8 +55,12 @@ profits = query(f"SELECT policy_kind,simulated_net_profit_quote::text,missed_can
 amounts = {row[0]: Decimal(row[1]) for row in profits}
 assert amounts['FixedUniverse'] == Decimal('-0.005191'), 'FixedUniverse profit differs'
 assert amounts['SimpleRules'] == Decimal('-0.002269'), 'SimpleRules profit differs'
+assert next(row[1] for row in profits if row[0] == 'FixedUniverse') == '-0.005191', 'FixedUniverse profit is padded'
+assert next(row[1] for row in profits if row[0] == 'SimpleRules') == '-0.002269', 'SimpleRules profit is padded'
+zero_profit = query(f"SELECT simulated_net_profit_quote::text FROM research.v_shape_evidence WHERE result_id='{SELECTED}' AND shape='triangle' AND policy_kind='FixedUniverse'")
+assert zero_profit == [['0']], 'zero profit is padded or hidden'
 assert all(row[2:] == ['t', 't'] for row in profits), 'unmeasured value differs'
-print('profits', 'FixedUniverse', amounts['FixedUniverse'], 'SimpleRules', amounts['SimpleRules'], 'missed/realized NULL')
+print('profits', 'FixedUniverse', amounts['FixedUniverse'], 'SimpleRules', amounts['SimpleRules'], 'triangle zero', zero_profit[0][0], 'missed/realized NULL')
 
 assert reader('SELECT count(*) FROM research.experiments').returncode == 0
 for sql in ["INSERT INTO research.experiments(result_id) VALUES ('denied')",
@@ -76,20 +81,41 @@ finally:
     assert admin(f'DROP TABLE research.{future}').returncode == 0
 print('reader_access PASS')
 
+# Inspect names only. Never print or log any environment value.
+environment = subprocess.run(['docker', 'inspect', '--format', '{{json .Config.Env}}', 'mevana-research-grafana'],
+                             capture_output=True, text=True, check=True)
+env_names = {entry.split('=', 1)[0] for entry in json.loads(environment.stdout)}
+assert 'POSTGRES_PASSWORD' not in env_names, 'Grafana received Postgres superuser password'
+assert {'RESEARCH_READER_PASSWORD', 'GF_SECURITY_ADMIN_PASSWORD'} <= env_names
+print('grafana_environment_names PASS')
+
 with urllib.request.urlopen(API + '/api/dashboards/uid/mevana-research-evidence', timeout=10) as response:
     dashboard = json.load(response)['dashboard']
 assert dashboard['title'] == 'MEVana Research Evidence' and len(dashboard['panels']) == 8
-for panel in dashboard['panels'][1:]:
-    sql = panel['targets'][0]['rawSql'].replace('${experiment:sqlstring}', "'" + SELECTED + "'")
-    payload = {'queries': [{'refId': 'A', 'datasource': {'uid': 'research-postgres', 'type': 'postgres'},
-        'rawSql': sql, 'format': 'table', 'intervalMs': 1000, 'maxDataPoints': 1000}], 'from': 'now-1h', 'to': 'now'}
-    request = urllib.request.Request(API + '/api/ds/query', json.dumps(payload).encode(), {'Content-Type': 'application/json'}, method='POST')
-    with urllib.request.urlopen(request, timeout=15) as response:
-        result = json.load(response)['results']['A']
-    frames = result.get('frames', [])
-    rows = sum(len(frame.get('data', {}).get('values', [[]])[0]) for frame in frames)
-    assert result.get('status') == 200 and not result.get('error') and rows > 0, f"Grafana panel {panel['id']} failed"
-    print('grafana_panel', panel['id'], 'rows', rows)
+assert dashboard['templating']['list'][0]['current']['value'] == SELECTED
+for experiment, label, expected_rows in ((SELECTED, 'universe', [4, 12, 12, 3, 3, 6, 26]),
+                                          (V1, 'v1', [4, 12, 12, 3, 3, 1, 1])):
+    for panel, expected_count in zip(dashboard['panels'][1:], expected_rows):
+        sql = panel['targets'][0]['rawSql'].replace('${experiment:sqlstring}', "'" + experiment + "'")
+        payload = {'queries': [{'refId': 'A', 'datasource': {'uid': 'research-postgres', 'type': 'postgres'},
+            'rawSql': sql, 'format': 'table', 'intervalMs': 1000, 'maxDataPoints': 1000}], 'from': 'now-1h', 'to': 'now'}
+        request = urllib.request.Request(API + '/api/ds/query', json.dumps(payload).encode(), {'Content-Type': 'application/json'}, method='POST')
+        with urllib.request.urlopen(request, timeout=15) as response:
+            result = json.load(response)['results']['A']
+        frames = result.get('frames', [])
+        rows = sum(len(frame.get('data', {}).get('values', [[]])[0]) for frame in frames)
+        assert result.get('status') == 200 and not result.get('error') and rows == expected_count, f"Grafana panel {panel['id']} failed for {label}: {rows}"
+        fields = [field['name'] for field in frames[0]['schema']['fields']]
+        values = frames[0]['data']['values']
+        if panel['id'] in (7, 8) and label == 'v1':
+            assert values[0][0] == 'Not measured for this experiment'
+        if panel['id'] == 6 and label == 'universe':
+            simulated = values[fields.index('Simulated net profit')]
+            assert '-0.005191 USDC' in simulated and '-0.002269 USDC' in simulated
+        if panel['id'] == 4:
+            shares = values[fields.index('Share')]
+            assert all(share.endswith('%') and len(share.split('.')[1]) == 3 for share in shares)
+        print('grafana_panel', label, panel['id'], 'rows', rows)
 
 before = snapshot()
 load = subprocess.run([str(ROOT / 'scripts/research/load-seed.sh')], capture_output=True, text=True)
