@@ -157,8 +157,10 @@ Work proceeds through dated handoffs in `docs/`. The latest one is the authority
    - See `docs/2026-10-30-1139-CDT-research-handoff-12-closeout.md`.
 6. **Handoff 13 (done, 2026-10-30):** experiment request contract v2, for multi-pair route universes and triangles. It is .NET plus OpenSpec only, and v1 stays frozen.
    - See `docs/2026-10-30-1325-CDT-research-handoff-13-request-v2-closeout.md`.
-7. **Next:**
-   - handoff 14: triangle and multi-pair replay (12 and 13 are done). A version-2 `ExperimentResult` cannot be canonicalized or catalog-validated yet, because `ExperimentResultSyntaxValidator` accepts version 1 only, so this handoff must add a v2 result path without changing v1;
+7. **Handoff 14 (done, 2026-10-30):** offline replay of the 152-route USDC universe, with a v2-linked `Simulated` result.
+   - 69.81% of triangle candidates were evaluable, and none was profitable. The two detected opportunities were two-leg, and both simulated negative.
+   - See `docs/2026-10-30-1618-CDT-research-handoff-14-multi-route-replay-closeout.md`.
+8. **Next:**
    - handoff 15: read-only Research API;
    - handoff 16: MEVana-UI research page.
    - Later: a server-host capture.
