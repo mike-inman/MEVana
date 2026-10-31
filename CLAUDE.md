@@ -162,9 +162,12 @@ Work proceeds through dated handoffs in `docs/`. The latest one is the authority
    - See `docs/2026-10-30-1618-CDT-research-handoff-14-multi-route-replay-closeout.md`.
 8. **Handoff 15 (done, 2026-10-30):** read-only, loopback-only Research API on port 8098, serving the four validated experiments. Handoff 15a pins all 11 seed files by SHA-256, so any seed change needs a deliberate pin update.
    - See `docs/2026-10-30-2123-CDT-research-handoff-15-read-only-research-api-closeout.md`.
-9. **Next:**
-   - handoff 16: MEVana-UI research page (`docs/2026-10-30-2220-CDT-research-handoff-16-mevana-ui-research-page.md`).
-   - Later: a server-host capture.
+9. **Handoff 16 (done, 2026-10-31):** signed-in MEVana-UI research pages at `/research`, read from the loopback API by server code. It is tables only and works locally; the deployed UI shows "Research API unavailable" until the API is deployed with real authentication.
+   - See the closeout in MEVana-UI: `docs/2026-10-30-2234-CDT-research-handoff-16-closeout.md`.
+10. **Next:**
+    - research page charts;
+    - a strategy for expanding coverage beyond Orca and SOL/USDC/USDT.
+    - Later: a server-host capture.
 
 **Not in focus right now:**
 - HotPath latency work, executor or Jito, wallets, live or paper trading;
