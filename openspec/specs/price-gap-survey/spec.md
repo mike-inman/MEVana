@@ -1,10 +1,10 @@
-# Spec Delta
+# price-gap-survey Specification
 
 ## Purpose
 
 Provide bounded, reproducible Indicative evidence about mid-price gaps between verified public liquidity pools to guide later exact modeling.
 
-## ADDED Requirements
+## Requirements
 
 ### Requirement: Verified pool universe
 The survey SHALL use at most 40 allowlisted public pool accounts, with verified owner programs, token mints, decimals, fee tiers and source provenance.
@@ -23,6 +23,8 @@ The survey SHALL subscribe only to allowlisted pool account updates at Confirmed
 ### Requirement: Deterministic indicative analysis
 The survey SHALL produce byte-identical output for identical inputs and SHALL label all observations Indicative.
 
+Pool prices SHALL be normalized to a consistent mint direction for each token pair before gaps are calculated.
+
 #### Scenario: Missing fee or stale state
 - **WHEN** a fee is unknown or the older pool price is more than 25 slots old
 - **THEN** unknown net gaps SHALL remain NULL and stale observations SHALL be excluded and counted.
@@ -31,8 +33,12 @@ The survey SHALL produce byte-identical output for identical inputs and SHALL la
 The survey SHALL evaluate 5, 10, 25 and 50 bps net-gap events and SHALL apply the predeclared three-run segment gate unchanged.
 
 #### Scenario: Gate evaluation
-- **WHEN** a segment has at least three runs
+- **WHEN** a segment has at least three runs with nonstale observations
 - **THEN** advancement SHALL require at least six 10 bps events per hour, median duration at least two slots, known fees and stale exclusions below 20%.
+
+#### Scenario: Unobserved allowlist segment
+- **WHEN** a token-pair and venue combination in the allowlist has no eligible observations
+- **THEN** the gate SHALL report it as too little data, rather than omit the segment.
 
 ### Requirement: Honest research presentation
 The research tables and dashboard SHALL label all survey data Indicative and SHALL show no profit or executable-trade claim.

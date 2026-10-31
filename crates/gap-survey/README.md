@@ -11,3 +11,5 @@ This crate records and analyzes public pool account mid prices only. A price gap
 The source links are https://github.com/raydium-io/raydium-idl/blob/e7e0c96fe77bcf6a020b84a44c47a722aac8e359/raydium_clmm/raydium_clmm.json and https://github.com/MeteoraAg/dlmm-sdk/blob/2f540c2107988e0f97efa5917100bb912c96c17a/idls/dlmm.json. The checked-in registry's file named `meteora_dlmm.json` identifies `amm_v3` and is not used.
 
 Meteora's variable fee is not modeled. Any net gap involving it remains unknown unless the full fee is known. Raydium's dynamic fee is likewise treated as unknown when nonzero configuration/state is present.
+
+Pool mid prices are normalized to the first verified pool's mint order for each token pair before comparison. The fixed gate counts a run only when that segment has a nonstale observation and reports unobserved allowlist segments as `too_little_data`.

@@ -7,7 +7,7 @@ use whirlpool_core::decode::decode_whirlpool;
 pub const ORCA: &str = "whirLbMiicVdio4qvUfM5KAg6Ct8VwpYzGff3uctyCc";
 pub const RAYDIUM: &str = "CAMMCzo5YL8w4VFF8KVHrK22GGUsp5VTaW7grrKgrWqK";
 pub const METEORA: &str = "LBUZKhRxPF3XUpBCjp4YzTKgLccjZhTSDM9YuVaPwxo";
-const PRICE_SCALE: u32 = 24;
+pub const PRICE_SCALE: u32 = 24;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct PoolPrice {

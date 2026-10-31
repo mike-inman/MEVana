@@ -18,10 +18,10 @@
 
 ## 4. Bounded live survey and closeout
 
-- [ ] 4.1 Complete the offline validation list and credential scan before live use; record outputs in a dated closeout.
-- [ ] 4.2 Run one 300-second pilot, inspect update rates and project bytes; verify provider sockets close and stop if any venue is absent or projected bytes exceed budget.
-- [ ] 4.3 Run at most six bounded main sessions across three times of day, analyze and load each; verify cumulative payload bytes stay within 1.5 GB and no process remains.
-- [ ] 4.4 Record H1-H4, per-segment fixed gate outcomes, limitations, bytes, panel render checks and final validation in a dated closeout; verify documents and artifacts contain no secrets or raw captures.
+- [x] 4.1 Complete the offline validation list and credential scan before live use; record outputs in a dated closeout.
+- [x] 4.2 Run one 300-second pilot, inspect update rates and project bytes; verify provider sockets close and stop if any venue is absent or projected bytes exceed budget.
+- [x] 4.3 Run at most six bounded main sessions across three times of day, analyze and load each; verify cumulative payload bytes stay within 1.5 GB and no process remains.
+- [x] 4.4 Record H1-H4, per-segment fixed gate outcomes, limitations, bytes, panel render checks and final validation in a dated closeout; verify documents and artifacts contain no secrets or raw captures.
 
 ## Workflow follow-up
 

@@ -15,7 +15,8 @@ See proposal.md. The existing Geyser capture request includes broad Whirlpool po
 - Use a new crate and reuse only provider profile, credential parsing and transport primitives from `geyser-capture`. An isolated subscription constructor prevents broad account filters from entering the survey.
 - Pin public layout sources and check real account bytes against owner/mints, then compare the decoded price against a same-pair Whirlpool within 1%. Stop if this cannot be established.
 - Write bounded raw sessions outside Git, then sort confirmed account updates by slot and stable tie-breakers for deterministic analysis. Retain the latest pool price and count stale exclusions.
-- Use integer fixed-point arithmetic for prices and bps calculations, with explicit truncation in the DLMM power calculation. Unknown fee propagates to NULL net gaps.
+- Use integer fixed-point arithmetic for prices and bps calculations, with explicit truncation in the DLMM power calculation. Normalize opposite mint orders before comparing pools. Unknown fee propagates to NULL net gaps.
+- Enumerate every allowlist segment in the gate. Count a run toward the three-run rule only when that segment has nonstale observations.
 - Load aggregates in one SQL transaction and use provisioned, read-only Grafana queries with explicit time fields.
 
 ## Risks / Trade-offs

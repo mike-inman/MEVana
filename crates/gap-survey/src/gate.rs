@@ -46,15 +46,19 @@ pub fn evaluate(analyses: &[Analysis]) -> Result<Vec<GateResult>> {
         let mut events = 0u64;
         let mut duration = Vec::new();
         let mut seconds = 0i64;
+        let mut eligible_runs = 0usize;
         for (a, s) in &runs {
             observations += s.observation_count;
             stale += s.stale_count;
             known += s.known_fee_count;
             events += s.events_10bps;
             duration.extend_from_slice(&s.event_duration_slots);
-            let start = DateTime::parse_from_rfc3339(&a.window_start_utc)?;
-            let end = DateTime::parse_from_rfc3339(&a.window_end_utc)?;
-            seconds += (end - start).num_seconds().max(0);
+            if s.observation_count > s.stale_count {
+                eligible_runs += 1;
+                let start = DateTime::parse_from_rfc3339(&a.window_start_utc)?;
+                let end = DateTime::parse_from_rfc3339(&a.window_end_utc)?;
+                seconds += (end - start).num_seconds().max(0);
+            }
         }
         duration.sort_unstable();
         let median = if duration.is_empty() {
@@ -72,8 +76,9 @@ pub fn evaluate(analyses: &[Analysis]) -> Result<Vec<GateResult>> {
         } else {
             None
         };
-        let all_fees_known = known == observations.saturating_sub(stale);
-        let result = if runs.len() < 3 || observations == 0 || seconds == 0 {
+        let eligible = observations.saturating_sub(stale);
+        let all_fees_known = eligible > 0 && known == eligible;
+        let result = if eligible_runs < 3 || eligible == 0 || seconds == 0 {
             "too_little_data"
         } else if rate.is_some_and(|v| v >= 6_000_000)
             && median.is_some_and(|v| v >= 2)
@@ -89,7 +94,7 @@ pub fn evaluate(analyses: &[Analysis]) -> Result<Vec<GateResult>> {
             pair,
             venue_combination,
             result: result.into(),
-            runs: runs.len(),
+            runs: eligible_runs,
             events_per_hour_10bps_micro: rate,
             median_duration_slots: median,
             stale_exclusion_percent_micro: stale_pct,
@@ -204,6 +209,14 @@ mod tests {
                 .result,
             "fail"
         );
+        let stale_only = evaluate(&[
+            run("a", 6, vec![2; 6], 19, 81),
+            run("b", 6, vec![2; 6], 19, 81),
+            run("c", 0, vec![], 100, 0),
+        ])
+        .unwrap();
+        assert_eq!(stale_only[0].runs, 2);
+        assert_eq!(stale_only[0].result, "too_little_data");
     }
     #[test]
     fn unobserved_allowlist_segments_are_too_little_data() {

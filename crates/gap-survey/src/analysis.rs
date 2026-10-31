@@ -1,7 +1,7 @@
 //! Deterministic, slot-ordered analysis of Indicative mid prices.
 use crate::{
     capture::{Allowlist, PoolMeta, RunManifest, UpdateRecord},
-    decode::{decode_pool, PoolPrice},
+    decode::{decode_pool, PoolPrice, PRICE_SCALE},
 };
 use anyhow::{ensure, Context, Result};
 use base64::Engine;
@@ -149,6 +149,16 @@ pub fn gross_gap_bps_micro(a: &BigUint, b: &BigUint) -> Result<u64> {
         .to_u64()
         .context("gap overflow")
 }
+fn normalize_price(price: BigUint, reversed: bool) -> Result<BigUint> {
+    if !reversed {
+        return Ok(price);
+    }
+    ensure!(price > BigUint::from(0u8), "cannot invert zero price");
+    let scale = BigUint::from(10u8).pow(PRICE_SCALE);
+    let inverted = &scale * &scale / price;
+    ensure!(inverted > BigUint::from(0u8), "inverted price underflow");
+    Ok(inverted)
+}
 pub fn net_gap_bps_micro(
     gross: u64,
     fee_a: Option<u64>,
@@ -250,6 +260,10 @@ pub fn analyze(run_dir: &Path, allowlist_path: &Path) -> Result<Analysis> {
     );
     let allowlist = Allowlist::load(allowlist_path)?;
     let index = allowlist.by_address();
+    let mut pair_mints = BTreeMap::<&str, (&str, &str)>::new();
+    for p in &allowlist.pools {
+        pair_mints.entry(&p.pair).or_insert((&p.mint0, &p.mint1));
+    }
     let raw_file = fs::read(run_dir.join("updates.jsonl"))?;
     ensure!(
         format!("{:x}", Sha256::digest(&raw_file)) == manifest.updates_sha256,
@@ -324,6 +338,11 @@ pub fn analyze(run_dir: &Path, allowlist_path: &Path) -> Result<Analysis> {
                 decoded.mint0 == p.mint0 && decoded.mint1 == p.mint1,
                 "live mint mismatch"
             );
+            let canonical = pair_mints[&p.pair.as_str()];
+            decoded.price_scaled = normalize_price(
+                decoded.price_scaled,
+                (p.mint0.as_str(), p.mint1.as_str()) != canonical,
+            )?;
             if p.venue == "Raydium" && decoded.variable_fee_modeled {
                 decoded.fee_bps_micro = p.fee_bps_micro;
             }
@@ -588,6 +607,14 @@ mod tests {
             net_gap_bps_micro(200_000_000, Some(4_000_000), None).unwrap(),
             None
         );
+    }
+    #[test]
+    fn reversed_mint_order_is_normalized_before_gap_math() {
+        let scale = BigUint::from(10u8).pow(PRICE_SCALE);
+        let forward = &scale * BigUint::from(2u8);
+        let reverse = &scale / BigUint::from(2u8);
+        assert_eq!(normalize_price(reverse, true).unwrap(), forward);
+        assert_eq!(gross_gap_bps_micro(&forward, &forward).unwrap(), 0);
     }
     #[test]
     fn stale_and_volatility_boundaries() {

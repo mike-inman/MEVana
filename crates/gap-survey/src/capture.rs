@@ -54,6 +54,7 @@ impl Allowlist {
             "invalid allowlist"
         );
         let mut keys = BTreeSet::new();
+        let mut pair_mints = BTreeMap::<&str, (&str, &str)>::new();
         for p in &a.pools {
             ensure!(keys.insert(&p.address), "duplicate pool");
             ensure!(
@@ -69,6 +70,12 @@ impl Allowlist {
                 "invalid owner"
             );
             ensure!(p.decimals0 <= 18 && p.decimals1 <= 18, "invalid decimals");
+            let canonical = pair_mints.entry(&p.pair).or_insert((&p.mint0, &p.mint1));
+            ensure!(
+                (p.mint0.as_str(), p.mint1.as_str()) == *canonical
+                    || (p.mint1.as_str(), p.mint0.as_str()) == *canonical,
+                "token pair has inconsistent mints"
+            );
         }
         Ok(a)
     }
