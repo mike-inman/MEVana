@@ -34,3 +34,7 @@ The source is Simulated evidence from about eight minutes of laptop capture. No 
 Docker's default address pools were exhausted, so this stack declares the unused `10.252.61.0/24` bridge subnet. The main `infrastructure/docker-compose.yml` Grafana mounts start with `./infrastructure/...` even though that file already lives in `infrastructure/`; those mounts resolve correctly only when run from the repository root. That file was left untouched.
 
 The stack is stopped, ports 5434 and 3010 are clear, and both named volumes remain. No deployment or merge was performed.
+
+## 2026-10-31 10:04 CDT dashboard correction
+
+Handoff 17a corrected the browser display while retaining every queried value above. The `numeric` views now use `trim_scale`, so `-0.005191`, `-0.002269` and `0` return without padded fractional zeroes. Coverage renders as twelve labeled per-row bars with a separate twelve-row count table. The missing-state heatmap was replaced by a time-free pool/direction table; v1 shape and probe panels explain their absent data. The default selection is the 152-route universe, rejection reasons have distinct neutral colors, and Grafana receives only the reader and admin secrets. The later [Handoff 17a closeout](2026-10-31-1005-CDT-research-handoff-17a-dashboard-fixes-closeout.md) records validation and the browser-check limitation. The original Handoff 17 observations above remain the historical baseline.
