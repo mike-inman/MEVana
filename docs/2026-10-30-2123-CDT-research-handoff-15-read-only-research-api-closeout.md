@@ -8,6 +8,8 @@ Created: 2026-10-30 21:23 CDT.
 
 This session implemented the handoff directly in Claude Code rather than in Codex. The branch `feat/research-api-20261030` is for operator review; merging is the operator's decision.
 
+**2026-10-30 22:05 CDT amendment:** Handoff 15a was required before merge. The original validation allowed valid-looking changes to the seed's profit, token units, diagnostic probes, shape attribution, or manifest membership. The store now checks compiled SHA-256 pins for all eleven approved seed files as its final load step, before the API binds.
+
 ## Endpoints
 
 GET and HEAD only. The path's `v1` is the API version, not a contract version.
@@ -36,10 +38,13 @@ A summary contains the identifiers and versions, window, `evidenceKind`, `status
 | Safe integers | `unsafe_integer` | ±2^53 and a non-integer |
 | Summary reconciliation | `summary_mismatch` | Changed shape count, summary on a v1 experiment |
 | Contract separation | `contract_version_mismatch` | Each parser given the other's document, manifest version crossed |
+| Approved seed bytes (Handoff 15a) | `seed_hash_mismatch` | Six isolated copies: null pool directions, changed probe inputs, moved shape counts, removed manifest entry, changed simulated profit, and changed catalog decimals |
 
 Handoff 13 section 6 now applies through these parsers. An end-to-end test confirms that a failed artifact prevents `StartAsync` from returning a server.
 
 Seven safeguards were also broken deliberately, one at a time: the hash, canonical, evidence, loopback, duplicate and coverage-reason logic, plus the fallback route. The suite failed each time, and passed 294/294 once they were restored.
+
+Handoff 15a recomputed all eleven committed seed hashes and matched the handoff values. With the pin loop temporarily removed, **exactly the six new pin tests failed** while the prior 294 tests passed. After restoring the loop, `dotnet build MEVana.slnx -warnaserror --no-restore` had zero warnings and errors, and `dotnet test MEVana.slnx --no-restore` passed **300/300**, with no skipped tests. The six new tests live in a new file; no existing test or seed file was edited.
 
 ## Coverage served
 
@@ -82,11 +87,11 @@ Run it with `dotnet MEVana.Research.Api.dll` from the build output. `dotnet run`
 
 ## Validation and limits
 
-- `dotnet build dotnet/MEVana.slnx`: zero warnings and errors. `dotnet test dotnet/MEVana.slnx`: 294 passed, none failed or skipped (217 prior, 77 new).
+- Original Handoff 15: `dotnet build dotnet/MEVana.slnx` had zero warnings and errors; `dotnet test dotnet/MEVana.slnx` passed 294/294 (217 prior, 77 then new). Handoff 15a's pinned build and 300/300 result are recorded above.
 - `openspec validate --all --strict`, `./scripts/ci/repo_hygiene.sh` and `git diff --check`: passed. Hygiene reports only its existing timestamp and script-location warnings.
 - A non-printing credential scan over the diff found nothing.
-- No diff in `crates/` or `dotnet/src/MEVana.Research.Core`, and no existing fixture or test file changed. The only edits to existing files are `Program.cs`, the Api and test `.csproj` files, and one line in `config/ports.toml`. No package was added.
+- No diff in `crates/` or `dotnet/src/MEVana.Research.Core`, and no existing fixture or test file changed. Original Handoff 15 edited `Program.cs`, the Api and test `.csproj` files, and one line in `config/ports.toml`. Handoff 15a additionally edits `ResearchArtifactStore.cs`, this closeout and the main OpenSpec spec, and adds one test file. No package was added.
 
-The API is local only and has no authentication, so loopback is its only access control. The seed is static, and a new result needs a seed change and restart. Every served result rests on about eight minutes of dev/test Processed data from a laptop, with no fill, inclusion, slippage or realized-profit modeling. `ModelRanking` is the labeled `ranking-v0-heuristic`; no learned model was involved. Coverage is unequal across experiments, and B remains thin.
+The API is local only and has no authentication, so loopback is its only access control. The seed is static, and a new result needs a reviewed seed and pin change plus restart. Every served result rests on about eight minutes of dev/test Processed data from a laptop, with no fill, inclusion, slippage or realized-profit modeling. `ModelRanking` is the labeled `ranking-v0-heuristic`; no learned model was involved. Coverage is unequal across experiments, and B remains thin.
 
 The OpenSpec change `add-research-api` is archived with its spec synced.

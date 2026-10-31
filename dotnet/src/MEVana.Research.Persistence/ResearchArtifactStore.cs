@@ -1,3 +1,4 @@
+using System.Collections.ObjectModel;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
@@ -19,6 +20,22 @@ public sealed record StoredExperiment(
 /// </summary>
 public sealed class ResearchArtifactStore
 {
+    static readonly IReadOnlyDictionary<string, string> SeedHashes = new ReadOnlyDictionary<string, string>(
+        new Dictionary<string, string>(StringComparer.Ordinal)
+        {
+            ["2026-10-30-multi-route-v2-request.json"] = "63788e9af74985533851fbeb6f2d24481d3f6c87e3acadcecb7387ef2b713953",
+            ["2026-10-30-multi-route-v2-result.json"] = "a4223ade793105e3c060a6b1d711d02993f94161312e8ef44491f5d94bf4dd09",
+            ["2026-10-30-multi-route-v2-summary.json"] = "8edff656b82130ee7006d90687b3a303a85052b0fd20f52482b30b3e32c5f599",
+            ["2026-10-30-snapshot-replay-a-request.json"] = "474dec245a21450366f9339b20d58ffc3962c04f5c99e049e7d33bd2c9a8c373",
+            ["2026-10-30-snapshot-replay-a-result.json"] = "00d36a8a44df3ed53b1c475b045fc0cf13470e888cefa472fd73265581191a5f",
+            ["2026-10-30-snapshot-replay-b-request.json"] = "7c20450f5289fa9c1f19804f49e161b4297a900f8ac3ba47b1c5f129ce91117d",
+            ["2026-10-30-snapshot-replay-b-result.json"] = "bd1bfa458a60934e8b5aa4fdf0eed5ddc89c414ef4d1f176177128582cb0fd47",
+            ["2026-10-30-snapshot-replay-c-request.json"] = "868c9996c6d491d53c0ddc5adb957b19c796ded330df23d1d000723b977ac414",
+            ["2026-10-30-snapshot-replay-c-result.json"] = "b211afe876d4769d15b242d6a6ef52e96b86129ea2a6512c2cc3c5a925c07d85",
+            ["catalog.json"] = "b3c46a902b33eb4f6ff86dd7ddf38c091cb2504a692d0dff45b2158aebc7df02",
+            ["manifest.json"] = "920844455dbfd6df1064fce50a26005e4158ba482642a8b8425535e904cbf3bc"
+        });
+
     ResearchArtifactStore(ResearchCatalog catalog, IReadOnlyList<StoredExperiment> experiments)
     {
         Catalog = catalog;
@@ -39,6 +56,9 @@ public sealed class ResearchArtifactStore
             .OrderBy(e => e.Result.ResultId, StringComparer.Ordinal).ToArray();
         if (experiments.Select(e => e.Result.ResultId).Distinct(StringComparer.Ordinal).Count() != experiments.Length)
             throw manifest.Fail("duplicate_experiment");
+        foreach (var (file, expectedHash) in SeedHashes)
+            if (!string.Equals(Convert.ToHexStringLower(SHA256.HashData(Read(directory, file))), expectedHash, StringComparison.Ordinal))
+                throw new ArtifactIntegrityException("seed_hash_mismatch", file);
         return new(catalog, Array.AsReadOnly(experiments));
     }
 
