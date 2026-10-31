@@ -1,0 +1,431 @@
+{
+  "uid": "mevana-price-gap-survey",
+  "title": "MEVana Price-Gap Survey",
+  "tags": [
+    "research",
+    "Indicative"
+  ],
+  "timezone": "utc",
+  "schemaVersion": 40,
+  "version": 1,
+  "editable": false,
+  "refresh": "1m",
+  "time": {
+    "from": "now-7d",
+    "to": "now"
+  },
+  "panels": [
+    {
+      "id": 1,
+      "title": "Indicative evidence limits",
+      "type": "text",
+      "gridPos": {
+        "x": 0,
+        "y": 0,
+        "w": 24,
+        "h": 3
+      },
+      "options": {
+        "mode": "markdown",
+        "content": "Indicative mid-price gaps only. Not executable and not profit.\n\nPool-state duration counts visible slots, not a tradable window. Provider timestamps group observations; laptop receipt order is not trading latency. Variable Meteora fees are not modeled; unknown net gaps stay Not measured. Event-rate denominators include only observations with known fees."
+      }
+    },
+    {
+      "id": 2,
+      "title": "Indicative run health",
+      "type": "table",
+      "gridPos": {
+        "x": 0,
+        "y": 3,
+        "w": 24,
+        "h": 9
+      },
+      "datasource": {
+        "type": "postgres",
+        "uid": "research-postgres"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "postgres",
+            "uid": "research-postgres"
+          },
+          "editorMode": "code",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "SELECT r.window_start_utc AS \"time\", r.run_id AS \"Run\", r.provider AS \"Provider\", r.window_end_utc AS \"Window end\", r.payload_bytes AS \"Payload bytes\", r.gaps AS \"Gaps\", r.stalls AS \"Stalls\", v.venue AS \"Venue\", COALESCE((r.updates_by_venue->>v.venue)::bigint,0) AS \"Updates\", round(COALESCE((r.updates_by_venue->>v.venue)::numeric,0)*60/NULLIF(EXTRACT(EPOCH FROM r.window_end_utc-r.window_start_utc),0),2) AS \"Updates/min\", r.evidence_kind AS \"Evidence kind\" FROM research.gap_runs r CROSS JOIN (VALUES ('Orca'),('Raydium'),('Meteora')) v(venue) ORDER BY r.window_start_utc,v.venue"
+        }
+      ],
+      "options": {
+        "showHeader": true,
+        "cellHeight": "sm",
+        "footer": {
+          "show": false
+        }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "noValue": "Not measured",
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "#7aa5d2"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "#7aa5d2",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": []
+      }
+    },
+    {
+      "id": 3,
+      "title": "Indicative gap events per hour by token group and threshold (H2)",
+      "type": "table",
+      "gridPos": {
+        "x": 0,
+        "y": 12,
+        "w": 24,
+        "h": 9
+      },
+      "datasource": {
+        "type": "postgres",
+        "uid": "research-postgres"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "postgres",
+            "uid": "research-postgres"
+          },
+          "editorMode": "code",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "WITH groups AS (SELECT DISTINCT run_id,token_group FROM research.gap_observation_buckets), thresholds AS (SELECT * FROM (VALUES (5),(10),(25),(50)) t(threshold_bps)) SELECT r.window_start_utc AS \"time\",r.run_id AS \"Run\",g.token_group AS \"Token group\",t.threshold_bps AS \"Threshold (bps)\",count(e.start_slot) AS \"Events\",round(count(e.start_slot)*3600.0/NULLIF(EXTRACT(EPOCH FROM r.window_end_utc-r.window_start_utc),0),2) AS \"Events/hour\",r.evidence_kind AS \"Evidence kind\" FROM research.gap_runs r JOIN groups g ON g.run_id=r.run_id CROSS JOIN thresholds t LEFT JOIN research.gap_events e ON e.run_id=r.run_id AND e.token_group=g.token_group AND e.threshold_bps=t.threshold_bps GROUP BY r.run_id,r.window_start_utc,r.window_end_utc,r.evidence_kind,g.token_group,t.threshold_bps ORDER BY r.window_start_utc,g.token_group,t.threshold_bps"
+        }
+      ],
+      "options": {
+        "showHeader": true,
+        "cellHeight": "sm",
+        "footer": {
+          "show": false
+        }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "noValue": "Not measured",
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "#7aa5d2"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "#7aa5d2",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": []
+      }
+    },
+    {
+      "id": 4,
+      "title": "Indicative cross-venue versus same-venue event rates (H1)",
+      "type": "table",
+      "gridPos": {
+        "x": 0,
+        "y": 21,
+        "w": 24,
+        "h": 9
+      },
+      "datasource": {
+        "type": "postgres",
+        "uid": "research-postgres"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "postgres",
+            "uid": "research-postgres"
+          },
+          "editorMode": "code",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "WITH obs AS (SELECT token_pair,venue_combination,sum(observations) AS n FROM research.gap_observation_buckets GROUP BY 1,2), ev AS (SELECT token_pair,CASE WHEN venue_a<=venue_b THEN venue_a||'/'||venue_b ELSE venue_b||'/'||venue_a END AS venue_combination,count(*) AS n FROM research.gap_events WHERE threshold_bps=10 GROUP BY 1,2) SELECT o.token_pair AS \"Token pair\",o.venue_combination AS \"Venues\",CASE WHEN split_part(o.venue_combination,'/',1)=split_part(o.venue_combination,'/',2) THEN 'Same venue' ELSE 'Cross venue' END AS \"Comparison\",o.n AS \"Observations\",COALESCE(e.n,0) AS \"10 bps events\",round(COALESCE(e.n,0)*1000.0/NULLIF(o.n,0),3) AS \"Events/1000 observations\",'Indicative' AS \"Evidence kind\" FROM obs o LEFT JOIN ev e USING(token_pair,venue_combination) ORDER BY o.token_pair,o.venue_combination"
+        }
+      ],
+      "options": {
+        "showHeader": true,
+        "cellHeight": "sm",
+        "footer": {
+          "show": false
+        }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "noValue": "Not measured",
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "#7aa5d2"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "#7aa5d2",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": []
+      }
+    },
+    {
+      "id": 5,
+      "title": "Indicative net gap heatmap by token pair and minute",
+      "type": "table",
+      "gridPos": {
+        "x": 0,
+        "y": 30,
+        "w": 24,
+        "h": 9
+      },
+      "datasource": {
+        "type": "postgres",
+        "uid": "research-postgres"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "postgres",
+            "uid": "research-postgres"
+          },
+          "editorMode": "code",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "SELECT m.minute_utc AS \"time\",m.token_pair AS \"Token pair\",m.venue_a||'/'||m.venue_b AS \"Venues\",round(m.median_net_bps_micro::numeric/1000000,3) AS \"Median net gap (bps)\",m.observation_count AS \"Observations\",m.excluded_stale_count AS \"Excluded stale\",m.evidence_kind AS \"Evidence kind\" FROM research.gap_minute_stats m ORDER BY m.minute_utc,m.token_pair,m.pool_a,m.pool_b"
+        }
+      ],
+      "options": {
+        "showHeader": true,
+        "cellHeight": "sm",
+        "footer": {
+          "show": false
+        }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "noValue": "Not measured",
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "#7aa5d2"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "#7aa5d2",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Median net gap (bps)"
+            },
+            "properties": [
+              {
+                "id": "custom.displayMode",
+                "value": "color-background"
+              },
+              {
+                "id": "color",
+                "value": {
+                  "mode": "continuous-Blues"
+                }
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": 6,
+      "title": "Indicative event duration distribution by threshold",
+      "type": "table",
+      "gridPos": {
+        "x": 0,
+        "y": 39,
+        "w": 24,
+        "h": 9
+      },
+      "datasource": {
+        "type": "postgres",
+        "uid": "research-postgres"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "postgres",
+            "uid": "research-postgres"
+          },
+          "editorMode": "code",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "WITH bins AS (SELECT * FROM (VALUES ('1 slot',1),('2 slots',2),('3-5 slots',3),('6+ slots',4)) b(label,sort)), thresholds AS (SELECT * FROM (VALUES (5),(10),(25),(50)) t(threshold_bps)) SELECT t.threshold_bps AS \"Threshold (bps)\",b.label AS \"Visible duration\",count(e.start_slot) AS \"Events\",'Indicative' AS \"Evidence kind\" FROM thresholds t CROSS JOIN bins b LEFT JOIN research.gap_events e ON e.threshold_bps=t.threshold_bps AND (CASE WHEN e.duration_slots=1 THEN 1 WHEN e.duration_slots=2 THEN 2 WHEN e.duration_slots BETWEEN 3 AND 5 THEN 3 ELSE 4 END)=b.sort WHERE EXISTS (SELECT 1 FROM research.gap_observation_buckets) GROUP BY t.threshold_bps,b.label,b.sort ORDER BY t.threshold_bps,b.sort"
+        }
+      ],
+      "options": {
+        "showHeader": true,
+        "cellHeight": "sm",
+        "footer": {
+          "show": false
+        }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "noValue": "Not measured",
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "#7aa5d2"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "#7aa5d2",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": []
+      }
+    },
+    {
+      "id": 7,
+      "title": "Indicative volatility and post-move event rates (H3, H4)",
+      "type": "table",
+      "gridPos": {
+        "x": 0,
+        "y": 48,
+        "w": 24,
+        "h": 9
+      },
+      "datasource": {
+        "type": "postgres",
+        "uid": "research-postgres"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "postgres",
+            "uid": "research-postgres"
+          },
+          "editorMode": "code",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "WITH exposure AS (SELECT 'H3 volatility' AS hypothesis,volatility_bucket AS cohort,sum(observations) AS n FROM research.gap_observation_buckets GROUP BY 1,2 UNION ALL SELECT 'H4 sharp move',CASE WHEN after_sharp_move THEN 'after sharp move' ELSE 'baseline' END,sum(observations) FROM research.gap_observation_buckets GROUP BY 1,2), events AS (SELECT 'H3 volatility' AS hypothesis,COALESCE(volatility_bucket,'Not measured') AS cohort,count(*) AS n FROM research.gap_events WHERE threshold_bps=10 GROUP BY 1,2 UNION ALL SELECT 'H4 sharp move',CASE WHEN after_sharp_move THEN 'after sharp move' ELSE 'baseline' END,count(*) FROM research.gap_events WHERE threshold_bps=10 GROUP BY 1,2) SELECT x.hypothesis AS \"Hypothesis\",x.cohort AS \"Cohort\",x.n AS \"Observations\",COALESCE(e.n,0) AS \"10 bps events\",round(COALESCE(e.n,0)*1000.0/NULLIF(x.n,0),3) AS \"Events/1000 observations\",'Indicative' AS \"Evidence kind\" FROM exposure x LEFT JOIN events e USING(hypothesis,cohort) ORDER BY x.hypothesis,x.cohort"
+        }
+      ],
+      "options": {
+        "showHeader": true,
+        "cellHeight": "sm",
+        "footer": {
+          "show": false
+        }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "noValue": "Not measured",
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "#7aa5d2"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "#7aa5d2",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": []
+      }
+    },
+    {
+      "id": 8,
+      "title": "Indicative top pool pairs by 10 bps event rate",
+      "type": "table",
+      "gridPos": {
+        "x": 0,
+        "y": 57,
+        "w": 24,
+        "h": 9
+      },
+      "datasource": {
+        "type": "postgres",
+        "uid": "research-postgres"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "postgres",
+            "uid": "research-postgres"
+          },
+          "editorMode": "code",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "WITH obs AS (SELECT m.pool_a,m.pool_b,m.token_pair,sum(m.known_fee_observation_count) AS n FROM research.gap_minute_stats m GROUP BY 1,2,3 HAVING sum(m.known_fee_observation_count)>0), ev AS (SELECT e.pool_a,e.pool_b,e.token_pair,count(*) AS n FROM research.gap_events e WHERE e.threshold_bps=10 GROUP BY 1,2,3) SELECT o.token_pair AS \"Token pair\",o.pool_a AS \"Pool A\",o.pool_b AS \"Pool B\",o.n AS \"Observations\",COALESCE(e.n,0) AS \"10 bps events\",round(COALESCE(e.n,0)*1000.0/NULLIF(o.n,0),3) AS \"Events/1000 observations\",'Indicative' AS \"Evidence kind\" FROM obs o LEFT JOIN ev e USING(pool_a,pool_b,token_pair) ORDER BY \"Events/1000 observations\" DESC,o.token_pair,o.pool_a,o.pool_b LIMIT 20"
+        }
+      ],
+      "options": {
+        "showHeader": true,
+        "cellHeight": "sm",
+        "footer": {
+          "show": false
+        }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "noValue": "Not measured",
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "#7aa5d2"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "#7aa5d2",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": []
+      }
+    }
+  ]
+}
