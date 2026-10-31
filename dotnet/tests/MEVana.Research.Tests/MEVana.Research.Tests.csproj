@@ -12,7 +12,10 @@
     <PackageReference Include="xunit.runner.visualstudio" Version="3.1.4" PrivateAssets="all" />
   </ItemGroup>
   <ItemGroup>
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+    <ProjectReference Include="..\..\src\MEVana.Research.Api\MEVana.Research.Api.csproj" />
     <ProjectReference Include="..\..\src\MEVana.Research.Core\MEVana.Research.Core.csproj" />
+    <ProjectReference Include="..\..\src\MEVana.Research.Persistence\MEVana.Research.Persistence.csproj" />
   </ItemGroup>
   <ItemGroup>
     <None Update="Fixtures/*.json" CopyToOutputDirectory="PreserveNewest" />

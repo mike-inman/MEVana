@@ -1,0 +1,59 @@
+{
+  "experiments": [
+    {
+      "resultId": "replay-v2-463353643-a-confirmed-l1-tip10000",
+      "requestContractVersion": 1,
+      "requestFile": "2026-10-30-snapshot-replay-a-request.json",
+      "resultFile": "2026-10-30-snapshot-replay-a-result.json",
+      "summaryFile": null,
+      "sourceCloseout": "docs/2026-10-30-1139-CDT-research-handoff-12-closeout.md",
+      "limitations": [
+        "About eight minutes of dev/test Processed data captured on a laptop.",
+        "Simulated route outcomes only: no fill, inclusion, slippage or realized profit modeling.",
+        "ModelRanking is the ranking-v0-heuristic policy; no learned model was involved."
+      ]
+    },
+    {
+      "resultId": "replay-v2-463353643-b-confirmed-l1-tip10000",
+      "requestContractVersion": 1,
+      "requestFile": "2026-10-30-snapshot-replay-b-request.json",
+      "resultFile": "2026-10-30-snapshot-replay-b-result.json",
+      "summaryFile": null,
+      "sourceCloseout": "docs/2026-10-30-1139-CDT-research-handoff-12-closeout.md",
+      "limitations": [
+        "About eight minutes of dev/test Processed data captured on a laptop.",
+        "Simulated route outcomes only: no fill, inclusion, slippage or realized profit modeling.",
+        "ModelRanking is the ranking-v0-heuristic policy; no learned model was involved.",
+        "Thin evaluable share: unseen and proven-absent tick arrays limit SOL/USDT routes."
+      ]
+    },
+    {
+      "resultId": "replay-v2-463353643-c-confirmed-l1-tip10000",
+      "requestContractVersion": 1,
+      "requestFile": "2026-10-30-snapshot-replay-c-request.json",
+      "resultFile": "2026-10-30-snapshot-replay-c-result.json",
+      "summaryFile": null,
+      "sourceCloseout": "docs/2026-10-30-1139-CDT-research-handoff-12-closeout.md",
+      "limitations": [
+        "About eight minutes of dev/test Processed data captured on a laptop.",
+        "Simulated route outcomes only: no fill, inclusion, slippage or realized profit modeling.",
+        "ModelRanking is the ranking-v0-heuristic policy; no learned model was involved."
+      ]
+    },
+    {
+      "resultId": "replay-v2-463353643-usdc-confirmed-l1-tip10000",
+      "requestContractVersion": 2,
+      "requestFile": "2026-10-30-multi-route-v2-request.json",
+      "resultFile": "2026-10-30-multi-route-v2-result.json",
+      "summaryFile": "2026-10-30-multi-route-v2-summary.json",
+      "sourceCloseout": "docs/2026-10-30-1618-CDT-research-handoff-14-multi-route-replay-closeout.md",
+      "limitations": [
+        "About eight minutes of dev/test Processed data captured on a laptop.",
+        "Simulated route outcomes only: no fill, inclusion, slippage or realized profit modeling.",
+        "ModelRanking is the ranking-v0-heuristic policy; no learned model was involved.",
+        "Triangle cost uses an assumed 600,000 compute units, not a measurement.",
+        "Missing tick-array state leaves part of the triangle candidates unevaluable, so absence of an opportunity applies only to evaluable candidates."
+      ]
+    }
+  ]
+}

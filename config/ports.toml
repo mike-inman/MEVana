@@ -92,6 +92,7 @@ auth_gateway = 3001                 # Authentication service
 websocket_gateway = 8095            # Centralized WebSocket management
 stream_aggregator = 8096            # Multi-stream aggregation service
 analytics_api = 8097                # Advanced analytics endpoints
+research_api = 8098                 # Read-only Research API (loopback only)
 
 # =============================================================================
 # PORT ALLOCATION STRATEGY

@@ -1,0 +1,127 @@
+{
+  "datasets": [
+    {
+      "id": "orca-wp-snapshot-20261030",
+      "metadataVersion": "capture-v2",
+      "provenance": "capture-1793377454811581000-dev-test-processed-snapshot",
+      "verifiedAvailable": true,
+      "suitability": "Simulated research only",
+      "coverageStartUtc": "2026-10-30T16:24:15.7075850Z",
+      "coverageEndUtc": "2026-10-30T16:32:14.7603190Z",
+      "supportedStrategyVersions": [
+        "ranking-v0-heuristic"
+      ],
+      "tokens": [
+        {
+          "id": "So11111111111111111111111111111111111111112",
+          "decimals": 9,
+          "maxResearchTradeSizeQuoteAtoms": 1000000000
+        },
+        {
+          "id": "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v",
+          "decimals": 6,
+          "maxResearchTradeSizeQuoteAtoms": 1000000000
+        },
+        {
+          "id": "Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB",
+          "decimals": 6,
+          "maxResearchTradeSizeQuoteAtoms": 1000000000
+        }
+      ],
+      "pools": [
+        {
+          "id": "21gTfxAnhUDjJGZJDkTXctGFKT8TeiXx6pN1CEg9K1uW",
+          "tokenIds": [
+            "So11111111111111111111111111111111111111112",
+            "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v"
+          ]
+        },
+        {
+          "id": "7qbRF6YsyGuLUVs6Y1q64bdVrfe4ZcUUz1JRdoVNUJnm",
+          "tokenIds": [
+            "So11111111111111111111111111111111111111112",
+            "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v"
+          ]
+        },
+        {
+          "id": "83v8iPyZihDEjDdY8RdZddyZNyUtXngz69Lgo9Kt5d6d",
+          "tokenIds": [
+            "So11111111111111111111111111111111111111112",
+            "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v"
+          ]
+        },
+        {
+          "id": "BSddxwYW73as8852ZTHRH13pbZEmZ96NBjayc5mSVtkZ",
+          "tokenIds": [
+            "So11111111111111111111111111111111111111112",
+            "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v"
+          ]
+        },
+        {
+          "id": "Czfq3xZZDmsdGdUyrNLtRhGc47cXcZtLG4crryfu44zE",
+          "tokenIds": [
+            "So11111111111111111111111111111111111111112",
+            "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v"
+          ]
+        },
+        {
+          "id": "FpCMFDFGYotvufJ7HrFHsWEiiQCGbkLCtwHiDnh7o28Q",
+          "tokenIds": [
+            "So11111111111111111111111111111111111111112",
+            "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v"
+          ]
+        },
+        {
+          "id": "AhhoxZDmsg2snm85vPjqzYzEYESoKfb4KmTj4HrBBNwY",
+          "tokenIds": [
+            "So11111111111111111111111111111111111111112",
+            "Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB"
+          ]
+        },
+        {
+          "id": "B6LL9aCWVuo1tTcJoYvCTDqYrq1vjMfci8uHxsm4UxTR",
+          "tokenIds": [
+            "So11111111111111111111111111111111111111112",
+            "Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB"
+          ]
+        },
+        {
+          "id": "BmXVhzBHTawt5stWKBtFdjM8n33G5RoUDECE5FrRvayq",
+          "tokenIds": [
+            "So11111111111111111111111111111111111111112",
+            "Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB"
+          ]
+        },
+        {
+          "id": "FwewVm8u6tFPGewAyHmWAqad9hmF7mvqxK4mJ7iNqqGC",
+          "tokenIds": [
+            "So11111111111111111111111111111111111111112",
+            "Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB"
+          ]
+        },
+        {
+          "id": "HcoJqG325TTifs6jyWvRJ9ET4pDu12Xrt2EQKZGFmuKX",
+          "tokenIds": [
+            "So11111111111111111111111111111111111111112",
+            "Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB"
+          ]
+        },
+        {
+          "id": "4fuUiYxTQ6QCrdSq9ouBYcTM7bqSwYTSyLueGZLTy4T4",
+          "tokenIds": [
+            "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v",
+            "Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB"
+          ]
+        },
+        {
+          "id": "ELqXddRqcnRJXQnqZdPwBXEEBpQ6SEbCQrBe12wpHBU",
+          "tokenIds": [
+            "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v",
+            "Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB"
+          ]
+        }
+      ],
+      "maxResearchTradeSizeQuoteAtoms": 1000000000
+    }
+  ]
+}

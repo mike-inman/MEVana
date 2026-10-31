@@ -8,4 +8,7 @@
     <ProjectReference Include="..\MEVana.Research.Core\MEVana.Research.Core.csproj" />
     <ProjectReference Include="..\MEVana.Research.Persistence\MEVana.Research.Persistence.csproj" />
   </ItemGroup>
+  <ItemGroup>
+    <Content Include="..\..\data\research-artifacts\*.json" Link="research-artifacts\%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+  </ItemGroup>
 </Project>
