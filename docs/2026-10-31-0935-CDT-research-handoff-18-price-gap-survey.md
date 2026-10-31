@@ -133,7 +133,14 @@ Add a provisioned Grafana dashboard titled **MEVana Price-Gap Survey**, with UI 
 6. Event rates by volatility bucket (H3), and after sharp moves compared with the baseline (H4).
 7. Top pool pairs by event rate at the 10 bps threshold. Ordering by event rate is allowed here, because it is a unitless measure and not profit.
 
-`noValue` is "Not measured", and NULL must never become 0. Use no green or red judgment coloring.
+`noValue` is "Not measured", and NULL must never become 0. A measured count of zero must show 0, not "Not measured". Use no green or red judgment coloring.
+
+Handoff 17 showed that a panel can return correct rows and still display wrongly. A check that a query returned data is not enough:
+- Multi-row panels must show every row.
+- Time-based panels need a real time column.
+- Every panel must be rendered and described in the closeout. Say so plainly if you cannot render it. Claude will check it in a browser before merging.
+
+The dashboard goes in `infrastructure/research/grafana/dashboards/`, which `repo_hygiene.sh` already allows. Use `infrastructure/research/schema.sql` and the existing load script pattern. Grafana's research stack runs from `scripts/research/grafana-up.sh`, at `http://127.0.0.1:3010`.
 
 ## Decision gate
 

@@ -164,8 +164,9 @@ Work proceeds through dated handoffs in `docs/`. The latest one is the authority
    - See `docs/2026-10-30-2123-CDT-research-handoff-15-read-only-research-api-closeout.md`.
 9. **Handoff 16 (done, 2026-10-31):** signed-in MEVana-UI research pages at `/research`, read from the loopback API by server code. It is tables only and works locally; the deployed UI shows "Research API unavailable" until the API is deployed with real authentication.
    - See the closeout in MEVana-UI: `docs/2026-10-30-2234-CDT-research-handoff-16-closeout.md`.
-10. **Next:**
-    - handoff 17: Grafana research evidence, which is now the standard for visualization (`docs/2026-10-31-0920-CDT-research-handoff-17-grafana-research-evidence.md`);
+10. **Handoffs 17 and 17a (done, 2026-10-31):** Grafana is the standard for visualization. A separate local research stack (`scripts/research/grafana-up.sh`, then `load-seed.sh`) serves the MEVana Research Evidence dashboard at `http://127.0.0.1:3010` from a `research` Postgres schema on port 5434.
+    - See `docs/2026-10-31-1005-CDT-research-handoff-17a-dashboard-fixes-closeout.md`.
+11. **Next:**
     - handoff 18: indicative price-gap survey across Orca, Raydium CLMM and Meteora DLMM, with live runs finished by 2026-11-04 (`docs/2026-10-31-0935-CDT-research-handoff-18-price-gap-survey.md`).
     - Later: exact modeling and a server-host capture for segments that pass the survey gate.
 
