@@ -160,9 +160,10 @@ Work proceeds through dated handoffs in `docs/`. The latest one is the authority
 7. **Handoff 14 (done, 2026-10-30):** offline replay of the 152-route USDC universe, with a v2-linked `Simulated` result.
    - 69.81% of triangle candidates were evaluable, and none was profitable. The two detected opportunities were two-leg, and both simulated negative.
    - See `docs/2026-10-30-1618-CDT-research-handoff-14-multi-route-replay-closeout.md`.
-8. **Next:**
-   - handoff 15: read-only Research API;
-   - handoff 16: MEVana-UI research page.
+8. **Handoff 15 (done, 2026-10-30):** read-only, loopback-only Research API on port 8098, serving the four validated experiments. Handoff 15a pins all 11 seed files by SHA-256, so any seed change needs a deliberate pin update.
+   - See `docs/2026-10-30-2123-CDT-research-handoff-15-read-only-research-api-closeout.md`.
+9. **Next:**
+   - handoff 16: MEVana-UI research page (`docs/2026-10-30-2220-CDT-research-handoff-16-mevana-ui-research-page.md`).
    - Later: a server-host capture.
 
 **Not in focus right now:**
