@@ -47,3 +47,7 @@ The panel SQL has no fake timestamp. The three rejection reasons use distinct ne
 - The stack was stopped after validation. Ports 5434 and 3010 are clear; both named volumes remain. No repo-root `.env` was read, no provider call was made, and no volume was deleted. The protected Rust, API, Core, seed and main compose paths remain unchanged.
 
 No deployment or merge was performed.
+
+## Browser verification and final fix (2026-10-31, Claude)
+
+The dashboard was checked in a browser for the universe experiment and two v1 experiments. All panels rendered correctly, with one exception: the diagnostic probe table showed "Not measured" for outcomes that did not occur. Outcomes are exhaustive per probe row and sum to `attempts` with no mismatches, so those are exact zeros. The query now returns 0, and `check-dashboard.py` guards against the earlier form.

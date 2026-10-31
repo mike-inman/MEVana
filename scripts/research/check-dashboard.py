@@ -44,6 +44,8 @@ assert 'Not measured for this experiment' in panels[7]['targets'][0]['rawSql']
 assert 'Not measured for this experiment' in panels[8]['targets'][0]['rawSql']
 assert panels[8]['type'] == 'table'
 assert 'Diagnostic probe: raw input amounts, not chained route amounts' in panels[8]['title']
+# Outcomes are exhaustive per probe row, so an outcome that did not occur is an exact 0, not unmeasured.
+assert 'FILTER' not in panels[8]['targets'][0]['rawSql']
 assert 'seed_loaded_at' not in panels[8]['targets'][0]['rawSql']
 assert all('FM999,999,999,999' in panels[i]['targets'][0]['rawSql'] for i in (4, 6, 7, 8))
 
