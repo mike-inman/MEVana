@@ -24,5 +24,14 @@ for panel in panels[1:]:
     assert panel["fieldConfig"]["defaults"]["color"]["fixedColor"] == "#7aa5d2"
 for panel in (panels[1], panels[2], panels[4]):
     assert 'AS "time"' in panel["targets"][0]["rawSql"]
-assert "color-background" in json.dumps(panels[4])
+heatmap = panels[4]
+assert "GROUP BY m.minute_utc,m.token_pair" in heatmap["targets"][0]["rawSql"]
+assert any(
+    prop.get("id") == "custom.cellOptions"
+    and prop.get("value", {}).get("type") == "color-background"
+    for override in heatmap["fieldConfig"]["overrides"]
+    for prop in override["properties"]
+)
+assert "gap_observation_buckets" in panels[3]["targets"][0]["rawSql"]
+assert "known_fee_observation_count" in panels[7]["targets"][0]["rawSql"]
 print("Gap dashboard contract: 8 panels, Indicative labels, neutral colors and explicit unknowns")

@@ -216,7 +216,7 @@
           "editorMode": "code",
           "format": "table",
           "rawQuery": true,
-          "rawSql": "SELECT m.minute_utc AS \"time\",m.token_pair AS \"Token pair\",m.venue_a||'/'||m.venue_b AS \"Venues\",round(m.median_net_bps_micro::numeric/1000000,3) AS \"Median net gap (bps)\",m.observation_count AS \"Observations\",m.excluded_stale_count AS \"Excluded stale\",m.evidence_kind AS \"Evidence kind\" FROM research.gap_minute_stats m ORDER BY m.minute_utc,m.token_pair,m.pool_a,m.pool_b"
+          "rawSql": "SELECT m.minute_utc AS \"time\",m.token_pair AS \"Token pair\",round(max(m.maximum_net_bps_micro)::numeric/1000000,3) AS \"Maximum net gap (bps)\",sum(m.known_fee_observation_count) AS \"Known-fee observations\",sum(m.excluded_stale_count) AS \"Excluded stale\",'Indicative' AS \"Evidence kind\" FROM research.gap_minute_stats m WHERE m.maximum_net_bps_micro IS NOT NULL GROUP BY m.minute_utc,m.token_pair ORDER BY m.minute_utc,m.token_pair"
         }
       ],
       "options": {
@@ -247,17 +247,52 @@
           {
             "matcher": {
               "id": "byName",
-              "options": "Median net gap (bps)"
+              "options": "Maximum net gap (bps)"
             },
             "properties": [
               {
-                "id": "custom.displayMode",
-                "value": "color-background"
-              },
-              {
                 "id": "color",
                 "value": {
-                  "mode": "continuous-Blues"
+                  "mode": "thresholds"
+                }
+              },
+              {
+                "id": "thresholds",
+                "value": {
+                  "mode": "absolute",
+                  "steps": [
+                    {
+                      "color": "#244262",
+                      "value": null
+                    },
+                    {
+                      "color": "#315f8a",
+                      "value": 0
+                    },
+                    {
+                      "color": "#477fa9",
+                      "value": 5
+                    },
+                    {
+                      "color": "#6a9bc3",
+                      "value": 10
+                    },
+                    {
+                      "color": "#9fc1dc",
+                      "value": 25
+                    },
+                    {
+                      "color": "#c5d9eb",
+                      "value": 50
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "type": "color-background",
+                  "mode": "basic"
                 }
               }
             ]
