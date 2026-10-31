@@ -72,7 +72,7 @@ POST /research/v1/experiments -> {"code":"method_not_allowed"} [405]
 listening after stop: 0
 ```
 
-Run it with `dotnet MEVana.Research.Api.dll` from the build output, or with `dotnet run`. The native `MEVana.Research.Api` launcher fails on this machine because it looks in `/usr/local/share/dotnet`, which has no .NET 10 runtime. Port and artifact directory are set with `MEVANA_RESEARCH_Url` and `MEVANA_RESEARCH_ArtifactDirectory`, or `--Url` and `--ArtifactDirectory`.
+Run it with `dotnet MEVana.Research.Api.dll` from the build output. `dotnet run` was not tested. The native `MEVana.Research.Api` launcher fails on this machine because it looks in `/usr/local/share/dotnet`, which has no .NET 10 runtime. Port and artifact directory are set with `MEVANA_RESEARCH_Url` and `MEVANA_RESEARCH_ArtifactDirectory`, or `--Url` and `--ArtifactDirectory`.
 
 ## Not served, and why
 
