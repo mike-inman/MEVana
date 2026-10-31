@@ -1,0 +1,47 @@
+name: mevana-research
+services:
+  postgres:
+    image: postgres:15
+    container_name: mevana-research-postgres
+    restart: 'no'
+    env_file: ./research.env
+    environment:
+      POSTGRES_DB: research
+      POSTGRES_USER: postgres
+    ports:
+      - '127.0.0.1:5434:5432'
+    volumes:
+      - research_postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U postgres -d research']
+      interval: 2s
+      timeout: 3s
+      retries: 30
+  grafana:
+    image: grafana/grafana:10.4.5
+    container_name: mevana-research-grafana
+    restart: 'no'
+    env_file: ./research.env
+    environment:
+      GF_SERVER_HTTP_ADDR: 0.0.0.0
+      GF_AUTH_ANONYMOUS_ENABLED: 'true'
+      GF_AUTH_ANONYMOUS_ORG_ROLE: Viewer
+      GF_USERS_ALLOW_SIGN_UP: 'false'
+      GF_SECURITY_ADMIN_USER: admin
+    ports:
+      - '127.0.0.1:3010:3000'
+    volumes:
+      - research_grafana_data:/var/lib/grafana
+      - ./research/grafana/datasources:/etc/grafana/provisioning/datasources:ro
+      - ./research/grafana/dashboards:/etc/grafana/provisioning/dashboards:ro
+    depends_on:
+      postgres:
+        condition: service_healthy
+volumes:
+  research_postgres_data:
+  research_grafana_data:
+networks:
+  default:
+    ipam:
+      config:
+        - subnet: 10.252.61.0/24

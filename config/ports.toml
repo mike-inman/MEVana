@@ -20,6 +20,8 @@ kafka_external = 29092              # Kafka broker (external access)
 redis = 6379                        # Redis cache and session store
 postgres_internal = 5432            # PostgreSQL (container internal)
 postgres_external = 5433            # PostgreSQL (host mapped)
+research_postgres = 5434           # Isolated research Postgres, loopback only
+research_grafana = 3010            # Isolated research Grafana, loopback only
 
 # Monitoring Stack
 prometheus = 9090                   # Metrics collection

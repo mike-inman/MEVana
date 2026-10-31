@@ -1,0 +1,17 @@
+apiVersion: 1
+datasources:
+  - name: Research Postgres
+    uid: research-postgres
+    type: postgres
+    access: proxy
+    url: postgres:5432
+    user: research_reader
+    database: research
+    isDefault: true
+    editable: false
+    jsonData:
+      sslmode: disable
+      postgresVersion: 1500
+      timescaledb: false
+    secureJsonData:
+      password: $RESEARCH_READER_PASSWORD

@@ -1,0 +1,429 @@
+{
+  "annotations": {
+    "list": []
+  },
+  "editable": false,
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 0,
+  "id": null,
+  "links": [],
+  "liveNow": false,
+  "panels": [
+    {
+      "id": 1,
+      "title": "Evidence limits",
+      "type": "text",
+      "gridPos": {
+        "x": 0,
+        "y": 0,
+        "w": 24,
+        "h": 3
+      },
+      "options": {
+        "mode": "markdown",
+        "content": "Simulated research only. About eight minutes of capture. No realized results.\n\nEach experiment has its own quote asset and overlapping candidate scope. ModelRanking is ranking-v0 heuristic; no learned model was involved."
+      }
+    },
+    {
+      "id": 2,
+      "title": "Experiments",
+      "type": "table",
+      "description": "",
+      "datasource": {
+        "type": "postgres",
+        "uid": "research-postgres"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "postgres",
+            "uid": "research-postgres"
+          },
+          "editorMode": "code",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "SELECT result_id AS \"Experiment\", evidence_kind AS \"Evidence kind\", status AS \"Status\", scope_label AS \"Scope\", scope->'routeShapes' AS \"Route shapes\", scope->>'poolCount' AS \"Pool count\", quote_symbol AS \"Quote asset\", window_start_utc AS \"Window start UTC\", window_end_utc AS \"Window end UTC\" FROM research.experiments ORDER BY result_id"
+        }
+      ],
+      "gridPos": {
+        "x": 0,
+        "y": 3,
+        "w": 24,
+        "h": 8
+      },
+      "fieldConfig": {
+        "defaults": {
+          "noValue": "Not measured",
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "#7aa5d2"
+          },
+          "custom": {},
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "#7aa5d2",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {}
+    },
+    {
+      "id": 3,
+      "title": "Coverage: evaluable share per experiment and policy",
+      "type": "bargauge",
+      "description": "",
+      "datasource": {
+        "type": "postgres",
+        "uid": "research-postgres"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "postgres",
+            "uid": "research-postgres"
+          },
+          "editorMode": "code",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "SELECT result_id || ' / ' || policy_kind AS metric, evaluable_share_pct AS value FROM research.v_policy_evidence ORDER BY result_id, policy_kind"
+        }
+      ],
+      "gridPos": {
+        "x": 0,
+        "y": 11,
+        "w": 12,
+        "h": 8
+      },
+      "fieldConfig": {
+        "defaults": {
+          "noValue": "Not measured",
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "#7aa5d2"
+          },
+          "custom": {},
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "#7aa5d2",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "orientation": "horizontal",
+        "displayMode": "basic",
+        "showUnfilled": true
+      }
+    },
+    {
+      "id": 4,
+      "title": "Coverage: evaluable and evaluated counts",
+      "type": "table",
+      "description": "",
+      "datasource": {
+        "type": "postgres",
+        "uid": "research-postgres"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "postgres",
+            "uid": "research-postgres"
+          },
+          "editorMode": "code",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "SELECT result_id AS \"Experiment\", policy_kind AS \"Policy\", evaluable_candidates AS \"Evaluable\", candidates_evaluated AS \"Evaluated\", unevaluable_candidates AS \"Unevaluable\", evaluable_share_pct AS \"Share percent\" FROM research.v_policy_evidence ORDER BY result_id, policy_kind"
+        }
+      ],
+      "gridPos": {
+        "x": 12,
+        "y": 11,
+        "w": 12,
+        "h": 8
+      },
+      "fieldConfig": {
+        "defaults": {
+          "noValue": "Not measured",
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "#7aa5d2"
+          },
+          "custom": {},
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "#7aa5d2",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {}
+    },
+    {
+      "id": 5,
+      "title": "Where candidates went: rejection counts",
+      "type": "barchart",
+      "description": "One selected experiment. Rejection counts are grouped by policy and reason.",
+      "datasource": {
+        "type": "postgres",
+        "uid": "research-postgres"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "postgres",
+            "uid": "research-postgres"
+          },
+          "editorMode": "code",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "SELECT policy_kind AS policy, max(rejected_count) FILTER (WHERE reason_code='below_threshold') AS below_threshold, max(rejected_count) FILTER (WHERE reason_code='insufficient_state') AS insufficient_state, max(rejected_count) FILTER (WHERE reason_code='tick_array_absent') AS tick_array_absent, max(rejected_count) FILTER (WHERE reason_code='state_gap') AS state_gap FROM research.policy_rejections WHERE result_id=${experiment:sqlstring} GROUP BY policy_kind ORDER BY policy_kind"
+        }
+      ],
+      "gridPos": {
+        "x": 0,
+        "y": 19,
+        "w": 24,
+        "h": 8
+      },
+      "fieldConfig": {
+        "defaults": {
+          "noValue": "Not measured",
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "#7aa5d2"
+          },
+          "custom": {},
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "#7aa5d2",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "orientation": "horizontal",
+        "xField": "policy",
+        "stacking": {
+          "mode": "normal",
+          "group": "A"
+        },
+        "showValue": "auto"
+      }
+    },
+    {
+      "id": 6,
+      "title": "Policy comparison: selected experiment",
+      "type": "table",
+      "description": "",
+      "datasource": {
+        "type": "postgres",
+        "uid": "research-postgres"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "postgres",
+            "uid": "research-postgres"
+          },
+          "editorMode": "code",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "SELECT policy_kind AS \"Policy\", opportunities_detected AS \"Detected\", selected_or_executed AS \"Selected or executed\", CASE WHEN estimated_net_profit_quote IS NULL THEN NULL ELSE estimated_net_profit_quote::text || ' ' || quote_symbol END AS \"Estimated net profit\", CASE WHEN simulated_net_profit_quote IS NULL THEN NULL ELSE simulated_net_profit_quote::text || ' ' || quote_symbol END AS \"Simulated net profit\", missed_candidates AS \"Missed\", CASE WHEN realized_net_profit_quote IS NULL THEN NULL ELSE realized_net_profit_quote::text || ' ' || quote_symbol END AS \"Realized net profit\" FROM research.v_policy_evidence WHERE result_id=${experiment:sqlstring} ORDER BY policy_kind"
+        }
+      ],
+      "gridPos": {
+        "x": 0,
+        "y": 27,
+        "w": 24,
+        "h": 8
+      },
+      "fieldConfig": {
+        "defaults": {
+          "noValue": "Not measured",
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "#7aa5d2"
+          },
+          "custom": {},
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "#7aa5d2",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {}
+    },
+    {
+      "id": 7,
+      "title": "Shape coverage: triangle and two-leg within selected universe",
+      "type": "table",
+      "description": "",
+      "datasource": {
+        "type": "postgres",
+        "uid": "research-postgres"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "postgres",
+            "uid": "research-postgres"
+          },
+          "editorMode": "code",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "SELECT shape AS \"Shape\", route_count AS \"Routes\", policy_kind AS \"Policy\", evaluable_candidates AS \"Evaluable\", candidates_evaluated AS \"Evaluated\", unevaluable_candidates AS \"Unevaluable\", evaluable_share_pct AS \"Share percent\", CASE WHEN estimated_net_profit_quote IS NULL THEN NULL ELSE estimated_net_profit_quote::text || ' ' || quote_symbol END AS \"Estimated net profit\", CASE WHEN simulated_net_profit_quote IS NULL THEN NULL ELSE simulated_net_profit_quote::text || ' ' || quote_symbol END AS \"Simulated net profit\" FROM research.v_shape_evidence WHERE result_id=${experiment:sqlstring} ORDER BY shape, policy_kind"
+        }
+      ],
+      "gridPos": {
+        "x": 0,
+        "y": 35,
+        "w": 24,
+        "h": 8
+      },
+      "fieldConfig": {
+        "defaults": {
+          "noValue": "Not measured",
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "#7aa5d2"
+          },
+          "custom": {},
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "#7aa5d2",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {}
+    },
+    {
+      "id": 8,
+      "title": "Missing state by pool \u2014 Diagnostic probe: raw input amounts, not chained route amounts",
+      "type": "heatmap",
+      "description": "Diagnostic probe at raw input atoms. These values are not chained route amounts.",
+      "datasource": {
+        "type": "postgres",
+        "uid": "research-postgres"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "postgres",
+            "uid": "research-postgres"
+          },
+          "editorMode": "code",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "SELECT seed_loaded_at AS time, pool_id || ' / ' || input_token || ' \u2192 ' || output_token || ' / ' || outcome AS metric, outcome_count AS value FROM research.v_probe_evidence WHERE result_id=${experiment:sqlstring} AND outcome IN ('state_gap','insufficient_state','tick_array_absent') ORDER BY pool_id, input_token, outcome"
+        }
+      ],
+      "gridPos": {
+        "x": 0,
+        "y": 43,
+        "w": 24,
+        "h": 10
+      },
+      "fieldConfig": {
+        "defaults": {
+          "noValue": "Not measured",
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "#7aa5d2"
+          },
+          "custom": {},
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "#7aa5d2",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "calculate": true,
+        "yAxis": {
+          "axisPlacement": "left"
+        }
+      }
+    }
+  ],
+  "refresh": "",
+  "schemaVersion": 39,
+  "tags": [
+    "research",
+    "simulated"
+  ],
+  "templating": {
+    "list": [
+      {
+        "name": "experiment",
+        "label": "Experiment",
+        "type": "query",
+        "datasource": {
+          "type": "postgres",
+          "uid": "research-postgres"
+        },
+        "query": "SELECT result_id AS __text, result_id AS __value FROM research.experiments ORDER BY result_id",
+        "refresh": 1,
+        "includeAll": false,
+        "multi": false,
+        "current": {},
+        "options": []
+      }
+    ]
+  },
+  "time": {
+    "from": "now-1h",
+    "to": "now"
+  },
+  "timepicker": {},
+  "timezone": "utc",
+  "title": "MEVana Research Evidence",
+  "uid": "mevana-research-evidence",
+  "version": 1
+}

@@ -10,11 +10,11 @@ if ls dashboards/*.json >/dev/null 2>&1; then
   fail "Found dashboards/ at repo root. Move JSON files to infrastructure/grafana/dashboards/."
 fi
 
-stray=$(find . -type f -name '*.json' -path '*/dashboards/*' ! -path './infrastructure/grafana/dashboards/*' | wc -l | xargs)
+stray=$(find . -type f -name '*.json' -path '*/dashboards/*' ! -path './infrastructure/grafana/dashboards/*' ! -path './infrastructure/research/grafana/dashboards/mevana-research-evidence.json' | wc -l | xargs)
 if [ "$stray" != "0" ]; then
   echo "Stray dashboard files:" >&2
-  find . -type f -name '*.json' -path '*/dashboards/*' ! -path './infrastructure/grafana/dashboards/*' >&2 || true
-  fail "Dashboard JSON must live in infrastructure/grafana/dashboards/."
+  find . -type f -name '*.json' -path '*/dashboards/*' ! -path './infrastructure/grafana/dashboards/*' ! -path './infrastructure/research/grafana/dashboards/mevana-research-evidence.json' >&2 || true
+  fail "Dashboard JSON must live in an approved Grafana dashboard directory."
 fi
 
 # 2) Disallow docs-new (all docs must live in docs/)
@@ -30,7 +30,7 @@ if [ -n "$bad" ]; then
 fi
 
 # 4) Validate dashboard JSON files parse
-dash_files=$(find infrastructure/grafana/dashboards -maxdepth 1 -type f -name '*.json' 2>/dev/null || true)
+dash_files=$(find infrastructure/grafana/dashboards infrastructure/research/grafana/dashboards -maxdepth 1 -type f -name '*.json' 2>/dev/null || true)
 if [ -n "$dash_files" ]; then
   echo "Validating dashboard JSON files..."
   has_jq=$(command -v jq || true)

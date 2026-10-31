@@ -16,6 +16,7 @@
     <ProjectReference Include="..\..\src\MEVana.Research.Api\MEVana.Research.Api.csproj" />
     <ProjectReference Include="..\..\src\MEVana.Research.Core\MEVana.Research.Core.csproj" />
     <ProjectReference Include="..\..\src\MEVana.Research.Persistence\MEVana.Research.Persistence.csproj" />
+    <ProjectReference Include="..\..\src\MEVana.Research.SqlExport\MEVana.Research.SqlExport.csproj" />
   </ItemGroup>
   <ItemGroup>
     <None Update="Fixtures/*.json" CopyToOutputDirectory="PreserveNewest" />
