@@ -1,6 +1,6 @@
 //! Fixed predeclared gate: three runs, six 10-bps events/hour, two-slot median,
 //! known fees and fewer than 20% stale exclusions.
-use crate::analysis::Analysis;
+use crate::{analysis::Analysis, capture::Allowlist};
 use anyhow::{ensure, Result};
 use chrono::DateTime;
 use serde::Serialize;
@@ -99,6 +99,49 @@ pub fn evaluate(analyses: &[Analysis]) -> Result<Vec<GateResult>> {
     Ok(out)
 }
 
+pub fn evaluate_with_allowlist(
+    analyses: &[Analysis],
+    allowlist: &Allowlist,
+) -> Result<Vec<GateResult>> {
+    let mut results = evaluate(analyses)?;
+    let observed: BTreeSet<_> = results
+        .iter()
+        .map(|r| (r.pair.clone(), r.venue_combination.clone()))
+        .collect();
+    let mut expected = BTreeSet::new();
+    for (i, a) in allowlist.pools.iter().enumerate() {
+        for b in &allowlist.pools[i + 1..] {
+            if a.pair == b.pair {
+                let venues = if a.venue <= b.venue {
+                    format!("{}/{}", a.venue, b.venue)
+                } else {
+                    format!("{}/{}", b.venue, a.venue)
+                };
+                expected.insert((a.pair.clone(), venues));
+            }
+        }
+    }
+    ensure!(
+        observed.is_subset(&expected),
+        "analysis contains a segment outside the allowlist"
+    );
+    for (pair, venue_combination) in expected.difference(&observed) {
+        results.push(GateResult {
+            evidence_kind: "Indicative".into(),
+            pair: pair.clone(),
+            venue_combination: venue_combination.clone(),
+            result: "too_little_data".into(),
+            runs: 0,
+            events_per_hour_10bps_micro: None,
+            median_duration_slots: None,
+            stale_exclusion_percent_micro: None,
+            all_fees_known: false,
+        });
+    }
+    results.sort_by(|a, b| (&a.pair, &a.venue_combination).cmp(&(&b.pair, &b.venue_combination)));
+    Ok(results)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -161,5 +204,18 @@ mod tests {
                 .result,
             "fail"
         );
+    }
+    #[test]
+    fn unobserved_allowlist_segments_are_too_little_data() {
+        let allowlist = Allowlist::load(std::path::Path::new(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/allowlist.json"
+        )))
+        .unwrap();
+        let results = evaluate_with_allowlist(&[], &allowlist).unwrap();
+        assert_eq!(results.len(), 40);
+        assert!(results
+            .iter()
+            .all(|r| r.result == "too_little_data" && r.runs == 0));
     }
 }

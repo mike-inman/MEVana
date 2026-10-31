@@ -3,9 +3,10 @@ use clap::{Parser, Subcommand};
 use gap_survey::capture::{record, CaptureArgs};
 use gap_survey::{
     analysis::{write_analysis, Analysis},
-    gate::evaluate,
+    gate::evaluate_with_allowlist,
 };
 use geyser_capture::config::Provider;
+use sha2::{Digest, Sha256};
 use std::path::PathBuf;
 
 #[derive(Parser)]
@@ -49,6 +50,8 @@ enum Command {
     Gate {
         #[arg(long,required=true,num_args=1..)]
         analyses: Vec<PathBuf>,
+        #[arg(long, default_value = "crates/gap-survey/allowlist.json")]
+        allowlist: PathBuf,
         #[arg(long)]
         output: PathBuf,
     },
@@ -93,12 +96,22 @@ async fn main() -> Result<()> {
             write_analysis(&run_dir, &allowlist, &output)?;
             println!("Wrote deterministic Indicative analysis");
         }
-        Command::Gate { analyses, output } => {
+        Command::Gate {
+            analyses,
+            allowlist,
+            output,
+        } => {
             let runs: Vec<Analysis> = analyses
                 .iter()
                 .map(|p| serde_json::from_slice(&std::fs::read(p)?).map_err(anyhow::Error::from))
                 .collect::<Result<_>>()?;
-            let results = evaluate(&runs)?;
+            let hash = format!("{:x}", Sha256::digest(std::fs::read(&allowlist)?));
+            ensure!(
+                runs.iter().all(|r| r.allowlist_sha256 == hash),
+                "analysis allowlist hash mismatch"
+            );
+            let allowlist = gap_survey::capture::Allowlist::load(&allowlist)?;
+            let results = evaluate_with_allowlist(&runs, &allowlist)?;
             std::fs::write(output, serde_json::to_vec_pretty(&results)?)?;
             println!("Wrote {} fixed-gate segment results", results.len());
         }
