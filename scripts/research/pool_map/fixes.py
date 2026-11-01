@@ -20,7 +20,7 @@ def onchain(rows,bundle):
  pools=bundle['pools'];rounds=bundle['chain_rounds']
  for r in rows:
   key=r['pair'];eligible=[p for p in pools if p.get('venue_type')=='AMM' and '|'.join(sorted([p['mint0'],p['mint1']]))==key and p.get('liquidity') is not None and D(p['liquidity'])>=20000 and p.get('created') is not None and bundle['sample_epoch']-int(p['created'])>=7*86400]
-  r.update(onchain_gap_bps=None,fee_kind='Not measured',above_fee=None,bin_step_bps=None,deepest_depth=None,shallowest_depth=None,deepest_venue=None,shallowest_venue=None)
+  r.update(gap_within_bin_step=None,onchain_gap_bps=None,fee_kind='Not measured',above_fee=None,bin_step_bps=None,deepest_depth=None,shallowest_depth=None,deepest_venue=None,shallowest_venue=None)
   symbols=bundle.get('symbols',{});r['symbol']=' / '.join(symbols.get(m,m[:6]+'…') for m in key.split('|'));r['freeze_flag']='; '.join(f"{symbols.get(m,m[:6])}: {v['freeze']}" for m,v in r['freeze_flags'].items());r['mint_check']='; '.join(f"{symbols.get(m,m[:6])}: {v['reason'] or ('Pass' if v['safe'] else 'Not measured')}" for m,v in r['freeze_flags'].items())
   estimates=[(D(bundle['depths'][p['address']]),p['venue']) for p in eligible if bundle.get('depths',{}).get(p['address']) is not None]
   if estimates:r['deepest_depth'],r['deepest_venue']=max(estimates);r['shallowest_depth'],r['shallowest_venue']=min(estimates)
@@ -34,14 +34,16 @@ def onchain(rows,bundle):
     if y['mint0']!=key.split('|')[0]:pb=1/pb
     gap=abs(pa-pb)*20000/(pa+pb);fee=None if x['fee_micro_bps'] is None or y['fee_micro_bps'] is None else D(x['fee_micro_bps']+y['fee_micro_bps'])/1000000
     kind='MinimumFeeOnly' if 'MinimumBaseFee' in [x['fee_kind'],y['fee_kind']] else 'Measured'
-    obs=(gap,fee,kind,max([v for v in (x.get('bin_step_bps'),y.get('bin_step_bps')) if v is not None],default=None));observations.append(obs)
+    obs=(gap,fee,kind,max([v for v in (x.get('bin_step_bps'),y.get('bin_step_bps')) if v is not None],default=None),a['address'],b['address']);observations.append(obs)
     if fee is None:unknown=True
     elif gap>fee:passes.append(obs)
   if observations:
    chosen=max(observations,key=lambda x:x[0])
-   r['onchain_gap_bps'],r['combined_fee_bps'],kind,r['bin_step_bps']=chosen
+   r['onchain_gap_bps'],r['combined_fee_bps'],kind,r['bin_step_bps']=chosen[:4]
+   r['compared_pool_ids']=list(chosen[4:]);r['compared_venues']=[p['venue'] for a in chosen[4:] for p in eligible if p['address']==a]
+   r['gap_within_bin_step']=None if r['bin_step_bps'] is None else r['onchain_gap_bps']<=r['bin_step_bps']
    r['fee_kind']=kind if chosen[1] is not None else 'Not measured';r['above_fee']=chosen[0]>chosen[1] if chosen[1] is not None else None
-  if r['failed_step'] in (None,'R5'):
+  if r['failed_step'] in (None,'R5') and not r.get('not_checked'):
    r['failed_step']=None;r['reason']=None
    if r['above_fee'] is True:pass
    elif not observations or r['combined_fee_bps'] is None:r['reason']='Not measured';r['fee_kind']='Not measured'

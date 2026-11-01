@@ -48,7 +48,7 @@ def first_failure(pools,now,mints):
 def analyze(bundle):
     pools=bundle['pools']; grouped={}
     for p in pools:
-        if bundle.get('version')=='19a' and p.get('venue_type')!='AMM':continue
+        if bundle.get('version') in ('19a','19b') and p.get('venue_type')!='AMM':continue
         grouped.setdefault(pair(p['mint0'],p['mint1']),[]).append(p)
     for key in bundle['controls']:grouped.setdefault(key,[])
     rows=[];new=[]
@@ -56,7 +56,7 @@ def analyze(bundle):
         if p.get('created') is not None and bundle['sample_epoch']-int(p['created'])<7*86400:new.append(p)
     for key,ps in sorted(grouped.items()):
         step,reason,eligible=first_failure(ps,bundle['sample_epoch'],bundle['mints'])
-        if step is None and 'onchain_evidence_kind' in bundle and sum('onchain_pool_owner' in p for p in eligible)<2:step,reason='R4','shortlist_not_checked'
+        if step is None and bundle.get('version')!='19b' and 'onchain_evidence_kind' in bundle and sum('onchain_pool_owner' in p for p in eligible)<2:step,reason='R4','shortlist_not_checked'
         r={'pair':key,'control':key in bundle['controls'],'failed_step':step,'reason':reason,'pool_count':len(ps),'evidence_kind':'Reported','list':None,'turnover':None,'price_disagreement_bps':None,'sample_movement_bps':None,'liquidity_imbalance':None,'combined_fee_bps':None,'near_price_depth_usd_estimate':None,'freeze_flags':{m:mint_check(bundle['mints'].get(m),m in EXEMPT) for m in key.split('|')},'onchain_evidence_kind':'OnChain','exemptions':{m:EXEMPT[m] for m in key.split('|') if m in EXEMPT}}
         if step is None:
             values=[];movement=[]
@@ -98,10 +98,15 @@ def analyze(bundle):
                 else:r['failed_step']='R5';r['reason']='fees_not_below_gap'
         if r['control']:r['list']='Control'
         rows.append(r)
-    if bundle.get('version')=='19a':
+    if bundle.get('version')=='19b':
+        for row in rows:
+            row['not_checked']=False
+            if row['failed_step']=='R4' and (row['pair'] not in bundle['planned_pairs'] or any(m not in bundle['mint_requested'] for m in row['pair'].split('|'))):
+                row.update(not_checked=True,failed_step=None,reason='NotChecked',outcome='NotChecked')
+    if bundle.get('version') in ('19a','19b'):
         from fixes import onchain
         onchain(rows,bundle)
-    survivors=[r for r in rows if not r['failed_step'] and not r['control']]
+    survivors=[r for r in rows if not r['failed_step'] and not r['control'] and not r.get('not_checked')]
     liqs=sorted(r['liquidity'] for r in survivors)
     median=liqs[(len(liqs)-1)//2] if liqs else None
     candidates=sorted([r for r in survivors if r['liquidity']>=median and r['turnover'] is not None],key=lambda r:(r['turnover'],r['pair']))[:30]

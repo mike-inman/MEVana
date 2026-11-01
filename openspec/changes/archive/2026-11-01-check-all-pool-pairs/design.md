@@ -1,0 +1,3 @@
+# 2026-11-01 Design
+
+Reuse the saved 19a bundle. Plan every R1–R3 eligible pair and all controls, choosing up to three pools with the existing liquidity order. Conservative preflight bounds one configuration account per pool; reject a plan above 15 RPC calls before constructing a live source. Enforce 40 public price requests and a 460-second guard below eight minutes. Read mints once and then three price rounds 120 seconds apart. Unsupported venues remain unmeasured. Requested-but-unreadable mints are rejected; unrequested eligibility is NotChecked. Within-bin labels are nullable comparisons against the largest bin step and cannot affect R5 or list selection. Save raw responses and use the shared serializer for byte-identical replay.

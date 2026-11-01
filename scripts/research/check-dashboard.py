@@ -78,7 +78,7 @@ pair_path = ROOT / 'infrastructure/research/grafana/dashboards/mevana-pair-disco
 pair_dashboard = json.loads(pair_path.read_text())
 assert pair_dashboard['title'] == 'MEVana Pair Discovery'
 assert pair_dashboard['editable'] is False
-assert len(pair_dashboard['panels']) == 10
+assert len(pair_dashboard['panels']) == 13
 assert 'One short sample. Reported data and indicative prices. Not executable and not profit.' in pair_dashboard['panels'][0]['options']['content']
 assert not re.search(r'COALESCE|profitable|winner|best|recommended|"green"|"red"', pair_path.read_text(), re.I)
 for panel in pair_dashboard['panels'][1:]:
@@ -97,3 +97,7 @@ assert 'onchain_gap_bps' in pair_sql and 'fee_kind' in pair_sql
 
 assert "jsonb_object_agg" not in pair_sql
 assert "Start UTC" in pair_sql
+
+assert "NotChecked" in pair_sql
+assert "gap_within_bin_step" in pair_sql
+assert any("Comparison" in p["title"] and "gap_within_bin_step" in p["targets"][0]["rawSql"] for p in pair_dashboard["panels"][1:])
