@@ -1,0 +1,175 @@
+{
+  "array_cap_per_pool": 25,
+  "geyser_bytes": 0,
+  "jup": "JUPyiwrYJFskUPiHa7hkeR8VUtAeFoSYbKedZNsDvCN",
+  "max_slot_spread": 25,
+  "meteora_keys": [
+    "31p1hptjhFo6ZD8oBqkfutNXQKGGPyi7YcEAfsyKW777",
+    "3sehQcVywWcFJZ1ri3NmJ7MRkrXbViJMRNN5b6kz8Mqn",
+    "3xNGdc58axYtrJ64STQz5TrdQWVtWHLR888iRBbWZnEe",
+    "6F4rVnmVc1A2QDqpHn5cpQZfXugapFbGZTXEyaakpvVQ",
+    "9uX6G8ZaRVxGSVybyYwqjHdgA1hgQqsospqD4m1sG3u2",
+    "ANCx141SujgVdbKz9NTEH8F38qWsnyyXsVju64aU3qLB",
+    "AXXo7N2gcLeVyo8nDsN99UW8Fv6NCsa2DP21WD3SKtM3",
+    "AtcGozT6i1GR3wJAjVwRwmt7qbHqZrBUqKs2DcMAKoVe",
+    "BhQEFZCRnWKQ21LEt4DUby7fKynfmLVJcNjfHNqjEF61",
+    "C8Gr6AUuq9hEdSYJzoEpNcdjpojPZwqG5MtQbeouNNwg",
+    "DXfnX2oCJAcfBC8A7MB1UamcrT9eeERxWP2RduHkrbN",
+    "DdMA1cHcHEqYfttc1z1sJEY978CcU1pyjNuTWTNmdvzU",
+    "EXXfbVutbuexDZtPw8pkSvWxLFoUMBHd544CAGkmtPZm",
+    "EoFtFBgdBXzKeqZc5dtYGvnKicWEvfEZGTZQM9eFTJ6b",
+    "HdsFGjjY46twFKjqHqUyT2bnRS4XCo1HaExts5CSNprU",
+    "HfgjZDmexhFVD28Vkb1NbQwWeXP3uDcVTLPjSGHmRHhL"
+  ],
+  "mint_keys": [
+    "2zMMhcVQEXDtdE6vsFS7S7D5oUodfJHE8vd1gnBouauv",
+    "3NZ9JMVBmGAqocybic2c7LQCJScmgsAZ6vQqTDzcqmJh",
+    "98sMhvDwXj1RQi5c5Mndm3vPe9cBqPrbLaufMXFNMh5g",
+    "DezXAZ8z7PnrnRJjz3wXBoRgixCa6xjnB7YaB1pPB263",
+    "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v",
+    "Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB",
+    "JDzPbXboQYWVmdxXS3LbvjM52RtsV1QaSv2AzoCiai2o",
+    "JUPyiwrYJFskUPiHa7hkeR8VUtAeFoSYbKedZNsDvCN",
+    "METvsvVRapdj9cFLzq4Tr43xK4tAjQfwX76z3n6mWQL",
+    "So11111111111111111111111111111111111111112"
+  ],
+  "orca": "Indicative: tick arrays are not part of this bounded account plan",
+  "pairs": [
+    {
+      "control": false,
+      "pair": "2zMMhcVQEXDtdE6vsFS7S7D5oUodfJHE8vd1gnBouauv|EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v",
+      "pools": [
+        "9uX6G8ZaRVxGSVybyYwqjHdgA1hgQqsospqD4m1sG3u2",
+        "DdMA1cHcHEqYfttc1z1sJEY978CcU1pyjNuTWTNmdvzU"
+      ],
+      "symbol": "PENGU / USDC"
+    },
+    {
+      "control": false,
+      "pair": "3NZ9JMVBmGAqocybic2c7LQCJScmgsAZ6vQqTDzcqmJh|EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v",
+      "pools": [
+        "3sehQcVywWcFJZ1ri3NmJ7MRkrXbViJMRNN5b6kz8Mqn",
+        "55BrDTCLWayM16GwrMEQU57o4PTm6ceF9wavSdNZcEiy"
+      ],
+      "symbol": "WBTC / USDC"
+    },
+    {
+      "control": false,
+      "pair": "98sMhvDwXj1RQi5c5Mndm3vPe9cBqPrbLaufMXFNMh5g|EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v",
+      "pools": [
+        "6F4rVnmVc1A2QDqpHn5cpQZfXugapFbGZTXEyaakpvVQ",
+        "DXfnX2oCJAcfBC8A7MB1UamcrT9eeERxWP2RduHkrbN"
+      ],
+      "symbol": "HYPE / USDC"
+    },
+    {
+      "control": false,
+      "pair": "98sMhvDwXj1RQi5c5Mndm3vPe9cBqPrbLaufMXFNMh5g|EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v",
+      "pools": [
+        "ANCx141SujgVdbKz9NTEH8F38qWsnyyXsVju64aU3qLB",
+        "DXfnX2oCJAcfBC8A7MB1UamcrT9eeERxWP2RduHkrbN"
+      ],
+      "symbol": "HYPE / USDC"
+    },
+    {
+      "control": true,
+      "pair": "DezXAZ8z7PnrnRJjz3wXBoRgixCa6xjnB7YaB1pPB263|EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v",
+      "pools": [
+        "31p1hptjhFo6ZD8oBqkfutNXQKGGPyi7YcEAfsyKW777",
+        "8QaXeHBrShJTdtN1rWCccBxpSVvKksQ2PCu5nufb2zbk"
+      ],
+      "symbol": "Bonk / USDC"
+    },
+    {
+      "control": true,
+      "pair": "DezXAZ8z7PnrnRJjz3wXBoRgixCa6xjnB7YaB1pPB263|So11111111111111111111111111111111111111112",
+      "pools": [
+        "5zpyutJu9ee6jFymDGoK7F6S5Kczqtc9FomP3ueKuyA9",
+        "AtcGozT6i1GR3wJAjVwRwmt7qbHqZrBUqKs2DcMAKoVe"
+      ],
+      "symbol": "Bonk / SOL"
+    },
+    {
+      "control": true,
+      "pair": "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v|JUPyiwrYJFskUPiHa7hkeR8VUtAeFoSYbKedZNsDvCN",
+      "pools": [
+        "BhQEFZCRnWKQ21LEt4DUby7fKynfmLVJcNjfHNqjEF61",
+        "HfgjZDmexhFVD28Vkb1NbQwWeXP3uDcVTLPjSGHmRHhL"
+      ],
+      "symbol": "USDC / JUP"
+    },
+    {
+      "control": false,
+      "pair": "Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB|JDzPbXboQYWVmdxXS3LbvjM52RtsV1QaSv2AzoCiai2o",
+      "pools": [
+        "AXXo7N2gcLeVyo8nDsN99UW8Fv6NCsa2DP21WD3SKtM3",
+        "EXXfbVutbuexDZtPw8pkSvWxLFoUMBHd544CAGkmtPZm"
+      ],
+      "symbol": "USDT / FO"
+    },
+    {
+      "control": false,
+      "pair": "JUPyiwrYJFskUPiHa7hkeR8VUtAeFoSYbKedZNsDvCN|METvsvVRapdj9cFLzq4Tr43xK4tAjQfwX76z3n6mWQL",
+      "pools": [
+        "3xNGdc58axYtrJ64STQz5TrdQWVtWHLR888iRBbWZnEe",
+        "EoFtFBgdBXzKeqZc5dtYGvnKicWEvfEZGTZQM9eFTJ6b"
+      ],
+      "symbol": "JUP / MET"
+    },
+    {
+      "control": true,
+      "pair": "JUPyiwrYJFskUPiHa7hkeR8VUtAeFoSYbKedZNsDvCN|So11111111111111111111111111111111111111112",
+      "pools": [
+        "C1MgLojNLWBKADvu9BHdtgzz1oZX4dZ5zGdGcgvvW8Wz",
+        "C8Gr6AUuq9hEdSYJzoEpNcdjpojPZwqG5MtQbeouNNwg"
+      ],
+      "symbol": "JUP / SOL"
+    },
+    {
+      "control": true,
+      "pair": "JUPyiwrYJFskUPiHa7hkeR8VUtAeFoSYbKedZNsDvCN|So11111111111111111111111111111111111111112",
+      "pools": [
+        "C8Gr6AUuq9hEdSYJzoEpNcdjpojPZwqG5MtQbeouNNwg",
+        "HdsFGjjY46twFKjqHqUyT2bnRS4XCo1HaExts5CSNprU"
+      ],
+      "symbol": "JUP / SOL"
+    }
+  ],
+  "pool_keys": [
+    "31p1hptjhFo6ZD8oBqkfutNXQKGGPyi7YcEAfsyKW777",
+    "3sehQcVywWcFJZ1ri3NmJ7MRkrXbViJMRNN5b6kz8Mqn",
+    "3xNGdc58axYtrJ64STQz5TrdQWVtWHLR888iRBbWZnEe",
+    "55BrDTCLWayM16GwrMEQU57o4PTm6ceF9wavSdNZcEiy",
+    "5zpyutJu9ee6jFymDGoK7F6S5Kczqtc9FomP3ueKuyA9",
+    "6F4rVnmVc1A2QDqpHn5cpQZfXugapFbGZTXEyaakpvVQ",
+    "7qbRF6YsyGuLUVs6Y1q64bdVrfe4ZcUUz1JRdoVNUJnm",
+    "8QaXeHBrShJTdtN1rWCccBxpSVvKksQ2PCu5nufb2zbk",
+    "9uX6G8ZaRVxGSVybyYwqjHdgA1hgQqsospqD4m1sG3u2",
+    "ANCx141SujgVdbKz9NTEH8F38qWsnyyXsVju64aU3qLB",
+    "AXXo7N2gcLeVyo8nDsN99UW8Fv6NCsa2DP21WD3SKtM3",
+    "AtcGozT6i1GR3wJAjVwRwmt7qbHqZrBUqKs2DcMAKoVe",
+    "BhQEFZCRnWKQ21LEt4DUby7fKynfmLVJcNjfHNqjEF61",
+    "C1MgLojNLWBKADvu9BHdtgzz1oZX4dZ5zGdGcgvvW8Wz",
+    "C8Gr6AUuq9hEdSYJzoEpNcdjpojPZwqG5MtQbeouNNwg",
+    "DXfnX2oCJAcfBC8A7MB1UamcrT9eeERxWP2RduHkrbN",
+    "DdMA1cHcHEqYfttc1z1sJEY978CcU1pyjNuTWTNmdvzU",
+    "EXXfbVutbuexDZtPw8pkSvWxLFoUMBHd544CAGkmtPZm",
+    "EoFtFBgdBXzKeqZc5dtYGvnKicWEvfEZGTZQM9eFTJ6b",
+    "HdsFGjjY46twFKjqHqUyT2bnRS4XCo1HaExts5CSNprU",
+    "HfgjZDmexhFVD28Vkb1NbQwWeXP3uDcVTLPjSGHmRHhL"
+  ],
+  "public_requests": 0,
+  "reachability": "output_atoms > input_atoms; full modeled legs only",
+  "rpc_upper_bound": 10,
+  "run_id": "sample-20261101-20",
+  "sizes_usd": [
+    100,
+    1000
+  ],
+  "usd_references": {
+    "JUPyiwrYJFskUPiHa7hkeR8VUtAeFoSYbKedZNsDvCN": "BhQEFZCRnWKQ21LEt4DUby7fKynfmLVJcNjfHNqjEF61",
+    "So11111111111111111111111111111111111111112": "7qbRF6YsyGuLUVs6Y1q64bdVrfe4ZcUUz1JRdoVNUJnm"
+  },
+  "usdc": "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v",
+  "valuation": "USDC/USDT nominal $1; SOL and JUP from declared same-round nominal pool prices, price inputs only"
+}

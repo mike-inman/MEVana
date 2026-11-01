@@ -78,7 +78,7 @@ pair_path = ROOT / 'infrastructure/research/grafana/dashboards/mevana-pair-disco
 pair_dashboard = json.loads(pair_path.read_text())
 assert pair_dashboard['title'] == 'MEVana Pair Discovery'
 assert pair_dashboard['editable'] is False
-assert len(pair_dashboard['panels']) == 13
+assert len(pair_dashboard['panels']) == 15
 assert 'One short sample. Reported data and indicative prices. Not executable and not profit.' in pair_dashboard['panels'][0]['options']['content']
 assert not re.search(r'COALESCE|profitable|winner|best|recommended|"green"|"red"', pair_path.read_text(), re.I)
 for panel in pair_dashboard['panels'][1:]:
@@ -101,3 +101,22 @@ assert "Start UTC" in pair_sql
 assert "NotChecked" in pair_sql
 assert "gap_within_bin_step" in pair_sql
 assert any("Comparison" in p["title"] and "gap_within_bin_step" in p["targets"][0]["rawSql"] for p in pair_dashboard["panels"][1:])
+
+# 2026-11-01 CST: H20 outcomes and complete candidate/control tables.
+new_panels={p['id']:p for p in pair_dashboard['panels']}
+assert 'Modeled' in new_panels[14]['title'] and 'Indicative' in new_panels[14]['title']
+assert 'OnChain' in new_panels[15]['title']
+assert 'reachable_gap_results' in new_panels[14]['targets'][0]['rawSql']
+assert 'last_update_age_seconds' in new_panels[15]['targets'][0]['rawSql']
+for number in (4,5,6): assert new_panels[number]['gridPos']['h'] >= 14
+for number in (10,11,12): assert new_panels[number]['gridPos']['h'] >= 18
+for number in (6,9,12): assert "THEN '' ELSE" in new_panels[number]['targets'][0]['rawSql']
+for number in (14,15):
+ widths=[v['value'] for o in new_panels[number]['fieldConfig']['overrides'] for v in o['properties'] if v['id']=='custom.width']
+ assert sum(widths)<=1400
+print('Reachable-gap dashboard checks passed (Modeled, Indicative, OnChain; empty failure; full table heights)')
+
+for number in (6,9,12):
+ assert any(o['matcher']['options']=='First failure' and {'id':'noValue','value':' '} in o['properties'] for o in new_panels[number]['fieldConfig']['overrides'])
+
+assert new_panels[13]['gridPos']['h'] >= 620

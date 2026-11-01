@@ -38,7 +38,7 @@
         "x": 0,
         "y": 4,
         "w": 24,
-        "h": 4
+        "h": 12
       },
       "datasource": {
         "type": "postgres",
@@ -62,7 +62,8 @@
         "cellHeight": "sm",
         "footer": {
           "show": false
-        }
+        },
+        "enablePagination": false
       },
       "fieldConfig": {
         "defaults": {
@@ -573,14 +574,394 @@
       }
     },
     {
+      "id": 14,
+      "title": "Reachable gap test \u2014 Modeled / Indicative",
+      "type": "table",
+      "gridPos": {
+        "x": 0,
+        "y": 16,
+        "w": 24,
+        "h": 55
+      },
+      "datasource": {
+        "type": "postgres",
+        "uid": "research-postgres"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "postgres",
+            "uid": "research-postgres"
+          },
+          "editorMode": "code",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "SELECT data->>'symbol' AS \"Pair\",size_usd AS \"Size $\",left(pool_buy,6)||' \u2192 '||left(pool_sell,6) AS \"Direction\",data->>'result' AS \"Result\",round((data->>'modeled_dollars')::numeric,2) AS \"Modeled net $\",round((data->>'average_buy_price')::numeric,12) AS \"Avg buy\",round((data->>'average_sell_price')::numeric,12) AS \"Avg sell\",CASE WHEN data->>'reason' IS NULL THEN '' ELSE data->>'reason' END AS \"Unknown reason\",pool_buy||' \u2192 '||pool_sell AS \"Full pools\" FROM research.reachable_gap_results WHERE run_id='sample-20261101-20' ORDER BY data->>'symbol',pool_buy,size_usd"
+        }
+      ],
+      "options": {
+        "showHeader": true,
+        "cellHeight": "sm",
+        "footer": {
+          "show": false
+        },
+        "enablePagination": false
+      },
+      "fieldConfig": {
+        "defaults": {
+          "noValue": "Not measured",
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "#7aa5d2"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "#7aa5d2",
+                "value": null
+              }
+            ]
+          },
+          "custom": {
+            "cellOptions": {
+              "type": "auto"
+            },
+            "minWidth": 110
+          },
+          "decimals": 2
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Pair"
+            },
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 135
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Size $"
+            },
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 75
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Direction"
+            },
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 155
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Result"
+            },
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 115
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Modeled net $"
+            },
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 115
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Avg buy"
+            },
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 170
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Avg sell"
+            },
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 170
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Unknown reason"
+            },
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 245
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Full pools"
+            },
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 100
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Avg buy"
+            },
+            "properties": [
+              {
+                "id": "decimals",
+                "value": 12
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Avg sell"
+            },
+            "properties": [
+              {
+                "id": "decimals",
+                "value": 12
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Size $"
+            },
+            "properties": [
+              {
+                "id": "decimals",
+                "value": 0
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Unknown reason"
+            },
+            "properties": [
+              {
+                "id": "noValue",
+                "value": " "
+              }
+            ]
+          }
+        ]
+      },
+      "description": "2026-11-01 CST. $100/$1,000, both pool orders, two rounds. Selected full-state round if available; exact rounds and atom fees are retained. Before transaction, priority and tip costs. Orca without tick arrays stays Indicative. Nominal USD references are price inputs only. Not an execution or profit claim."
+    },
+    {
+      "id": 15,
+      "title": "Meteora liquidity and fee-state labels \u2014 OnChain",
+      "type": "table",
+      "gridPos": {
+        "x": 0,
+        "y": 71,
+        "w": 24,
+        "h": 22
+      },
+      "datasource": {
+        "type": "postgres",
+        "uid": "research-postgres"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "postgres",
+            "uid": "research-postgres"
+          },
+          "editorMode": "code",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "SELECT left(pool_id,8) AS \"Pool\",(data->>'active_id')::integer AS \"Active bin\",CASE WHEN data->>'price_changed_across_rounds'='true' THEN 'Yes' ELSE 'No' END AS \"Price changed\",(data->>'last_update_age_seconds')::bigint AS \"Fee-state age s\",(data->>'empty_bins_to_y')::integer AS \"Empty to Y\",(data->>'empty_bins_to_x')::integer AS \"Empty to X\",(data->>'slot')::bigint AS \"Slot\",pool_id AS \"Full pool\" FROM research.reachable_gap_pools WHERE run_id='sample-20261101-20' ORDER BY pool_id"
+        }
+      ],
+      "options": {
+        "showHeader": true,
+        "cellHeight": "sm",
+        "footer": {
+          "show": false
+        },
+        "enablePagination": false
+      },
+      "fieldConfig": {
+        "defaults": {
+          "noValue": "Not measured",
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "#7aa5d2"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "#7aa5d2",
+                "value": null
+              }
+            ]
+          },
+          "custom": {
+            "cellOptions": {
+              "type": "auto"
+            },
+            "minWidth": 110
+          },
+          "decimals": 0
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Pool"
+            },
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 110
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Active bin"
+            },
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 110
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Price changed"
+            },
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 130
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Fee-state age s"
+            },
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 140
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Empty to Y"
+            },
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 120
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Empty to X"
+            },
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 120
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Slot"
+            },
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 130
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Full pool"
+            },
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 420
+              }
+            ]
+          }
+        ]
+      },
+      "description": "Offset 56 is variable-parameter update time, not an independent last-trade timestamp. Empty distance counts bins lacking output-side reserves; unknown coverage remains Not measured. Final-round labels; both rounds retained."
+    },
+    {
       "id": 3,
       "title": "Requirement funnel \u2014 Reported",
       "type": "table",
       "gridPos": {
         "x": 0,
-        "y": 8,
+        "y": 93,
         "w": 24,
-        "h": 7
+        "h": 12
       },
       "datasource": {
         "type": "postgres",
@@ -604,7 +985,8 @@
         "cellHeight": "sm",
         "footer": {
           "show": false
-        }
+        },
+        "enablePagination": false
       },
       "fieldConfig": {
         "defaults": {
@@ -1108,9 +1490,9 @@
       "type": "table",
       "gridPos": {
         "x": 0,
-        "y": 15,
+        "y": 105,
         "w": 24,
-        "h": 7
+        "h": 14
       },
       "datasource": {
         "type": "postgres",
@@ -1134,7 +1516,8 @@
         "cellHeight": "sm",
         "footer": {
           "show": false
-        }
+        },
+        "enablePagination": false
       },
       "fieldConfig": {
         "defaults": {
@@ -1626,9 +2009,9 @@
       "type": "table",
       "gridPos": {
         "x": 0,
-        "y": 22,
+        "y": 119,
         "w": 24,
-        "h": 7
+        "h": 14
       },
       "datasource": {
         "type": "postgres",
@@ -1652,7 +2035,8 @@
         "cellHeight": "sm",
         "footer": {
           "show": false
-        }
+        },
+        "enablePagination": false
       },
       "fieldConfig": {
         "defaults": {
@@ -2144,9 +2528,9 @@
       "type": "table",
       "gridPos": {
         "x": 0,
-        "y": 29,
+        "y": 133,
         "w": 24,
-        "h": 7
+        "h": 14
       },
       "datasource": {
         "type": "postgres",
@@ -2162,7 +2546,7 @@
           "editorMode": "code",
           "format": "table",
           "rawQuery": true,
-          "rawSql": "SELECT data->>'symbol' AS \"Pair\",CASE WHEN data->'freeze_flags' @? '$.*.freeze ? (@ == true)' THEN 'Set' WHEN data->'freeze_flags' @? '$.*.freeze ? (@ == null)' THEN 'Not measured' ELSE 'Not set' END AS \"Freeze flag\",CASE WHEN data->>'failed_step'='R4' THEN data->>'reason' WHEN data->'freeze_flags' @? '$.*.safe ? (@ == false)' THEN 'Not measured' ELSE 'Pass / exemptions' END AS \"Mint check\",data->>'failed_step' AS \"First failure\",data->>'reason' AS \"Review reason\",pair_id AS \"Full mints\" FROM research.pair_clues WHERE run_id=(SELECT run_id FROM research.pool_map_runs ORDER BY (data->>'finished_epoch')::bigint DESC LIMIT 1) AND data->>'list'='Candidates' ORDER BY data->>'symbol'"
+          "rawSql": "SELECT data->>'symbol' AS \"Pair\",CASE WHEN data->'freeze_flags' @? '$.*.freeze ? (@ == true)' THEN 'Set' WHEN data->'freeze_flags' @? '$.*.freeze ? (@ == null)' THEN 'Not measured' ELSE 'Not set' END AS \"Freeze flag\",CASE WHEN data->>'failed_step'='R4' THEN data->>'reason' WHEN data->'freeze_flags' @? '$.*.safe ? (@ == false)' THEN 'Not measured' ELSE 'Pass / exemptions' END AS \"Mint check\",CASE WHEN data->>'failed_step' IS NULL THEN '' ELSE data->>'failed_step' END AS \"First failure\",CASE WHEN data->>'reason' IS NULL THEN '' ELSE data->>'reason' END AS \"Review reason\",pair_id AS \"Full mints\" FROM research.pair_clues WHERE run_id=(SELECT run_id FROM research.pool_map_runs ORDER BY (data->>'finished_epoch')::bigint DESC LIMIT 1) AND data->>'list'='Candidates' ORDER BY data->>'symbol'"
         }
       ],
       "options": {
@@ -2170,7 +2554,8 @@
         "cellHeight": "sm",
         "footer": {
           "show": false
-        }
+        },
+        "enablePagination": false
       },
       "fieldConfig": {
         "defaults": {
@@ -2652,6 +3037,30 @@
                 "value": 115
               }
             ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "First failure"
+            },
+            "properties": [
+              {
+                "id": "noValue",
+                "value": " "
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Review reason"
+            },
+            "properties": [
+              {
+                "id": "noValue",
+                "value": " "
+              }
+            ]
           }
         ]
       }
@@ -2662,9 +3071,9 @@
       "type": "table",
       "gridPos": {
         "x": 0,
-        "y": 36,
+        "y": 147,
         "w": 24,
-        "h": 7
+        "h": 12
       },
       "datasource": {
         "type": "postgres",
@@ -2688,7 +3097,8 @@
         "cellHeight": "sm",
         "footer": {
           "show": false
-        }
+        },
+        "enablePagination": false
       },
       "fieldConfig": {
         "defaults": {
@@ -3180,9 +3590,9 @@
       "type": "table",
       "gridPos": {
         "x": 0,
-        "y": 43,
+        "y": 159,
         "w": 24,
-        "h": 7
+        "h": 12
       },
       "datasource": {
         "type": "postgres",
@@ -3206,7 +3616,8 @@
         "cellHeight": "sm",
         "footer": {
           "show": false
-        }
+        },
+        "enablePagination": false
       },
       "fieldConfig": {
         "defaults": {
@@ -3698,9 +4109,9 @@
       "type": "table",
       "gridPos": {
         "x": 0,
-        "y": 50,
+        "y": 171,
         "w": 24,
-        "h": 7
+        "h": 12
       },
       "datasource": {
         "type": "postgres",
@@ -3716,7 +4127,7 @@
           "editorMode": "code",
           "format": "table",
           "rawQuery": true,
-          "rawSql": "SELECT data->>'symbol' AS \"Pair\",CASE WHEN data->'freeze_flags' @? '$.*.freeze ? (@ == true)' THEN 'Set' WHEN data->'freeze_flags' @? '$.*.freeze ? (@ == null)' THEN 'Not measured' ELSE 'Not set' END AS \"Freeze flag\",CASE WHEN data->>'failed_step'='R4' THEN data->>'reason' WHEN data->'freeze_flags' @? '$.*.safe ? (@ == false)' THEN 'Not measured' ELSE 'Pass / exemptions' END AS \"Mint check\",data->>'failed_step' AS \"First failure\",data->>'reason' AS \"Review reason\",pair_id AS \"Full mints\" FROM research.pair_clues WHERE run_id=(SELECT run_id FROM research.pool_map_runs ORDER BY (data->>'finished_epoch')::bigint DESC LIMIT 1) AND data->>'list'='Comparison' ORDER BY data->>'symbol'"
+          "rawSql": "SELECT data->>'symbol' AS \"Pair\",CASE WHEN data->'freeze_flags' @? '$.*.freeze ? (@ == true)' THEN 'Set' WHEN data->'freeze_flags' @? '$.*.freeze ? (@ == null)' THEN 'Not measured' ELSE 'Not set' END AS \"Freeze flag\",CASE WHEN data->>'failed_step'='R4' THEN data->>'reason' WHEN data->'freeze_flags' @? '$.*.safe ? (@ == false)' THEN 'Not measured' ELSE 'Pass / exemptions' END AS \"Mint check\",CASE WHEN data->>'failed_step' IS NULL THEN '' ELSE data->>'failed_step' END AS \"First failure\",CASE WHEN data->>'reason' IS NULL THEN '' ELSE data->>'reason' END AS \"Review reason\",pair_id AS \"Full mints\" FROM research.pair_clues WHERE run_id=(SELECT run_id FROM research.pool_map_runs ORDER BY (data->>'finished_epoch')::bigint DESC LIMIT 1) AND data->>'list'='Comparison' ORDER BY data->>'symbol'"
         }
       ],
       "options": {
@@ -3724,7 +4135,8 @@
         "cellHeight": "sm",
         "footer": {
           "show": false
-        }
+        },
+        "enablePagination": false
       },
       "fieldConfig": {
         "defaults": {
@@ -4206,6 +4618,30 @@
                 "value": 115
               }
             ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "First failure"
+            },
+            "properties": [
+              {
+                "id": "noValue",
+                "value": " "
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Review reason"
+            },
+            "properties": [
+              {
+                "id": "noValue",
+                "value": " "
+              }
+            ]
           }
         ]
       }
@@ -4216,9 +4652,9 @@
       "type": "table",
       "gridPos": {
         "x": 0,
-        "y": 57,
+        "y": 183,
         "w": 24,
-        "h": 7
+        "h": 18
       },
       "datasource": {
         "type": "postgres",
@@ -4242,7 +4678,8 @@
         "cellHeight": "sm",
         "footer": {
           "show": false
-        }
+        },
+        "enablePagination": false
       },
       "fieldConfig": {
         "defaults": {
@@ -4734,9 +5171,9 @@
       "type": "table",
       "gridPos": {
         "x": 0,
-        "y": 64,
+        "y": 201,
         "w": 24,
-        "h": 7
+        "h": 18
       },
       "datasource": {
         "type": "postgres",
@@ -4760,7 +5197,8 @@
         "cellHeight": "sm",
         "footer": {
           "show": false
-        }
+        },
+        "enablePagination": false
       },
       "fieldConfig": {
         "defaults": {
@@ -5252,9 +5690,9 @@
       "type": "table",
       "gridPos": {
         "x": 0,
-        "y": 71,
+        "y": 219,
         "w": 24,
-        "h": 7
+        "h": 18
       },
       "datasource": {
         "type": "postgres",
@@ -5270,7 +5708,7 @@
           "editorMode": "code",
           "format": "table",
           "rawQuery": true,
-          "rawSql": "SELECT data->>'symbol' AS \"Pair\",CASE WHEN data->'freeze_flags' @? '$.*.freeze ? (@ == true)' THEN 'Set' WHEN data->'freeze_flags' @? '$.*.freeze ? (@ == null)' THEN 'Not measured' ELSE 'Not set' END AS \"Freeze flag\",CASE WHEN data->>'failed_step'='R4' THEN data->>'reason' WHEN data->'freeze_flags' @? '$.*.safe ? (@ == false)' THEN 'Not measured' ELSE 'Pass / exemptions' END AS \"Mint check\",data->>'failed_step' AS \"First failure\",data->>'reason' AS \"Review reason\",pair_id AS \"Full mints\" FROM research.pair_requirements WHERE run_id=(SELECT run_id FROM research.pool_map_runs ORDER BY (data->>'finished_epoch')::bigint DESC LIMIT 1) AND data->>'control'='true' ORDER BY data->>'symbol'"
+          "rawSql": "SELECT data->>'symbol' AS \"Pair\",CASE WHEN data->'freeze_flags' @? '$.*.freeze ? (@ == true)' THEN 'Set' WHEN data->'freeze_flags' @? '$.*.freeze ? (@ == null)' THEN 'Not measured' ELSE 'Not set' END AS \"Freeze flag\",CASE WHEN data->>'failed_step'='R4' THEN data->>'reason' WHEN data->'freeze_flags' @? '$.*.safe ? (@ == false)' THEN 'Not measured' ELSE 'Pass / exemptions' END AS \"Mint check\",CASE WHEN data->>'failed_step' IS NULL THEN '' ELSE data->>'failed_step' END AS \"First failure\",CASE WHEN data->>'reason' IS NULL THEN '' ELSE data->>'reason' END AS \"Review reason\",pair_id AS \"Full mints\" FROM research.pair_requirements WHERE run_id=(SELECT run_id FROM research.pool_map_runs ORDER BY (data->>'finished_epoch')::bigint DESC LIMIT 1) AND data->>'control'='true' ORDER BY data->>'symbol'"
         }
       ],
       "options": {
@@ -5278,7 +5716,8 @@
         "cellHeight": "sm",
         "footer": {
           "show": false
-        }
+        },
+        "enablePagination": false
       },
       "fieldConfig": {
         "defaults": {
@@ -5760,6 +6199,30 @@
                 "value": 115
               }
             ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "First failure"
+            },
+            "properties": [
+              {
+                "id": "noValue",
+                "value": " "
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Review reason"
+            },
+            "properties": [
+              {
+                "id": "noValue",
+                "value": " "
+              }
+            ]
           }
         ]
       }
@@ -5770,9 +6233,9 @@
       "type": "table",
       "gridPos": {
         "x": 0,
-        "y": 78,
+        "y": 237,
         "w": 24,
-        "h": 7
+        "h": 620
       },
       "datasource": {
         "type": "postgres",
@@ -5796,7 +6259,8 @@
         "cellHeight": "sm",
         "footer": {
           "show": false
-        }
+        },
+        "enablePagination": false
       },
       "fieldConfig": {
         "defaults": {

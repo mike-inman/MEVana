@@ -38,7 +38,7 @@ def onchain(rows,bundle):
     if fee is None:unknown=True
     elif gap>fee:passes.append(obs)
   if observations:
-   chosen=max(observations,key=lambda x:x[0])
+   chosen=max(passes or observations,key=lambda x:x[0])
    r['onchain_gap_bps'],r['combined_fee_bps'],kind,r['bin_step_bps']=chosen[:4]
    r['compared_pool_ids']=list(chosen[4:]);r['compared_venues']=[p['venue'] for a in chosen[4:] for p in eligible if p['address']==a]
    r['gap_within_bin_step']=None if r['bin_step_bps'] is None else r['onchain_gap_bps']<=r['bin_step_bps']

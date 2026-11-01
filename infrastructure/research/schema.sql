@@ -247,3 +247,20 @@ CREATE TABLE IF NOT EXISTS research.pair_clues (
  PRIMARY KEY(run_id,pair_id)
 );
 GRANT SELECT ON ALL TABLES IN SCHEMA research TO research_reader;
+
+-- 2026-11-01 CST: Handoff 20 modeled read-only bin walks, not realized profit.
+CREATE TABLE IF NOT EXISTS research.reachable_gap_runs (
+ run_id text PRIMARY KEY, evidence_kind text NOT NULL CHECK(evidence_kind='Modeled'), data jsonb NOT NULL
+);
+CREATE TABLE IF NOT EXISTS research.reachable_gap_results (
+ run_id text NOT NULL REFERENCES research.reachable_gap_runs ON DELETE CASCADE,
+ pool_buy text NOT NULL, pool_sell text NOT NULL, size_usd integer NOT NULL CHECK(size_usd IN (100,1000)),
+ evidence_kind text NOT NULL CHECK(evidence_kind='Modeled'), data jsonb NOT NULL,
+ PRIMARY KEY(run_id,pool_buy,pool_sell,size_usd)
+);
+CREATE TABLE IF NOT EXISTS research.reachable_gap_pools (
+ run_id text NOT NULL REFERENCES research.reachable_gap_runs ON DELETE CASCADE,
+ pool_id text NOT NULL, evidence_kind text NOT NULL CHECK(evidence_kind='OnChain'), data jsonb NOT NULL,
+ PRIMARY KEY(run_id,pool_id)
+);
+GRANT SELECT ON ALL TABLES IN SCHEMA research TO research_reader;
