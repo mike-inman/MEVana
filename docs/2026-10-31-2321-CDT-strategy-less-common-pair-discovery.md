@@ -101,7 +101,13 @@ A clear negative result is a valid outcome.
 
 ## Order of work
 
-1. Verify and merge handoff 18.
-2. Handoff 19: stages 1 and 2, using no Geyser quota.
-3. Handoff 20: Meteora fees and stage 3.
+Decision, 2026-10-31 23:32 CDT: the user wants short samples and no long jobs. Each stage uses a small, capped sample, and stage 1 is one pass rather than a daily job.
+
+1. Verify and merge handoff 18 (done, merge `c6aa0175`).
+2. Handoff 19: stages 1 and 2, as one short sample using no Geyser quota.
+3. Handoff 20: Meteora fees and a small stage 3 sample.
 4. Handoff 21: stage 4, with stage 5 only if a route passes.
+
+## Lead from handoff 18 verification
+
+A scratch rerun counted Meteora at its base fee only, which is a best case because variable fees can only add cost. That gave 30 events of 10 bps or more, including JUP/SOL Orca/Meteora gaps of about 50 bps visible for 45 to 50 slots. These are not confirmed opportunities. DLMM prices move in bin steps, so the active-bin price can differ from the tradable price, and variable fees are not included. Handoff 20 must check both before this lead counts as evidence.

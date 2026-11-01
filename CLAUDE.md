@@ -166,9 +166,12 @@ Work proceeds through dated handoffs in `docs/`. The latest one is the authority
    - See the closeout in MEVana-UI: `docs/2026-10-30-2234-CDT-research-handoff-16-closeout.md`.
 10. **Handoffs 17 and 17a (done, 2026-10-31):** Grafana is the standard for visualization. A separate local research stack (`scripts/research/grafana-up.sh`, then `load-seed.sh`) serves the MEVana Research Evidence dashboard at `http://127.0.0.1:3010` from a `research` Postgres schema on port 5434.
     - See `docs/2026-10-31-1005-CDT-research-handoff-17a-dashboard-fixes-closeout.md`.
-11. **Next:**
-    - handoff 18: indicative price-gap survey across Orca, Raydium CLMM and Meteora DLMM, with live runs finished by 2026-11-04 (`docs/2026-10-31-0935-CDT-research-handoff-18-price-gap-survey.md`).
-    - Later: exact modeling and a server-host capture for segments that pass the survey gate.
+11. **Handoff 18 (done, 2026-10-31):** indicative price-gap survey of 13 pairs across Orca, Raydium CLMM and Meteora DLMM. No segment passed the gate (13 failed, 27 too little data), and there were no 10 bps net events. Meteora variable fees were not modeled.
+    - See `docs/2026-10-31-1836-CDT-research-handoff-18-price-gap-survey-closeout.md`.
+12. **Next:**
+    - handoff 19: one short pool map sample, with no Geyser streams (`docs/2026-10-31-2332-CDT-research-handoff-19-pool-map-sample.md`).
+    - The strategy is in `docs/2026-10-31-2321-CDT-strategy-less-common-pair-discovery.md`.
+    - Keep work to short, capped samples. Do not plan long jobs.
 
 **Not in focus right now:**
 - HotPath latency work, executor or Jito, wallets, live or paper trading;
