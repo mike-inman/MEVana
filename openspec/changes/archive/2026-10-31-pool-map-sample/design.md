@@ -1,0 +1,3 @@
+# 2026-10-31 Design
+
+Use Python Decimal in the existing research tooling instead of a new crate. Raw responses stay outside Git. Public calls are paced below published limits, capped at 300, with two retries on 429/5xx. RPC uses the existing Tatum snapshot helper with a wrapper cap of 20. The shared monotonic deadline is 1190 seconds. Three batched shortlist samples start five minutes apart. First-failure order and selection rules are frozen before collection. Read at most 40 shortlisted pairs and three pools per pair; unchecked pairs fail R4 explicitly. Candidate ordering uses lowest turnover above median liquidity; comparison selection uses SHA-256 of run id.

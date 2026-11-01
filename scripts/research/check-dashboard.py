@@ -72,3 +72,32 @@ for number in (2, 4, 6, 7, 8):
 schema = (ROOT / 'infrastructure/research/schema.sql').read_text()
 assert schema.count('trim_scale(') >= 6
 print('Dashboard evidence guard: PASS (8 panels, default universe, 12 coverage rows, scoped diagnostics)')
+
+# 2026-10-31: Handoff 19 public sample dashboard.
+pair_path = ROOT / 'infrastructure/research/grafana/dashboards/mevana-pair-discovery.json'
+pair_dashboard = json.loads(pair_path.read_text())
+assert pair_dashboard['title'] == 'MEVana Pair Discovery'
+assert pair_dashboard['editable'] is False
+assert len(pair_dashboard['panels']) == 13
+assert 'One short sample. Reported data and indicative prices. Not executable and not profit.' in pair_dashboard['panels'][0]['options']['content']
+assert not re.search(r'COALESCE|profitable|winner|best|recommended|"green"|"red"', pair_path.read_text(), re.I)
+for panel in pair_dashboard['panels'][1:]:
+    assert panel['type'] == 'table'
+    assert panel['fieldConfig']['defaults']['noValue'] == 'Not measured'
+    assert panel['targets'][0]['format'] == 'table'
+print('Pair discovery dashboard checks passed')
+
+# 2026-11-01: Readability at the review viewport; exact data stays in storage.
+pair_sql=' '.join(p['targets'][0]['rawSql'] for p in pair_dashboard['panels'][1:])
+assert 'round(' in pair_sql and ',2)' in pair_sql
+assert 'to_char(' in pair_sql and 'to_timestamp(' in pair_sql
+assert 'AS "Pair"' in pair_sql and 'AS "Full mints"' in pair_sql
+assert 'freeze_flags\' AS' not in pair_sql
+assert 'onchain_gap_bps' in pair_sql and 'fee_kind' in pair_sql
+
+assert "jsonb_object_agg" not in pair_sql
+assert "Start UTC" in pair_sql
+
+assert "NotChecked" in pair_sql
+assert "gap_within_bin_step" in pair_sql
+assert any("Comparison" in p["title"] and "gap_within_bin_step" in p["targets"][0]["rawSql"] for p in pair_dashboard["panels"][1:])
