@@ -127,3 +127,102 @@ REVOKE ALL ON SCHEMA public FROM PUBLIC;
 GRANT USAGE ON SCHEMA research TO research_reader;
 GRANT SELECT ON ALL TABLES IN SCHEMA research TO research_reader;
 ALTER DEFAULT PRIVILEGES IN SCHEMA research GRANT SELECT ON TABLES TO research_reader;
+
+-- 2026-10-31: Indicative pool mid-price survey. Run-scoped rows preserve provenance.
+CREATE TABLE IF NOT EXISTS research.gap_runs (
+  run_id text PRIMARY KEY,
+  evidence_kind text NOT NULL DEFAULT 'Indicative' CHECK (evidence_kind = 'Indicative'),
+  provider text NOT NULL,
+  window_start_utc timestamptz NOT NULL,
+  window_end_utc timestamptz NOT NULL,
+  duration_seconds bigint NOT NULL CHECK (duration_seconds > 0 AND duration_seconds <= 3600),
+  payload_bytes bigint NOT NULL CHECK (payload_bytes >= 0),
+  updates bigint NOT NULL CHECK (updates >= 0),
+  updates_by_venue jsonb NOT NULL,
+  gaps bigint NOT NULL CHECK (gaps >= 0),
+  stalls bigint NOT NULL CHECK (stalls >= 0),
+  stop_reason text NOT NULL,
+  allowlist_sha256 text NOT NULL,
+  updates_sha256 text NOT NULL,
+  loaded_at timestamptz NOT NULL DEFAULT now()
+);
+CREATE TABLE IF NOT EXISTS research.gap_pools (
+  run_id text NOT NULL REFERENCES research.gap_runs(run_id) ON DELETE CASCADE,
+  pool_id text NOT NULL,
+  evidence_kind text NOT NULL DEFAULT 'Indicative' CHECK (evidence_kind = 'Indicative'),
+  venue text NOT NULL,
+  token_pair text NOT NULL,
+  token_group text NOT NULL,
+  mint0 text NOT NULL,
+  mint1 text NOT NULL,
+  decimals0 integer NOT NULL,
+  decimals1 integer NOT NULL,
+  fee_bps_micro bigint,
+  base_fee_bps_micro bigint,
+  fee_source text NOT NULL,
+  variable_fee_modeled boolean NOT NULL,
+  PRIMARY KEY (run_id,pool_id)
+);
+CREATE TABLE IF NOT EXISTS research.gap_minute_stats (
+  run_id text NOT NULL REFERENCES research.gap_runs(run_id) ON DELETE CASCADE,
+  minute_utc timestamptz NOT NULL,
+  token_pair text NOT NULL,
+  pool_a text NOT NULL,
+  pool_b text NOT NULL,
+  evidence_kind text NOT NULL DEFAULT 'Indicative' CHECK (evidence_kind = 'Indicative'),
+  token_group text NOT NULL,
+  venue_a text NOT NULL,
+  venue_b text NOT NULL,
+  observation_count bigint NOT NULL,
+  known_fee_observation_count bigint NOT NULL CHECK (known_fee_observation_count >= 0 AND known_fee_observation_count <= observation_count),
+  median_gross_bps_micro bigint,
+  maximum_gross_bps_micro bigint,
+  median_net_bps_micro bigint,
+  maximum_net_bps_micro bigint,
+  excluded_stale_count bigint NOT NULL,
+  PRIMARY KEY (run_id,minute_utc,token_pair,pool_a,pool_b)
+);
+CREATE TABLE IF NOT EXISTS research.gap_events (
+  run_id text NOT NULL REFERENCES research.gap_runs(run_id) ON DELETE CASCADE,
+  token_pair text NOT NULL,
+  pool_a text NOT NULL,
+  pool_b text NOT NULL,
+  threshold_bps integer NOT NULL CHECK (threshold_bps IN (5,10,25,50)),
+  start_slot bigint NOT NULL,
+  evidence_kind text NOT NULL DEFAULT 'Indicative' CHECK (evidence_kind = 'Indicative'),
+  token_group text NOT NULL,
+  venue_a text NOT NULL,
+  venue_b text NOT NULL,
+  start_time_utc timestamptz,
+  duration_slots bigint NOT NULL,
+  peak_net_bps_micro bigint NOT NULL,
+  volatility_bucket text,
+  after_sharp_move boolean NOT NULL,
+  open_at_end boolean NOT NULL,
+  PRIMARY KEY (run_id,token_pair,pool_a,pool_b,threshold_bps,start_slot)
+);
+CREATE TABLE IF NOT EXISTS research.gap_gate_results (
+  run_set_id text NOT NULL,
+  token_pair text NOT NULL,
+  venue_combination text NOT NULL,
+  evidence_kind text NOT NULL DEFAULT 'Indicative' CHECK (evidence_kind = 'Indicative'),
+  result text NOT NULL CHECK (result IN ('advance','fail','too_little_data')),
+  runs integer NOT NULL,
+  events_per_hour_10bps_micro bigint,
+  median_duration_slots bigint,
+  stale_exclusion_percent_micro bigint,
+  all_fees_known boolean NOT NULL,
+  PRIMARY KEY (run_set_id,token_pair,venue_combination)
+);
+CREATE TABLE IF NOT EXISTS research.gap_observation_buckets (
+  run_id text NOT NULL REFERENCES research.gap_runs(run_id) ON DELETE CASCADE,
+  token_pair text NOT NULL,
+  venue_combination text NOT NULL,
+  token_group text NOT NULL,
+  volatility_bucket text NOT NULL,
+  after_sharp_move boolean NOT NULL,
+  evidence_kind text NOT NULL DEFAULT 'Indicative' CHECK (evidence_kind = 'Indicative'),
+  observations bigint NOT NULL CHECK (observations >= 0),
+  PRIMARY KEY (run_id,token_pair,venue_combination,volatility_bucket,after_sharp_move)
+);
+GRANT SELECT ON ALL TABLES IN SCHEMA research TO research_reader;

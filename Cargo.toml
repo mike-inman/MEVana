@@ -3,6 +3,7 @@
 resolver = "2"
 
 members = [
+  "crates/gap-survey",
   "crates/geyser-capture",
   "crates/research-replay",
   # PRODUCTION HOTPATH SYSTEM
