@@ -168,8 +168,10 @@ Work proceeds through dated handoffs in `docs/`. The latest one is the authority
     - See `docs/2026-10-31-1005-CDT-research-handoff-17a-dashboard-fixes-closeout.md`.
 11. **Handoff 18 (done, 2026-10-31):** indicative price-gap survey of 13 pairs across Orca, Raydium CLMM and Meteora DLMM. No segment passed the gate (13 failed, 27 too little data), and there were no 10 bps net events. Meteora variable fees were not modeled.
     - See `docs/2026-10-31-1836-CDT-research-handoff-18-price-gap-survey-closeout.md`.
-12. **Next:**
-    - handoff 19: one short pool map sample, with no Geyser streams (`docs/2026-10-31-2332-CDT-research-handoff-19-pool-map-sample.md`).
+12. **Handoffs 19, 19a and 19b (done, 2026-11-01):** public pool map and on-chain price sample, with every eligible pair checked. No non-control pair beat a measured fee. Five eligible pairs beat Meteora's minimum fee, but their Meteora prices were frozen across the sample.
+    - See `docs/2026-11-01-0049-CDT-research-handoff-19b-closeout.md`.
+13. **Next:**
+    - handoff 20: check whether the Meteora gaps can actually be reached (`docs/2026-11-01-1131-CST-research-handoff-20-meteora-reachable-gaps.md`).
     - The strategy is in `docs/2026-10-31-2321-CDT-strategy-less-common-pair-discovery.md`.
     - Keep work to short, capped samples. Do not plan long jobs.
 
