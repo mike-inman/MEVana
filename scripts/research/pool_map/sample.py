@@ -69,7 +69,7 @@ def dex(data):
   if x.get('chainId')!='solana':continue
   try:
    native=decimal(x.get('priceNative'));usd=decimal(x.get('priceUsd'))
-   out.append({'address':x['pairAddress'],'venue':x['dexId'],'pool_type':','.join(x.get('labels') or []) or None,'mint0':x['baseToken']['address'],'mint1':x['quoteToken']['address'],'price':x.get('priceNative'),'base_usd':x.get('priceUsd'),'quote_usd':str(usd/native) if usd is not None and native else None,'liquidity':x.get('liquidity',{}).get('usd'),'volume':x.get('volume',{}).get('h24'),'fee_bps':None,'created':int(x['pairCreatedAt'])//1000 if x.get('pairCreatedAt') else None,'source':'DexScreener','collected_epoch':int(time.time()),'evidence_kind':'Reported'})
+   out.append({'address':x['pairAddress'],'venue':x['dexId'],'pool_type':','.join(x.get('labels') or []) or None,'mint0':x['baseToken']['address'],'mint1':x['quoteToken']['address'],'price':x.get('priceNative'),'base_usd':x.get('priceUsd'),'quote_usd':str(usd/native) if usd is not None and native else None,'liquidity':x.get('liquidity',{}).get('usd'),'volume':x.get('volume',{}).get('h24'),'fee_bps':None,'created':int(x['pairCreatedAt'])//1000 if x.get('pairCreatedAt') else None,'symbol0':x['baseToken'].get('symbol'),'symbol1':x['quoteToken'].get('symbol'),'source':'DexScreener','collected_epoch':int(time.time()),'evidence_kind':'Reported'})
   except (KeyError,ValueError,TypeError):continue
  return out
 def enrich(short,chain,mints):

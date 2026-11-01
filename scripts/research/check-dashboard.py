@@ -78,7 +78,7 @@ pair_path = ROOT / 'infrastructure/research/grafana/dashboards/mevana-pair-disco
 pair_dashboard = json.loads(pair_path.read_text())
 assert pair_dashboard['title'] == 'MEVana Pair Discovery'
 assert pair_dashboard['editable'] is False
-assert len(pair_dashboard['panels']) == 6
+assert len(pair_dashboard['panels']) == 10
 assert 'One short sample. Reported data and indicative prices. Not executable and not profit.' in pair_dashboard['panels'][0]['options']['content']
 assert not re.search(r'COALESCE|profitable|winner|best|recommended|"green"|"red"', pair_path.read_text(), re.I)
 for panel in pair_dashboard['panels'][1:]:
@@ -86,3 +86,14 @@ for panel in pair_dashboard['panels'][1:]:
     assert panel['fieldConfig']['defaults']['noValue'] == 'Not measured'
     assert panel['targets'][0]['format'] == 'table'
 print('Pair discovery dashboard checks passed')
+
+# 2026-11-01: Readability at the review viewport; exact data stays in storage.
+pair_sql=' '.join(p['targets'][0]['rawSql'] for p in pair_dashboard['panels'][1:])
+assert 'round(' in pair_sql and ',2)' in pair_sql
+assert 'to_char(' in pair_sql and 'to_timestamp(' in pair_sql
+assert 'AS "Pair"' in pair_sql and 'AS "Full mints"' in pair_sql
+assert 'freeze_flags\' AS' not in pair_sql
+assert 'onchain_gap_bps' in pair_sql and 'fee_kind' in pair_sql
+
+assert "jsonb_object_agg" not in pair_sql
+assert "Start UTC" in pair_sql

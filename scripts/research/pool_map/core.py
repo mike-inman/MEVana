@@ -47,7 +47,9 @@ def first_failure(pools,now,mints):
     return None,None,old
 def analyze(bundle):
     pools=bundle['pools']; grouped={}
-    for p in pools:grouped.setdefault(pair(p['mint0'],p['mint1']),[]).append(p)
+    for p in pools:
+        if bundle.get('version')=='19a' and p.get('venue_type')!='AMM':continue
+        grouped.setdefault(pair(p['mint0'],p['mint1']),[]).append(p)
     for key in bundle['controls']:grouped.setdefault(key,[])
     rows=[];new=[]
     for p in pools:
@@ -96,6 +98,9 @@ def analyze(bundle):
                 else:r['failed_step']='R5';r['reason']='fees_not_below_gap'
         if r['control']:r['list']='Control'
         rows.append(r)
+    if bundle.get('version')=='19a':
+        from fixes import onchain
+        onchain(rows,bundle)
     survivors=[r for r in rows if not r['failed_step'] and not r['control']]
     liqs=sorted(r['liquidity'] for r in survivors)
     median=liqs[(len(liqs)-1)//2] if liqs else None

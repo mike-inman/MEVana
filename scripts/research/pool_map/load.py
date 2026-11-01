@@ -12,7 +12,7 @@ print('BEGIN;');print('DELETE FROM research.pool_map_runs WHERE run_id='+q(manif
 row('pool_map_runs',None,manifest)
 new={p['address'] for p in result['new_pools']}
 for p in bundle['pools']:
- row('pool_map_pools',('pool_id',p['address']),dict(p,new_pool=p['address'] in new,samples=[{'epoch':t,'price':sample.get(p['address']),'evidence_kind':'Reported'} for t,sample in zip(bundle['sample_times'],bundle['samples'])]))
+ row('pool_map_pools',('pool_id',p['address']),dict(p,new_pool=p['address'] in new,near_price_depth_usd_estimate=bundle.get('depths',{}).get(p['address']),depth_evidence='OnChain active-liquidity estimate / Reported conversion',onchain_rounds=[r.get(p['address']) for r in bundle.get('chain_rounds',[])],samples=[{'epoch':t,'price':sample.get(p['address']),'evidence_kind':'Reported'} for t,sample in zip(bundle['sample_times'],bundle['samples'])]))
 for p in result['pairs']:
  row('pair_requirements',('pair_id',p['pair']),p)
  if not p['failed_step']:row('pair_clues',('pair_id',p['pair']),p)
