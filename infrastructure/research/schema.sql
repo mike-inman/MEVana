@@ -226,3 +226,24 @@ CREATE TABLE IF NOT EXISTS research.gap_observation_buckets (
   PRIMARY KEY (run_id,token_pair,venue_combination,volatility_bucket,after_sharp_move)
 );
 GRANT SELECT ON ALL TABLES IN SCHEMA research TO research_reader;
+
+-- 2026-10-31: One bounded public pool-map sample. Exact reported amounts stay JSON strings.
+CREATE TABLE IF NOT EXISTS research.pool_map_runs (
+ run_id text PRIMARY KEY, evidence_kind text NOT NULL CHECK(evidence_kind='Reported'), data jsonb NOT NULL
+);
+CREATE TABLE IF NOT EXISTS research.pool_map_pools (
+ run_id text NOT NULL REFERENCES research.pool_map_runs ON DELETE CASCADE,
+ pool_id text NOT NULL, evidence_kind text NOT NULL CHECK(evidence_kind='Reported'), data jsonb NOT NULL,
+ PRIMARY KEY(run_id,pool_id)
+);
+CREATE TABLE IF NOT EXISTS research.pair_requirements (
+ run_id text NOT NULL REFERENCES research.pool_map_runs ON DELETE CASCADE,
+ pair_id text NOT NULL, evidence_kind text NOT NULL CHECK(evidence_kind='Reported'), data jsonb NOT NULL,
+ PRIMARY KEY(run_id,pair_id)
+);
+CREATE TABLE IF NOT EXISTS research.pair_clues (
+ run_id text NOT NULL REFERENCES research.pool_map_runs ON DELETE CASCADE,
+ pair_id text NOT NULL, evidence_kind text NOT NULL CHECK(evidence_kind='Reported'), data jsonb NOT NULL,
+ PRIMARY KEY(run_id,pair_id)
+);
+GRANT SELECT ON ALL TABLES IN SCHEMA research TO research_reader;

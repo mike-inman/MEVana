@@ -1,0 +1,304 @@
+{
+  "uid": "mevana-pair-discovery",
+  "title": "MEVana Pair Discovery",
+  "tags": [
+    "research",
+    "Indicative"
+  ],
+  "timezone": "utc",
+  "schemaVersion": 40,
+  "version": 1,
+  "editable": false,
+  "refresh": "1m",
+  "time": {
+    "from": "now-7d",
+    "to": "now"
+  },
+  "panels": [
+    {
+      "id": 1,
+      "title": "Indicative evidence limits",
+      "type": "text",
+      "gridPos": {
+        "x": 0,
+        "y": 0,
+        "w": 24,
+        "h": 3
+      },
+      "options": {
+        "mode": "markdown",
+        "content": "One short sample. Reported data and indicative prices. Not executable and not profit.\n\nCandidates: lowest turnover among pairs at or above median reported liquidity. Unknown fees stay for review. Depth estimates ignore tick crossings. Mint flags are OnChain; liquidity and prices are Reported."
+      }
+    },
+    {
+      "id": 2,
+      "title": "Reported run health",
+      "type": "table",
+      "gridPos": {
+        "x": 0,
+        "y": 3,
+        "w": 24,
+        "h": 10
+      },
+      "datasource": {
+        "type": "postgres",
+        "uid": "research-postgres"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "postgres",
+            "uid": "research-postgres"
+          },
+          "editorMode": "code",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "SELECT run_id,data->>'started_epoch' AS \"Start epoch\",data->>'finished_epoch' AS \"End epoch\",data->>'public_requests' AS \"Public requests\",data->>'rpc_calls' AS \"Tatum calls\",data->'partial_sources' AS \"Partial sources\",data->'limits_reached' AS \"Limits reached\",evidence_kind FROM research.pool_map_runs"
+        }
+      ],
+      "options": {
+        "showHeader": true,
+        "cellHeight": "sm",
+        "footer": {
+          "show": false
+        }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "noValue": "Not measured",
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "#7aa5d2"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "#7aa5d2",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": []
+      }
+    },
+    {
+      "id": 3,
+      "title": "Reported requirement funnel",
+      "type": "table",
+      "gridPos": {
+        "x": 0,
+        "y": 13,
+        "w": 24,
+        "h": 10
+      },
+      "datasource": {
+        "type": "postgres",
+        "uid": "research-postgres"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "postgres",
+            "uid": "research-postgres"
+          },
+          "editorMode": "code",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "WITH steps AS (SELECT * FROM (VALUES ('R1',1),('R2',2),('R3',3),('R4',4),('R5',5)) s(step,n)) SELECT step, count(*) FILTER (WHERE data->>'failed_step' IS NULL OR substring(data->>'failed_step',2)::int>=n) AS \"Entering\",count(*) FILTER (WHERE data->>'failed_step' IS NULL OR substring(data->>'failed_step',2)::int>n) AS \"Leaving or retained for review\",count(*) FILTER (WHERE step='R5' AND data->>'failed_step' IS NULL AND data->>'reason'='Not measured') AS \"Fee comparison not measured\",(SELECT jsonb_object_agg(reason,total) FROM (SELECT data->>'reason' AS reason,count(*) AS total FROM research.pair_requirements WHERE data->>'failed_step'=step GROUP BY data->>'reason') rejected) AS \"Rejection reasons\",'Reported' AS \"Evidence\" FROM research.pair_requirements CROSS JOIN steps GROUP BY step,n ORDER BY n"
+        }
+      ],
+      "options": {
+        "showHeader": true,
+        "cellHeight": "sm",
+        "footer": {
+          "show": false
+        }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "noValue": "Not measured",
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "#7aa5d2"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "#7aa5d2",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": []
+      }
+    },
+    {
+      "id": 4,
+      "title": "Reported candidates \u2014 lowest turnover above median liquidity",
+      "type": "table",
+      "gridPos": {
+        "x": 0,
+        "y": 23,
+        "w": 24,
+        "h": 10
+      },
+      "datasource": {
+        "type": "postgres",
+        "uid": "research-postgres"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "postgres",
+            "uid": "research-postgres"
+          },
+          "editorMode": "code",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "SELECT pair_id AS \"Pair\",data->>'turnover' AS \"Turnover\",data->>'price_disagreement_bps' AS \"Price disagreement bps\",data->>'sample_movement_bps' AS \"Sample movement bps\",data->>'liquidity_imbalance' AS \"Liquidity imbalance\",data->>'combined_fee_bps' AS \"Combined fee bps\",data->>'near_price_depth_usd_estimate' AS \"OnChain depth estimate USD\",data->>'failed_step' AS \"First failed step\",data->>'reason' AS \"Reason\",data->'freeze_flags' AS \"OnChain mint flags\",evidence_kind AS \"Evidence\" FROM research.pair_clues WHERE data->>'list'='Candidates' ORDER BY (data->>'turnover')::numeric,pair_id"
+        }
+      ],
+      "options": {
+        "showHeader": true,
+        "cellHeight": "sm",
+        "footer": {
+          "show": false
+        }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "noValue": "Not measured",
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "#7aa5d2"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "#7aa5d2",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": []
+      }
+    },
+    {
+      "id": 5,
+      "title": "Reported controls",
+      "type": "table",
+      "gridPos": {
+        "x": 0,
+        "y": 33,
+        "w": 24,
+        "h": 10
+      },
+      "datasource": {
+        "type": "postgres",
+        "uid": "research-postgres"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "postgres",
+            "uid": "research-postgres"
+          },
+          "editorMode": "code",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "SELECT pair_id AS \"Pair\",data->>'turnover' AS \"Turnover\",data->>'price_disagreement_bps' AS \"Price disagreement bps\",data->>'sample_movement_bps' AS \"Sample movement bps\",data->>'liquidity_imbalance' AS \"Liquidity imbalance\",data->>'combined_fee_bps' AS \"Combined fee bps\",data->>'near_price_depth_usd_estimate' AS \"OnChain depth estimate USD\",data->>'failed_step' AS \"First failed step\",data->>'reason' AS \"Reason\",data->'freeze_flags' AS \"OnChain mint flags\",evidence_kind AS \"Evidence\" FROM research.pair_requirements WHERE data->>'control'='true' ORDER BY pair_id"
+        }
+      ],
+      "options": {
+        "showHeader": true,
+        "cellHeight": "sm",
+        "footer": {
+          "show": false
+        }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "noValue": "Not measured",
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "#7aa5d2"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "#7aa5d2",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": []
+      }
+    },
+    {
+      "id": 6,
+      "title": "Reported NewPool",
+      "type": "table",
+      "gridPos": {
+        "x": 0,
+        "y": 43,
+        "w": 24,
+        "h": 10
+      },
+      "datasource": {
+        "type": "postgres",
+        "uid": "research-postgres"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "postgres",
+            "uid": "research-postgres"
+          },
+          "editorMode": "code",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "SELECT pool_id,data->>'venue' AS \"Venue\",data->>'mint0' AS \"Mint 0\",data->>'mint1' AS \"Mint 1\",data->>'created' AS \"Created epoch\",data->>'liquidity' AS \"Reported liquidity USD\",evidence_kind FROM research.pool_map_pools WHERE data->>'new_pool'='true' ORDER BY pool_id"
+        }
+      ],
+      "options": {
+        "showHeader": true,
+        "cellHeight": "sm",
+        "footer": {
+          "show": false
+        }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "noValue": "Not measured",
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "#7aa5d2"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "#7aa5d2",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": []
+      }
+    }
+  ]
+}

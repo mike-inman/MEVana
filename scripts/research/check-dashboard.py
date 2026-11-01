@@ -72,3 +72,17 @@ for number in (2, 4, 6, 7, 8):
 schema = (ROOT / 'infrastructure/research/schema.sql').read_text()
 assert schema.count('trim_scale(') >= 6
 print('Dashboard evidence guard: PASS (8 panels, default universe, 12 coverage rows, scoped diagnostics)')
+
+# 2026-10-31: Handoff 19 public sample dashboard.
+pair_path = ROOT / 'infrastructure/research/grafana/dashboards/mevana-pair-discovery.json'
+pair_dashboard = json.loads(pair_path.read_text())
+assert pair_dashboard['title'] == 'MEVana Pair Discovery'
+assert pair_dashboard['editable'] is False
+assert len(pair_dashboard['panels']) == 6
+assert 'One short sample. Reported data and indicative prices. Not executable and not profit.' in pair_dashboard['panels'][0]['options']['content']
+assert not re.search(r'COALESCE|profitable|winner|best|recommended|"green"|"red"', pair_path.read_text(), re.I)
+for panel in pair_dashboard['panels'][1:]:
+    assert panel['type'] == 'table'
+    assert panel['fieldConfig']['defaults']['noValue'] == 'Not measured'
+    assert panel['targets'][0]['format'] == 'table'
+print('Pair discovery dashboard checks passed')
